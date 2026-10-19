@@ -485,6 +485,51 @@ function recordTerminal(terminalId: string, sessionId: string, data: string) {
 const inflight = new Set<string>();
 
 // ---------------------------------------------------------------------------
+// Message queue — Ctrl+Enter while working parks a prompt here; the queue is
+// flushed FIFO in dispatchPrompt's settle path. In-memory only (a restart
+// drops queued drafts, same as the desktop's session-bound queue).
+// ---------------------------------------------------------------------------
+
+export interface QueuedMsg { id: string; text: string }
+const promptQueues = new Map<string, QueuedMsg[]>();
+let queueSeq = 0;
+
+export function queueList(id: string): QueuedMsg[] {
+  return promptQueues.get(id) ?? [];
+}
+
+/** Enqueue a message; callers GET the list back for the queue band. */
+export function queueAdd(ctx: ApiContext, id: string, text: string): QueuedMsg {
+  const m: QueuedMsg = { id: `q${(++queueSeq).toString(36)}${Date.now().toString(36)}`, text };
+  const q = promptQueues.get(id) ?? [];
+  q.push(m);
+  promptQueues.set(id, q);
+  noteUpdate(ctx, id);
+  return m;
+}
+
+export function queueRemove(ctx: ApiContext, id: string, qid: string): boolean {
+  const q = promptQueues.get(id);
+  if (!q) return false;
+  const i = q.findIndex((m) => m.id === qid);
+  if (i < 0) return false;
+  q.splice(i, 1);
+  if (!q.length) promptQueues.delete(id);
+  noteUpdate(ctx, id);
+  return true;
+}
+
+/** Dispatch the next queued prompt if nothing is in flight. */
+function queueFlush(ctx: ApiContext, id: string) {
+  if (inflight.has(id)) return;
+  const q = promptQueues.get(id);
+  const next = q?.shift();
+  if (!next) return;
+  if (q && !q.length) promptQueues.delete(id);
+  dispatchPrompt(ctx, id, next.text, []);
+}
+
+// ---------------------------------------------------------------------------
 // interrupted-turn recovery — a prompt that never settled is recoverable
 // evidence, not silent loss. dispatchPrompt records the outgoing message in
 // <dataDir>/open-turns.json at send time and clears it when the prompt
@@ -758,6 +803,7 @@ function dispatchPrompt(ctx: ApiContext, id: string, text: string, attachments: 
     .finally(() => {
       inflight.delete(id);
       if (openTurns.delete(id)) openTurnsSave(ctx);
+      queueFlush(ctx, id);
     });
 }
 
@@ -1077,6 +1123,7 @@ export {
   type ConfigOption, type SessionConfig, sessionConfig, cloudVersionToModel,
   terminalBuf, recordTerminal, inflight, resolveUpload, attachmentBlocks,
   promptWithRetry, dispatchPrompt, sessionStatus,
+  queueFlush,
   type SubagentInfo, listSubagents, subagentTimeline, subPingActive,
   type ListedSession, listLocalSessions, snippetFromLog,
 };

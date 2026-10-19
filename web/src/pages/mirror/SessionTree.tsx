@@ -103,11 +103,9 @@ function TreeRow({ s, depth, activeDevinId, folders, onOpen, onPrefetch, onRefre
             <Lock size={12} />
           </span>
         )}
-        {compact && !propHidden?.['Status'] && enu === 'working' ? (
-          <span aria-label="Working" title="Working" className={cn('relative z-10 flex size-4 shrink-0 items-center justify-center text-muted-foreground group-hover/sidebar:invisible group-has-[:focus-visible]/row:invisible', menu !== 'closed' && 'invisible')}>
-            <svg aria-hidden="true" className="motion-safe:animate-spin" width={16} height={16} viewBox="0 0 24 24" fill="none"><path d="M21 12C21 16.9706 16.9706 21 12 21C7.02944 21 3 16.9706 3 12C3 7.02944 7.02944 3 12 3C16.9706 3 21 7.02944 21 12Z" stroke="currentColor" strokeOpacity="0.3" strokeWidth="2" /><path d="M20.9451 13C20.4839 17.1716 17.1716 20.4839 13 20.9451" stroke="currentColor" strokeWidth="2" strokeLinecap="round" /></svg>
-          </span>
-        ) : compactPr ? (
+        {/* Working spinner lives in the left w-6 icon cell above — the old
+            second spinner here (compact mode) duplicated it. */}
+        {compactPr ? (
           compactPr.pr_url ? (
             <a href={compactPr.pr_url} target="_blank" rel="noreferrer" aria-label="Open pull request" title="Open pull request" onClick={(e) => e.stopPropagation()} className={cn('relative z-10 flex size-[18px] shrink-0 items-center justify-center rounded-[4px] group-hover/sidebar:invisible group-has-[:focus-visible]/row:invisible', menu !== 'closed' && 'invisible', prColor(compactPr.state, compactPr.draft))}>
               <GitPullRequest size={14} />

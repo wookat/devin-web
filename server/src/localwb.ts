@@ -29,6 +29,7 @@ import {
   sessionConfig, recordTerminal, inflight, resolveUpload, dispatchPrompt,
   sessionStatus, interruptedTurn, listSubagents, subagentTimeline, subPingActive, listLocalSessions,
   snippetFromLog, responseCfg, terminalBuf, cloudVersionToModel,
+  queueList, queueAdd, queueRemove,
   type ListedSession, type SessionConfig, type SubagentInfo, type ConfigOption,
 } from "./sessionio.js";
 
@@ -1034,10 +1035,50 @@ export async function handleLocalWb(ctx: ApiContext, req: IncomingMessage, res: 
         }
 
         if (sub === "queue" && m === "GET") {
-          json(res, 200, { queue: [] });
+          json(res, 200, { queue: queueList(id) });
+          return true;
+        }
+        // POST .../queue {message} — park a prompt while a turn is in flight;
+        // dispatchPrompt's settle path flushes it FIFO (queueFlush).
+        if (sub === "queue" && m === "POST") {
+          const body = (await readJson(req)) as { message?: string };
+          const text = (body.message ?? "").trim();
+          if (!text) { json(res, 400, { error: "empty message" }); return true; }
+          if (!inflight.has(id) && !queueList(id).length) {
+            dispatchPrompt(ctx, id, text, []);
+            json(res, 200, { ok: true, sent: true });
+            return true;
+          }
+          const m2 = queueAdd(ctx, id, text);
+          json(res, 200, { ok: true, id: m2.id });
           return true;
         }
         if (sub === "queue-op" && m === "POST") {
+          const body = (await readJson(req)) as { op?: string; id?: string; ids?: string[]; message?: string };
+          const q = queueList(id);
+          switch (body.op) {
+            case "remove": queueRemove(ctx, id, body.id ?? ""); break;
+            case "clear": for (const m2 of [...q]) queueRemove(ctx, id, m2.id); break;
+            case "edit": { const m2 = q.find((x) => x.id === body.id); if (m2 && body.message) m2.text = body.message; break; }
+            case "reorder": {
+              if (Array.isArray(body.ids)) {
+                const byId = new Map(q.map((x) => [x.id, x]));
+                const next = body.ids.map((x) => byId.get(x)).filter((x): x is NonNullable<typeof x> => !!x);
+                q.splice(0, q.length, ...next);
+              }
+              break;
+            }
+            case "send_now": {
+              const i = q.findIndex((x) => x.id === body.id);
+              if (i >= 0) {
+                const [m2] = q.splice(i, 1);
+                // Busy → front of the queue (fires on settle); idle → send now.
+                if (inflight.has(id)) q.unshift(m2); else dispatchPrompt(ctx, id, m2.text, []);
+              }
+              break;
+            }
+            default: break; // hold/unhold are client-side edit state
+          }
           json(res, 200, { ok: true });
           return true;
         }
@@ -1414,7 +1455,7 @@ export async function handleLocalWb(ctx: ApiContext, req: IncomingMessage, res: 
         const all = serveSnap ? snap : live;
         const reset = !serveSnap && tlReset.delete(id);
         const items = loading && !snap ? [] : all.slice(-300);
-        json(res, 200, { items, next_cursor: null, error: null, queue: [], reset: reset || undefined, gen: serveSnap ? 0 : gen, activity: loading ? { text: "Loading history…" } : null });
+        json(res, 200, { items, next_cursor: null, error: null, queue: queueList(id), reset: reset || undefined, gen: serveSnap ? 0 : gen, activity: loading ? { text: "Loading history…" } : null });
         return true;
       }
       if (sub === "messages" && m === "GET") {

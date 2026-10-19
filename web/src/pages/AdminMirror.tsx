@@ -2388,15 +2388,14 @@ const groups = useMemo(() => groupItems(allItems, sessionWorking), [allItems, se
         )}
         <header className="flex h-11 flex-shrink-0 items-center justify-between overflow-hidden border-b border-transparent p-2 pr-[7px]">
           <div className="flex min-w-0 flex-1 items-center gap-2">
-          {!isVisitor && (
+          {!isVisitor && !sidebar && (
             <button
               data-slot="sidebar-trigger"
-              onClick={() => { setPeek(false); setSidebar(!sidebar) }}
-              onMouseEnter={() => { if (!sidebar) setPeek(true) }}
+              onClick={() => { setPeek(false); setSidebar(true) }}
               className="flex size-7 shrink-0 cursor-pointer items-center justify-center rounded-md text-muted-foreground hover:bg-accent hover:text-foreground focus-visible:bg-accent focus-visible:text-foreground"
-              aria-label={sidebar ? 'Collapse sidebar' : 'Expand sidebar'}
+              aria-label="Expand sidebar"
             >
-              {sidebar ? <PanelLeftClose size={16} /> : <PanelLeft size={16} />}
+              <PanelLeft size={16} />
             </button>
           )}
           {detail?.session.parent_devin_id && (
