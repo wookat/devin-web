@@ -4326,7 +4326,7 @@ const groups = useMemo(() => groupItems(allItems, sessionWorking), [allItems, se
                   )
                 })
               })()}
-              <div className="sticky right-0 z-10 flex h-7 shrink-0 items-center self-center bg-card/80 pl-1 backdrop-blur-sm">
+              <div className="sticky right-0 z-10 flex h-7 shrink-0 items-center self-center bg-card pl-1">
                 <button
                   ref={addBtnRef}
                   onClick={(e) => {
