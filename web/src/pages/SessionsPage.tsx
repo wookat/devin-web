@@ -1,7 +1,7 @@
 import { useEffect, useMemo, useRef, useState, type MouseEvent as ReactMouseEvent, type ReactNode } from 'react'
 import { Link, useNavigate } from 'react-router-dom'
 import { createPortal } from 'react-dom'
-import { Archive, ArchiveRestore, Bell, Bot, Check, ChevronDown, ChevronRight, Download, FolderInput, ListFilter, PanelLeft, PanelLeftClose, Pin, PinOff, Plus, RefreshCw, RotateCcw, Search, Settings2, Tag, X } from 'lucide-react'
+import { Archive, ArchiveRestore, Bell, Bot, Check, ChevronDown, ChevronRight, Download, FolderInput, ListFilter, PanelLeft, PanelLeftClose, Pin, PinOff, Plus, RefreshCw, RotateCcw, Rows3, Search, Settings2, Tag, X } from 'lucide-react'
 import { adminFetch } from '@/lib/api'
 import { cn } from '@/lib/utils'
 import { type MirrorTreeSession } from './mirror/treeCache'
@@ -118,7 +118,6 @@ export default function SessionsPage() {
   const [menu, setMenu] = useState<{ kind: string; r: DOMRect } | null>(null)
   const [msg, setMsg] = useState('')
   const [sideOpen, setSideOpen] = useState(window.innerWidth >= 1024)
-  const [moreNav, setMoreNav] = useState(false)
   const [orgMenu, setOrgMenu] = useState(false)
   const [notifOpen, setNotifOpen] = useState(false)
   const unreadSessions = useMemo(() => rows.filter((s) => s.is_unread), [rows])
@@ -384,31 +383,14 @@ export default function SessionsPage() {
               <Plus size={14} className="shrink-0 text-muted-foreground" />
               <span className="min-w-0 flex-1 truncate">新会话</span>
             </Link>
-            <button
-              onClick={() => setMoreNav((v) => !v)}
-              aria-expanded={moreNav}
-              className="flex h-[30px] cursor-pointer items-center gap-2 rounded-[6px] px-2 text-[13px] leading-[18px] text-foreground hover:bg-tint-secondary"
+            <Link
+              to="/admin/sessions"
+              aria-current="page"
+              className="mb-px flex h-[30px] items-center gap-2 rounded-[6px] bg-tint-secondary px-2 text-[13px] font-medium leading-[18px] text-foreground hover:bg-tint-secondary"
             >
-              <ChevronRight size={14} className={cn('shrink-0 text-muted-foreground transition-transform', moreNav && 'rotate-90')} />
-              <span className="min-w-0 flex-1 truncate text-left">更多</span>
-            </button>
-            {moreNav && (
-              <>
-                <Link
-                  to="/admin/sessions"
-                  aria-current="page"
-                  className="mb-px flex h-[30px] items-center gap-2 rounded-[6px] bg-tint-secondary py-0 pl-8 pr-2 text-[13px] font-medium leading-[18px] text-foreground hover:bg-tint-secondary"
-                >
-                  <span className="min-w-0 flex-1 truncate">会话管理</span>
-                </Link>
-                <Link
-                  to="/settings"
-                  className="mb-px flex h-[30px] items-center gap-2 rounded-[6px] py-0 pl-8 pr-2 text-[13px] leading-[18px] text-muted-foreground hover:bg-tint-secondary hover:text-foreground"
-                >
-                  <span className="min-w-0 flex-1 truncate">首选项</span>
-                </Link>
-              </>
-            )}
+              <Rows3 size={14} className="shrink-0 text-muted-foreground" />
+              <span className="min-w-0 flex-1 truncate">会话管理</span>
+            </Link>
           </nav>
           <div className="min-h-0 flex-1 overflow-y-auto py-1">
             <SessionTree

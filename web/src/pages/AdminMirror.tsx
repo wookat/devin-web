@@ -5,7 +5,7 @@
 import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState, type KeyboardEvent as ReactKeyboardEvent } from 'react'
 import { createPortal } from 'react-dom'
 import { Link, useLocation, useNavigate, useParams } from 'react-router-dom'
-import { ArrowLeft, Loader2, ChevronRight, ChevronDown, ChevronUp, Settings2, Copy, Check, RotateCcw, Archive, ArchiveRestore, Plus, FileText, Circle, PanelLeftClose, PanelLeft, ArrowUp, ArrowUpRight, Square, Link2, X, Expand, Code, Workflow as WorkflowIcon, BookOpen, UploadCloud, Folder as FolderIcon, Pencil, Search, Clock, Lightbulb, Info, Laptop, FolderOpen, Image as ImageIcon, Share2, RefreshCw, AlertTriangle, Bell } from 'lucide-react'
+import { ArrowLeft, Loader2, ChevronRight, ChevronDown, ChevronUp, Settings2, Copy, Check, RotateCcw, Archive, ArchiveRestore, Plus, FileText, Circle, PanelLeftClose, PanelLeft, ArrowUp, ArrowUpRight, Square, Link2, X, Expand, Code, Workflow as WorkflowIcon, BookOpen, UploadCloud, Folder as FolderIcon, Pencil, Search, Clock, Lightbulb, Info, Laptop, FolderOpen, Image as ImageIcon, Share2, RefreshCw, AlertTriangle, Bell, Rows3 } from 'lucide-react'
 import { adminFetch, adminFetchSwr, shareFetchSwr, type AdminSession, type PublicMessage, type DashboardData } from '@/lib/api'
 import { adminViewer, visitorViewer, setViewer, sessionFetch, sessionFetchSwr, attachmentUrl, type Viewer, type SharePermission } from '@/lib/viewer'
 import { visibleInterval } from '@/lib/poll'
@@ -580,7 +580,6 @@ export default function AdminMirrorPage() {
   const [dashboard, setDashboard] = useState<{ data: DashboardData | null; updatedAt?: string }>({ data: null })
   const [sidebar, setSidebar] = useState(window.innerWidth >= 1024)
   const [orgMenu, setOrgMenu] = useState(false)
-  const [moreNav, setMoreNav] = useState(false)
   const settingsRowCls = 'text-foreground text-[13px] leading-[18px] flex w-full cursor-pointer select-none items-center gap-2 rounded-[6px] px-2 py-1.5 outline-none [&>svg]:mx-px [&>svg]:size-4 [&>svg]:shrink-0 hover:bg-tint-secondary'
   const settingsSeparatorCls = 'mx-2 h-[9px] bg-border bg-clip-content py-1'
   // Official collapsed-sidebar behavior: hovering the left edge shows the sidebar as a floating flyout.
@@ -2309,30 +2308,13 @@ const groups = useMemo(() => groupItems(allItems, sessionWorking), [allItems, se
               <Plus size={14} className="shrink-0 text-muted-foreground" />
               <span className="min-w-0 flex-1 truncate">新会话</span>
             </Link>
-            <button
-              onClick={() => setMoreNav((v) => !v)}
-              aria-expanded={moreNav}
-              className="flex h-[30px] cursor-pointer items-center gap-2 rounded-[6px] px-2 text-[13px] leading-[18px] text-foreground hover:bg-tint-secondary"
+            <Link
+              to="/admin/sessions"
+              className="mb-px flex h-[30px] items-center gap-2 rounded-[6px] px-2 text-[13px] leading-[18px] text-foreground hover:bg-tint-secondary"
             >
-              <ChevronRight size={14} className={cn('shrink-0 text-muted-foreground transition-transform', moreNav && 'rotate-90')} />
-              <span className="min-w-0 flex-1 truncate text-left">更多</span>
-            </button>
-            {moreNav && (
-              <>
-                <Link
-                  to="/admin/sessions"
-                  className="mb-px flex h-[30px] items-center gap-2 rounded-[6px] py-0 pl-8 pr-2 text-[13px] leading-[18px] text-muted-foreground hover:bg-tint-secondary hover:text-foreground"
-                >
-                  <span className="min-w-0 flex-1 truncate">会话管理</span>
-                </Link>
-                <Link
-                  to="/settings"
-                  className="mb-px flex h-[30px] items-center gap-2 rounded-[6px] py-0 pl-8 pr-2 text-[13px] leading-[18px] text-muted-foreground hover:bg-tint-secondary hover:text-foreground"
-                >
-                  <span className="min-w-0 flex-1 truncate">首选项</span>
-                </Link>
-              </>
-            )}
+              <Rows3 size={14} className="shrink-0 text-muted-foreground" />
+              <span className="min-w-0 flex-1 truncate">会话管理</span>
+            </Link>
           </nav>
           <div className="min-h-0 flex-1 overflow-y-auto py-1">
             {tree.length > 0 ? (
