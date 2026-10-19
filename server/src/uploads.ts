@@ -17,6 +17,22 @@ export const MIME: Record<string, string> = {
   ".txt": "text/plain",
   ".md": "text/markdown",
   ".json": "application/json",
+  ".csv": "text/csv",
+  ".zip": "application/zip",
+  ".doc": "application/msword",
+  ".docx": "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
+  ".xls": "application/vnd.ms-excel",
+  ".xlsx": "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+  ".ppt": "application/vnd.ms-powerpoint",
+  ".pptx": "application/vnd.openxmlformats-officedocument.presentationml.presentation",
+  ".mp3": "audio/mpeg",
+  ".mp4": "video/mp4",
+  ".mov": "video/quicktime",
+  ".wav": "audio/wav",
+  ".heic": "image/heic",
+  ".avif": "image/avif",
+  ".ico": "image/x-icon",
+  ".bmp": "image/bmp",
 };
 
 const MAX_UPLOAD = 25 * 1024 * 1024;
@@ -42,7 +58,14 @@ export async function saveUpload(
   store: Store,
   filename: string,
 ): Promise<UploadMeta> {
-  const clean = path.basename(filename).replace(/[^\w.\- ]/g, "_") || "file";
+  // Keep the user's real name (CJK included) — strip only filesystem-illegal
+  // chars and Windows edge cases; basename already removed path segments.
+  const clean =
+    path
+      .basename(filename)
+      .replace(/[<>:"\/\\|?*\x00-\x1f]/g, "_")
+      .replace(/^[\s.]+|[\s.]+$/g, "")
+      .slice(0, 120) || "file";
   const id = `${randomUUID()}-${clean}`;
   const dest = path.join(store.uploadsDir, id);
   const out = createWriteStream(dest, { flags: "wx" });
