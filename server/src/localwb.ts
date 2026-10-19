@@ -7,7 +7,7 @@
  * a small registry file (wb.json) for titles/folders/pins/dashboards.
  */
 import type { IncomingMessage, ServerResponse } from "node:http";
-import { spawn } from "node:child_process";
+import { spawn, spawnSync } from "node:child_process";
 import fs from "node:fs";
 import path from "node:path";
 import os from "node:os";
@@ -354,6 +354,9 @@ async function readJson(req: IncomingMessage): Promise<Record<string, unknown>> 
 }
 
 const UNSUPPORTED = { error: "not supported on local workbench" };
+
+/** file-git response cache — 8s per session. */
+const gitStatusCache = new Map<string, { at: number; body: unknown }>();
 
 /**
  * Sub-session dispatch — `sub:<parent>:<agentId>` resolves to a child agent's
@@ -995,6 +998,35 @@ export async function handleLocalWb(ctx: ApiContext, req: IncomingMessage, res: 
             }
             json(res, 200, { ok: true });
           } catch (e) { json(res, 500, { error: (e as Error).message }); }
+          return true;
+        }
+
+        // GET file-git — VSCode-style git status map for the workspace tree.
+        // {git:false} for non-repo cwds; otherwise map relpath→status letter.
+        if (isAdmin && sub === "file-git" && m === "GET") {
+          const cwd = cwdFor(ctx, id);
+          const cache = (gitStatusCache.get(id) ?? { at: 0, body: { git: false, map: {} } }) as { at: number; body: unknown };
+          if (Date.now() - cache.at < 8000) { json(res, 200, cache.body); return true; }
+          let body: { git: boolean; map: Record<string, string> } = { git: false, map: {} };
+          try {
+            const r = spawnSync("git", ["status", "--porcelain=v1", "-z", "--ignored=no"], { cwd, encoding: "buffer", timeout: 5000, windowsHide: true });
+            if (r.status === 0 && r.stdout) {
+              const map: Record<string, string> = {};
+              const segs = r.stdout.toString("utf8").split("\0");
+              for (let i = 0; i + 0 < segs.length; i++) {
+                const line = segs[i];
+                if (!line) continue;
+                const x = line[0], y = line[1];
+                const rel = line.slice(3);
+                const st = y !== " " ? y : x;
+                map[rel.replace(/\\/g, "/")] = st === "?" ? "U" : (st || "M");
+                if (x === "R" || x === "C") i++; // rename/copy: skip the source path field
+              }
+              body = { git: true, map };
+            }
+          } catch { /* git absent or not a repo */ }
+          gitStatusCache.set(id, { at: Date.now(), body });
+          json(res, 200, body);
           return true;
         }
 

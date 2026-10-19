@@ -52,6 +52,18 @@ const kindOf = (p: string): Kind => KINDS[ext(p)] ?? (TEXT_EXTS.has(ext(p)) ? 't
 /** kinds backed by a text payload and therefore editable */
 const EDITABLE: Record<Kind, boolean> = { image: false, pdf: false, av: false, md: true, html: true, docx: false, xlsx: true, csv: true, text: true, bin: false }
 
+/* git status letter → VSCode-ish tint */
+function gitCls(s?: string) {
+  if (!s) return 'text-muted-foreground'
+  if (s === 'M') return 'text-[#b58900]'
+  if (s === 'U' || s === 'A') return 'text-[#28a745]'
+  if (s === 'D') return 'text-red-500'
+  return 'text-blue-500'
+}
+function gitTitle(s?: string) {
+  return ({ M: '已修改', U: '未跟踪', A: '已暂存', D: '已删除', R: '已重命名', C: '已复制' } as Record<string, string>)[s ?? ''] ?? s
+}
+
 function TypeIcon({ path, dir, size = 14, className }: { path: string; dir?: boolean; size?: number; className?: string }) {
   const cls = cn('shrink-0', className)
   if (dir) return <FolderIcon size={size} className={cn(cls, 'text-muted-foreground')} />
@@ -117,6 +129,7 @@ function WorkspacePanel({ id }: { id: string }) {
   const [tabMenu, setTabMenu] = useState<{ pos: MenuPos; path: string } | null>(null)
   const [dragTab, setDragTab] = useState<string | null>(null)
   const [dropDir, setDropDir] = useState<string | null>(null)
+  const [gitMap, setGitMap] = useState<Record<string, string>>({})
   const stripRef = useRef<HTMLDivElement>(null)
 
   useEffect(() => { mem.set(id, { tabs, active, expanded, filter, drafts }) }, [id, tabs, active, expanded, filter, drafts])
@@ -134,6 +147,16 @@ function WorkspacePanel({ id }: { id: string }) {
   }, [id, dirs])
 
   useEffect(() => { if (!dirs['']) void loadDir('') }, [dirs, loadDir])
+
+  useEffect(() => {
+    let dead = false
+    const pull = () => adminFetch<{ git?: boolean; map?: Record<string, string> }>(`/api/admin/session/${id}/file-git`)
+      .then((r) => { if (!dead && r.git) setGitMap(r.map ?? {}) })
+      .catch(() => {})
+    void pull()
+    const t = setInterval(pull, 15000)
+    return () => { dead = true; clearInterval(t) }
+  }, [id])
 
   const openFile = useCallback(async (p: string, force = false) => {
     if (!force) setFiles((f) => ({ ...f, [p]: { path: p, text: null } }))
@@ -175,8 +198,14 @@ function WorkspacePanel({ id }: { id: string }) {
 
   /* file ops */
   const op = useCallback(async (o: string, path: string, to?: string) => {
-    const r = await adminFetch<{ ok?: boolean; error?: string }>(`/api/admin/session/${id}/file-ops`, { method: 'POST', body: JSON.stringify({ op: o, path, to }) })
-    if (r.error) return r.error
+    let r: { ok?: boolean; error?: string }
+    try {
+      r = await adminFetch<{ ok?: boolean; error?: string }>(`/api/admin/session/${id}/file-ops`, { method: 'POST', body: JSON.stringify({ op: o, path, to }) })
+    } catch (e) {
+      window.alert(`操作失败: ${(e as Error).message}`)
+      return (e as Error).message
+    }
+    if (r.error) { window.alert(`操作失败: ${r.error}`); return r.error }
     // refresh affected dirs
     const ps = new Set([parentOf(path), to ? parentOf(to) : '', to ?? ''])
     for (const p of ps) if (p === '' || dirs[p]) void loadDir(p, true)
@@ -191,21 +220,28 @@ function WorkspacePanel({ id }: { id: string }) {
   }, [id, dirs, loadDir, active])
 
   const saveFile = useCallback(async (p: string, text: string) => {
-    const r = await adminFetch<{ ok?: boolean; error?: string }>(`/api/admin/session/${id}/file-write`, { method: 'POST', body: JSON.stringify({ path: p, text }) })
-    if (!r.error) {
-      setDrafts((d) => { const n = { ...d }; delete n[p]; return n })
-      void openFile(p, true)
-    }
-    return r.error ?? null
+    try {
+      const r = await adminFetch<{ ok?: boolean; error?: string }>(`/api/admin/session/${id}/file-write`, { method: 'POST', body: JSON.stringify({ path: p, text }) })
+      if (!r.error) {
+        setDrafts((d) => { const n = { ...d }; delete n[p]; return n })
+        void openFile(p, true)
+        return null
+      }
+      window.alert(`保存失败: ${r.error}`)
+      return r.error
+    } catch (e) { window.alert(`保存失败: ${(e as Error).message}`); return (e as Error).message }
   }, [id, openFile])
 
   const saveBinary = useCallback(async (p: string, buf: ArrayBuffer | Blob) => {
-    const b = buf instanceof Blob ? await buf.arrayBuffer() : buf
-    let bin = ''
-    const bytes = new Uint8Array(b)
-    for (let i = 0; i < bytes.length; i += 8192) bin += String.fromCharCode(...bytes.subarray(i, i + 8192))
-    const r = await adminFetch<{ ok?: boolean; error?: string }>(`/api/admin/session/${id}/file-write`, { method: 'POST', body: JSON.stringify({ path: p, base64: btoa(bin) }) })
-    return r.error ?? null
+    try {
+      const b = buf instanceof Blob ? await buf.arrayBuffer() : buf
+      let bin = ''
+      const bytes = new Uint8Array(b)
+      for (let i = 0; i < bytes.length; i += 8192) bin += String.fromCharCode(...bytes.subarray(i, i + 8192))
+      const r = await adminFetch<{ ok?: boolean; error?: string }>(`/api/admin/session/${id}/file-write`, { method: 'POST', body: JSON.stringify({ path: p, base64: btoa(bin) }) })
+      if (r.error) window.alert(`保存失败: ${r.error}`)
+      return r.error ?? null
+    } catch (e) { window.alert(`保存失败: ${(e as Error).message}`); return (e as Error).message }
   }, [id])
 
   /* -------- tree -------- */
@@ -235,10 +271,10 @@ function WorkspacePanel({ id }: { id: string }) {
           draggable={renaming !== n.path}
           onDragStart={(e) => { setDragNode(n.path); e.dataTransfer.effectAllowed = 'move' }}
           onDragEnd={() => { setDragNode(null); setDropDir(null) }}
-          onDragOver={n.entry.dir ? (e) => { e.preventDefault(); setDropDir(n.path) } : undefined}
+          onDragOver={n.entry.dir ? (e) => { e.preventDefault(); e.stopPropagation(); setDropDir(n.path) } : undefined}
           onDragLeave={n.entry.dir ? () => setDropDir((d) => (d === n.path ? null : d)) : undefined}
           onDrop={n.entry.dir ? (e) => {
-            e.preventDefault(); setDropDir(null)
+            e.preventDefault(); e.stopPropagation(); setDropDir(null)
             const src = dragNode
             setDragNode(null)
             if (src && src !== n.path && parentOf(src) !== n.path) void op('move', src, n.path)
@@ -269,7 +305,10 @@ function WorkspacePanel({ id }: { id: string }) {
               }}
               onBlur={(e) => { const v = e.target.value.trim(); setRenaming(null); if (v && v !== n.entry.name) void op('rename', n.path, parentOf(n.path) ? `${parentOf(n.path)}/${v}` : v) }}
             />
-          ) : <span className="min-w-0 flex-1 truncate text-muted-foreground">{n.entry.name}</span>}
+          ) : <span className={cn('min-w-0 flex-1 truncate', gitCls(gitMap[n.path]))}>{n.entry.name}</span>}
+          {!n.entry.dir && gitMap[n.path] && (
+            <span className={cn('ml-1 shrink-0 text-[10px] font-medium', gitCls(gitMap[n.path]))} title={gitTitle(gitMap[n.path])}>{gitMap[n.path]}</span>
+          )}
         </div>
         {n.entry.dir && isOpen && (
           <div>
@@ -317,7 +356,7 @@ function WorkspacePanel({ id }: { id: string }) {
       <div className="flex min-w-0 flex-1 flex-col overflow-hidden">
         <div
           ref={stripRef}
-          className="flex h-[36px] shrink-0 items-stretch gap-0 overflow-x-auto overflow-y-hidden border-b border-border bg-card [scrollbar-width:thin]"
+          className="flex h-[36px] shrink-0 items-stretch gap-0 overflow-x-auto overflow-y-hidden border-b border-border bg-transparent [scrollbar-width:thin]"
           onWheel={(e) => { if (stripRef.current && Math.abs(e.deltaY) > Math.abs(e.deltaX)) stripRef.current.scrollLeft += e.deltaY }}
         >
           {tabs.map((p) => {
@@ -364,7 +403,7 @@ function WorkspacePanel({ id }: { id: string }) {
           })}
         </div>
         {active && (
-          <div className="flex h-6 shrink-0 items-center gap-1 border-b border-border bg-background px-3 text-[11px] text-muted-foreground">
+          <div className="flex h-6 shrink-0 items-center gap-1 border-b border-border bg-transparent px-3 text-[11px] text-muted-foreground">
             <TypeIcon path={active} size={11} />
             {active.split('/').map((seg, i, arr) => (
               <span key={i} className="flex items-center gap-1">
@@ -423,6 +462,13 @@ function WorkspacePanel({ id }: { id: string }) {
         <div
           className="min-h-0 flex-1 overflow-auto p-1"
           onContextMenu={(e) => { e.preventDefault(); setCtxMenu({ pos: { x: e.clientX, y: e.clientY }, node: null }) }}
+          onDragOver={(e) => { if (dragNode) { e.preventDefault(); e.dataTransfer.dropEffect = 'move' } }}
+          onDrop={(e) => {
+            e.preventDefault()
+            const src = dragNode
+            setDragNode(null); setDropDir(null)
+            if (src && parentOf(src)) void op('move', src, '.')
+          }}
         >
           <div className="flex h-[26px] items-center gap-1 px-1.5 text-[13px] font-medium">
             <TypeIcon path="" dir size={14} />
