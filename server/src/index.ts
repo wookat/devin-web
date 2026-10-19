@@ -7,7 +7,7 @@ import child_process, { execFile } from "node:child_process";
 import { fileURLToPath } from "node:url";
 import { promisify } from "node:util";
 import { AcpManager } from "./manager.js";
-import { AccountPool, retryAfterSeconds } from "./accounts.js";
+import { AccountPool, isRateLimitError, retryAfterSeconds } from "./accounts.js";
 import { AGENTS, type AgentDef } from "./agents.js";
 import { Store } from "./store.js";
 import { WsHub } from "./ws.js";
@@ -15,7 +15,7 @@ import { WebSocketServer } from "ws";
 import { SessionLog } from "./sessionlog.js";
 import { handleApi, type ApiContext } from "./routes.js";
 import { handleLocalWb } from "./localwb.js";
-import { recordTerminal, loadInflight, isReplayEcho, autoResumeInterrupted } from "./sessionio.js";
+import { recordTerminal, loadInflight, isReplayEcho, autoResumeInterrupted, sessionHost } from "./sessionio.js";
 import { noteUpdate } from "./wbtimeline.js";
 import { initLocalBrowser, attachBrowserWs } from "./localbrowser.js";
 import { initScreen } from "./screen.js";
@@ -238,6 +238,7 @@ const manager = new AcpManager({
   onSessionUpdate: (sessionId, update) => {
     if (isReplayEcho(sessionId, update as Record<string, unknown>)) return;
     sessionLog.append(sessionId, update as Record<string, unknown>);
+    watchSubRateLimit(sessionId, update as Record<string, unknown>);
     hub.broadcast({ type: "session_update", sessionId, update });
     noteUpdate(ctx, sessionId);
   },
@@ -304,6 +305,39 @@ function rotate(reason: string, target?: string): string | null {
   hub.broadcast({ type: "account_rotated", from, to: next, reason, accounts: accounts.status() });
   console.log(`[accounts] rotated [${reason}]: ${from} -> ${next}`);
   return next;
+}
+
+/** toolCallId → sessionId for live run_subagent calls — a failed
+ * tool_call_update can then be attributed back to the turn that spawned it. */
+const subCalls = new Map<string, string>();
+
+/** Rate limits raised INSIDE a run_subagent resume arrive as an ordinary
+ * failed tool result — neither promptWithRetry (which only sees prompt-level
+ * HTTP errors) nor onAgentLog (session-level notices) ever observes them, so
+ * a limited account kept serving until this watcher existed. On a failed
+ * run_subagent update whose result text matches the limit patterns, cool the
+ * account the lead's host actually runs on and rotate — same attribution as
+ * a prompt-level 429. */
+function watchSubRateLimit(sessionId: string, u: Record<string, unknown>) {
+  const tc = String(u.toolCallId ?? "");
+  const m = u._meta as Record<string, unknown> | undefined;
+  if (u.sessionUpdate === "tool_call") {
+    if (m?.["cognition.ai/inferenceToolName"] === "run_subagent" && tc) {
+      if (subCalls.size > 4000) subCalls.clear();
+      subCalls.set(tc, sessionId);
+    }
+    return;
+  }
+  if (u.sessionUpdate !== "tool_call_update" || !tc || u.status !== "failed" || subCalls.get(tc) !== sessionId) return;
+  const text = JSON.stringify(u.rawOutput ?? u.content ?? "");
+  if (!isRateLimitError(text)) return;
+  if (loadInflight.has(sessionId)) return; // replayed history must not cool accounts
+  const name = sessionHost.get(sessionId)?.account ?? accounts.accountForCredFile() ?? accounts.pick();
+  if (name) {
+    accounts.markLimited(name, retryAfterSeconds(text));
+    hub.broadcast({ type: "account_limited", account: name, sessionId, message: text.slice(0, 300) });
+  }
+  rotate("subagent-rate-limit");
 }
 
 const ctx: ApiContext = {
@@ -421,7 +455,7 @@ httpServer.listen(PORT, HOST, async () => {
   // Auto-resume turns left open by a crashed/killed predecessor — gated by
   // the 会话自动继续 pref. Delayed so the acp pool settles first.
   setTimeout(() => {
-    try { autoResumeInterrupted(ctx); } catch (e) { console.error("[auto-resume]", e); }
+    void autoResumeInterrupted(ctx).catch((e) => console.error("[auto-resume]", e));
   }, 4000);
 });
 

@@ -287,6 +287,13 @@ powershell -File clean-orphans.ps1  :: kill acp processes with dead parents
   message content instead of calling the tool). A running agent can't be
   resumed; a dead/unregistered one reports "no subagent exists" — the lead
   surfaces the honest error.
+- **Rate limits inside a child resume arrive as an ordinary failed
+  tool_call_update** (rawOutput/content text), NOT a prompt-level error —
+  promptWithRetry and onAgentLog never see them. `watchSubRateLimit` in
+  index.ts registers every live `run_subagent` tool_call (toolCallId →
+  sessionId), and on a `failed` update whose result matches
+  `isRateLimitError` it cools the pinned host's account + rotates (gated by
+  loadInflight like onRateLimited — replays must not cool accounts).
 - Handshake `_meta` advertises `cognition.ai/subagentSupport|subagentControl|
   chains|sidechains|messageGrouping|partialContent|clarificationRequested`.
 - `session/load` `update_meta` (eventId/timestamp/sidechain/subagent_*) does
@@ -330,6 +337,10 @@ powershell -File clean-orphans.ps1  :: kill acp processes with dead parents
 - `DEVIN_REMOTE_NO_AUTORESUME=1` disables the boot open-turns sweep —
   REQUIRED on second instances sharing the data dir, or each boot re-sends
   "继续" into sessions the primary already resumed (and burns GBs replaying).
+  Auto-resume also SKIPS sessions whose disk log exceeds 256MB (a
+  session/load replay of a 3.7GB log saturates the event loop for minutes)
+  and staggers remaining resumes 5s apart — the interrupted banner still
+  offers manual resume for skipped ones.
 
 ## Desktop-parity capability matrix (probed live against `devin acp`, v3.10.67 bundle)
 

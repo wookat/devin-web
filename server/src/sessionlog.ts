@@ -164,6 +164,13 @@ export class SessionLog {
     try { return fs.statSync(this.file(sessionId)).mtimeMs; } catch { return null; }
   }
 
+  /** Byte size of the on-disk log — 0 when absent. Lets callers skip
+   * operations whose cost scales with history (boot auto-resume). */
+  diskSize(sessionId: string): number {
+    if (!this.dir) return 0;
+    try { return fs.statSync(this.file(sessionId)).size; } catch { return 0; }
+  }
+
   // ---- subagent sidecars -----------------------------------------------------
   // Derived projections, maintained alongside the authoritative append:
   //   <id>.sub.<aid>.jsonl — every event belonging to child agent <aid>'s

@@ -556,14 +556,28 @@ export function interruptedTurn(ctx: ApiContext, id: string): OpenTurn | null {
  * resume it with "继续" — session/load replays the partial turn and the
  * agent picks the work back up. Gated by the 会话自动继续 pref and capped
  * at 2 attempts per turn (a resume that itself crashes can't loop). */
-export function autoResumeInterrupted(ctx: ApiContext) {
+export async function autoResumeInterrupted(ctx: ApiContext) {
   openTurnsLoad(ctx);
   // DEVIN_REMOTE_NO_AUTORESUME: a second instance sharing the data dir must
   // not double-drive interrupted turns — each boot would otherwise re-send
   // "继续" into sessions the primary instance already resumed.
   if (process.env.DEVIN_REMOTE_NO_AUTORESUME || !loadReg(ctx).prefs?.autoResume || !openTurns.size) return;
+  // A resume triggers session/load, which replays the FULL transcript back
+  // through the update stream — on multi-GB logs that replay alone saturates
+  // the loop and balloons the heap for minutes. Gate huge histories to
+  // manual resume (the interrupted banner still offers it), and stagger the
+  // rest so N replays never run at once.
+  const HUGE = 256 << 20;
+  let first = true;
   for (const [id, t] of [...openTurns]) {
     if ((t.resumeCount ?? 0) >= 2) continue;
+    const size = ctx.sessionLog.diskSize(id);
+    if (size > HUGE) {
+      console.error(`[auto-resume] ${id}: ${(size / (1 << 20)).toFixed(0)}MB log — skipping auto-resume (manual 继续 still works)`);
+      continue;
+    }
+    if (!first) await new Promise((r) => setTimeout(r, 5000));
+    first = false;
     t.resumeCount = (t.resumeCount ?? 0) + 1;
     openTurnsSave(ctx);
     console.error(`[auto-resume] ${id}: interrupted turn → "继续" (attempt ${t.resumeCount})`);
