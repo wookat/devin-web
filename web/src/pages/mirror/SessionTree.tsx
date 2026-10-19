@@ -39,9 +39,11 @@ function TreeRow({ s, depth, activeDevinId, folders, onOpen, onPrefetch, onRefre
   const hasKids = s.children.length > 0 || s.total_children > 0
   const active = s.devin_id === activeDevinId
   const enu = mapEnum(s.status_enum || s.activity_status)
-  // Official rows are 30px one-line; rows with a subtitle line (Working status / Last updated / PR count) render 44px two-line.
+  // Official rows are 30px one-line; rows with a subtitle line render 44px
+  // two-line. Official line-2 shows status AND time ("Working · 2m ago"),
+  // not either/or.
   const subtitle = !compact && !propHidden?.['Status'] && enu === 'working' ? 'Working' : null
-  const subTime = !compact && !subtitle && !propHidden?.['Last updated'] ? relTime(s.updated_at) : ''
+  const subTime = !compact && !propHidden?.['Last updated'] ? relTime(s.updated_at) : ''
   const allPrs = !propHidden?.['Pull requests'] ? (s.pull_requests || []) : []
   const prs = compact ? [] : allPrs
   const showArchivedIcon = !compact && !!archivedView && !propHidden?.['Archived']
@@ -61,8 +63,8 @@ function TreeRow({ s, depth, activeDevinId, folders, onOpen, onPrefetch, onRefre
         }}
         onPointerEnter={() => onPrefetch?.(s)}
         onTouchStart={() => onPrefetch?.(s)}
-        className={cn('group/row relative mb-px mt-px flex items-center gap-1.5 rounded-md pr-2 hover:bg-tint-secondary has-[:focus-visible]:bg-tint-secondary [content-visibility:auto]', hasSub ? 'h-11 [contain-intrinsic-block-size:44px]' : 'h-[30px] [contain-intrinsic-block-size:30px]', (active || menu !== 'closed') && 'bg-tint-secondary')}
-        style={{ paddingLeft: 8 + depth * 14 }}
+        className={cn('group/row relative isolate mb-px mt-px flex items-center gap-1 rounded-md pr-0.5 hover:bg-tint-secondary has-[:focus-visible]:bg-tint-secondary [content-visibility:auto]', hasSub ? 'h-11 [contain-intrinsic-block-size:44px]' : 'h-[30px] [contain-intrinsic-block-size:30px]', (active || menu !== 'closed') && 'bg-tint-secondary')}
+        style={{ paddingLeft: 4 + depth * 14 }}
       >
         <a
           data-slot="sidebar-menu-button"
@@ -81,7 +83,17 @@ function TreeRow({ s, depth, activeDevinId, folders, onOpen, onPrefetch, onRefre
             {open ? <ChevronDown size={12} /> : <ChevronRight size={12} />}
           </button>
         )}
-        <StatusDot status={enu} className="!h-2 !w-2 shrink-0" />
+        {/* official left icon cell: w-6 h-[18px], 16px status glyph; aligns to
+            line-1 in two-line rows (self-start+mt-1), centered in 30px rows */}
+        <span className={cn('flex h-[18px] w-6 shrink-0 items-center justify-center text-muted-foreground', hasSub && 'self-start mt-1')}>
+          {enu === 'working' ? (
+            <svg aria-hidden="true" className="motion-safe:animate-spin text-text-green" width={16} height={16} viewBox="0 0 24 24" fill="none"><path d="M21 12C21 16.9706 16.9706 21 12 21C7.02944 21 3 16.9706 3 12C3 7.02944 7.02944 3 12 3C16.9706 3 21 7.02944 21 12Z" stroke="currentColor" strokeOpacity="0.3" strokeWidth="2" /><path d="M20.9451 13C20.4839 17.1716 17.1716 20.4839 13 20.9451" stroke="currentColor" strokeWidth="2" strokeLinecap="round" /></svg>
+          ) : s.status_enum === 'archived' ? (
+            <Archive size={16} className="text-text-orange" />
+          ) : (
+            <StatusDot status={enu} className="!h-2 !w-2" />
+          )}
+        </span>
         {s.is_locked && !s.loaded_here && (
           <span
             aria-label="Locked by another process"
@@ -104,7 +116,7 @@ function TreeRow({ s, depth, activeDevinId, folders, onOpen, onPrefetch, onRefre
             <span className={cn('flex size-[18px] shrink-0 items-center justify-center group-hover/sidebar:invisible group-has-[:focus-visible]/row:invisible', menu !== 'closed' && 'invisible', prColor(compactPr.state, compactPr.draft))}><GitPullRequest size={14} /></span>
           )
         ) : null}
-        <span className="flex min-w-0 flex-1 flex-col overflow-hidden">
+        <span className="flex min-w-0 flex-1 flex-col gap-0.5 overflow-hidden">
           <span className={cn('min-w-0 truncate text-[13px] leading-[18px]', s.is_unread ? 'font-semibold text-foreground' : 'text-foreground/90', s.resumable === false && 'text-muted-foreground')}>
             {s.title || s.devin_id}
           </span>
@@ -115,7 +127,7 @@ function TreeRow({ s, depth, activeDevinId, folders, onOpen, onPrefetch, onRefre
                   <span className="mr-1 shrink-0 rounded bg-muted px-1 text-[10px] leading-[15px]" title="句柄已失效（宿主进程已重启/重放），不能续聊">已失效</span>
                 </>
               )}
-              <span className="truncate">{subtitle || subTime}</span>
+              <span className="truncate">{[subtitle, subTime].filter(Boolean).join(' · ')}</span>
               {prs.length > 0 && (
                 <>
                   <span className="mx-1 text-muted-foreground/60">·</span>
@@ -149,11 +161,16 @@ function TreeRow({ s, depth, activeDevinId, folders, onOpen, onPrefetch, onRefre
                   <span aria-label="Archived" title="Archived" className="flex size-4 shrink-0 items-center justify-center text-orange-500"><Archive size={14} /></span>
                 </>
               )}
+              {hasKids && !open && (
+                <>
+                  <span className="mx-1 text-muted-foreground/60">·</span>
+                  <span className="tabular-nums">{s.total_children || s.children.length}</span>
+                </>
+              )}
             </span>
           )}
         </span>
         {s.is_unread && <span className="size-1.5 shrink-0 rounded-full bg-blue-500 group-hover/row:hidden" />}
-        {hasKids && !open && <span className="shrink-0 text-[11px] tabular-nums text-muted-foreground group-hover/row:hidden">{s.total_children || s.children.length}</span>}
         <span data-slot="sidebar-menu-actions" className="pointer-events-auto relative z-10 flex shrink-0 flex-row items-center gap-px">
           {compact && awakeLabel && (
             <span aria-label={awakeLabel} title={awakeLabel} className="flex size-4 shrink-0 items-center justify-center text-blue-500">
@@ -515,7 +532,7 @@ const SessionTree = memo(function SessionTree({ tree, archivedTree, activeDevinI
           })
         } : undefined}
         onDrop={isFolder ? (e) => e.preventDefault() : undefined}
-        className="group/label sticky top-0 z-20 flex h-8 w-full shrink-0 items-center gap-1 bg-background px-1 text-[12px] font-medium text-muted-foreground"
+        className="group/label sticky top-0 z-20 flex h-8 w-full shrink-0 items-center justify-between gap-px bg-background pl-1 pr-1 text-[12px] font-medium text-muted-foreground"
       >
         {searching ? (
           <input
@@ -630,7 +647,7 @@ const SessionTree = memo(function SessionTree({ tree, archivedTree, activeDevinI
   const groupNames = [...folderNames, 'Pinned', 'Recent', 'Archived']
   return (
     <div className="px-1.5 py-1">
-      <div data-slot="sidebar-label-row" className="group/label sticky top-0 z-20 flex h-8 w-full shrink-0 items-center gap-1 bg-background px-1 text-[12px] font-medium text-muted-foreground">
+      <div data-slot="sidebar-label-row" className="group/label sticky top-0 z-20 flex h-8 w-full shrink-0 items-center justify-between gap-px bg-background pl-1 pr-1 text-[12px] font-medium text-muted-foreground">
         <span data-slot="sidebar-group-label" className="min-w-0 flex-1 truncate pl-1">Sessions</span>
         <button
           aria-label="Properties"
