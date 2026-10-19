@@ -21,8 +21,10 @@
   --color-tint-green: #d9fceb;
   --color-tint-blue: #ebf2fe;
   --color-text-green: rgb(0 165 88);
+  --color-text-orange: rgb(245 142 58);
   --color-text-red: rgb(245 59 58);
   --color-text-purple: rgb(149 108 222);
+  --color-accent-primary: rgb(49 124 255);
   --color-bg-accent-neutral: rgb(54 54 54);
   --color-text-tertiary: rgba(25, 25, 25, 0.4);
   --color-elevated: #ffffff;
@@ -52,8 +54,10 @@
     --color-tint-green: rgb(29, 47, 39);
     --color-tint-blue: rgb(34, 41, 53);
     --color-text-green: rgb(0 236 126);
+    --color-text-orange: rgb(245 142 58);
     --color-text-red: rgb(245 59 58);
     --color-text-purple: rgb(149 108 222);
+    --color-accent-primary: rgb(73 176 255);
     --color-bg-accent-neutral: rgb(249 249 249);
     --color-text-tertiary: rgba(255, 255, 255, 0.4);
     --color-elevated: #1f1f1f;

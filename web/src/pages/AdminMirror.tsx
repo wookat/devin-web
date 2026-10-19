@@ -2284,12 +2284,20 @@ const groups = useMemo(() => groupItems(allItems, sessionWorking), [allItems, se
               <span className="min-w-0 flex-1 truncate text-left">更多</span>
             </button>
             {moreNav && (
-              <Link
-                to="/settings"
-                className="mb-px flex h-[30px] items-center gap-2 rounded-[6px] py-0 pl-8 pr-2 text-[13px] leading-[18px] text-muted-foreground hover:bg-tint-secondary hover:text-foreground"
-              >
-                <span className="min-w-0 flex-1 truncate">首选项</span>
-              </Link>
+              <>
+                <Link
+                  to="/admin/sessions"
+                  className="mb-px flex h-[30px] items-center gap-2 rounded-[6px] py-0 pl-8 pr-2 text-[13px] leading-[18px] text-muted-foreground hover:bg-tint-secondary hover:text-foreground"
+                >
+                  <span className="min-w-0 flex-1 truncate">会话管理</span>
+                </Link>
+                <Link
+                  to="/settings"
+                  className="mb-px flex h-[30px] items-center gap-2 rounded-[6px] py-0 pl-8 pr-2 text-[13px] leading-[18px] text-muted-foreground hover:bg-tint-secondary hover:text-foreground"
+                >
+                  <span className="min-w-0 flex-1 truncate">首选项</span>
+                </Link>
+              </>
             )}
           </nav>
           <div className="min-h-0 flex-1 overflow-y-auto py-1">
@@ -2549,11 +2557,15 @@ const groups = useMemo(() => groupItems(allItems, sessionWorking), [allItems, se
                   onMouseEnter={() => setSettingsSub('none')}
                   onClick={async () => {
                     setSettingsOpen(false)
+                    const nowArchived = !detail.session.archived
                     await adminFetch(`/api/admin/session/${id}/archive`, {
                       method: 'POST',
-                      body: JSON.stringify({ archived: !detail.session.archived }),
+                      body: JSON.stringify({ archived: nowArchived }),
                     })
-                    reloadDetail()
+                    // An archived session leaves the sidebar — land on the
+                    // management page where the 已归档 group shows it.
+                    if (nowArchived) nav('/admin/sessions')
+                    else reloadDetail()
                   }}
                   className={settingsRowCls}
                 >
