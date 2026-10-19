@@ -18,3 +18,5 @@ server.log
 /NUL
 .playwright-mcp/  
 _*.txt  
+shot_only.py  
+child-page.png  
