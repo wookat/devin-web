@@ -334,6 +334,17 @@ powershell -File clean-orphans.ps1  :: kill acp processes with dead parents
   wipe every `<id>.jsonl.sub*` file (old generation); the constructor
   deletes leftover `.subidx`. Child timelines read ONE small sidechain —
   never the parent log.
+  Coverage-hole rules (0-byte-file audit): `append` only bumps `.subscan`
+  when EVERY routed sidecar write landed — a failed open must leave
+  coverage behind so `subFilesStale` schedules a healing rescan;
+  `wipeSidecars` bumps the gen counter (a wipe IS a generation change, so
+  `restoreFile` wipes also invalidate in-flight scans) and closes live
+  scan fds registered in `scanOuts` BEFORE rmSync — an rm on an open fd is
+  delete-pending on Windows (name lingers at 0 bytes, writes land in a
+  doomed file object: the observed ghost), and the `dead` flag stops the
+  killed scan repopulating. Scan-end `fileEnd` is Math.max-clamped so
+  mid-scan appends aren't regressed, and torn-tail truncation drops the
+  coverage marker since a shrunken prefix invalidates it.
 - **Log durability**: `writer()` opens each `<id>.jsonl` `'a+'` and on first
   open scans the last 8KB for a torn tail (crash mid-write → partial final
   line) and truncates back to the last newline via `fs.truncateSync(path)`
