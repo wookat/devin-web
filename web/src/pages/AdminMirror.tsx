@@ -54,7 +54,7 @@ import { PrPanel } from './mirror/PrPanel'
 import { ProgressPanel, WorklogPanel } from './mirror/ProgressPanels'
 import { ChangesPanel } from './mirror/ChangesPanel'
 import { ComputerPanel } from './mirror/ComputerPanel'
-import { WorkspacePanel } from './mirror/WorkspacePanel'
+import { WorkspacePanel, CtxMenu } from './mirror/WorkspacePanel'
 import { ResourcesPanel, SubagentsPanel } from './mirror/ResourcePanels'
 
 let lastSeenLocalCfg: LocalCfg | null = null
@@ -246,6 +246,7 @@ export default function AdminMirrorPage() {
   useEffect(() => { panelFlashRef.current = panel }, [panel])
   const [addOpen, setAddOpen] = useState(false)
   const [addAnchor, setAddAnchor] = useState<{ left: number; top: number } | null>(null)
+  const [panelTabMenu, setPanelTabMenu] = useState<{ x: number; y: number; close: () => void } | null>(null)
   const addBtnRef = useRef<HTMLButtonElement | null>(null)
   // The fixed-position menu doesn't track its anchor, so re-anchor it when the viewport changes
   // (e.g. the mobile keyboard opening for the search field).
@@ -4217,10 +4218,10 @@ const groups = useMemo(() => groupItems(allItems, sessionWorking), [allItems, se
           style={!fullWidth && window.innerWidth >= 768 ? { flexGrow: rightPct } : undefined}
         >
           <div className="flex h-11 items-center gap-1 overflow-hidden p-2">
-            <div role="tablist" className="relative min-w-0 shrink flex w-max items-center gap-1 overflow-x-auto [-ms-overflow-style:none] [scrollbar-width:none] [&::-webkit-scrollbar]:hidden">
+            <div role="tablist" className="relative min-w-0 flex-1 flex items-center gap-1 overflow-x-auto [-ms-overflow-style:none] [scrollbar-width:none] [&::-webkit-scrollbar]:hidden">
               {(() => {
                 const displayed = displayedPanelKeys
-                const tabProps = (key: string) => ({
+                const tabProps = (key: string, close?: () => void) => ({
                   key,
                   role: 'tab' as const,
                   tabIndex: 0,
@@ -4228,6 +4229,7 @@ const groups = useMemo(() => groupItems(allItems, sessionWorking), [allItems, se
                   draggable: true,
                   'data-sortable-tab': '',
                   'data-flash-key': key,
+                  onContextMenu: (e: React.MouseEvent) => { e.preventDefault(); if (close) setPanelTabMenu({ x: e.clientX, y: e.clientY, close }) },
                   onClick: () => { tabSyncBlocked.current = false; setPanel(key); setUserPickedActiveTab(true); setPermSide(null) },
                   onKeyDown: (e: ReactKeyboardEvent<HTMLDivElement>) => {
                     if (e.key === 'Enter' || e.key === ' ') {
@@ -4251,13 +4253,14 @@ const groups = useMemo(() => groupItems(allItems, sessionWorking), [allItems, se
                     panel === key ? 'bg-accent text-foreground' : 'text-muted-foreground hover:bg-accent',
                   ),
                 })
-                const closeButton = (onClose: () => void) => (
+                const closeButton = (onClose: () => void, active: boolean) => (
                   <button
                     type="button"
                     aria-label="Close tab"
                     title="Close tab"
                     onClick={(e) => { e.stopPropagation(); onClose() }}
-                    className="absolute inset-0 flex size-[22px] cursor-pointer items-center justify-center rounded-[4px] opacity-0 group-hover:opacity-100 [@media(any-pointer:coarse)]:opacity-100 hover:bg-accent"
+                    className={cn('absolute inset-0 flex size-[22px] cursor-pointer items-center justify-center rounded-[4px] hover:bg-accent',
+                      active ? 'opacity-100' : 'opacity-0 group-hover:opacity-100')}
                   >
                     <PanelCloseTabIcon size={16} />
                   </button>
@@ -4266,13 +4269,14 @@ const groups = useMemo(() => groupItems(allItems, sessionWorking), [allItems, se
                   if (!dk.startsWith('file:') && !dk.startsWith('pr:')) {
                     const key = dk as PanelKey
                     const { label, Icon } = PANELS[key]
+                    const isActive = panel === key
                     return (
-                      <div {...tabProps(key)} key={key}>
+                      <div {...tabProps(key, () => closeTab(key))} key={key}>
                         <span className="relative size-[22px] shrink-0">
-                          <span className="absolute inset-0 flex items-center justify-center opacity-100 group-hover:opacity-0 [@media(any-pointer:coarse)]:opacity-0">
+                          <span className={cn('absolute inset-0 flex items-center justify-center', isActive ? 'opacity-0' : 'opacity-100 group-hover:opacity-0')}>
                             <Icon size={16} />
                           </span>
-                          {closeButton(() => closeTab(key))}
+                          {closeButton(() => closeTab(key), isActive)}
                         </span>
                         <span className="max-w-[120px] truncate">{label}</span>
                       </div>
@@ -4282,17 +4286,19 @@ const groups = useMemo(() => groupItems(allItems, sessionWorking), [allItems, se
                     const pr = prTabs.find((p) => `pr:${p.url}` === dk)
                     if (!pr) return null
                     const key = dk
+                    const isActive = panel === key
+                    const doClose = () => {
+                      setHiddenPrs((prev) => new Set(prev).add(pr.url))
+                      setClosedTabIds((prev) => new Set(prev).add(key))
+                      if (panel === key) setPanel('progress')
+                    }
                     return (
-                      <div {...tabProps(key)} key={key}>
+                      <div {...tabProps(key, doClose)} key={key}>
                         <span className="relative size-[22px] shrink-0">
-                          <span className="absolute inset-0 flex items-center justify-center opacity-100 group-hover:opacity-0 [@media(any-pointer:coarse)]:opacity-0">
+                          <span className={cn('absolute inset-0 flex items-center justify-center', isActive ? 'opacity-0' : 'opacity-100 group-hover:opacity-0')}>
                             <PanelPullRequestIcon size={16} className={pr.draft ? 'text-muted-foreground' : pr.state === 'closed' ? 'text-[#f53b3a]' : pr.state === 'merged' ? 'text-[rgb(149,108,222)]' : 'text-green-600'} />
                           </span>
-                          {closeButton(() => {
-                            setHiddenPrs((prev) => new Set(prev).add(pr.url))
-                            setClosedTabIds((prev) => new Set(prev).add(key))
-                            if (panel === key) setPanel('progress')
-                          })}
+                          {closeButton(doClose, isActive)}
                         </span>
                         <span className="max-w-[120px] truncate">PR #{pr.num}</span>
                       </div>
@@ -4301,15 +4307,17 @@ const groups = useMemo(() => groupItems(allItems, sessionWorking), [allItems, se
                   const f = fileTabs.find((t) => `file:${t.href}` === dk)
                   if (!f) return null
                   const key = dk
+                  const isActive = panel === key
+                  const doClose = () => {
+                    setFileTabs((prev) => prev.filter((t) => t.href !== f.href))
+                    setClosedTabIds((prev) => new Set(prev).add(key))
+                    if (panel === key) setPanel('progress')
+                  }
                   return (
-                    <div {...tabProps(key)} key={key} ref={(el) => { if (panel === key) el?.scrollIntoView({ inline: 'nearest', block: 'nearest' }) }}>
+                    <div {...tabProps(key, doClose)} key={key} ref={(el) => { if (panel === key) el?.scrollIntoView({ inline: 'nearest', block: 'nearest' }) }}>
                       <span className="relative size-[22px] shrink-0">
-                        <span className="absolute inset-0 flex items-center justify-center opacity-100 group-hover:opacity-0 [@media(any-pointer:coarse)]:opacity-0 [&_svg]:size-4" dangerouslySetInnerHTML={{ __html: filePillSvg(f.name) }} />
-                        {closeButton(() => {
-                          setFileTabs((prev) => prev.filter((t) => t.href !== f.href))
-                          setClosedTabIds((prev) => new Set(prev).add(key))
-                          if (panel === key) setPanel('progress')
-                        })}
+                        <span className={cn('absolute inset-0 flex items-center justify-center [&_svg]:size-4', isActive ? 'opacity-0' : 'opacity-100 group-hover:opacity-0')} dangerouslySetInnerHTML={{ __html: filePillSvg(f.name) }} />
+                        {closeButton(doClose, isActive)}
                       </span>
                       <span className="max-w-[120px] truncate">{f.name}</span>
                     </div>
@@ -4433,6 +4441,13 @@ const groups = useMemo(() => groupItems(allItems, sessionWorking), [allItems, se
                     </div>
                   ) : null}
                 </div>
+              )}
+              {panelTabMenu && (
+                <CtxMenu
+                  pos={{ x: panelTabMenu.x, y: panelTabMenu.y }}
+                  items={[{ label: 'Close', onClick: panelTabMenu.close }]}
+                  onClose={() => setPanelTabMenu(null)}
+                />
               )}
             </div>
             <span className="flex-1" />

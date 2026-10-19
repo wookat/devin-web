@@ -145,6 +145,15 @@ function cwdFor(ctx: ApiContext, id: string): string {
   return ctx.sessionCwd.get(parseSubId(id)?.parent ?? id) ?? ctx.primaryCwd;
 }
 
+/** Resolve a workspace-relative path strictly INSIDE cwd — rejects absolutes
+ *  and `..` escapes. Returns the absolute path or null. */
+function confined(cwd: string, p: unknown): string | null {
+  if (typeof p !== "string" || !p) return null;
+  const full = path.resolve(cwd, p);
+  const root = path.resolve(cwd);
+  return full === root || full.startsWith(root + path.sep) ? full : null;
+}
+
 function subStatusEnum(a: { status: string; agentId?: string; resumable?: boolean } | undefined | null, aid: string): string {
   if (a?.status === "running") return a.resumable === false ? "stopped" : "working";
   if (subPingActive(aid)) return "working";
@@ -949,6 +958,45 @@ export async function handleLocalWb(ctx: ApiContext, req: IncomingMessage, res: 
 
         const sharedH = sessionSubs[`${sub}:${m}`];
         if (sharedH) { await sharedH(ctx, id, req, res, url); return true; }
+
+        // Editor write/ops — ADMIN ONLY (never in sessionSubs: share links must
+        // not write). All paths confined inside the session cwd.
+        if (isAdmin && sub === "file-write" && m === "POST") {
+          const body = await readJson(req);
+          const cwd = cwdFor(ctx, id);
+          const full = confined(cwd, body.path);
+          if (!full) { json(res, 400, { error: "path escapes cwd" }); return true; }
+          try {
+            fs.mkdirSync(path.dirname(full), { recursive: true });
+            const buf = typeof body.base64 === "string" ? Buffer.from(body.base64, "base64") : Buffer.from(String(body.text ?? ""), "utf8");
+            if (buf.length > 50 * 1024 * 1024) { json(res, 413, { error: "too large" }); return true; }
+            fs.writeFileSync(full, buf);
+            json(res, 200, { ok: true, size: buf.length });
+          } catch (e) { json(res, 500, { error: (e as Error).message }); }
+          return true;
+        }
+        if (isAdmin && sub === "file-ops" && m === "POST") {
+          const body = await readJson(req);
+          const cwd = cwdFor(ctx, id);
+          const full = confined(cwd, body.path);
+          if (!full) { json(res, 400, { error: "path escapes cwd" }); return true; }
+          const dest = typeof body.to === "string" ? confined(cwd, body.to) : null;
+          const needDest = body.op === "rename" || body.op === "move" || body.op === "copy";
+          if (needDest && !dest) { json(res, 400, { error: "destination escapes cwd" }); return true; }
+          try {
+            switch (body.op) {
+              case "rename": fs.renameSync(full, dest!); break;
+              case "move": fs.renameSync(full, path.join(dest!, path.basename(full))); break;
+              case "copy": fs.cpSync(full, dest!, { recursive: true }); break;
+              case "mkdir": fs.mkdirSync(full, { recursive: true }); break;
+              case "newfile": if (fs.existsSync(full)) { json(res, 409, { error: "exists" }); return true; } fs.mkdirSync(path.dirname(full), { recursive: true }); fs.writeFileSync(full, ""); break;
+              case "delete": fs.rmSync(full, { recursive: true, force: true }); break;
+              default: json(res, 400, { error: `unknown op ${body.op}` }); return true;
+            }
+            json(res, 200, { ok: true });
+          } catch (e) { json(res, 500, { error: (e as Error).message }); }
+          return true;
+        }
 
         if (sub === "timeline" && m === "GET") {
           // Kick off the replay but DON'T await it. While it runs, serve the
