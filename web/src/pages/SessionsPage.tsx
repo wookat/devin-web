@@ -18,17 +18,22 @@ interface SessionsResp {
 
 /* Official status → colored text (measured app.devin.ai token values):
    green rgb(0,165,88) · orange rgb(245,142,58) · red rgb(245,59,58) · secondary rgba(25,25,25,.56) */
+/* Local status set — 进行中/等待输入/已归档/已失效/已结束. Acp sessions have
+   no "sleeping": a finished turn parks at 'blocked' (idle, awaiting input) —
+   that is a real state, not an ended session. crashed/failed/stopped are dead
+   ends → 已失效; finished → 已结束. */
 const STATUS_TEXT: Record<string, { label: string; cls: string }> = {
   working: { label: '进行中', cls: 'text-text-green' },
-  idle: { label: 'Sleeping', cls: 'text-muted-foreground' },
   blocked: { label: '等待输入', cls: 'text-text-orange' },
-  finished: { label: 'Done', cls: 'text-muted-foreground' },
-  stopped: { label: 'Stopped', cls: 'text-muted-foreground' },
-  crashed: { label: 'Crashed', cls: 'text-text-red' },
-  failed: { label: 'Failed', cls: 'text-text-red' },
-  archived: { label: 'Archived', cls: 'text-muted-foreground' },
+  archived: { label: '已归档', cls: 'text-muted-foreground' },
+  crashed: { label: '已失效', cls: 'text-text-red' },
+  failed: { label: '已失效', cls: 'text-text-red' },
+  stopped: { label: '已失效', cls: 'text-muted-foreground' },
+  idle: { label: '已失效', cls: 'text-muted-foreground' },
+  finished: { label: '已结束', cls: 'text-muted-foreground' },
+  ended: { label: '已结束', cls: 'text-muted-foreground' },
 }
-const stText = (s: string) => STATUS_TEXT[s] ?? { label: s, cls: 'text-muted-foreground' }
+const stText = (s: string) => STATUS_TEXT[s] ?? { label: '已结束', cls: 'text-muted-foreground' }
 
 const fmtDay = (iso: string | null | undefined) => {
   if (!iso) return ''
@@ -40,8 +45,8 @@ const fmtDay = (iso: string | null | undefined) => {
 }
 
 const STATUS_OPTS = [
-  { v: 'working', l: '进行中' }, { v: 'blocked', l: '等待输入' }, { v: 'finished', l: 'Done' },
-  { v: 'stopped', l: 'Stopped' }, { v: 'crashed', l: 'Crashed' }, { v: 'archived', l: '已归档' }, { v: 'unarchived', l: '未归档' },
+  { v: 'working', l: '进行中' }, { v: 'blocked', l: '等待输入' }, { v: 'finished', l: '已结束' },
+  { v: 'crashed', l: '已失效' }, { v: 'archived', l: '已归档' }, { v: 'unarchived', l: '未归档' },
 ]
 
 /* Portal-anchored dropdown — same chrome as ui.tsx Combo (rounded-10, bg-95, blur-8). */
@@ -60,17 +65,20 @@ function Menu({ anchor, onClose, children, minW = 200 }: { anchor: DOMRect | nul
   let top = anchor.bottom + 4
   if (top + 320 > window.innerHeight - 8 && anchor.top - 4 - 320 > 8) top = anchor.top - 4 - 320
   return createPortal(
-    <div ref={ref} className="menu-in fixed z-[100] overflow-y-auto rounded-[10px] bg-elevated/95 py-1 shadow-[0_10px_15px_-3px_rgba(0,0,0,0.06),0_4px_6px_-4px_rgba(0,0,0,0.1)] outline outline-1 outline-border-secondary backdrop-blur-[8px]" style={{ left, top, width: w, maxHeight: 'min(480px, 80vh)' }}>
+    <div ref={ref} className="menu-in fixed z-[100] overflow-y-auto rounded-[10px] bg-elevated/95 p-1 shadow-[0_10px_15px_-3px_rgba(0,0,0,0.06),0_4px_6px_-4px_rgba(0,0,0,0.1)] outline outline-1 outline-border-secondary backdrop-blur-[8px]" style={{ left, top, width: w, maxHeight: 'min(480px, 80vh)' }}>
       {children}
     </div>,
     document.body,
   )
 }
 
-/* Official menu item: h-30px px-2 py-1.5 gap-2 rounded-6 text-13, svg 16px */
+/* Official menu item: h-30px px-2 py-1.5 gap-2 rounded-6 text-13, svg 16px,
+   checked mark at the right (measured on app.devin.ai). */
 const menuItem = 'flex w-full cursor-pointer select-none items-center gap-2 rounded-[6px] px-2 py-1.5 text-left text-[13px] leading-[18px] text-foreground outline-none hover:bg-tint-secondary [&>svg]:size-4 [&>svg]:shrink-0'
-const menuHead = 'px-2 pb-1 pt-2 text-[12px] leading-[16px] text-muted-foreground'
-const menuSep = 'mx-2 my-1 border-t border-border'
+/* Official group label: 12px/500 secondary, py-[5px] px-2 → h-26 */
+const menuHead = 'select-none px-2 py-[5px] text-[12px] font-medium leading-[16px] text-muted-foreground'
+/* Official separator: 9px slot, centered 1px line, mx-2 (bg-clip-content trick) */
+const menuSep = 'mx-2 h-[9px] bg-border-secondary bg-clip-content py-1'
 
 /* Official checkbox: 14px rounded-[4px] border .08 transparent; checked →
    bg-accent-primary rgb(49,124,255) + white check; focus-visible 1px accent
@@ -245,19 +253,20 @@ export default function SessionsPage() {
           </div>
           <div className="mr-auto" />
           <div className="relative flex shrink-0 items-center gap-[12px]">
+            {/* hover actions live IN the flow (official expands them before the
+                meta) — no absolute overlay, so the avatar is never covered */}
+            <span className="hidden items-center gap-0.5 group-hover/row:flex">
+              <button onClick={(e) => { e.stopPropagation(); pinRow(s) }} title={s.is_pinned ? 'Unpin' : 'Pin'} aria-label={s.is_pinned ? 'Unpin' : 'Pin'} className={cn('flex size-7 cursor-pointer items-center justify-center rounded-[6px] text-muted-foreground hover:bg-tint-secondary hover:text-foreground', FOCUS_RING)}>
+                {s.is_pinned ? <PinOff size={14} /> : <Pin size={14} />}
+              </button>
+              <button onClick={(e) => { e.stopPropagation(); archRow(s) }} title={s.status_enum === 'archived' ? '取消归档' : '归档'} aria-label={s.status_enum === 'archived' ? '取消归档' : '归档'} className={cn('flex size-7 cursor-pointer items-center justify-center rounded-[6px] text-muted-foreground hover:bg-tint-secondary hover:text-foreground', FOCUS_RING)}>
+                {s.status_enum === 'archived' ? <ArchiveRestore size={14} /> : <Archive size={14} />}
+              </button>
+            </span>
             {showFolder && s.folder && <span className="flex items-center gap-1 text-[13px] leading-[18px] text-muted-foreground"><Tag size={12} />{s.folder}</span>}
             {showCreated && <span className="text-[13px] leading-[18px] text-muted-foreground">{fmtDay(s.created_at)}</span>}
             {showUpdated && <span className="text-[13px] leading-[18px] text-muted-foreground">{fmtDay(s.updated_at)}</span>}
             {showUser && <span className="flex size-6 items-center justify-center rounded-full bg-tint-secondary text-[10px] font-medium text-muted-foreground">L</span>}
-          </div>
-          {/* official hover slide-in actions: Pin + (local) archive */}
-          <div className="absolute right-3 top-1/2 hidden -translate-y-1/2 items-center gap-0.5 bg-background/80 pl-1 backdrop-blur-sm group-hover/row:flex">
-            <button onClick={(e) => { e.stopPropagation(); pinRow(s) }} title={s.is_pinned ? 'Unpin' : 'Pin'} aria-label={s.is_pinned ? 'Unpin' : 'Pin'} className={cn('flex size-7 cursor-pointer items-center justify-center rounded-[6px] text-muted-foreground hover:bg-tint-primary hover:text-foreground', FOCUS_RING)}>
-              {s.is_pinned ? <PinOff size={14} /> : <Pin size={14} />}
-            </button>
-            <button onClick={(e) => { e.stopPropagation(); archRow(s) }} title={s.status_enum === 'archived' ? '取消归档' : '归档'} aria-label={s.status_enum === 'archived' ? '取消归档' : '归档'} className={cn('flex size-7 cursor-pointer items-center justify-center rounded-[6px] text-muted-foreground hover:bg-tint-primary hover:text-foreground', FOCUS_RING)}>
-              {s.status_enum === 'archived' ? <ArchiveRestore size={14} /> : <Archive size={14} />}
-            </button>
           </div>
         </div>
         {open && kids && kids.map((k) => <RowLine key={k.devin_id} s={k} depth={depth + 1} />)}
@@ -280,13 +289,14 @@ export default function SessionsPage() {
     )
   }
 
-  /* Official filter chip: 28px rounded-6 bordered card, icon + label + × */
+  /* Official filter chip: h-28 rounded-full pill, border .06, bg-tint-tertiary;
+     inner: icon 15px mr-1.5 + label btn px-1 + remove btn rounded-r-full */
   const Chip = ({ icon, label, onClear, kind }: { icon: ReactNode; label: string; onClear: () => void; kind: string }) => (
-    <span className="inline-flex h-7 items-center gap-1 rounded-[6px] border border-border bg-card pr-0.5 text-[13px] leading-[18px] text-foreground">
-      <button onClick={openMenu(kind)} className={cn('flex h-full cursor-pointer touch-manipulation items-center gap-1 rounded-l-[6px] pl-[10px] pr-1 text-foreground hover:bg-tint-secondary', FOCUS_RING)}>
+    <span className="inline-flex h-7 max-w-full items-center rounded-full border border-border-secondary bg-tint-tertiary text-[13px] leading-[18px] text-foreground">
+      <button onClick={openMenu(kind)} className={cn('flex h-full cursor-pointer touch-manipulation items-center gap-1 overflow-hidden whitespace-nowrap rounded-l-full pl-2 pr-1 py-0.5 text-foreground hover:bg-tint-secondary', FOCUS_RING)}>
         {icon}{label}
       </button>
-      <button onClick={onClear} className={cn('flex size-5 cursor-pointer items-center justify-center rounded-[4px] text-muted-foreground hover:bg-tint-primary hover:text-foreground', FOCUS_RING)} aria-label="移除筛选"><X size={12} /></button>
+      <button onClick={onClear} className={cn('flex h-full cursor-pointer items-center rounded-r-full py-0.5 pl-1 pr-1.5 text-muted-foreground hover:bg-tint-secondary hover:text-foreground', FOCUS_RING)} aria-label="Remove filter"><X size={12} /></button>
     </span>
   )
 
@@ -454,8 +464,9 @@ export default function SessionsPage() {
           {folderF.length > 0 && (
             <Chip kind="folder" icon={<Tag size={14} className="text-muted-foreground" />} label={folderF.length === 1 ? `Folder is ${folderF[0] === '__none' ? 'none' : folderF[0]}` : `Folder is any of ${folderF.length}`} onClear={() => setFolderF([])} />
           )}
-          <button onClick={openMenu('addfilter')} className={cn('flex size-7 cursor-pointer touch-manipulation items-center justify-center rounded-[6px] text-muted-foreground hover:bg-tint-secondary hover:text-foreground', FOCUS_RING)} aria-label="添加筛选" title="添加筛选">
-            <ListFilter size={16} />
+          {/* official Add filters: 28×28 circle, border .06, white bg, 18px icon */}
+          <button onClick={openMenu('addfilter')} className={cn('flex size-7 cursor-pointer touch-manipulation items-center justify-center rounded-full border border-border-secondary bg-card text-muted-foreground hover:bg-tint-secondary hover:text-foreground', FOCUS_RING)} aria-label="Add filters" title="Add filters">
+            <ListFilter size={18} />
           </button>
           {filtersOn && <button onClick={() => { setQ(''); setStatusF([]); setFolderF([]) }} className={cn('flex h-7 cursor-pointer touch-manipulation select-none items-center gap-1 whitespace-nowrap rounded-[6px] px-[10px] text-[13px] font-medium leading-[18px] text-muted-foreground hover:bg-tint-secondary hover:text-foreground', FOCUS_RING)}>Clear filters</button>}
         </div>
@@ -497,7 +508,7 @@ export default function SessionsPage() {
 
       {/* Display menu — official structure (Sort by / Direction / Grouping / View / Display properties / Export) */}
       {menu?.kind === 'display' && (
-        <Menu anchor={menu.r} onClose={() => setMenu(null)} minW={220}>
+        <Menu anchor={menu.r} onClose={() => setMenu(null)} minW={280}>
           <div className={menuHead}>Sort by</div>
           {[['updated', 'Updated'], ['created', 'Created']].map(([v, l]) => (
             <button key={v} className={menuItem} onClick={() => setSort(v as 'updated' | 'created')}>{l}{sort === v && <Check size={14} className="ml-auto" />}</button>
@@ -525,12 +536,12 @@ export default function SessionsPage() {
         </Menu>
       )}
 
-      {/* ☰ add-filter menu */}
+      {/* ☰ add-filter menu — official 220w flat list, rows open submenus */}
       {menu?.kind === 'addfilter' && (
-        <Menu anchor={menu.r} onClose={() => setMenu(null)}>
+        <Menu anchor={menu.r} onClose={() => setMenu(null)} minW={220}>
           <div className={menuHead}>Add filter</div>
-          <button className={menuItem} onClick={(e) => setMenu({ kind: 'status', r: e.currentTarget.getBoundingClientRect() })}><ListFilter size={14} className="text-muted-foreground" /> Status</button>
-          <button className={menuItem} onClick={(e) => setMenu({ kind: 'folder', r: e.currentTarget.getBoundingClientRect() })}><Tag size={14} className="text-muted-foreground" /> Folder</button>
+          <button className={menuItem} onClick={(e) => setMenu({ kind: 'status', r: e.currentTarget.getBoundingClientRect() })}><ListFilter className="text-muted-foreground" /> <span className="min-w-0 flex-1 truncate">Status</span><ChevronRight className="ml-auto text-muted-foreground" /></button>
+          <button className={menuItem} onClick={(e) => setMenu({ kind: 'folder', r: e.currentTarget.getBoundingClientRect() })}><Tag className="text-muted-foreground" /> <span className="min-w-0 flex-1 truncate">Folder</span><ChevronRight className="ml-auto text-muted-foreground" /></button>
         </Menu>
       )}
 
