@@ -14,7 +14,7 @@ import os from "node:os";
 import type { ApiContext } from "./routes.js";
 import type { DevinAcp } from "./acp.js";
 import { stageUpload, uploadPath, MIME } from "./uploads.js";
-import { streamScreen } from "./screen.js";
+import { streamScreen, injectInput } from "./screen.js";
 import zlib from "node:zlib";
 import { fileURLToPath } from "node:url";
 import { loadReg, saveReg, meta, noteLastUsed, type WbRegistry } from "./wbstore.js";
@@ -292,11 +292,12 @@ const sessionSubs: Record<string, (ctx: ApiContext, id: string, req: IncomingMes
     json(res, 200, { files, error: null });
   },
   "file-raw:GET": async (ctx, id, _req, res, url) => {
-    // Raw workspace file bytes (images read by the agent, etc.) — same path
-    // resolution as file-contents but streams the real mime type.
-    const p = url.searchParams.get("path") ?? "";
-    const cwd = cwdFor(ctx, id);
-    const full = path.isAbsolute(p) ? p : path.join(cwd, p);
+    // Raw workspace file bytes (images read by the agent, produced-file chips).
+    // sessionSubs is share-reachable → MUST stay confined inside the session
+    // cwd; an unconstrained path here is arbitrary host-file read for any
+    // share-link holder.
+    const full = confined(cwdFor(ctx, id), url.searchParams.get("path"));
+    if (!full) { json(res, 403, { error: "path escapes session cwd" }); return; }
     try {
       const data = fs.readFileSync(full);
       if (data.length > 25 * 1024 * 1024) {
@@ -714,6 +715,17 @@ export async function handleLocalWb(ctx: ApiContext, req: IncomingMessage, res: 
       // the share tree. Read-only by design (see screen.ts).
       if (p === "/api/admin/screen/live" && m === "GET") {
         await streamScreen(res);
+        return true;
+      }
+      // POST /api/admin/screen/input — inject one pointer/keyboard event.
+      if (p === "/api/admin/screen/input" && m === "POST") {
+        const body = await readJson(req).catch(() => null);
+        try {
+          await injectInput(body);
+          json(res, 200, { ok: true });
+        } catch (e) {
+          json(res, 400, { error: e instanceof Error ? e.message : String(e) });
+        }
         return true;
       }
 
@@ -1534,7 +1546,11 @@ export async function handleLocalWb(ctx: ApiContext, req: IncomingMessage, res: 
         const serveSnap = !!(loading && snap);
         const all = serveSnap ? snap : live;
         const reset = !serveSnap && tlReset.delete(id);
-        const items = loading && !snap ? [] : all.slice(-300);
+        const items = (loading && !snap ? [] : all.slice(-300)).map((it) =>
+          it.attachments?.some((a) => a.url.startsWith("/api/admin/"))
+            ? { ...it, attachments: it.attachments.filter((a) => !a.url.startsWith("/api/admin/")) }
+            : it,
+        );
         json(res, 200, { items, next_cursor: null, error: null, queue: queueList(id), reset: reset || undefined, gen: serveSnap ? 0 : gen, activity: loading ? { text: "Loading history…" } : null });
         return true;
       }

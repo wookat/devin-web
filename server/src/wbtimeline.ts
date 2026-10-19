@@ -169,10 +169,86 @@ interface TlState {
    * original cognition.ai/timestamp stamp, so a hash of (kind|stamp) collapses
    * echo rows (observed: 9 generations of one subagent run in a loaded log). */
   dedup?: Set<number>;
+  /** Files the agent created/modified this turn, collected from edit tool
+   * diffs; flushed onto the next (or current) devin message as attachments —
+   * the official "files produced by this message" chips. path → action. */
+  produced: Map<string, string>;
+  /** Session id — needed to build file-raw URLs for produced attachments. */
+  sid: string;
 }
 
-function freshTlState(): TlState {
-  return { items: [], toolItems: new Map(), permItems: new Map(), lastMsg: null, realUser: new Set(), localUser: new Map(), seenSeq: -1, logGen: -1, gen: 0, agentToolIds: new Set(), pendingSpawns: [], subCards: new Map() };
+function freshTlState(sid = ""): TlState {
+  return { items: [], toolItems: new Map(), permItems: new Map(), lastMsg: null, realUser: new Set(), localUser: new Map(), seenSeq: -1, logGen: -1, gen: 0, agentToolIds: new Set(), pendingSpawns: [], subCards: new Map(), produced: new Map(), sid };
+}
+
+/** Extract output paths a shell command is likely to CREATE: `>`/`>>`
+ * redirects (incl. `2>` but not `2>&1`), `-o`/`--output*` flag values, and
+ * the first arg of PowerShell write cmdlets (Set-Content/Out-File/…). */
+function shellOutputPaths(cmd: string): string[] {
+  const tokens: string[] = [];
+  const re = /"([^"]*)"|'([^']*)'|(\S+)/g;
+  let m: RegExpExecArray | null;
+  while ((m = re.exec(cmd))) tokens.push(m[1] ?? m[2] ?? m[3]);
+  const looksLikePath = (s: string) =>
+    !!s && !/^[&|<>-]/.test(s) && !/^(nul|\/dev\/null|stderr|stdout|console)$/i.test(s)
+      && !/[*?]|^\$|^%/.test(s) && /\.[A-Za-z0-9]{1,10}$|[\\/]/.test(s);
+  const out = new Set<string>();
+  const writeCmds = /^(set-content|add-content|out-file|tee-object|tee|copy|xcopy|move|ren|rename|certutil)$/i;
+  for (let i = 0; i < tokens.length; i++) {
+    const t = tokens[i];
+    if (writeCmds.test(t)) {
+      const nxt = tokens.slice(i + 1).find((x) => !/^[-/]/.test(x));
+      if (nxt && looksLikePath(nxt)) out.add(nxt);
+      continue;
+    }
+    const r = /^[0-9]?>(>{0,1})(.+)$/.exec(t);
+    if (r && looksLikePath(r[2])) { out.add(r[2]); continue; }
+    if (/^[0-9]?>>?$/.test(t)) {
+      const nxt = tokens[i + 1];
+      if (nxt && looksLikePath(nxt)) out.add(nxt);
+      continue;
+    }
+    if (/^(-o|--out|--output|--output-file|--output-path|-output|-filepath|-file)$/i.test(t)) {
+      const nxt = tokens[i + 1];
+      if (nxt && looksLikePath(nxt)) out.add(nxt);
+      continue;
+    }
+    const eq = /^(--out(?:put(?:-file|-path)?)?|-o)=(.+)$/.exec(t);
+    if (eq && looksLikePath(eq[2])) out.add(eq[2]);
+  }
+  return [...out];
+}
+
+/** Push collected produced-file paths onto the last devin message as
+ * attachments (file-raw URLs the admin UI renders via AttachmentCard). */
+function flushProduced(st: TlState, dirty?: WbItem[], boundary = false): void {
+  if (!st.produced.size || !st.sid) return;
+  // lastMsg may be a thought row — walk back to the last devin message, but
+  // never past a user row (files would leak into the previous turn's reply).
+  let msg = st.lastMsg;
+  if (!msg || msg.role !== "devin" || msg.kind !== "message") {
+    msg = null;
+    for (let i = st.items.length - 1; i >= 0; i--) {
+      const it = st.items[i];
+      if (it.role === "user") break;
+      if (it.role === "devin" && it.kind === "message") { msg = it; break; }
+    }
+  }
+  // A turn that produced files but never sent a reply: at a turn boundary
+  // there's no message left to claim them — drop rather than let the NEXT
+  // turn's reply take credit.
+  if (!msg) { if (boundary) st.produced.clear(); return; }
+  const atts = msg.attachments ?? (msg.attachments = []);
+  const have = new Set(atts.map((a) => a.url));
+  for (const [p] of st.produced) {
+    const url = `/api/admin/session/${st.sid}/file-raw?path=${encodeURIComponent(p)}`;
+    if (have.has(url)) continue;
+    have.add(url);
+    atts.push({ url, name: p.split(/[\\/]/).pop() || p });
+    msg.resultFiles = [...(msg.resultFiles ?? []), p];
+  }
+  dirty?.push(msg);
+  st.produced.clear();
 }
 
 let tlGenSeq = 0;
@@ -218,6 +294,8 @@ function tlPush(st: TlState, e: { ts: number; seq?: number; update: Record<strin
   if (kind === "user_message_chunk" || kind === "agent_message_chunk" || kind === "agent_thought_chunk") {
     const text = (u.content as { text?: string } | undefined)?.text ?? "";
     const isUser = kind === "user_message_chunk";
+    // New user turn begins — flush any produced files onto the previous reply.
+    if (isUser) flushProduced(st, dirty, true);
     if (isUser && !u._local) st.realUser.add(text);
     const wantKind = kind === "agent_thought_chunk" ? "thought" : "message";
     const role = isUser ? "user" : "devin";
@@ -247,6 +325,8 @@ function tlPush(st: TlState, e: { ts: number; seq?: number; update: Record<strin
       if (isUser && u._local) st.localUser.set(text, st.lastMsg);
     }
     dirty?.push(st.lastMsg);
+    // Files produced during the turn attach to the devin reply as chips.
+    if (!isUser) flushProduced(st, dirty);
     // Real user chunks may arrive split — after each merge, if the merged
     // body matches a pending `_local` optimistic twin, drop the twin.
     const mergedMsg = st.lastMsg;
@@ -365,6 +445,13 @@ function tlPush(st: TlState, e: { ts: number; seq?: number; update: Record<strin
         if (p) it.image = { path: p };
       }
     }
+    // Produced files: edit-kind diffs whose action is create/modify. Collected
+    // now, attached when the turn's reply lands (flush points below).
+    if (it.kind === "edit" && it.fileUpdates?.length) {
+      for (const f of it.fileUpdates) {
+        if (f.action_type === "create" || f.action_type === "modify") st.produced.set(f.file_path, f.action_type);
+      }
+    }
     // Shell rows carry the command itself — devin puts it in rawInput.command
     // or a tool://preview resource; contentText only surfaces result text.
     // The command STREAMS in via progressive tool_call_update deltas ("cd" →
@@ -382,7 +469,13 @@ function tlPush(st: TlState, e: { ts: number; seq?: number; update: Record<strin
         const res = blk ? ((blk.content as Record<string, unknown>).resource as { text?: string } | undefined) : undefined;
         if (res?.text) cmd = res.text;
       }
-      if (cmd) it.body = cmd.slice(0, 20000);
+      if (cmd) {
+        it.body = cmd.slice(0, 20000);
+        // Commands that write files via `>` / `-o` / Set-Content etc. count as
+        // produced files too (pdf/png/mp4/md generation usually goes through
+        // shell, not the edit tool).
+        for (const p of shellOutputPaths(cmd)) st.produced.set(p, "create");
+      }
     }
     // run_subagent: seed the card from the tool's own args (title/task/profile/
     // is_background). The real agentId arrives later via a subagent_started
@@ -452,8 +545,9 @@ function tlPush(st: TlState, e: { ts: number; seq?: number; update: Record<strin
   }
 
   if (kind === "usage_update" || kind === "session_info_update") return;
-  // Turn-boundary marker (interruptedTurn recovery evidence) — not a row.
-  if (kind === "wb_turn_end") return;
+  // Turn-boundary marker (interruptedTurn recovery evidence) — not a row,
+  // but a flush point: produced files settle onto the turn's final reply.
+  if (kind === "wb_turn_end") { flushProduced(st, dirty, true); return; }
   if (kind === "wb_notice") {
     push({ id, ts: iso, kind: "status", title: String(u.notice ?? ""), callout: "info", raw_type: "status_update" });
     return;
@@ -465,8 +559,8 @@ function tlPush(st: TlState, e: { ts: number; seq?: number; update: Record<strin
 }
 
 /** Build a full timeline from an entry array (snapshots, exports). */
-function buildTimelineFrom(entries: { ts: number; update: Record<string, unknown> }[], forAgent?: string): WbItem[] {
-  const st = freshTlState();
+function buildTimelineFrom(entries: { ts: number; update: Record<string, unknown> }[], forAgent?: string, sid = ""): WbItem[] {
+  const st = freshTlState(sid);
   for (let i = 0; i < entries.length; i++) tlPush(st, entries[i], i, undefined, forAgent);
   return st.items;
 }
@@ -498,7 +592,7 @@ function buildTimeline(ctx: ApiContext, sessionId: string): { items: WbItem[]; r
     const hadData = !!st && (st.items.length > 0 || st.seenSeq >= 0);
     const disk = ctx.sessionLog.readDisk(sessionId);
     const src = disk.length >= log.length ? disk : log;
-    st = freshTlState();
+    st = freshTlState(sessionId);
     tlCache.set(sessionId, st);
     rebuilt = true;
     for (let i = 0; i < src.length; i++) tlPush(st, src[i], i);

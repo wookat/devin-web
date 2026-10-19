@@ -8,9 +8,11 @@
  * clients. The child is killed when the last client leaves so an idle
  * server burns no CPU.
  *
- * Read-only by design: the workbench has no auth, so remote mouse/keyboard
- * control of the host desktop is deliberately NOT offered here — the
- * interactive surface is the dedicated CDP browser (localbrowser.ts).
+ * Input injection (POST /api/admin/screen/input) rides a persistent
+ * inputinject helper (same csc.exe compile-once pattern) reading line
+ * commands on stdin. Coordinates are normalized 0..1 over the virtual
+ * screen so the client never does DPI math. Linux backend: swap the
+ * helper spawn for an xdotool/XTest shim when a VM sandbox lands.
  */
 import { spawn, execFile, type ChildProcess } from "node:child_process";
 import { promisify } from "node:util";
@@ -131,4 +133,87 @@ export async function streamScreen(res: ServerResponse): Promise<void> {
     watchers.delete(write);
     if (!watchers.size) { stopCapture(); latest = null; }
   });
+}
+
+// ---- input injection ------------------------------------------------------
+
+const INJECT_SRC = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..", "..", "scripts", "inputinject.cs");
+const injectPath = () => path.join(dataDir, "screencap", "inputinject.exe");
+
+let injectChild: ChildProcess | null = null;
+let injectReady: Promise<ChildProcess> | null = null;
+
+async function ensureInject(): Promise<ChildProcess> {
+  if (injectChild) return injectChild;
+  injectReady ??= (async () => {
+    // Compile once next to screencap.exe (same sha-stamped pattern).
+    const exe = injectPath();
+    const sha = crypto.createHash("sha1").update(fs.readFileSync(INJECT_SRC)).digest("hex").slice(0, 12);
+    let ok = false;
+    try { ok = fs.existsSync(exe) && fs.readFileSync(exe + ".sha", "utf8").trim() === sha; } catch { /* rebuild */ }
+    if (!ok) {
+      const csc = findCsc();
+      if (!csc) throw new Error("csc.exe not found (.NET Framework 4.x required)");
+      fs.mkdirSync(path.dirname(exe), { recursive: true });
+      await execFileP(csc, [
+        "/nologo", "/target:exe", "/platform:anycpu",
+        `/out:${exe}`, "/r:System.Windows.Forms.dll", "/r:System.Drawing.dll", INJECT_SRC,
+      ], { timeout: 30_000 });
+      fs.writeFileSync(exe + ".sha", sha);
+    }
+    const c = spawn(exe, { stdio: ["pipe", "ignore", "ignore"], windowsHide: true });
+    const drop = () => { if (injectChild === c) injectChild = null; };
+    c.on("exit", drop);
+    c.on("error", drop);
+    return c;
+  })();
+  try {
+    injectChild = await injectReady;
+    return injectChild;
+  } finally {
+    injectReady = null;
+  }
+}
+
+/**
+ * `POST /api/admin/screen/input` — one input event as JSON:
+ *   {t:'move',u,v} {t:'button',btn:'l|r|m',down:bool} {t:'wheel',dy}
+ *   {t:'key',vk,down:bool} {t:'text',text}
+ */
+export async function injectInput(body: unknown): Promise<void> {
+  if (process.platform !== "win32" || !fs.existsSync(INJECT_SRC)) {
+    throw new Error("input injection unavailable on this host");
+  }
+  const o = body as Record<string, unknown>;
+  let line: string | null = null;
+  switch (o?.t) {
+    case "move": {
+      const u = Number(o.u), v = Number(o.v);
+      if (u >= 0 && u <= 1 && v >= 0 && v <= 1) line = `m ${u.toFixed(5)} ${v.toFixed(5)}`;
+      break;
+    }
+    case "button": {
+      const btn = o.btn === "r" ? "r" : o.btn === "m" ? "m" : "l";
+      line = `${o.down ? "d" : "u"} ${btn}`;
+      break;
+    }
+    case "wheel": {
+      const dy = Math.trunc(Number(o.dy) || 0);
+      if (dy) line = `w ${dy}`;
+      break;
+    }
+    case "key": {
+      const vk = Math.trunc(Number(o.vk) || 0);
+      if (vk > 0 && vk < 256) line = `k ${vk} ${o.down ? "down" : "up"}`;
+      break;
+    }
+    case "text": {
+      const s = String(o.text ?? "").slice(0, 4096);
+      if (s) line = `t ${Buffer.from(s, "utf8").toString("base64")}`;
+      break;
+    }
+  }
+  if (!line) throw new Error("bad input event");
+  const c = await ensureInject();
+  c.stdin!.write(line + "\n");
 }

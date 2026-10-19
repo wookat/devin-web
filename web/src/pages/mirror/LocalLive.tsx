@@ -4,7 +4,9 @@ import { cn } from '@/lib/utils'
 
 /**
  * LocalLive — the local replacement for the cloud noVNC LiveDesktop.
- *  桌面:   read-only MJPEG of the real host screen (/api/admin/screen/live).
+ *  桌面:   MJPEG of the real host screen (/api/admin/screen/live) with
+ *          input injection via POST /api/admin/screen/input — normalized
+ *          u/v coords map onto the virtual screen server-side.
  *  浏览器: dedicated Edge/Chrome driven over /ws/browser — CDP screencast
  *          frames in, pointer/keyboard events back out (Input.dispatch*).
  */
@@ -204,6 +206,130 @@ function LocalBrowser() {
           </div>
         )}
       </div>
+    </div>
+  )
+}
+
+function LocalDesktop() {
+  const imgRef = useRef<HTMLImageElement>(null)
+  const inputRef = useRef<HTMLTextAreaElement>(null)
+  const lastClickAt = useRef(0)
+  const lastMoveAt = useRef(0)
+  const pressed = useRef(new Set<number>())
+  const [control, setControl] = useState(true)
+
+  const post = useCallback((o: Record<string, unknown>) => {
+    void fetch('/api/admin/screen/input', {
+      method: 'POST',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify(o),
+    }).catch(() => {})
+  }, [])
+
+  // letterbox-normalized coords (same math as LocalBrowser.pos)
+  const pos = (e: { clientX: number; clientY: number }) => {
+    const img = imgRef.current
+    if (!img || !img.naturalWidth) return null
+    const r = img.getBoundingClientRect()
+    const scale = Math.min(r.width / img.naturalWidth, r.height / img.naturalHeight)
+    const w = img.naturalWidth * scale
+    const h = img.naturalHeight * scale
+    const u = (e.clientX - (r.left + (r.width - w) / 2)) / w
+    const v = (e.clientY - (r.top + (r.height - h) / 2)) / h
+    if (u < 0 || u > 1 || v < 0 || v > 1) return null
+    return { u, v }
+  }
+
+  useEffect(() => {
+    const el = inputRef.current
+    if (!el) return
+    const stop = (e: WheelEvent) => e.preventDefault()
+    el.addEventListener('wheel', stop, { passive: false })
+    return () => el.removeEventListener('wheel', stop)
+  }, [control])
+
+  return (
+    <div className="relative min-h-0 flex-1 overflow-hidden rounded-lg border border-border bg-black">
+      <img
+        ref={imgRef}
+        src="/api/admin/screen/live"
+        alt="host desktop"
+        draggable={false}
+        className="absolute inset-0 h-full w-full select-none object-contain"
+      />
+      {control && (
+        <textarea
+          ref={inputRef}
+          autoCapitalize="off" autoComplete="off" autoCorrect="off" spellCheck={false}
+          className="absolute inset-0 z-10 h-full w-full cursor-text resize-none bg-transparent opacity-0"
+          onContextMenu={(e) => e.preventDefault()}
+          onPointerDown={(e) => {
+            e.currentTarget.setPointerCapture(e.pointerId)
+            inputRef.current?.focus()
+            const p = pos(e); if (!p) return
+            const now = Date.now()
+            const dbl = now - lastClickAt.current < 400
+            lastClickAt.current = now
+            post({ t: 'move', ...p })
+            post({ t: 'button', btn: BTN[e.button]?.[0] ?? 'l', down: true })
+            if (dbl) { post({ t: 'button', btn: 'l', down: false }); post({ t: 'button', btn: 'l', down: true }) }
+          }}
+          onPointerUp={(e) => {
+            const p = pos(e); if (!p) return
+            post({ t: 'move', ...p })
+            post({ t: 'button', btn: BTN[e.button]?.[0] ?? 'l', down: false })
+          }}
+          onPointerMove={(e) => {
+            const now = Date.now()
+            if (now - lastMoveAt.current < 40) return
+            lastMoveAt.current = now
+            const p = pos(e); if (!p) return
+            post({ t: 'move', ...p })
+          }}
+          onWheel={(e) => {
+            const p = pos(e); if (!p) return
+            post({ t: 'move', ...p })
+            const k = e.deltaMode === 1 ? 16 : e.deltaMode === 2 ? 800 : 1
+            post({ t: 'wheel', dy: Math.trunc(e.deltaY * k) })
+          }}
+          onKeyDown={(e) => {
+            const vk = VK[e.key]
+            const chord = (e.ctrlKey || e.metaKey || e.altKey) && e.key.length === 1
+            if (vk != null || chord) {
+              e.preventDefault()
+              const code = vk ?? e.key.toUpperCase().charCodeAt(0)
+              if (!pressed.current.has(code)) {
+                pressed.current.add(code)
+                post({ t: 'key', vk: code, down: true })
+              }
+            }
+            // printable keys fall through → onInput
+          }}
+          onKeyUp={(e) => {
+            const vk = VK[e.key] ?? (e.key.length === 1 ? e.key.toUpperCase().charCodeAt(0) : -1)
+            if (vk >= 0 && pressed.current.delete(vk)) post({ t: 'key', vk, down: false })
+          }}
+          onInput={(e) => {
+            const v = e.currentTarget.value
+            if (v) { post({ t: 'text', text: v }); e.currentTarget.value = '' }
+          }}
+          onPaste={(e) => {
+            e.preventDefault()
+            const t = e.clipboardData.getData('text')
+            if (t) post({ t: 'text', text: t })
+          }}
+        />
+      )}
+      <button
+        onClick={() => setControl(!control)}
+        title={control ? '暂停控制（只观看）' : '接管控制'}
+        className={cn(
+          'absolute right-2 top-2 z-20 flex h-7 cursor-pointer items-center gap-1 rounded-md border px-2 text-[12px]',
+          control ? 'border-border bg-card/90 text-foreground' : 'border-border bg-card/90 text-muted-foreground',
+        )}
+      >
+        {control ? <><Eye size={12} />控制中</> : <><Eye size={12} />只观看</>}
+      </button>
     </div>
   )
 }

@@ -1029,7 +1029,7 @@ function subagentTimeline(ctx: ApiContext, id: string, agentId: string): WbItem[
   // Full coverage test: replay restarts seq at 0, so a ring whose first
   // entry is seq 0 was never truncated. A truncated window must be unioned
   // with the disk index or early subagent events vanish.
-  if (mem.length && mem[0].seq === 0) return buildTimelineFrom(mem.filter(forAgent), agentId);
+  if (mem.length && mem[0].seq === 0) return buildTimelineFrom(mem.filter(forAgent), agentId, id);
   // Cold parent → serve from the child's sidechain file. Cache keyed on the
   // SIDECAR's mtime (the main log's mtime churns during live writes and would
   // defeat the cache, re-parsing the stream on every poll).
@@ -1040,7 +1040,7 @@ function subagentTimeline(ctx: ApiContext, id: string, agentId: string): WbItem[
   if (ctx.sessionLog.subFilesStale(id)) ctx.sessionLog.ensureSubFiles(id);
   const idx = ctx.sessionLog.readSubStream(id, agentId) ?? [];
   const seen = new Set(idx.map((e) => e.seq));
-  const items = buildTimelineFrom((mem.length ? [...idx, ...mem.filter((e) => !seen.has(e.seq))] : idx).filter(forAgent), agentId);
+  const items = buildTimelineFrom((mem.length ? [...idx, ...mem.filter((e) => !seen.has(e.seq))] : idx).filter(forAgent), agentId, id);
   // Cache only a settled read — a missing stream means the scan is still
   // running and the empty result must not stick or the transcript never fills.
   if (im != null) subTlCache.set(key, { m: im, lastSeq, items });
