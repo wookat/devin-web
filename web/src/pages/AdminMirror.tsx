@@ -4324,8 +4324,6 @@ const groups = useMemo(() => groupItems(allItems, sessionWorking), [allItems, se
                   )
                 })
               })()}
-            </div>
-            <div className="relative shrink-0">
               <button
                 ref={addBtnRef}
                 onClick={(e) => {
@@ -4335,10 +4333,12 @@ const groups = useMemo(() => groupItems(allItems, sessionWorking), [allItems, se
                 }}
                 aria-label="Add tab"
                 title="Add tab"
-                className="flex size-7 cursor-pointer items-center justify-center rounded-[6px] text-muted-foreground hover:bg-accent"
+                className="flex size-7 shrink-0 cursor-pointer items-center justify-center rounded-[6px] text-muted-foreground hover:bg-accent"
               >
                 <PanelAddTabIcon size={18} />
               </button>
+            </div>
+            <div className="relative shrink-0">
               {addOpen && <div className="fixed inset-0 z-10" onClick={() => { setAddOpen(false); setAddQ(''); setAddSub(false); setAddPrSub(false) }} />}
               {addOpen && (
                 <div role="menu" style={addAnchor ? { left: addAnchor.left, top: addAnchor.top } : undefined} className="fixed z-20 w-[226px] rounded-lg border border-border bg-card p-1 shadow-lg">
