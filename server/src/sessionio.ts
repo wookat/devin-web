@@ -890,19 +890,19 @@ function subagentTimeline(ctx: ApiContext, id: string, agentId: string): WbItem[
   // entry is seq 0 was never truncated. A truncated window must be unioned
   // with the disk index or early subagent events vanish.
   if (mem.length && mem[0].seq === 0) return buildTimelineFrom(mem.filter(forAgent), agentId);
-  // Cold parent → serve from the .subidx sidecar. Cache keyed on the INDEX's
-  // own mtime (the main log's mtime churns during live writes and would
-  // defeat the cache, re-parsing a big index on every poll).
-  const im = ctx.sessionLog.subIndexMtime(id);
+  // Cold parent → serve from the child's sidechain file. Cache keyed on the
+  // SIDECAR's mtime (the main log's mtime churns during live writes and would
+  // defeat the cache, re-parsing the stream on every poll).
+  const im = ctx.sessionLog.subStreamMtime(id, agentId);
   const lastSeq = mem.length ? mem[mem.length - 1].seq ?? -1 : -1;
   const hit = subTlCache.get(key);
   if (hit && hit.m === im && im != null && hit.lastSeq === lastSeq) return hit.items;
-  if (ctx.sessionLog.subIndexStale(id)) ctx.sessionLog.ensureSubIndex(id);
-  const idx = ctx.sessionLog.readSubIndex(id) ?? [];
+  if (ctx.sessionLog.subFilesStale(id)) ctx.sessionLog.ensureSubFiles(id);
+  const idx = ctx.sessionLog.readSubStream(id, agentId) ?? [];
   const seen = new Set(idx.map((e) => e.seq));
   const items = buildTimelineFrom((mem.length ? [...idx, ...mem.filter((e) => !seen.has(e.seq))] : idx).filter(forAgent), agentId);
-  // Cache only a settled read — a null index means the scan is still running
-  // and the empty result must not stick or the transcript never fills in.
+  // Cache only a settled read — a missing stream means the scan is still
+  // running and the empty result must not stick or the transcript never fills.
   if (im != null) subTlCache.set(key, { m: im, lastSeq, items });
   return items;
 }

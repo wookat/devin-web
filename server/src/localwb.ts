@@ -159,8 +159,8 @@ interface SubTreeRow {
 }
 
 // A never-loaded session's subagents live only on DISK — memory get() is
-// empty. The `.subidx` sidecar holds just the subagent-bearing lines (a
-// 2.4GB log must never be fully re-parsed for a sidebar row); the first
+// empty. The `.subs.jsonl` journal holds just the spawn/lifecycle lines (a
+// multi-GB log must never be fully re-parsed for a sidebar row); the first
 // miss kicks a background scan and children appear on the next poll.
 const subListCache = new Map<string, { m: number | null; lastSeq: number; rows: SubagentInfo[] }>();
 function subsAny(ctx: ApiContext, id: string, scope?: string): SubagentInfo[] {
@@ -168,19 +168,22 @@ function subsAny(ctx: ApiContext, id: string, scope?: string): SubagentInfo[] {
   // Memory is authoritative only when the ring still covers the whole current
   // generation — clear()+replay restarts seq at 0, so mem[0].seq === 0 means
   // nothing was evicted. A truncated window misses early spawn events and
-  // must be unioned with the disk index (dedupe on seq).
+  // must be unioned with the journal (dedupe on seq).
   if (mem.length && mem[0].seq === 0) return listSubagents(ctx, id, scope);
-  if (ctx.sessionLog.subIndexStale(id)) ctx.sessionLog.ensureSubIndex(id);
-  // Cache BEFORE parsing — the sidecar itself can be ~200MB on
-  // subagent-heavy sessions, so a re-parse per poll is fatal.
+  if (ctx.sessionLog.subFilesStale(id)) ctx.sessionLog.ensureSubFiles(id);
   const key = `${id}${scope ?? ""}`;
-  const im = ctx.sessionLog.subIndexMtime(id);
+  const im = ctx.sessionLog.subsJournalMtime(id);
   const lastSeq = mem.length ? mem[mem.length - 1].seq ?? -1 : -1;
   const hit = subListCache.get(key);
   if (hit && hit.m === im && im != null && hit.lastSeq === lastSeq) return hit.rows;
-  const idx = ctx.sessionLog.readSubIndex(id) ?? [];
+  const idx = ctx.sessionLog.readSubsJournal(id) ?? [];
   const seen = new Set(idx.map((e) => e.seq));
   const rows = listSubagents(ctx, id, scope, mem.length ? [...idx, ...mem.filter((e) => !seen.has(e.seq))] : idx);
+  // The journal carries no content lines, so cold rows lack a last-text
+  // snippet — recover it from a bounded tail read of the child's sidechain.
+  for (const r of rows) {
+    if (!r.lastText && !r.agentId.startsWith("spawn:")) r.lastText = ctx.sessionLog.subTailText(id, r.agentId);
+  }
   if (im != null) subListCache.set(key, { m: im, lastSeq, rows });
   return rows;
 }

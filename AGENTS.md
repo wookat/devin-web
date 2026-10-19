@@ -310,10 +310,23 @@ powershell -File clean-orphans.ps1  :: kill acp processes with dead parents
 - **Coverage rule for subagent data**: the memory ring (5000) is
   authoritative ONLY when `mem[0].seq === 0` — clear()+replay restarts seq
   at 0, so that proves nothing was evicted. Otherwise `subsAny`/
-  `subagentTimeline` must union `.subidx` (the sidecar holding only
-  subagent-bearing lines, rebuilt incrementally by `ensureSubIndex`) with
-  the memory tail, deduped on seq. Bare `mem.length` checks lose early
-  spawns on >5000-entry sessions — this bug already shipped once.
+  `subagentTimeline` must union the sidecars with the memory tail, deduped
+  on seq. Bare `mem.length` checks lose early spawns on >5000-entry
+  sessions — this bug already shipped once.
+- **Subagent sidecars** (Claude-Code-style sidechains, replacing `.subidx`):
+  `sessionLog.append` fans each update out to
+  `<id>.sub.<aid>.jsonl` (that child agent's own stream — context tag,
+  lifecycle meta, root-call updates) and `<id>.subs.jsonl` (spawn-call +
+  lifecycle lines only — the listing journal). `<id>.subscan` `{"off":N}`
+  is the coverage marker: sidecars are complete for exactly the main file's
+  prefix [0,off); appends advance it, `ensureSubFiles` scans whatever lies
+  beyond (legacy logs bootstrap lazily, chunked in the background past
+  32MB; appends skip sidecar writes while coverage lags so a scan never
+  double-writes). `readSubStream`/`parseSubFile` sort+dedupe on seq since
+  scan-vs-append overlap can interleave lines. `clear()`/`restoreFile()`
+  wipe every `<id>.jsonl.sub*` file (old generation); the constructor
+  deletes leftover `.subidx`. Child timelines read ONE small sidechain —
+  never the parent log.
 - `DEVIN_REMOTE_NO_AUTORESUME=1` disables the boot open-turns sweep —
   REQUIRED on second instances sharing the data dir, or each boot re-sends
   "继续" into sessions the primary already resumed (and burns GBs replaying).
