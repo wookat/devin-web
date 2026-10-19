@@ -4454,7 +4454,6 @@ const groups = useMemo(() => groupItems(allItems, sessionWorking), [allItems, se
                 />
               )}
             </div>
-            <span className="flex-1" />
             <button
               onClick={() => setFullWidth(!fullWidth)}
               aria-label={fullWidth ? 'Exit full width' : 'Full width'}
