@@ -16,3 +16,5 @@ server.log
 /_*.mjs
 /_*.ps1
 /NUL
+.playwright-mcp/  
+_*.txt  
