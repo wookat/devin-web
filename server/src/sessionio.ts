@@ -558,7 +558,10 @@ export function interruptedTurn(ctx: ApiContext, id: string): OpenTurn | null {
  * at 2 attempts per turn (a resume that itself crashes can't loop). */
 export function autoResumeInterrupted(ctx: ApiContext) {
   openTurnsLoad(ctx);
-  if (!loadReg(ctx).prefs?.autoResume || !openTurns.size) return;
+  // DEVIN_REMOTE_NO_AUTORESUME: a second instance sharing the data dir must
+  // not double-drive interrupted turns — each boot would otherwise re-send
+  // "继续" into sessions the primary instance already resumed.
+  if (process.env.DEVIN_REMOTE_NO_AUTORESUME || !loadReg(ctx).prefs?.autoResume || !openTurns.size) return;
   for (const [id, t] of [...openTurns]) {
     if ((t.resumeCount ?? 0) >= 2) continue;
     t.resumeCount = (t.resumeCount ?? 0) + 1;
@@ -685,9 +688,13 @@ function dispatchPrompt(ctx: ApiContext, id: string, text: string, attachments: 
     // an explicit relay instruction on the main chain; the lead performs the
     // resume and the reply lands in the child stream. (A *running* subagent
     // cannot be resumed — the lead reports that, same as desktop.)
+    // The wording is imperative and the user text is JSON-quoted: a loose
+    // "relay this" phrasing lets the lead misread the message body as a task
+    // for itself (observed: it went off debugging the content instead of
+    // calling the tool).
     if (subagentId) subPing.set(subagentId, Date.now());
     const promptText = subagentId
-      ? `Relay this message to subagent ${subagentId} — resume it with run_subagent(resume="${subagentId}"): ${text}`
+      ? `[Subagent relay] Call run_subagent(resume="${subagentId}", task=<message>) now and pass the user's message verbatim — this is your ONLY task, do not do anything else first. If the subagent is still running and cannot be resumed, just say so. User message: ${JSON.stringify(text)}`
       : text;
     const textBlock = ctxMeta ? { type: "text", text: promptText, _meta: ctxMeta } : { type: "text", text: promptText };
     return promptWithRetry(ctx, id, () => acpForId(ctx, id), (acp) => acp.prompt(id, [textBlock, ...blocks] as never, ctxMeta));

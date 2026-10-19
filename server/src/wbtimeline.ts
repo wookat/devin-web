@@ -165,6 +165,10 @@ interface TlState {
   pendingSpawns: WbItem[];
   /** agentId → the spawn card that owns it. */
   subCards: Map<string, WbItem>;
+  /** Replay generations re-emit the same logical events — each copy keeps the
+   * original cognition.ai/timestamp stamp, so a hash of (kind|stamp) collapses
+   * echo rows (observed: 9 generations of one subagent run in a loaded log). */
+  dedup?: Set<number>;
 }
 
 function freshTlState(): TlState {
@@ -190,6 +194,19 @@ function tlPush(st: TlState, e: { ts: number; seq?: number; update: Record<strin
   const uMeta = (u._meta ?? {}) as Record<string, unknown>;
   const ctxAgent = (uMeta["cognition.ai/subagent_context"] as { parentAgentId?: string } | undefined)?.parentAgentId;
   if (forAgent ? ctxAgent !== forAgent : ctxAgent && ctxAgent !== "root") return;
+  // Collapse replay-generation echoes: copies of one event keep its creation
+  // stamp. Control kinds that produce no row are skipped so their churn
+  // doesn't bloat the set (usage_update alone outnumbers real rows).
+  const evTs = uMeta["cognition.ai/timestamp"];
+  if (typeof evTs === "string" && evTs && kind !== "usage_update" && kind !== "session_info_update" && kind !== "current_mode_update" && kind !== "config_option_update" && kind !== "available_commands_update" && kind !== "wb_turn_end") {
+    const s = kind + "|" + evTs;
+    let h1 = 5381, h2 = 52711;
+    for (let k = 0; k < s.length; k++) { const c = s.charCodeAt(k); h1 = ((h1 << 5) + h1 + c) | 0; h2 = ((h2 << 5) + h2 + c) ^ c; }
+    const hk = h1 * 4294967296 + (h2 >>> 0);
+    const d = (st.dedup ??= new Set<number>());
+    if (d.has(hk)) return;
+    d.add(hk);
+  }
   const push = (it: WbItem) => {
     it.eidx = gidx;
     st.items.push(it);

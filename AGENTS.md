@@ -277,14 +277,46 @@ powershell -File clean-orphans.ps1  :: kill acp processes with dead parents
   (`subagent_context`, `chain:{side:id}`, block-level metas) is ignored and
   `_cognition.ai/sidechain/request` returns Method not found. The only real
   path — same one desktop/lead uses — is `run_subagent(resume="<id>")`, which
-  the lead agent invokes. `/subagent/:aid/message` therefore sends an explicit
-  relay instruction on the main chain ("Relay this message to subagent <id>…
-  resume it with run_subagent"). A running agent can't be resumed; a dead one
-  reports "no subagent exists" — the lead surfaces the honest error.
+  the lead agent invokes (officially documented: "ask the agent to resume a
+  subagent"; resumed agents run foreground). `/subagent/:aid/message` and the
+  `sub:` child-session `/message` therefore send an imperative relay on the
+  main chain: `[Subagent relay] Call run_subagent(resume="<id>", task=<message>)
+  now … User message: "<json-quoted>"`. The wording MUST stay imperative with
+  the user text JSON-quoted — a loose "relay this message" phrasing lets the
+  lead misread the body as a task for itself (observed: it debugged the
+  message content instead of calling the tool). A running agent can't be
+  resumed; a dead/unregistered one reports "no subagent exists" — the lead
+  surfaces the honest error.
 - Handshake `_meta` advertises `cognition.ai/subagentSupport|subagentControl|
   chains|sidechains|messageGrouping|partialContent|clarificationRequested`.
 - `session/load` `update_meta` (eventId/timestamp/sidechain/subagent_*) does
   NOT restore event ids on replay — don't rely on them.
+- `cognition.ai/timestamp` DOES survive replay — it's the event creation
+  stamp and identical across generations (devin's store accumulates echo
+  copies: one loaded log held 9 generations of the same subagent run).
+  `tlPush` dedupes row-producing events on (kind|stamp) via `st.dedup` —
+  without it every re-load multiplies visible history.
+- **Child sessions = `sub:<parent>:<agentId>` pseudo-ids** — cloud parity:
+  a subagent opens as a FULL session page (own timeline+composer+controls),
+  nested under the parent in the sidebar tree. `handleSubSession` in
+  localwb.ts serves the whole per-session contract for the `sub:` id
+  (detail/timeline/messages/message/control/end/subagents/changes/todos/
+  config/files via `cwdFor`→parent cwd). Children populate via
+  `GET mirror/session-children?root=<id|sub:id>` (lazy per row) and
+  `mirror/parent` for the breadcrumb. Parent/child ownership comes from the
+  SPAWN CALL's stream tag (originTag), never from the child's own lifecycle
+  stream (which is tagged with its own id — self-as-child → infinite
+  recursion otherwise).
+- **Coverage rule for subagent data**: the memory ring (5000) is
+  authoritative ONLY when `mem[0].seq === 0` — clear()+replay restarts seq
+  at 0, so that proves nothing was evicted. Otherwise `subsAny`/
+  `subagentTimeline` must union `.subidx` (the sidecar holding only
+  subagent-bearing lines, rebuilt incrementally by `ensureSubIndex`) with
+  the memory tail, deduped on seq. Bare `mem.length` checks lose early
+  spawns on >5000-entry sessions — this bug already shipped once.
+- `DEVIN_REMOTE_NO_AUTORESUME=1` disables the boot open-turns sweep —
+  REQUIRED on second instances sharing the data dir, or each boot re-sends
+  "继续" into sessions the primary already resumed (and burns GBs replaying).
 
 ## Desktop-parity capability matrix (probed live against `devin acp`, v3.10.67 bundle)
 
