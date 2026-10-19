@@ -334,6 +334,16 @@ powershell -File clean-orphans.ps1  :: kill acp processes with dead parents
   wipe every `<id>.jsonl.sub*` file (old generation); the constructor
   deletes leftover `.subidx`. Child timelines read ONE small sidechain —
   never the parent log.
+- **Log durability**: `writer()` opens each `<id>.jsonl` `'a+'` and on first
+  open scans the last 8KB for a torn tail (crash mid-write → partial final
+  line) and truncates back to the last newline via `fs.truncateSync(path)`
+  — two Windows/Node quirks dictated this: plain `'a'` fds throw EBADF on
+  readSync, and append-mode fds throw EPERM on ftruncateSync, so the
+  truncate MUST go through the path API while the fd stays `'a+'`. Writes
+  then append behind complete lines only. `fsyncSync` runs at turn
+  boundaries (`wb_turn_end`/`wb_notice`) — per-append fsync would tax the
+  event loop; intra-turn loss is bounded by OS cache and recovery treats
+  an unfinished turn the same either way.
 - `DEVIN_REMOTE_NO_AUTORESUME=1` disables the boot open-turns sweep —
   REQUIRED on second instances sharing the data dir, or each boot re-sends
   "继续" into sessions the primary already resumed (and burns GBs replaying).
