@@ -80,6 +80,17 @@ function Menu({ anchor, onClose, children, minW = 200, side }: { anchor: DOMRect
   )
 }
 
+/* Official "Add filters" glyph — centered funnel of three rounded bars,
+   path copied verbatim from app.devin.ai (NOT lucide ListFilter, which is
+   left-aligned). Rendered at 18px inside the 28×28 circle button. */
+function FunnelGlyph({ size = 18, className }: { size?: number; className?: string }) {
+  return (
+    <svg aria-hidden="true" width={size} height={size} viewBox="0 0 24 24" fill="currentColor" className={className}>
+      <path d="M2.540 4.034 C 1.801 4.276,1.844 5.314,2.599 5.476 C 2.889 5.538,21.111 5.538,21.401 5.476 C 21.785 5.394,22.034 5.047,21.990 4.656 C 21.966 4.449,21.886 4.322,21.664 4.142 L 21.513 4.020 12.066 4.014 C 6.871 4.010,2.584 4.019,2.540 4.034 M5.571 11.279 C 5.395 11.321,5.266 11.411,5.133 11.586 C 5.035 11.714,5.020 11.769,5.020 12.003 C 5.020 12.243,5.033 12.289,5.142 12.426 C 5.210 12.511,5.344 12.620,5.441 12.670 L 5.617 12.760 12.000 12.760 L 18.383 12.760 18.559 12.670 C 18.656 12.620,18.790 12.511,18.858 12.426 C 18.967 12.289,18.980 12.244,18.980 12.000 C 18.980 11.755,18.968 11.712,18.856 11.574 C 18.787 11.489,18.670 11.384,18.596 11.340 C 18.462 11.261,18.382 11.260,12.080 11.254 C 8.571 11.250,5.642 11.262,5.571 11.279 M8.420 18.583 C 8.240 18.677,8.156 18.763,8.075 18.940 C 7.987 19.131,7.980 19.355,8.055 19.531 C 8.123 19.688,8.340 19.900,8.493 19.958 C 8.569 19.986,9.703 20.000,12.000 20.000 C 14.297 20.000,15.431 19.986,15.507 19.958 C 15.660 19.900,15.877 19.688,15.945 19.531 C 16.017 19.363,16.015 19.153,15.938 18.970 C 15.859 18.780,15.775 18.689,15.592 18.596 C 15.449 18.523,15.300 18.520,11.992 18.520 C 8.940 18.520,8.526 18.528,8.420 18.583" />
+    </svg>
+  )
+}
+
 /* Official menu item: h-30px px-2 py-1.5 gap-2 rounded-6 text-13, svg 16px,
    checked mark at the right (measured on app.devin.ai). */
 const menuItem = 'flex w-full cursor-pointer select-none items-center gap-2 rounded-[6px] px-2 py-1.5 text-left text-[13px] leading-[18px] text-foreground outline-none hover:bg-tint-secondary [&>svg]:size-4 [&>svg]:shrink-0'
@@ -152,7 +163,14 @@ export default function SessionsPage() {
   })
 
   const load = () => adminFetch<SessionsResp>('/api/admin/mirror/sessions')
-    .then((r) => { setRows(r.sessions ?? []); setFolders(r.folder_order ?? []); setFolderTotals(r.folder_totals ?? {}) })
+    .then((r) => {
+      const sess = r.sessions ?? []
+      setRows(sess)
+      // folder_order may be empty even when sessions carry folder values —
+      // union both sources so the Folder filter isn't left with just "(无文件夹)".
+      setFolders([...new Set([...(r.folder_order ?? []), ...sess.map((s) => s.folder).filter((f): f is string => !!f)])])
+      setFolderTotals(r.folder_totals ?? {})
+    })
     .catch(() => {})
   useEffect(() => {
     if (!loaded.current) { loaded.current = true; void load() }
@@ -481,7 +499,7 @@ export default function SessionsPage() {
           )}
           {/* official Add filters: 28×28 circle, border .06, white bg, 18px icon */}
           <button onClick={openMenu('addfilter')} className={cn('flex size-7 cursor-pointer touch-manipulation items-center justify-center rounded-full border border-border-secondary bg-card text-muted-foreground hover:bg-tint-secondary hover:text-foreground', FOCUS_RING)} aria-label="Add filters" title="Add filters">
-            <ListFilter size={18} />
+            <FunnelGlyph size={18} />
           </button>
           {filtersOn && <button onClick={() => { setQ(''); setStatusF([]); setFolderF([]) }} className={cn('flex h-7 cursor-pointer touch-manipulation select-none items-center gap-1 whitespace-nowrap rounded-[6px] px-[10px] text-[13px] font-medium leading-[18px] text-muted-foreground hover:bg-tint-secondary hover:text-foreground', FOCUS_RING)}>Clear filters</button>}
         </div>
