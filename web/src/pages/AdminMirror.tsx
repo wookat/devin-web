@@ -2030,6 +2030,23 @@ const groups = useMemo(() => groupItems(allItems, sessionWorking), [allItems, se
     setInterrupted(null)
   }
 
+  // Dead subagent handle: the registry that held it was emptied by a restart/
+  // replay, so resume relays can never land. Respawn sends the text with
+  // respawn:1 — the lead spawns a SUCCESSOR carrying this agent's context.
+  const subDead = isSub && detail?.session.subagent?.resumable === false
+  const respawnSub = async () => {
+    if (sending) return
+    const msg = input.trim() || '请继续处理之前的任务'
+    setSending(true)
+    try {
+      await sessionFetch('/message', { method: 'POST', body: JSON.stringify({ message: msg, respawn: true }) })
+      setInput('')
+      setControlMsg('已让主会话派出继任子代理 — 新子会话会出现在侧栏')
+    } catch (e) {
+      setSendErr(e instanceof Error && e.message ? e.message : 'Failed to send message. Try again.')
+    } finally { setSending(false) }
+  }
+
   // Latest unanswered question: any user reply after it clears the pending
   // state (matches the official composer panel behavior). An answered event
   // referencing the question (answeredEventId) also clears it.
@@ -4077,6 +4094,13 @@ const groups = useMemo(() => groupItems(allItems, sessionWorking), [allItems, se
                 <span className="min-w-0 truncate" title={interrupted.text}>上一轮回复被中断（服务重启/进程终止）— 上下文已保留：{interrupted.text.slice(0, 80)}</span>
                 <button onClick={() => void resumeInterrupted()} className="shrink-0 cursor-pointer underline hover:opacity-80">{interrupted.kind === 'resend' ? '重新发送' : '继续'}</button>
                 <button onClick={dismissInterrupted} className="shrink-0 cursor-pointer underline hover:opacity-80">忽略</button>
+              </div>
+            )}
+            {subDead && (
+              <div className="flex items-center gap-2 px-1 pt-1 text-[12px] leading-[16px] text-muted-foreground">
+                <AlertTriangle size={13} className="shrink-0" />
+                <span className="min-w-0 truncate">子代理句柄已失效（宿主进程已重启/重放）— 不能续聊</span>
+                <button onClick={() => void respawnSub()} className="shrink-0 cursor-pointer underline hover:opacity-80">派生新子代理继续</button>
               </div>
             )}
             {sendErr && (

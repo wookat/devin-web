@@ -26,6 +26,10 @@ interface MirrorTreeSession {
    *  `loaded_here` (this workbench is the holder); otherwise another app. */
   is_locked?: boolean
   loaded_here?: boolean
+  /** sub: rows only — false once the acp registry dropped the agent handle
+   * (server restart / session replay); the row greys and the child page
+   * offers respawn instead of a doomed resume relay. */
+  resumable?: boolean
 }
 
 interface TreeCachePayload {

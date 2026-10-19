@@ -29,6 +29,21 @@ const loadedOn = new WeakMap<object, Set<string>>();
  * sessionCwd gets rewritten by session/list (otherwise the pooled acp for the
  * *other* cwd tries to load it and devin reports session_locked). */
 const sessionHost = new Map<string, DevinAcp>();
+/** Server boot — the acp subagent registry is process-local, so any agent
+ * spawned before this process started has no live handle by definition. */
+const BOOT_TS = Date.now();
+/** sessionId → when its acp-side subagent registry was last emptied — every
+ * successful session/load resets it (post-replay resumes answer "doesn't
+ * exist in my current session"). Failed loads keep the old registry, so the
+ * stamp is only written on success inside doLoad. */
+const loadEpoch = new Map<string, number>();
+/** `parent:agentId` — a resume already failed with a missing-handle error
+ * for these; short-circuits further relays instead of burning a turn each
+ * time the user retries a dead child. */
+const deadSubs = new Set<string>();
+export function markSubagentDead(parent: string, aid: string) {
+  deadSubs.add(`${parent}:${aid}`);
+}
 /** sessionId → the acp process that holds its session/load lock. Exported so
  * the generic routes never rewrite a pinned session's cwd mapping. */
 
@@ -164,6 +179,10 @@ async function doLoad(ctx: ApiContext, acp: DevinAcp, id: string, cwd: string): 
     let replayed = false;
     try {
       captureLoadResponse(id, await loadWithRetry(acp, id, cwd));
+      // A successful reload rebuilt session state from the store — its
+      // subagent registry is fresh: agents spawned before this moment have
+      // no live handle even though their transcripts replay fine.
+      loadEpoch.set(id, Date.now());
       replayed = true;
       persistTail(ctx, id);
       ctx.sessionLog.dropBackup(id);
@@ -253,6 +272,7 @@ async function doLoad(ctx: ApiContext, acp: DevinAcp, id: string, cwd: string): 
     }
   } else {
     captureLoadResponse(id, await loadWithRetry(acp, id, cwd));
+    loadEpoch.set(id, Date.now());
     persistTail(ctx, id);
   }
 }
@@ -663,7 +683,7 @@ async function promptWithRetry<T>(
   }
 }
 
-function dispatchPrompt(ctx: ApiContext, id: string, text: string, attachments: { url: string; name?: string; mime?: string; size?: number }[] = [], subagentId?: string) {
+function dispatchPrompt(ctx: ApiContext, id: string, text: string, attachments: { url: string; name?: string; mime?: string; size?: number }[] = [], subagentId?: string, respawnRow?: { title: string; task: string; profile: string }) {
   // U+FFFD in the text means the body arrived corrupted (bad client encoding)
   // or the source text was already broken — log so we can tell "browser-side
   // corrupt" from "downstream corrupt" without reproducing.
@@ -707,8 +727,14 @@ function dispatchPrompt(ctx: ApiContext, id: string, text: string, attachments: 
     // for itself (observed: it went off debugging the content instead of
     // calling the tool).
     if (subagentId) subPing.set(subagentId, Date.now());
+    // respawnRow: the old handle is dead — the lead spawns a SUCCESSOR
+    // (fresh agent, same profile, prior task+tail as context) instead of
+    // resuming. The successor lands as a NEW child row; the dead one stays.
+    const tail = respawnRow ? ctx.sessionLog.subTailText(id, subagentId!).slice(-1500) : "";
     const promptText = subagentId
-      ? `[Subagent relay] Call run_subagent(resume="${subagentId}", task=<message>) now and pass the user's message verbatim — this is your ONLY task, do not do anything else first. If the subagent is still running and cannot be resumed, just say so. User message: ${JSON.stringify(text)}`
+      ? respawnRow
+        ? `[Subagent relay] Subagent "${subagentId}" is permanently dead (its host process was recycled) — do NOT resume it. Call run_subagent(title=${JSON.stringify(respawnRow.title || "Subagent successor")}, profile=${JSON.stringify(respawnRow.profile || "subagent_general")}, task=<task>) now to spawn a SUCCESSOR agent — this is your ONLY task. Compose <task> as: "You continue the work of a previous subagent. Original task: ${JSON.stringify(respawnRow.task.slice(0, 600))}. Its last output before the handle died: ${JSON.stringify(tail)}. New instruction from the user: ${JSON.stringify(text)}"`
+        : `[Subagent relay] Call run_subagent(resume="${subagentId}", task=<message>) now and pass the user's message verbatim — this is your ONLY task, do not do anything else first. If the subagent is still running and cannot be resumed, just say so. User message: ${JSON.stringify(text)}`
       : text;
     const textBlock = ctxMeta ? { type: "text", text: promptText, _meta: ctxMeta } : { type: "text", text: promptText };
     return promptWithRetry(ctx, id, () => acpForId(ctx, id), (acp) => acp.prompt(id, [textBlock, ...blocks] as never, ctxMeta));
@@ -766,6 +792,20 @@ interface SubagentInfo {
   /** count of that agent's own stream events (thoughts/messages/tool calls) */
   updates: number;
   lastText: string;
+  /** ts of the event proving CURRENT-registry membership (spawn call /
+   * subagent_started / completed resume), as the event's cognition.ai
+   * timestamp — replayed copies keep their original stamp so a replay can
+   * never fake liveness. Internal; feeds `resumable`. */
+  liveTs?: number;
+  /** Minted by a run_subagent(resume=…) call for an agent no row owns —
+   * the registry may already have dropped it, so it is NOT resumable until
+   * a lifecycle/result event re-proves it. */
+  resumeMinted?: boolean;
+  /** false once the process/registry holding the handle is gone (server
+   * restart, session replay, exited host) or a resume already failed —
+   * the UI greys the row and the message endpoint refuses the relay
+   * instead of burning a lead turn to learn "doesn't exist". */
+  resumable?: boolean;
 }
 
 /** Fresh-ping window: a "message subagent" relay makes the sub page's status
@@ -801,8 +841,14 @@ function listSubagents(ctx: ApiContext, id: string, scope?: string, entries?: Lo
     // with ITS OWN id — parentage comes from the spawn call's tag below.
     const tag = (m["cognition.ai/subagent_context"] as { parentAgentId?: string } | undefined)?.parentAgentId ?? "root";
     const iso = new Date(e.ts).toISOString();
+    // The event's ORIGINAL creation stamp — cognition.ai/timestamp survives
+    // replays, while e.ts is our append time (fresh on every re-replay and
+    // would fake liveness). Unstamped lines arriving DURING a replay can't
+    // prove anything → 0.
+    const ct = m["cognition.ai/timestamp"];
+    const evTs = typeof ct === "number" ? ct : (loadInflight.has(id) ? 0 : e.ts);
     const toolId = String(u.toolCallId ?? "");
-    const isSpawn = m["cognition.ai/inferenceToolName"] === "run_subagent";
+    const isSpawn = m?.["cognition.ai/inferenceToolName"] === "run_subagent";
     const st = m["cognition.ai/subagent_started"] as Record<string, unknown> | undefined;
     const dn = m["cognition.ai/subagent_completed"] as Record<string, unknown> | undefined;
 
@@ -812,8 +858,17 @@ function listSubagents(ctx: ApiContext, id: string, scope?: string, entries?: Lo
       const args = (u.rawInput ?? u.arguments ?? {}) as Record<string, unknown>;
       const resumeId = typeof args.resume === "string" ? args.resume : "";
       // Resume calls belong to the existing agent — merge, don't mint a row.
+      // A resume of an agent no row owns mints a TENTATIVE one (liveTs=0 —
+      // the handle may be gone; only its own result/started can re-prove it).
       const cur = resumeId
-        ? (byAgent.get(resumeId) ?? (() => { const r = blank(resumeId, toolId); add(r); return r })())
+        ? (byAgent.get(resumeId) ?? (() => {
+            const r = blank(resumeId, toolId);
+            r.live = false;
+            r.resumeMinted = true;
+            r.title = String(args.title ?? `Resumed subagent ${resumeId}`);
+            add(r);
+            return r;
+          })())
         : (rows.find((r) => r.toolId === toolId) ?? (() => { const r = blank(`spawn:${toolId}`, toolId); rows.push(r); return r })());
       cur.originTag ??= tag;
       cur.title = String(args.title ?? cur.title);
@@ -821,6 +876,9 @@ function listSubagents(ctx: ApiContext, id: string, scope?: string, entries?: Lo
       cur.profile = String(args.profile ?? cur.profile);
       cur.isBackground = Boolean(args.is_background);
       cur.startedAt ??= iso;
+      // A spawn call means the agent is being registered NOW; a resume call
+      // proves nothing until it succeeds.
+      if (!resumeId) cur.liveTs ??= evTs;
     }
     // Lifecycle meta (live only, toolCallId = agentId — NOT the spawn's id).
     if (st) {
@@ -835,6 +893,7 @@ function listSubagents(ctx: ApiContext, id: string, scope?: string, entries?: Lo
       const cur = byAgent.get(aid) ?? spawnRow ?? (() => { const r = blank(aid, toolId || undefined); add(r); return r })();
       if (cur.agentId.startsWith("spawn:")) { cur.agentId = aid; byAgent.set(aid, cur); }
       cur.live = true;
+      cur.liveTs = evTs; // started re-emits on a successful resume — that IS current-registry proof
       cur.title = String(st.title ?? cur.title);
       cur.task = String(st.task ?? cur.task);
       cur.profile = String(st.profile ?? cur.profile);
@@ -858,11 +917,20 @@ function listSubagents(ctx: ApiContext, id: string, scope?: string, entries?: Lo
     // rows; a live row's real status comes from subagent_completed (a
     // background spawn call returns while the agent is still running).
     if (isSpawn && u.sessionUpdate === "tool_call_update" && toolId && !dn) {
-      const cur = rows.find((r) => r.toolId === toolId && r.agentId.startsWith("spawn:"));
+      const cur = rows.find((r) => r.toolId === toolId && (r.agentId.startsWith("spawn:") || r.resumeMinted));
       if (cur) {
         const s2 = String(u.status ?? "");
-        if (s2 === "completed") { cur.status = "completed"; cur.finishedAt ??= iso; }
-        else if (s2 === "failed") { cur.status = "failed"; cur.finishedAt ??= iso; }
+        if (s2 === "completed") {
+          cur.status = "completed"; cur.finishedAt ??= iso;
+          // A resume call that completed proves the handle existed — the
+          // resumed agent is registered in the CURRENT process.
+          if (cur.resumeMinted) cur.liveTs = evTs;
+        } else if (s2 === "failed") {
+          cur.status = "failed"; cur.finishedAt ??= iso;
+          // A failed resume means the handle is gone — refuse future relays.
+          const text = JSON.stringify(u.rawOutput ?? u.content ?? "");
+          if (/doesn'?t exist|no longer found|no subagent found|not found/i.test(text)) deadSubs.add(`${id}:${cur.agentId}`);
+        }
       }
     }
     const cx = (m["cognition.ai/subagent_context"] as { parentAgentId?: string } | undefined)?.parentAgentId;
@@ -877,6 +945,18 @@ function listSubagents(ctx: ApiContext, id: string, scope?: string, entries?: Lo
   // rows for agents whose real id arrived in an earlier generation. An orphan
   // sharing a live row's title is that agent's earlier-generation spawn card —
   // drop the duplicate (a wrong title match only hides a cosmetic extra row).
+  // Resumability: the acp registry is process-local and emptied by every
+  // session/load replay — only an agent whose registering event is newer
+  // than the last epoch (and whose host process is alive, and which no
+  // failed resume already condemned) can take run_subagent(resume=…).
+  const epoch = loadEpoch.get(id) ?? BOOT_TS;
+  const hostDead = (() => { const h = sessionHost.get(id); return !h || h.exited; })();
+  for (const r of rows) {
+    r.resumable = !r.agentId.startsWith("spawn:")
+      && !hostDead
+      && !deadSubs.has(`${id}:${r.agentId}`)
+      && (r.liveTs ?? 0) >= epoch;
+  }
   const liveTitles = new Set(rows.filter((r) => !r.agentId.startsWith("spawn:")).map((r) => r.title));
   return rows
     // scope = "children of stream S": the spawn call must originate in S's

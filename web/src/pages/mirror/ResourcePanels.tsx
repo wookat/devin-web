@@ -11,6 +11,8 @@ interface LocalSubagent {
   status: 'running' | 'completed' | 'failed'
   summary: string | null; startedAt: string | null; finishedAt: string | null
   updates: number; lastText: string
+  /** false = registry handle gone (restart/replay) — can't be messaged. */
+  resumable?: boolean
 }
 
 /** Local subagents panel: list → detail (own transcript + direct message + control). */
@@ -200,9 +202,12 @@ function SubagentsPanel({ id }: { id: string }) {
         {!agents.length && <p className="px-2 py-6 text-center text-[12px] text-muted-foreground">No subagents in this session yet.</p>}
         {agents.map((a) => (
           <button key={a.agentId} onClick={() => nav(`/admin/sub:${root}:${a.agentId}`)} className="mb-1 flex w-full items-center gap-2.5 rounded-lg border border-border bg-card px-3 py-2.5 text-left hover:bg-tint-secondary">
-            <span className={cn('size-2 shrink-0 rounded-full', a.status === 'running' ? 'bg-amber-500 animate-pulse' : a.status === 'failed' ? 'bg-red-500' : 'bg-emerald-500')} />
+            <span className={cn('size-2 shrink-0 rounded-full', a.resumable === false ? 'bg-muted-foreground/40' : a.status === 'running' ? 'bg-amber-500 animate-pulse' : a.status === 'failed' ? 'bg-red-500' : 'bg-emerald-500')} />
             <span className="min-w-0 flex-1">
-              <span className="block truncate text-[13px] font-medium leading-[18px]">{a.title || a.agentId}</span>
+              <span className="flex min-w-0 items-center gap-1.5 truncate text-[13px] font-medium leading-[18px]">
+                <span className={cn('truncate', a.resumable === false && 'text-muted-foreground')}>{a.title || a.agentId}</span>
+                {a.resumable === false && <span className="shrink-0 rounded bg-muted px-1 text-[10px] leading-[15px] text-muted-foreground" title="宿主进程已重启/重放，句柄不在注册表">已失效</span>}
+              </span>
               <span className="block truncate text-[11px] leading-[15px] text-muted-foreground">{[a.profile, a.model].filter(Boolean).join(' · ')}{a.isBackground ? ' · bg' : ''}{a.lastText ? ` — ${a.lastText}` : a.summary ? ` — ${a.summary}` : ''}</span>
             </span>
             <ChevronRight size={14} className="shrink-0 text-muted-foreground" />

@@ -144,8 +144,9 @@ function cwdFor(ctx: ApiContext, id: string): string {
   return ctx.sessionCwd.get(parseSubId(id)?.parent ?? id) ?? ctx.primaryCwd;
 }
 
-function subStatusEnum(a: { status: string; agentId?: string } | undefined | null, aid: string): string {
-  if (a?.status === "running" || subPingActive(aid)) return "working";
+function subStatusEnum(a: { status: string; agentId?: string; resumable?: boolean } | undefined | null, aid: string): string {
+  if (a?.status === "running") return a.resumable === false ? "stopped" : "working";
+  if (subPingActive(aid)) return "working";
   if (a?.status === "failed") return "stopped";
   return "finished";
 }
@@ -156,6 +157,9 @@ interface SubTreeRow {
   folder: null; is_unread: boolean; is_pinned: boolean;
   cwd: string | undefined; is_locked: boolean; loaded_here: boolean;
   children: SubTreeRow[]; total_children: number;
+  /** false = the acp registry dropped this handle (restart/replay) — the
+   * sidebar greys it and the child page offers respawn instead of relay. */
+  resumable?: boolean;
 }
 
 // A never-loaded session's subagents live only on DISK — memory get() is
@@ -204,9 +208,10 @@ function subTreeRow(ctx: ApiContext, rootId: string, cwd: string | undefined, a:
     created_at: a.startedAt,
     snippet: a.lastText || a.task,
     folder: null, is_unread: false, is_pinned: false,
-    cwd, is_locked: false, loaded_here: a.status === "running",
+    cwd, is_locked: false, loaded_here: a.status === "running" && a.resumable !== false,
     children: kids.map((k) => subTreeRow(ctx, rootId, cwd, k, depth + 1)),
     total_children: kids.length,
+    resumable: a.resumable,
   };
 }
 
@@ -375,7 +380,7 @@ async function handleSubSession(
         subagent: {
           agentId: aid, profile: a?.profile ?? "", model: a?.model ?? "",
           task: a?.task ?? "", isBackground: a?.isBackground ?? false,
-          live: a?.live ?? false,
+          live: a?.live ?? false, resumable: a?.resumable ?? false,
         },
       },
       messages: buildMessages(items.slice(-60)),
@@ -404,6 +409,24 @@ async function handleSubSession(
     const text = String(body.message ?? body.text ?? "").trim();
     if (!text) { json(res, 400, { error: "empty message" }); return true; }
     if (aid.startsWith("spawn:")) { json(res, 400, { error: "subagent transcript not replayed; cannot message" }); return true; }
+    const a = info();
+    // respawn:1 spawns a SUCCESSOR carrying the dead agent's context —
+    // allowed precisely because the handle is gone (normal resume can't work).
+    if (body.respawn) {
+      dispatchPrompt(ctx, parent, text, [], aid, {
+        title: a?.title ?? "Subagent successor",
+        task: a?.task ?? "",
+        profile: a?.profile ?? "",
+      });
+      json(res, 200, { ok: true, respawned: true });
+      return true;
+    }
+    // A dead handle can't be resumed — refuse here rather than burn a lead
+    // turn that only comes back "doesn't exist in my current session".
+    if (!a || a.resumable === false) {
+      json(res, 409, { error: "该子代理句柄已失效（宿主进程已重启/重放），不能续聊 — 可派生新子代理继续", dead: true });
+      return true;
+    }
     dispatchPrompt(ctx, parent, text, [], aid);
     json(res, 200, { ok: true });
     return true;

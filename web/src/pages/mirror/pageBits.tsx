@@ -193,6 +193,9 @@ interface SessionDetail {
     subagent?: {
       agentId: string; profile: string; model: string; task: string
       isBackground: boolean; live: boolean
+      /** false = handle gone (restart/replay) — composer relays would only
+       * burn a lead turn to learn "doesn't exist"; offer respawn instead. */
+      resumable?: boolean
     } | null
   }
   messages: PublicMessage[]

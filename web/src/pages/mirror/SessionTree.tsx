@@ -105,11 +105,16 @@ function TreeRow({ s, depth, activeDevinId, folders, onOpen, onPrefetch, onRefre
           )
         ) : null}
         <span className="flex min-w-0 flex-1 flex-col overflow-hidden">
-          <span className={cn('min-w-0 truncate text-[13px] leading-[18px]', s.is_unread ? 'font-semibold text-foreground' : 'text-foreground/90')}>
+          <span className={cn('min-w-0 truncate text-[13px] leading-[18px]', s.is_unread ? 'font-semibold text-foreground' : 'text-foreground/90', s.resumable === false && 'text-muted-foreground')}>
             {s.title || s.devin_id}
           </span>
           {hasSub && (
             <span className="flex min-w-0 items-center whitespace-nowrap text-[12px] leading-[16px] text-muted-foreground">
+              {s.resumable === false && (
+                <>
+                  <span className="mr-1 shrink-0 rounded bg-muted px-1 text-[10px] leading-[15px]" title="句柄已失效（宿主进程已重启/重放），不能续聊">已失效</span>
+                </>
+              )}
               <span className="truncate">{subtitle || subTime}</span>
               {prs.length > 0 && (
                 <>
