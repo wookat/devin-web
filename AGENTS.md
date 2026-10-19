@@ -112,7 +112,21 @@ powershell -File clean-orphans.ps1  :: kill acp processes with dead parents
   `draftPicks` (replayed via /config after create); `wb2-new-session-draft`
   sessionStorage hands text between pages. `composer-meta` response carries
   `primary_cwd` for the draft workspace picker. `/admin/new` must stay out of
-  every session-scoped fetch (main.tsx boot prefetch excludes it).
+  every session-scoped fetch (main.tsx boot prefetch excludes it — 'sessions'
+  too: `/admin/sessions` is the management page, not a session id).
+- `/admin/sessions` (`web/src/pages/SessionsPage.tsx`) = pixel-parity clone of
+  the official sessions-management page (measured live on app.devin.ai):
+  300px sidebar mounting the REAL SessionTree + LocalDock; h-12 header;
+  removable filter chips + ☰ add-filter + Clear filters; sticky 36px
+  "Active sessions"/"Inactive sessions" group heads (archived rows sit in
+  Inactive with an orange Archive icon — there is no separate Archived group
+  on the official page; isolate via Status filter); 44px rounded rows with
+  hover Pin/Archive slide-ins; dark floating bulk pill; Display menu
+  (Sort/Direction/Grouping/Flat-Tree view/Display properties/Export CSV).
+  Pure frontend — all data/actions ride `/api/admin/mirror/sessions` +
+  `session-archive|session-pin|session-folder`; no server change. Archiving
+  a session from its page navigates here so archived rows stay discoverable.
+  `text-text-orange`/`bg-accent-primary` tokens added for exact palette.
 - Header settings menu is LOCAL-only: Send-with (localStorage), Rename/Folder/
   Archive (wb.json), Copy link (`/s/<id>?t=local`), Share-to-cloud + End session
   (verified `_cognition.ai/*` ext), Restart agent process (`POST .../restart` →
