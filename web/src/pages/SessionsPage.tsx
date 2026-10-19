@@ -18,22 +18,15 @@ interface SessionsResp {
 
 /* Official status → colored text (measured app.devin.ai token values):
    green rgb(0,165,88) · orange rgb(245,142,58) · red rgb(245,59,58) · secondary rgba(25,25,25,.56) */
-/* Local status set — 进行中/等待输入/已归档/已失效/已结束. Acp sessions have
-   no "sleeping": a finished turn parks at 'blocked' (idle, awaiting input) —
-   that is a real state, not an ended session. crashed/failed/stopped are dead
-   ends → 已失效; finished → 已结束. */
+/* Real status_enum values only — sessionStatus emits working|blocked; archived
+   comes from wb.json meta. No invented states (ended/finished/crashed don't
+   exist on local acp session/list). */
 const STATUS_TEXT: Record<string, { label: string; cls: string }> = {
   working: { label: '进行中', cls: 'text-text-green' },
   blocked: { label: '等待输入', cls: 'text-text-orange' },
   archived: { label: '已归档', cls: 'text-muted-foreground' },
-  crashed: { label: '已失效', cls: 'text-text-red' },
-  failed: { label: '已失效', cls: 'text-text-red' },
-  stopped: { label: '已失效', cls: 'text-muted-foreground' },
-  idle: { label: '已失效', cls: 'text-muted-foreground' },
-  finished: { label: '已结束', cls: 'text-muted-foreground' },
-  ended: { label: '已结束', cls: 'text-muted-foreground' },
 }
-const stText = (s: string) => STATUS_TEXT[s] ?? { label: '已结束', cls: 'text-muted-foreground' }
+const stText = (s: string) => STATUS_TEXT[s] ?? { label: s, cls: 'text-muted-foreground' }
 
 const fmtDay = (iso: string | null | undefined) => {
   if (!iso) return ''
@@ -44,16 +37,24 @@ const fmtDay = (iso: string | null | undefined) => {
   return d.toLocaleDateString('en-US', { month: 'short', day: 'numeric', ...(sameYear ? {} : { year: 'numeric' }) })
 }
 
+/* Real enum values only (sessionStatus: working|blocked; meta: archived). */
 const STATUS_OPTS = [
-  { v: 'working', l: '进行中' }, { v: 'blocked', l: '等待输入' }, { v: 'finished', l: '已结束' },
-  { v: 'crashed', l: '已失效' }, { v: 'archived', l: '已归档' }, { v: 'unarchived', l: '未归档' },
+  { v: 'working', l: '进行中', dot: 'bg-[rgb(0,165,88)]' },
+  { v: 'blocked', l: '等待输入', dot: 'bg-[rgb(245,142,58)]' },
+  { v: 'archived', l: '已归档', dot: 'bg-text-orange' },
+  { v: 'unarchived', l: '未归档', dot: 'bg-muted-foreground' },
 ]
 
-/* Portal-anchored dropdown — same chrome as ui.tsx Combo (rounded-10, bg-95, blur-8). */
-function Menu({ anchor, onClose, children, minW = 200 }: { anchor: DOMRect | null; onClose: () => void; children: ReactNode; minW?: number }) {
+/* Portal-anchored dropdown — same chrome as ui.tsx Combo (rounded-10, bg-95, blur-8).
+   side='right' renders an official-style flyout anchored to the item's right
+   edge (used for filter submenus); clicks inside ANY menu don't close others. */
+function Menu({ anchor, onClose, children, minW = 200, side }: { anchor: DOMRect | null; onClose: () => void; children: ReactNode; minW?: number; side?: 'right' }) {
   const ref = useRef<HTMLDivElement>(null)
   useEffect(() => {
-    const onDown = (e: MouseEvent) => { if (!ref.current?.contains(e.target as Node)) onClose() }
+    const onDown = (e: MouseEvent) => {
+      const t = e.target as Element | null
+      if (!ref.current?.contains(e.target as Node) && !t?.closest?.('[data-menu-el]')) onClose()
+    }
     const onKey = (e: KeyboardEvent) => { if (e.key === 'Escape') onClose() }
     document.addEventListener('mousedown', onDown)
     document.addEventListener('keydown', onKey)
@@ -61,11 +62,18 @@ function Menu({ anchor, onClose, children, minW = 200 }: { anchor: DOMRect | nul
   }, [onClose])
   if (!anchor) return null
   const w = Math.max(minW, anchor.width)
-  const left = Math.min(anchor.left, window.innerWidth - w - 8)
-  let top = anchor.bottom + 4
-  if (top + 320 > window.innerHeight - 8 && anchor.top - 4 - 320 > 8) top = anchor.top - 4 - 320
+  let left: number, top: number
+  if (side === 'right') {
+    left = anchor.right + 2
+    if (left + w > window.innerWidth - 8) left = anchor.left - w - 2
+    top = Math.max(8, Math.min(anchor.top - 4, window.innerHeight - 340))
+  } else {
+    left = Math.min(anchor.left, window.innerWidth - w - 8)
+    top = anchor.bottom + 4
+    if (top + 320 > window.innerHeight - 8 && anchor.top - 4 - 320 > 8) top = anchor.top - 4 - 320
+  }
   return createPortal(
-    <div ref={ref} className="menu-in fixed z-[100] overflow-y-auto rounded-[10px] bg-elevated/95 p-1 shadow-[0_10px_15px_-3px_rgba(0,0,0,0.06),0_4px_6px_-4px_rgba(0,0,0,0.1)] outline outline-1 outline-border-secondary backdrop-blur-[8px]" style={{ left, top, width: w, maxHeight: 'min(480px, 80vh)' }}>
+    <div ref={ref} data-menu-el className="menu-in fixed z-[100] overflow-y-auto rounded-[10px] bg-elevated/95 p-1 shadow-[0_10px_15px_-3px_rgba(0,0,0,0.06),0_4px_6px_-4px_rgba(0,0,0,0.1)] outline outline-1 outline-border-secondary backdrop-blur-[8px]" style={{ left, top, width: w, maxHeight: 'min(480px, 80vh)' }}>
       {children}
     </div>,
     document.body,
@@ -124,6 +132,7 @@ export default function SessionsPage() {
   const [showFolder, setShowFolder] = useState(false)
   const [sel, setSel] = useState<Set<string>>(new Set())
   const [menu, setMenu] = useState<{ kind: string; r: DOMRect } | null>(null)
+  const [sub, setSub] = useState<{ kind: 'status' | 'folder'; r: DOMRect } | null>(null)
   const [msg, setMsg] = useState('')
   const [sideOpen, setSideOpen] = useState(window.innerWidth >= 1024)
   const [orgMenu, setOrgMenu] = useState(false)
@@ -210,7 +219,13 @@ export default function SessionsPage() {
     a.download = 'sessions.csv'; a.click(); URL.revokeObjectURL(a.href); setMenu(null)
   }
 
-  const openMenu = (kind: string) => (e: ReactMouseEvent<HTMLElement>) => setMenu({ kind, r: e.currentTarget.getBoundingClientRect() })
+  // 'status'/'folder' are flyout submenus — they anchor off the chip like the
+  // parent menu does, so chip clicks reuse the same `sub` channel.
+  const openMenu = (kind: string) => (e: ReactMouseEvent<HTMLElement>) => {
+    const r = e.currentTarget.getBoundingClientRect()
+    if (kind === 'status' || kind === 'folder') { setSub({ kind, r }); setMenu(null) }
+    else { setMenu({ kind, r }); setSub(null) }
+  }
 
   /* ---------- row — official h-[44px] rounded-[6px] gap-[12px] px-[16px] ---------- */
   const RowLine = ({ s, depth = 0 }: { s: Row; depth?: number }) => {
@@ -536,39 +551,44 @@ export default function SessionsPage() {
         </Menu>
       )}
 
-      {/* ☰ add-filter menu — official 220w flat list, rows open submenus */}
+      {/* ☰ add-filter menu — official 220w flat list; rows open RIGHT flyouts
+          (parent stays open, like the official submenu). */}
       {menu?.kind === 'addfilter' && (
-        <Menu anchor={menu.r} onClose={() => setMenu(null)} minW={220}>
+        <Menu anchor={menu.r} onClose={() => { setMenu(null); setSub(null) }} minW={220}>
           <div className={menuHead}>Add filter</div>
-          <button className={menuItem} onClick={(e) => setMenu({ kind: 'status', r: e.currentTarget.getBoundingClientRect() })}><ListFilter className="text-muted-foreground" /> <span className="min-w-0 flex-1 truncate">Status</span><ChevronRight className="ml-auto text-muted-foreground" /></button>
-          <button className={menuItem} onClick={(e) => setMenu({ kind: 'folder', r: e.currentTarget.getBoundingClientRect() })}><Tag className="text-muted-foreground" /> <span className="min-w-0 flex-1 truncate">Folder</span><ChevronRight className="ml-auto text-muted-foreground" /></button>
+          <button className={cn(menuItem, sub?.kind === 'status' && 'bg-tint-secondary')} onClick={(e) => setSub({ kind: 'status', r: e.currentTarget.getBoundingClientRect() })}><ListFilter className="text-muted-foreground" /> <span className="min-w-0 flex-1 truncate">Status</span><ChevronRight className="ml-auto text-muted-foreground" /></button>
+          <button className={cn(menuItem, sub?.kind === 'folder' && 'bg-tint-secondary')} onClick={(e) => setSub({ kind: 'folder', r: e.currentTarget.getBoundingClientRect() })}><Tag className="text-muted-foreground" /> <span className="min-w-0 flex-1 truncate">Folder</span><ChevronRight className="ml-auto text-muted-foreground" /></button>
         </Menu>
       )}
 
-      {/* status filter — multi "is any of" like official */}
-      {menu?.kind === 'status' && (
-        <Menu anchor={menu.r} onClose={() => setMenu(null)}>
+      {/* status flyout — colored dots + right check, multi "is any of" */}
+      {sub?.kind === 'status' && (
+        <Menu anchor={sub.r} onClose={() => setSub(null)} side="right" minW={200}>
           <div className={menuHead}>Status is any of</div>
           {STATUS_OPTS.map((o) => {
             const on = statusF.includes(o.v)
             return (
               <button key={o.v} className={menuItem} onClick={() => setStatusF((p) => (on ? p.filter((x) => x !== o.v) : [...p, o.v]))}>
-                {o.l}{on && <Check size={14} className="ml-auto" />}
+                <span className={cn('size-2 shrink-0 rounded-full', o.dot)} />
+                <span className="min-w-0 flex-1 truncate">{o.l}</span>
+                {on && <Check size={14} className="ml-auto shrink-0" />}
               </button>
             )
           })}
         </Menu>
       )}
 
-      {/* folder filter */}
-      {menu?.kind === 'folder' && (
-        <Menu anchor={menu.r} onClose={() => setMenu(null)}>
+      {/* folder flyout */}
+      {sub?.kind === 'folder' && (
+        <Menu anchor={sub.r} onClose={() => setSub(null)} side="right" minW={200}>
           <div className={menuHead}>Folder is</div>
           {[{ v: '__none', l: '(无文件夹)' }, ...folders.map((f) => ({ v: f, l: f }))].map((o) => {
             const on = folderF.includes(o.v)
             return (
               <button key={o.v} className={menuItem} onClick={() => setFolderF((p) => (on ? p.filter((x) => x !== o.v) : [...p, o.v]))}>
-                {o.l}{on && <Check size={14} className="ml-auto" />}
+                <Tag className="shrink-0 text-muted-foreground" />
+                <span className="min-w-0 flex-1 truncate">{o.l}</span>
+                {on && <Check size={14} className="ml-auto shrink-0" />}
               </button>
             )
           })}
