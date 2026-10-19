@@ -4326,19 +4326,21 @@ const groups = useMemo(() => groupItems(allItems, sessionWorking), [allItems, se
                   )
                 })
               })()}
-              <button
-                ref={addBtnRef}
-                onClick={(e) => {
-                  const r = e.currentTarget.getBoundingClientRect()
-                  setAddAnchor({ left: Math.max(5, Math.min(r.left, window.innerWidth - 5 - 226)), top: r.bottom + 2 })
-                  setAddOpen(!addOpen)
-                }}
-                aria-label="Add tab"
-                title="Add tab"
-                className="flex size-7 shrink-0 cursor-pointer items-center justify-center rounded-[6px] text-muted-foreground hover:bg-accent"
-              >
-                <PanelAddTabIcon size={18} />
-              </button>
+              <div className="sticky right-0 z-10 flex h-7 shrink-0 items-center self-center bg-card/80 pl-1 backdrop-blur-sm">
+                <button
+                  ref={addBtnRef}
+                  onClick={(e) => {
+                    const r = e.currentTarget.getBoundingClientRect()
+                    setAddAnchor({ left: Math.max(5, Math.min(r.left, window.innerWidth - 5 - 226)), top: r.bottom + 2 })
+                    setAddOpen(!addOpen)
+                  }}
+                  aria-label="Add tab"
+                  title="Add tab"
+                  className="flex size-7 cursor-pointer items-center justify-center rounded-[6px] text-muted-foreground hover:bg-accent"
+                >
+                  <PanelAddTabIcon size={18} />
+                </button>
+              </div>
             </div>
             <div className="relative shrink-0">
               {addOpen && <div className="fixed inset-0 z-10" onClick={() => { setAddOpen(false); setAddQ(''); setAddSub(false); setAddPrSub(false) }} />}
