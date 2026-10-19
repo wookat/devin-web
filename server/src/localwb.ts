@@ -166,7 +166,7 @@ interface SubTreeRow {
 // empty. The `.subs.jsonl` journal holds just the spawn/lifecycle lines (a
 // multi-GB log must never be fully re-parsed for a sidebar row); the first
 // miss kicks a background scan and children appear on the next poll.
-const subListCache = new Map<string, { m: number | null; lastSeq: number; rows: SubagentInfo[] }>();
+const subListCache = new Map<string, { m: number | null; lastSeq: number; rows: SubagentInfo[]; at: number }>();
 function subsAny(ctx: ApiContext, id: string, scope?: string): SubagentInfo[] {
   const mem = ctx.sessionLog.get(id);
   // Memory is authoritative only when the ring still covers the whole current
@@ -178,8 +178,12 @@ function subsAny(ctx: ApiContext, id: string, scope?: string): SubagentInfo[] {
   const key = `${id}${scope ?? ""}`;
   const im = ctx.sessionLog.subsJournalMtime(id);
   const lastSeq = mem.length ? mem[mem.length - 1].seq ?? -1 : -1;
+  // `resumable` ages out WITHOUT new log events (a replay bumps the epoch,
+  // a failed resume fills deadSubs) — so the cache must not live longer
+  // than the next poll's liveness inputs. lastSeq changes whenever new
+  // events land; for a quiet log, cache only up to one heartbeat.
   const hit = subListCache.get(key);
-  if (hit && hit.m === im && im != null && hit.lastSeq === lastSeq) return hit.rows;
+  if (hit && hit.m === im && im != null && hit.lastSeq === lastSeq && Date.now() - hit.at < 15_000) return hit.rows;
   const idx = ctx.sessionLog.readSubsJournal(id) ?? [];
   const seen = new Set(idx.map((e) => e.seq));
   const rows = listSubagents(ctx, id, scope, mem.length ? [...idx, ...mem.filter((e) => !seen.has(e.seq))] : idx);
@@ -188,7 +192,7 @@ function subsAny(ctx: ApiContext, id: string, scope?: string): SubagentInfo[] {
   for (const r of rows) {
     if (!r.lastText && !r.agentId.startsWith("spawn:")) r.lastText = ctx.sessionLog.subTailText(id, r.agentId);
   }
-  if (im != null) subListCache.set(key, { m: im, lastSeq, rows });
+  if (im != null) subListCache.set(key, { m: im, lastSeq, rows, at: Date.now() });
   return rows;
 }
 
