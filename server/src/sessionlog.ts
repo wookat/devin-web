@@ -12,6 +12,13 @@ interface LogEntry {
   update: Record<string, unknown>;
 }
 
+/** A live sidecar scan's open fds; `dead` stops routing after a mid-scan
+ * wipe so a dead generation never repopulates fresh sidecar files. */
+interface ScanOuts {
+  dead: boolean;
+  fds: Map<string, number>;
+}
+
 /** In-memory ring buffer of session updates, write-through to a per-session
  * JSONL disk log (`<dir>/<id>.jsonl`). Memory bounds live-streaming cost; the
  * disk log keeps the COMPLETE history and is the backfill source for timeline
@@ -21,6 +28,10 @@ export class SessionLog {
   private seqs = new Map<string, number>();
   private gens = new Map<string, number>();
   private fds = new Map<string, number>();
+  /** Live scans' sidecar fds — registered so wipeSidecars can close them
+   * (an rmSync on an open fd is delete-pending on Windows: the name lingers
+   * in listings at 0 bytes and writes land in a doomed file object). */
+  private scanOuts = new Map<string, ScanOuts>();
   private dirReady = false;
 
   /** @param dir disk-log directory; null disables persistence (tests). */
@@ -107,8 +118,13 @@ export class SessionLog {
             // truncate via path instead. The 'a+' fd keeps appending at
             // the (new, shorter) EOF.
             fs.truncateSync(f, nl < 0 ? size - n : size - n + nl + 1);
-            // The file just shrank — any cached end/coverage is stale.
+            // The file just shrank — cached end/coverage and the persisted
+            // marker can now point past EOF (a covered claim over bytes that
+            // no longer exist defers sidecar routing forever). Drop them and
+            // let ensureSubFiles rebuild lazily.
             this.fileEnd.delete(sessionId);
+            this.coverOff.delete(sessionId);
+            try { fs.rmSync(this.subScanFile(sessionId), { force: true }); } catch {}
           }
         }
       } catch { /* readers skip torn lines anyway — best effort */ }
@@ -157,8 +173,11 @@ export class SessionLog {
       // Evaluated BEFORE fileEnd advances: coveredOff treats a 0-end file as
       // fresh, and fileEnd already including this line would fake a legacy gap.
       if (fd != null && this.coveredOff(sessionId) === before) {
-        this.writeSidecars(sessionId, update, line);
-        this.bumpCover(sessionId, before + Buffer.byteLength(line));
+        // Only claim coverage when every routed sidecar write landed — a
+        // failed open (delete-pending name on Windows, EPERM, ENOSPC) must
+        // leave cover behind so subFilesStale schedules a healing rescan.
+        if (this.writeSidecars(sessionId, update, line))
+          this.bumpCover(sessionId, before + Buffer.byteLength(line));
       }
       this.fileEnd.set(sessionId, before + Buffer.byteLength(line));
     }
@@ -284,7 +303,11 @@ export class SessionLog {
   /** Route one update to its derived sidecars. `line` is the serialized
    * main-log row — sidecars store the identical JSONL so readers share the
    * LogEntry shape. */
-  private writeSidecars(sessionId: string, u: Record<string, unknown>, line: string) {
+  /** Route one update to its derived sidecars. `line` is the serialized
+   * main-log row — sidecars store the identical JSONL so readers share the
+   * LogEntry shape. Returns false when any routed write failed, so the
+   * caller leaves coverage behind for a healing rescan. */
+  private writeSidecars(sessionId: string, u: Record<string, unknown>, line: string): boolean {
     const m = u._meta as Record<string, unknown> | undefined;
     const aids = new Set<string>();
     const cx = (m?.["cognition.ai/subagent_context"] as { parentAgentId?: string } | undefined)?.parentAgentId;
@@ -295,22 +318,24 @@ export class SessionLog {
     if (dn?.agentId) { const a = String(dn.agentId); aids.add(a); this.knownAids(sessionId).add(a); }
     const tc = u.toolCallId;
     if (tc != null && this.knownAids(sessionId).has(String(tc))) aids.add(String(tc));
-    for (const aid of aids) {
-      const fd = this.sideWriter(this.sideFile(sessionId, aid));
-      if (fd != null) { try { fs.writeSync(fd, line); } catch { /* best-effort */ } }
-    }
+    let ok = true;
+    const w = (file: string) => {
+      const fd = this.sideWriter(file);
+      if (fd == null) { ok = false; return; }
+      try { fs.writeSync(fd, line); } catch { ok = false; }
+    };
+    for (const aid of aids) w(this.sideFile(sessionId, aid));
     const isSpawn = m?.["cognition.ai/inferenceToolName"] === "run_subagent";
     const title = String(u.title ?? "");
     const prof = String(((u.rawInput ?? u.arguments) as Record<string, unknown> | undefined)?.profile ?? "");
-    if (isSpawn || st || dn || (u.sessionUpdate === "tool_call" && /subagent/i.test(title)) || prof.startsWith("subagent")) {
-      const fd = this.sideWriter(this.subsJournalFile(sessionId));
-      if (fd != null) { try { fs.writeSync(fd, line); } catch { /* best-effort */ } }
-    }
+    if (isSpawn || st || dn || (u.sessionUpdate === "tool_call" && /subagent/i.test(title)) || prof.startsWith("subagent"))
+      w(this.subsJournalFile(sessionId));
+    return ok;
   }
 
   /** The scan-time twin of writeSidecars — routes a raw line (string, not a
    * parsed update) and writes through per-file fds opened for the scan. */
-  private routeSubLine(sessionId: string, line: string, outs: Map<string, number>, known: Set<string>) {
+  private routeSubLine(sessionId: string, line: string, scan: ScanOuts, known: Set<string>) {
     if (!line.includes("subagent") && !line.includes("run_subagent")) return;
     let e: LogEntry;
     try { e = JSON.parse(line) as LogEntry; } catch { return; }
@@ -326,25 +351,27 @@ export class SessionLog {
     if (dn?.agentId) { const a = String(dn.agentId); aids.add(a); known.add(a); }
     const tc = u.toolCallId;
     if (tc != null && known.has(String(tc))) aids.add(String(tc));
-    for (const aid of aids) this.scanWrite(outs, this.sideFile(sessionId, aid), line);
+    for (const aid of aids) this.scanWrite(scan, this.sideFile(sessionId, aid), line);
     const isSpawn = m?.["cognition.ai/inferenceToolName"] === "run_subagent";
     const title = String(u.title ?? "");
     const prof = String(((u.rawInput ?? u.arguments) as Record<string, unknown> | undefined)?.profile ?? "");
     if (isSpawn || st || dn || (u.sessionUpdate === "tool_call" && /subagent/i.test(title)) || prof.startsWith("subagent"))
-      this.scanWrite(outs, this.subsJournalFile(sessionId), line);
+      this.scanWrite(scan, this.subsJournalFile(sessionId), line);
   }
 
-  private scanWrite(outs: Map<string, number>, file: string, line: string) {
-    let fd = outs.get(file);
+  private scanWrite(scan: ScanOuts, file: string, line: string) {
+    if (scan.dead) return; // wiped mid-scan — do not repopulate a dead generation
+    let fd = scan.fds.get(file);
     if (fd == null) {
-      try { fd = fs.openSync(file, "a"); outs.set(file, fd); } catch { return; }
+      try { fd = fs.openSync(file, "a"); scan.fds.set(file, fd); } catch { return; }
     }
     try { fs.writeSync(fd, line + "\n"); } catch { /* best-effort */ }
   }
 
-  private closeScan(outs: Map<string, number>) {
-    for (const fd of outs.values()) { try { fs.closeSync(fd); } catch {} }
-    outs.clear();
+  private closeScan(scan: ScanOuts) {
+    scan.dead = true;
+    for (const fd of scan.fds.values()) { try { fs.closeSync(fd); } catch {} }
+    scan.fds.clear();
   }
 
   /** True when the main log has bytes beyond the guaranteed sidecar
@@ -372,24 +399,29 @@ export class SessionLog {
     const SPAN = size - off;
     const SMALL = 32 << 20;
     if (SPAN <= SMALL) {
-      const outs = new Map<string, number>();
+      const scan: ScanOuts = { dead: false, fds: new Map() };
+      this.scanOuts.set(sessionId, scan);
       try {
-        this.eachFileLine(this.file(sessionId), (l) => this.routeSubLine(sessionId, l, outs, known), off, size);
+        this.eachFileLine(this.file(sessionId), (l) => this.routeSubLine(sessionId, l, scan, known), off, size);
         // A clear() mid-scan starts a new generation — this scan's output
         // belongs to the dead one; only claim coverage when it still matches.
+        // Claim only what still exists on disk (Math.min): a mid-scan
+        // truncation must not be covered by bytes we scanned but lost.
         if ((this.gens.get(sessionId) ?? 0) === genAtStart) {
-          this.bumpCover(sessionId, size);
-          this.fileEnd.set(sessionId, size);
+          const now = this.statSize(sessionId);
+          this.bumpCover(sessionId, Math.min(size, now));
+          this.fileEnd.set(sessionId, Math.max(now, this.fileEnd.get(sessionId) ?? 0));
         }
       } catch { /* partial — retried on next poll */ }
-      this.closeScan(outs);
+      finally { this.closeScan(scan); this.scanOuts.delete(sessionId); }
       return;
     }
     this.subScanning.add(sessionId);
     void (async () => {
       const fsp = fs.promises;
       const CHUNK = 16 << 20;
-      const outs = new Map<string, number>();
+      const scan: ScanOuts = { dead: false, fds: new Map() };
+      this.scanOuts.set(sessionId, scan);
       let fd: fs.promises.FileHandle | null = null;
       try {
         fd = await fsp.open(this.file(sessionId), "r");
@@ -406,27 +438,43 @@ export class SessionLog {
           const region = lastNl > 0 ? piece.subarray(0, lastNl) : Buffer.alloc(0);
           if (region.length) {
             for (const line of region.toString("utf8").split("\n")) {
-              if (line) this.routeSubLine(sessionId, line, outs, known);
+              if (line) this.routeSubLine(sessionId, line, scan, known);
             }
           }
         }
-        if (carry.length) this.routeSubLine(sessionId, carry.toString("utf8"), outs, known);
+        if (carry.length) this.routeSubLine(sessionId, carry.toString("utf8"), scan, known);
         if ((this.gens.get(sessionId) ?? 0) === genAtStart) {
-          this.bumpCover(sessionId, size);
-          this.fileEnd.set(sessionId, size);
+          const now = this.statSize(sessionId);
+          this.bumpCover(sessionId, Math.min(size, now));
+          this.fileEnd.set(sessionId, Math.max(now, this.fileEnd.get(sessionId) ?? 0));
         }
       } catch { /* retried on next poll */ }
       finally {
         if (fd) { try { await fd.close(); } catch {} }
-        this.closeScan(outs);
+        this.closeScan(scan);
+        this.scanOuts.delete(sessionId);
         this.subScanning.delete(sessionId);
       }
     })();
   }
 
-  /** Remove all derived sidecars + marker for a session (generation change). */
+  private statSize(sessionId: string): number {
+    try { return fs.statSync(this.file(sessionId)).size; } catch { return 0; }
+  }
+
+  /** Remove all derived sidecars + marker for a session (generation change).
+   * Also kills any in-flight scan: its fds are closed FIRST so the rm below
+   * never hits an open handle (delete-pending on Windows — the name then
+   * lingers in listings at 0 bytes and writes go to a doomed file object),
+   * and its `dead` flag stops it from repopulating afterwards. */
   private wipeSidecars(sessionId: string) {
     if (!this.dir) return;
+    // A wipe IS a generation change — stale scans keyed on genAtStart must
+    // not claim coverage over files this call just removed. (clear() bumps
+    // too; a double-bump is harmless.)
+    this.gens.set(sessionId, (this.gens.get(sessionId) ?? 0) + 1);
+    const scan = this.scanOuts.get(sessionId);
+    if (scan) { this.closeScan(scan); this.scanOuts.delete(sessionId); }
     const base = `${encodeURIComponent(sessionId)}.jsonl`;
     try {
       for (const f of fs.readdirSync(this.dir)) {
