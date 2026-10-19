@@ -313,7 +313,17 @@ powershell -File clean-orphans.ps1  :: kill acp processes with dead parents
   `mirror/parent` for the breadcrumb. Parent/child ownership comes from the
   SPAWN CALL's stream tag (originTag), never from the child's own lifecycle
   stream (which is tagged with its own id — self-as-child → infinite
-  recursion otherwise).
+  recursion otherwise). Resumability is process-bound: the acp subagent
+  registry lives in HOST-PROCESS memory and is emptied by every
+  session/load replay (post-replay resumes answer "doesn't exist in my
+  current session") — a child is `resumable` only while its registering
+  event's `cognition.ai/timestamp` (replay-proof; our append ts would fake
+  liveness) is newer than `loadEpoch` in sessionio, its host is alive, and
+  no failed resume condemned it (`deadSubs`). POST `sub:…/message` 409s on
+  a dead handle rather than burn a lead turn; `{respawn:1}` makes the lead
+  spawn a SUCCESSOR carrying title/profile/task + a 1.5KB stream-tail
+  excerpt — the successor lands as a NEW child row. UI greys dead rows
+  with a 已失效 badge and the child page offers the respawn button.
 - **Coverage rule for subagent data**: the memory ring (5000) is
   authoritative ONLY when `mem[0].seq === 0` — clear()+replay restarts seq
   at 0, so that proves nothing was evicted. Otherwise `subsAny`/
