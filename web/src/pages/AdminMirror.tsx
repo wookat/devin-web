@@ -218,10 +218,10 @@ export default function AdminMirrorPage() {
       localStorage.setItem(`session-tabs:${id}`, JSON.stringify({ tabs, fileTabs, order: tabOrder, activeTabId: panel, userPickedActiveTab, closedTabIds: [...closedTabIds], lastUpdated: Date.now() }))
     } catch { /* storage full/unavailable */ }
   }, [id, tabs, fileTabs, tabOrder, panel, userPickedActiveTab, closedTabIds, isVisitor])
-  const moveTab = useCallback((from: string, before: string, displayed: string[]) => {
+  const moveTab = useCallback((from: string, before: string | null, displayed: string[]) => {
     setTabOrder(() => {
       const next = displayed.filter((k) => k !== from)
-      next.splice(next.indexOf(before), 0, from)
+      next.splice(before === null ? next.length : next.indexOf(before), 0, from)
       return next
     })
   }, [])
@@ -4218,7 +4218,9 @@ const groups = useMemo(() => groupItems(allItems, sessionWorking), [allItems, se
           style={!fullWidth && window.innerWidth >= 768 ? { flexGrow: rightPct } : undefined}
         >
           <div className="flex h-11 items-center gap-1 overflow-hidden p-2">
-            <div role="tablist" className="relative min-w-0 flex-1 flex items-center gap-1 overflow-x-auto [-ms-overflow-style:none] [scrollbar-width:none] [&::-webkit-scrollbar]:hidden">
+            <div role="tablist" className="relative min-w-0 flex-1 flex items-center gap-1 overflow-x-auto [-ms-overflow-style:none] [scrollbar-width:none] [&::-webkit-scrollbar]:hidden"
+              onDragOver={(e) => { if (dragTab.current) e.preventDefault() }}
+              onDrop={(e) => { e.preventDefault(); if (dragTab.current) { moveTab(dragTab.current, null, displayedPanelKeys); dragTab.current = null } }}>
               {(() => {
                 const displayed = displayedPanelKeys
                 const tabProps = (key: string, close?: () => void) => ({

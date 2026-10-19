@@ -358,6 +358,8 @@ function WorkspacePanel({ id }: { id: string }) {
           ref={stripRef}
           className="flex h-[36px] shrink-0 items-stretch gap-0 overflow-x-auto overflow-y-hidden border-b border-border bg-transparent [scrollbar-width:thin]"
           onWheel={(e) => { if (stripRef.current && Math.abs(e.deltaY) > Math.abs(e.deltaX)) stripRef.current.scrollLeft += e.deltaY }}
+          onDragOver={(e) => { if (dragTab) { e.preventDefault(); e.dataTransfer.dropEffect = 'move' } }}
+          onDrop={(e) => { e.preventDefault(); if (dragTab) { setTabs((t) => t.filter((x) => x !== dragTab).concat(dragTab)); setDragTab(null) } }}
         >
           {tabs.map((p) => {
             const isActive = active === p
