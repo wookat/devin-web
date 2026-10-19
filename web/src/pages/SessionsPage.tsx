@@ -498,7 +498,7 @@ export default function SessionsPage() {
             <Chip kind="folder" icon={<Tag size={14} className="text-muted-foreground" />} label={folderF.length === 1 ? `Folder is ${folderF[0] === '__none' ? 'none' : folderF[0]}` : `Folder is any of ${folderF.length}`} onClear={() => setFolderF([])} />
           )}
           {/* official Add filters: 28×28 circle, border .06, white bg, 18px icon */}
-          <button onClick={openMenu('addfilter')} className={cn('flex size-7 cursor-pointer touch-manipulation items-center justify-center rounded-full border border-border-secondary bg-card text-muted-foreground hover:bg-tint-secondary hover:text-foreground', FOCUS_RING)} aria-label="Add filters" title="Add filters">
+          <button onClick={openMenu('addfilter')} className={cn('flex size-7 cursor-pointer touch-manipulation items-center justify-center rounded-full border border-border-secondary bg-card text-foreground hover:bg-tint-secondary', FOCUS_RING)} aria-label="Add filters" title="Add filters">
             <FunnelGlyph size={18} />
           </button>
           {filtersOn && <button onClick={() => { setQ(''); setStatusF([]); setFolderF([]) }} className={cn('flex h-7 cursor-pointer touch-manipulation select-none items-center gap-1 whitespace-nowrap rounded-[6px] px-[10px] text-[13px] font-medium leading-[18px] text-muted-foreground hover:bg-tint-secondary hover:text-foreground', FOCUS_RING)}>Clear filters</button>}
