@@ -39,9 +39,11 @@
     "@agentclientprotocol/sdk": "^1.2.1",
     "@novnc/novnc": "^1.7.0",
     "fflate": "^0.8.2",
+    "mammoth": "^1.13.0",
     "react-router-dom": "^7.18.4",
     "shiki": "^4.5.0",
-    "ws": "^8.18.0"
+    "ws": "^8.18.0",
+    "xlsx": "^0.18.5"
   },
   "devDependencies": {
     "@assistant-ui/react": "^0.14.27",
