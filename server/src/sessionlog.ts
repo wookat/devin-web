@@ -88,7 +88,30 @@ export class SessionLog {
     if (cur != null) return cur;
     try {
       if (!this.dirReady) { fs.mkdirSync(this.dir, { recursive: true }); this.dirReady = true; }
-      const fd = fs.openSync(this.file(sessionId), "a");
+      const f = this.file(sessionId);
+      // 'a+': the torn-tail check below needs readSync — a plain 'a' fd is
+      // write-only and readSync throws EBADF on this Node.
+      const fd = fs.openSync(f, "a+");
+      // Torn-tail repair: a killed writer can leave a partial last line —
+      // appending behind it would glue fresh JSON onto the fragment and
+      // corrupt both lines. Truncate back to the last complete line. (One
+      // tail read per fd open, so the hot path stays free.)
+      try {
+        const size = fs.fstatSync(fd).size;
+        if (size) {
+          const tail = Buffer.alloc(Math.min(size, 8192));
+          const n = fs.readSync(fd, tail, 0, tail.length, size - tail.length);
+          const nl = tail.subarray(0, n).lastIndexOf(0x0a);
+          if (nl !== n - 1) {
+            // ftruncateSync on an append-mode fd is EPERM on Windows —
+            // truncate via path instead. The 'a+' fd keeps appending at
+            // the (new, shorter) EOF.
+            fs.truncateSync(f, nl < 0 ? size - n : size - n + nl + 1);
+            // The file just shrank — any cached end/coverage is stale.
+            this.fileEnd.delete(sessionId);
+          }
+        }
+      } catch { /* readers skip torn lines anyway — best effort */ }
       this.fds.set(sessionId, fd);
       return fd;
     } catch { return null; }
@@ -117,7 +140,14 @@ export class SessionLog {
       const fd = this.writer(sessionId);
       const before = this.endOf(sessionId);
       if (fd != null) {
-        try { fs.writeSync(fd, line); } catch { /* disk is best-effort */ }
+        try {
+          fs.writeSync(fd, line);
+          // Turn boundaries are the durable commit points — fsync only
+          // there (per-append fsync would tax the event loop for nothing:
+          // intra-turn loss is bounded by OS cache, and recovery treats an
+          // unfinished turn the same either way).
+          if (update.sessionUpdate === "wb_turn_end" || update.sessionUpdate === "wb_notice") fs.fsyncSync(fd);
+        } catch { /* disk is best-effort */ }
       }
       // Sidecar coverage invariant: the derived sidecars cover EXACTLY the
       // main file's prefix [0, coverOff). When cover == file end before this
