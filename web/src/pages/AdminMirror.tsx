@@ -5,7 +5,7 @@
 import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState, type KeyboardEvent as ReactKeyboardEvent } from 'react'
 import { createPortal } from 'react-dom'
 import { Link, useLocation, useNavigate, useParams } from 'react-router-dom'
-import { ArrowLeft, Loader2, ChevronRight, ChevronDown, ChevronUp, Settings2, Copy, Check, RotateCcw, Archive, ArchiveRestore, Plus, FileText, Circle, PanelLeftClose, PanelLeft, ArrowUp, ArrowUpRight, Square, Link2, X, Expand, Code, Workflow as WorkflowIcon, BookOpen, UploadCloud, Folder as FolderIcon, Pencil, Search, Clock, Lightbulb, Info, Laptop, FolderOpen, Image as ImageIcon, Share2, RefreshCw, AlertTriangle } from 'lucide-react'
+import { ArrowLeft, Loader2, ChevronRight, ChevronDown, ChevronUp, Settings2, Copy, Check, RotateCcw, Archive, ArchiveRestore, Plus, FileText, Circle, PanelLeftClose, PanelLeft, ArrowUp, ArrowUpRight, Square, Link2, X, Expand, Code, Workflow as WorkflowIcon, BookOpen, UploadCloud, Folder as FolderIcon, Pencil, Search, Clock, Lightbulb, Info, Laptop, FolderOpen, Image as ImageIcon, Share2, RefreshCw, AlertTriangle, Bell } from 'lucide-react'
 import { adminFetch, adminFetchSwr, shareFetchSwr, type AdminSession, type PublicMessage, type DashboardData } from '@/lib/api'
 import { adminViewer, visitorViewer, setViewer, sessionFetch, sessionFetchSwr, attachmentUrl, type Viewer, type SharePermission } from '@/lib/viewer'
 import { visibleInterval } from '@/lib/poll'
@@ -85,6 +85,9 @@ export default function AdminMirrorPage() {
   const cachedTree = useMemo(() => readTreeCache(), [])
   const [sessions, setSessions] = useState<AdminSession[]>([])
   const [tree, setTree] = useState<MirrorTreeSession[]>(() => cachedTree?.sessions || [])
+  const [notifOpen, setNotifOpen] = useState(false)
+  const unreadSessions = useMemo(() => tree.filter((s) => s.is_unread), [tree])
+  const unreadCount = unreadSessions.length
   // "Recent" dirs for the draft workspace picker = cwds of existing sessions
   // (tree order is already most-recently-updated first).
   const recentCwds = useMemo(() => [...new Set(tree.map((s) => s.cwd).filter((c): c is string => !!c))].slice(0, 8), [tree])
@@ -2256,6 +2259,37 @@ const groups = useMemo(() => groupItems(allItems, sessionWorking), [allItems, se
             >
               <Search size={16} />
             </button>
+            {/* official header has a Notifications bell between Search and
+                Collapse — locally it lists unread sessions */}
+            <button
+              onClick={() => setNotifOpen((v) => !v)}
+              className="relative flex size-7 items-center justify-center rounded-[6px] text-muted-foreground hover:bg-tint-secondary hover:text-foreground"
+              aria-label="Notifications"
+              title="Notifications"
+            >
+              <Bell size={16} />
+              {unreadCount > 0 && <span className="absolute right-1 top-1 size-1.5 rounded-full bg-red-500" />}
+            </button>
+            {notifOpen && (
+              <>
+                <div className="fixed inset-0 z-20" onClick={() => setNotifOpen(false)} />
+                <div className="absolute left-0 right-0 top-10 z-30 mx-2 overflow-hidden rounded-[10px] bg-card/95 p-1 shadow-lg ring-1 ring-border backdrop-blur-[8px]">
+                  <div className="px-2 pb-1 pt-2 text-[12px] font-medium text-muted-foreground">未读会话</div>
+                  {unreadSessions.length === 0 && <div className="px-2 pb-2 pt-1 text-[13px] text-muted-foreground">暂无未读</div>}
+                  {unreadSessions.slice(0, 8).map((s) => (
+                    <button
+                      key={s.devin_id}
+                      role="menuitem"
+                      onClick={() => { setNotifOpen(false); nav(`/admin/${s.devin_id}`) }}
+                      className="flex w-full cursor-pointer select-none items-center gap-2 rounded-[6px] px-2 py-1.5 text-left text-[13px] leading-[18px] text-foreground hover:bg-tint-secondary"
+                    >
+                      <span className="size-1.5 shrink-0 rounded-full bg-blue-500" />
+                      <span className="min-w-0 flex-1 truncate">{s.title || s.devin_id}</span>
+                    </button>
+                  ))}
+                </div>
+              </>
+            )}
             <button
               onClick={() => { setPeek(false); setSidebar(false) }}
               className="flex size-7 items-center justify-center rounded-[6px] text-muted-foreground hover:bg-tint-secondary hover:text-foreground"

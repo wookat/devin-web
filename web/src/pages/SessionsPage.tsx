@@ -1,7 +1,7 @@
 import { useEffect, useMemo, useRef, useState, type MouseEvent as ReactMouseEvent, type ReactNode } from 'react'
 import { Link, useNavigate } from 'react-router-dom'
 import { createPortal } from 'react-dom'
-import { Archive, ArchiveRestore, Bot, Check, ChevronDown, ChevronRight, Download, FolderInput, ListFilter, PanelLeft, PanelLeftClose, Pin, PinOff, Plus, RefreshCw, RotateCcw, Search, Settings2, Tag, X } from 'lucide-react'
+import { Archive, ArchiveRestore, Bell, Bot, Check, ChevronDown, ChevronRight, Download, FolderInput, ListFilter, PanelLeft, PanelLeftClose, Pin, PinOff, Plus, RefreshCw, RotateCcw, Search, Settings2, Tag, X } from 'lucide-react'
 import { adminFetch } from '@/lib/api'
 import { cn } from '@/lib/utils'
 import { type MirrorTreeSession } from './mirror/treeCache'
@@ -120,6 +120,9 @@ export default function SessionsPage() {
   const [sideOpen, setSideOpen] = useState(window.innerWidth >= 1024)
   const [moreNav, setMoreNav] = useState(false)
   const [orgMenu, setOrgMenu] = useState(false)
+  const [notifOpen, setNotifOpen] = useState(false)
+  const unreadSessions = useMemo(() => rows.filter((s) => s.is_unread), [rows])
+  const unreadCount = unreadSessions.length
   const [treePrefs, setTreePrefs] = useState<TreePrefs>(() => {
     try { return { ...DEFAULT_TREE_PREFS, ...JSON.parse(localStorage.getItem(TREE_PREFS_KEY) || '{}') } } catch { return DEFAULT_TREE_PREFS }
   })
@@ -334,6 +337,36 @@ export default function SessionsPage() {
             >
               <Search size={16} />
             </button>
+            {/* official: Notifications bell between Search and Collapse — lists unread sessions */}
+            <button
+              onClick={() => setNotifOpen((v) => !v)}
+              className="relative flex size-7 items-center justify-center rounded-[6px] text-muted-foreground hover:bg-tint-secondary hover:text-foreground"
+              aria-label="Notifications"
+              title="Notifications"
+            >
+              <Bell size={16} />
+              {unreadCount > 0 && <span className="absolute right-1 top-1 size-1.5 rounded-full bg-red-500" />}
+            </button>
+            {notifOpen && (
+              <>
+                <div className="fixed inset-0 z-20" onClick={() => setNotifOpen(false)} />
+                <div className="absolute left-0 right-0 top-10 z-30 mx-2 overflow-hidden rounded-[10px] bg-card/95 p-1 shadow-lg ring-1 ring-border backdrop-blur-[8px]">
+                  <div className="px-2 pb-1 pt-2 text-[12px] font-medium text-muted-foreground">未读会话</div>
+                  {unreadSessions.length === 0 && <div className="px-2 pb-2 pt-1 text-[13px] text-muted-foreground">暂无未读</div>}
+                  {unreadSessions.slice(0, 8).map((s) => (
+                    <button
+                      key={s.devin_id}
+                      role="menuitem"
+                      onClick={() => { setNotifOpen(false); nav(`/admin/${s.devin_id}`) }}
+                      className="flex w-full cursor-pointer select-none items-center gap-2 rounded-[6px] px-2 py-1.5 text-left text-[13px] leading-[18px] text-foreground hover:bg-tint-secondary"
+                    >
+                      <span className="size-1.5 shrink-0 rounded-full bg-blue-500" />
+                      <span className="min-w-0 flex-1 truncate">{s.title || s.devin_id}</span>
+                    </button>
+                  ))}
+                </div>
+              </>
+            )}
             <button
               onClick={() => setSideOpen(false)}
               className="flex size-7 items-center justify-center rounded-[6px] text-muted-foreground hover:bg-tint-secondary hover:text-foreground"
