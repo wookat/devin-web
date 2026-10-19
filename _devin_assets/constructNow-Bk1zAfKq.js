@@ -1,0 +1,1 @@
+import{n as e}from"./rolldown-runtime-C0FnF6B9.js";import{i as t,r as n}from"./toDate-0HhV9vjb.js";function r(e){return n(e,Date.now())}function i(){return(i=e((()=>{t()})))()}export{i as n,r as t};

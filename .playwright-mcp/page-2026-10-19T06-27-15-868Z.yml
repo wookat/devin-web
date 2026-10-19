@@ -1,0 +1,7 @@
+- generic [ref=f4e3]:
+  - generic [ref=f4e5]:
+    - status
+  - generic:
+    - region "Notifications alt+T"
+    - generic:
+      - region "Notifications alt+T"

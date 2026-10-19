@@ -1,0 +1,1 @@
+import{n as e}from"./rolldown-runtime-C0FnF6B9.js";import{t}from"./jsx-runtime-BdxMnOeJ.js";import{n,r}from"./page-21KFdt5d.js";function i(){return(0,a.jsx)(n,{title:`Design.md`,description:`Design principles and documentation are coming soon`})}var a;function o(){return(o=e((()=>{r(),a=t()})))()}o();export{i as component};

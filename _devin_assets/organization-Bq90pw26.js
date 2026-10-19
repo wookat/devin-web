@@ -1,0 +1,1 @@
+import{n as e}from"./rolldown-runtime-C0FnF6B9.js";import{n as t,t as n}from"./app-initial-C1_LlZmJ.js";import{n as r,t as i}from"./BaseEnvironmentPage-BsJkqz3l.js";var a;function o(){return(o=e((()=>{t(),r(),a=n(i,`/_user/settings/_org/environment/blueprints/organization`)})))()}o();export{a as component};

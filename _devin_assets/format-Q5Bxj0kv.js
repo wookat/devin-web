@@ -1,0 +1,1 @@
+import{n as e}from"./rolldown-runtime-C0FnF6B9.js";function t(e){let[t,n,...r]=e.split(`:`);return t!==void 0&&n!==void 0&&r.length===0?`${t.charAt(0).toUpperCase()+t.slice(1)}: ${n.replace(/_/g,` `)}`:e}function n(e,n){let r=t(e);return n?n(`automations.eventType_${e.replace(/:/g,`_`)}`,{defaultValue:r}):r}function r(){return(r=e((()=>{})))()}export{r as n,n as t};

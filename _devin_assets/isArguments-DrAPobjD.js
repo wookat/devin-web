@@ -1,0 +1,1 @@
+import{n as e}from"./rolldown-runtime-C0FnF6B9.js";import{M as t}from"./noop-DMgHpgYY.js";function n(e){return e===`__proto__`}function r(){return(r=e((()=>{})))()}function i(e){return typeof e==`object`&&!!e&&t(e)===`[object Arguments]`}function a(){return(a=e((()=>{})))()}export{n as i,i as n,r,a as t};

@@ -1,0 +1,1 @@
+import{n as e}from"./rolldown-runtime-C0FnF6B9.js";function t(e){return Number.isSafeInteger(e)&&e>=0}function n(e){return e!=null&&typeof e!=`function`&&t(e.length)}function r(){return(r=e((()=>{})))()}export{n,r as t};

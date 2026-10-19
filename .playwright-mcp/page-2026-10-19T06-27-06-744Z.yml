@@ -1,0 +1,356 @@
+- generic [ref=f3e2]:
+  - navigation "Primary navigation" [ref=f3e3]:
+    - generic [ref=f3e4]:
+      - link "Devin home" [ref=f3e6] [cursor=pointer]:
+        - /url: /
+      - button "Toggle menu" [ref=f3e14] [cursor=pointer]
+  - main [ref=f3e17]:
+    - generic [ref=f3e19]:
+      - generic [ref=f3e20]:
+        - generic [ref=f3e21]:
+          - heading "Meet Devin, your team's autonomous software engineer" [level=1] [ref=f3e22]
+          - paragraph [ref=f3e23]: Devin runs in the cloud or on your machine, tests in its own browser, and won't stop until the PR is ready to merge
+        - generic [ref=f3e24]:
+          - link "Get started" [ref=f3e25] [cursor=pointer]:
+            - /url: https://app.devin.ai/auth/signup
+          - link "Book a demo" [ref=f3e26] [cursor=pointer]:
+            - /url: /demo
+      - generic [ref=f3e29]:
+        - generic [ref=f3e31]:
+          - generic [ref=f3e32]:
+            - generic [ref=f3e56]:
+              - generic [ref=f3e57]:
+                - generic [ref=f3e58]: New session
+                - generic [ref=f3e62]: Automations
+                - generic [ref=f3e66]: Security
+                - generic [ref=f3e70]: Review
+                - generic [ref=f3e74]: Wiki
+                - generic [ref=f3e78]: More
+              - generic [ref=f3e82]: Sessions
+              - generic [ref=f3e94]:
+                - generic [ref=f3e95]:
+                  - generic [ref=f3e96]:
+                    - generic [ref=f3e100]: Pinned
+                    - generic [ref=f3e101]: "3"
+                  - generic [ref=f3e102]: Add enterprise SSO
+                  - generic [ref=f3e109]: Add multi-region failover
+                  - generic [ref=f3e116]: Upgrade Node.js across services
+                  - generic [ref=f3e121]: Investigate API latency spike
+                  - generic [ref=f3e126]: Patch vulnerable dependencies
+                  - generic [ref=f3e129]: Fix failing checkout tests
+                  - generic [ref=f3e132]: Review authentication changes
+                  - generic [ref=f3e137]: Expand payment test coverage
+                  - generic [ref=f3e142]: Document service architecture
+                  - generic [ref=f3e147]: More
+                - generic [ref=f3e152]:
+                  - generic [ref=f3e153]:
+                    - generic [ref=f3e157]: Participated
+                    - generic [ref=f3e158]: "12"
+                  - generic [ref=f3e159]: Review API changes
+                  - generic [ref=f3e162]: Optimize database queries
+                  - generic [ref=f3e165]: Fix failing checkout tests
+                  - generic [ref=f3e170]: More
+            - generic [ref=f3e177]:
+              - generic [ref=f3e178]: Kenzo Park
+              - generic [ref=f3e179]: Cognition
+          - generic [ref=f3e187]:
+            - generic [ref=f3e189]:
+              - generic [ref=f3e190]: Add enterprise SSO
+              - generic [ref=f3e194]: XL
+            - generic [ref=f3e211]:
+              - generic [ref=f3e212]:
+                - generic [ref=f3e213]:
+                  - paragraph [ref=f3e214]: Add SAML SSO for enterprise customers.
+                  - paragraph [ref=f3e215]: Follow our existing auth patterns and let admins configure it in organization settings. Keep email login working for everyone else.
+                - generic [ref=f3e216]:
+                  - generic [ref=f3e217]: Explored authentication across 3 repositories
+                  - generic [ref=f3e223]:
+                    - generic [ref=f3e226]: Implemented SSO and organization settings
+                    - generic [ref=f3e227]:
+                      - generic [ref=f3e228]: "+13"
+                      - generic [ref=f3e229]: "-1"
+                - generic [ref=f3e233]:
+                  - generic [ref=f3e234]:
+                    - generic [ref=f3e235]: Devin
+                    - generic [ref=f3e236]: 8:05 PM
+                  - generic [ref=f3e237]:
+                    - paragraph [ref=f3e238]: Here’s the PR. Enterprise admins can now configure SSO in organization settings, and members can sign in through their identity provider.
+                    - paragraph [ref=f3e239]: I tested setup, sign-in, and account linking in the browser. Existing email login still works, and all checks pass.
+                - generic [ref=f3e241]:
+                  - generic [ref=f3e244]: Tested sign-in and account linking in the browser
+                  - generic [ref=f3e245]: 5 tests passed
+                - generic [ref=f3e247]:
+                  - generic [ref=f3e249]:
+                    - paragraph [ref=f3e250]: "feat: Add SAML SSO for enterprise"
+                    - generic [ref=f3e251]:
+                      - generic [ref=f3e254]: "acme/platform #2922"
+                      - generic [ref=f3e255]: ·
+                      - generic [ref=f3e256]:
+                        - generic [ref=f3e257]: "+9"
+                        - generic [ref=f3e258]: "-14"
+                  - generic [ref=f3e259]: View PR
+                - paragraph [ref=f3e261]: Added to the PR. Admins can require SSO once setup is verified. I also added tests for enforcement and recovery access.
+              - generic [ref=f3e262]:
+                - paragraph [ref=f3e263]: Plan a feature, fix bugs, or perform a security scan
+                - generic [ref=f3e264]: Ultra
+        - generic [ref=f3e286]:
+          - generic [ref=f3e287]:
+            - generic [ref=f3e288]:
+              - generic [ref=f3e291]: PR Open
+              - generic [ref=f3e292]: ·
+              - generic [ref=f3e293]: "acme/platform #2922"
+            - paragraph [ref=f3e294]: Add enterprise SSO
+            - generic [ref=f3e295]:
+              - generic [ref=f3e296]: bwhuffman
+              - generic [ref=f3e298]:
+                - generic [ref=f3e299]: main
+                - generic [ref=f3e302]: enterprise-sso
+              - generic [ref=f3e303]: 12 files changed
+              - generic [ref=f3e304]:
+                - generic [ref=f3e305]: "+8"
+                - generic [ref=f3e306]: "-14"
+          - generic [ref=f3e307]:
+            - generic [ref=f3e308]: Devin’s analysis
+            - paragraph [ref=f3e309]: Adds SAML single sign-on for enterprise organizations. Admins can configure their identity provider, verify the connection, and require SSO from organization settings.
+          - generic [ref=f3e312]:
+            - generic [ref=f3e313]:
+              - generic [ref=f3e316]: Test recording
+              - generic [ref=f3e317]: on Mac OS X virtual environment
+            - generic [ref=f3e318]: 2/5
+    - region "Trusted by leading teams" [ref=f3e331]:
+      - region "Customer logos — keyboard focus to pause" [ref=f3e334]:
+        - generic [ref=f3e336]:
+          - img "OpenRouter" [ref=f3e338]
+          - img "Modal" [ref=f3e340]
+          - img "Gamma" [ref=f3e342]
+          - img "Citi" [ref=f3e344]
+          - img "Reducto" [ref=f3e346]
+          - img "Mercor" [ref=f3e348]
+          - img "Mercedes" [ref=f3e350]
+          - img "AngelList" [ref=f3e352]
+          - img "Fox" [ref=f3e354]
+          - img "NVIDIA" [ref=f3e356]
+          - img "RV Tech" [ref=f3e358]
+          - img "AT&T" [ref=f3e360]
+          - img "Profound" [ref=f3e362]
+          - img "Rohlik Group" [ref=f3e364]
+          - img "Cloudflare" [ref=f3e366]
+          - img "Lowe's" [ref=f3e368]
+          - img "Exa" [ref=f3e370]
+          - img "Wayfair" [ref=f3e372]
+          - img "Elevance Health" [ref=f3e374]
+    - region [ref=f3e453]:
+      - generic [ref=f3e454]:
+        - heading "Your teammate’s favorite teammate" [level=2] [ref=f3e455]
+        - generic [ref=f3e456]:
+          - generic [ref=f3e458]:
+            - article [ref=f3e459]:
+              - heading "Tests end to end on its own computer" [level=3] [ref=f3e464]
+              - paragraph [ref=f3e465]: Devin spins up its own Windows, Mac, and Linux virtual machines as needed to build, test in its browser, and record itself clicking through what it built
+            - article [ref=f3e466]:
+              - heading "Gets the best from every frontier model" [level=3] [ref=f3e471]
+              - paragraph [ref=f3e472]: Access frontier performance for up to 60% less. Devin mixes and matches models to get the most from each
+          - generic [ref=f3e474]:
+            - article [ref=f3e475]:
+              - heading "Keeps working when your laptop is closed" [level=3] [ref=f3e480]
+              - paragraph [ref=f3e481]: Delegate a big task, then Devin splits it across parallel cloud agents, manages them, and reports back
+            - article [ref=f3e482]:
+              - heading "Joins the thread when you @Devin" [level=3] [ref=f3e487]
+              - paragraph [ref=f3e488]: Tag @Devin in Slack, Teams, and more. Devin reads the thread, responds to follow-ups, and gets to work
+            - article [ref=f3e489]:
+              - heading "Watches for issues and fixes them proactively" [level=3] [ref=f3e494]
+              - paragraph [ref=f3e495]: Set up automations so Devin handles bugs, failed CI, and other alerts as they land
+    - region [ref=f3e497]:
+      - generic [ref=f3e498]:
+        - heading "From problem to merged PR, Devin gets hard engineering work done." [level=2] [ref=f3e499]
+        - generic [ref=f3e501]:
+          - paragraph [ref=f3e502]: "01"
+          - generic [ref=f3e503]:
+            - generic [ref=f3e504]:
+              - heading "Understand and plan" [level=3] [ref=f3e505]
+              - paragraph [ref=f3e506]: Map the codebase and systems architecture accurately and efficiently. Devin updates diagrams and code maps as quickly as the codebase changes
+            - link "Explore Wiki" [ref=f3e508] [cursor=pointer]:
+              - /url: https://deepwiki.com
+        - generic [ref=f3e514]:
+          - paragraph [ref=f3e515]: "02"
+          - generic [ref=f3e516]:
+            - generic [ref=f3e517]:
+              - heading "Code and test" [level=3] [ref=f3e518]
+              - paragraph [ref=f3e519]: Delegate to Devin Cloud, iterate in Desktop or CLI, or tag @Devin. Wherever you work, Devin gives you the best of all frontier models
+            - link "Explore Devin Cloud" [ref=f3e521] [cursor=pointer]:
+              - /url: /cloud
+        - generic [ref=f3e527]:
+          - paragraph [ref=f3e528]: "03"
+          - generic [ref=f3e529]:
+            - generic [ref=f3e530]:
+              - heading "Review" [level=3] [ref=f3e531]
+              - paragraph [ref=f3e532]: Devin Review finds bugs and vulnerabilities before they reach production. Assign Devin to fix in one click
+            - link "Explore Devin Review" [ref=f3e534] [cursor=pointer]:
+              - /url: https://app.devin.ai/review
+        - generic [ref=f3e540]:
+          - paragraph [ref=f3e541]: "04"
+          - generic [ref=f3e542]:
+            - generic [ref=f3e543]:
+              - heading "Automate and maintain" [level=3] [ref=f3e544]
+              - paragraph [ref=f3e545]: Create scheduled workflows and trigger-based automations for repetitive work. Devin swarms can proactively find novel vulnerabilities, performance issues, and gaps in test coverage
+            - link "Explore Security Swarm" [ref=f3e547] [cursor=pointer]:
+              - /url: /security
+    - region [ref=f3e553]:
+      - generic [ref=f3e555]:
+        - heading "Connect once, deliver repeatedly with your favorite tools" [level=2] [ref=f3e556]: Connect once, deliver repeatedlywith your favorite tools
+        - generic [ref=f3e557]:
+          - link [ref=f3e558] [cursor=pointer]:
+            - /url: https://docs.devin.ai/integrations/slack
+            - img "Slack" [ref=f3e561]
+            - paragraph [ref=f3e570]: Triage bugs as they land
+          - link [ref=f3e571] [cursor=pointer]:
+            - /url: https://docs.devin.ai/integrations/gh
+            - img "GitHub" [ref=f3e574]
+            - paragraph [ref=f3e579]: Fix CI when it fails
+          - link [ref=f3e580] [cursor=pointer]:
+            - /url: https://docs.devin.ai/product-guides/auto-triage#mcp-integrations
+            - img "Datadog" [ref=f3e583]
+            - paragraph [ref=f3e590]: Investigate alerts as they fire
+          - link [ref=f3e591] [cursor=pointer]:
+            - /url: https://docs.devin.ai/product-guides/auto-triage#mcp-integrations
+            - img "Sentry" [ref=f3e594]
+            - paragraph [ref=f3e599]: Turn errors into fixes
+          - link [ref=f3e600] [cursor=pointer]:
+            - /url: https://docs.devin.ai/integrations/microsoft-teams
+            - img "Microsoft Teams" [ref=f3e603]
+            - paragraph [ref=f3e610]: Triage issues when they get posted
+          - link [ref=f3e611] [cursor=pointer]:
+            - /url: https://docs.devin.ai/integrations/linear
+            - img "Linear" [ref=f3e614]
+            - paragraph [ref=f3e619]: Pick up issues as they're assigned
+          - link [ref=f3e620] [cursor=pointer]:
+            - /url: https://docs.devin.ai/integrations/jira
+            - img "Jira" [ref=f3e623]
+            - paragraph [ref=f3e628]: Assign a ticket, get a PR
+          - link [ref=f3e629] [cursor=pointer]:
+            - /url: https://docs.devin.ai/work-with-devin/mcp
+            - img "Notion" [ref=f3e632]
+            - paragraph [ref=f3e637]: Build from a spec page
+    - region [ref=f3e638]:
+      - generic [ref=f3e639]:
+        - heading "Recently shipped" [level=2] [ref=f3e641]:
+          - text: Recently
+          - generic [ref=f3e642]: shipped
+        - generic [ref=f3e643]:
+          - link "10.15 Introducing Devin Oncall Product" [ref=f3e644] [cursor=pointer]:
+            - /url: /blog/introducing-devin-oncall
+            - time [ref=f3e645]: "10.15"
+            - generic [ref=f3e646]: Introducing Devin Oncall
+            - generic [ref=f3e647]: Product
+          - 'link "10.13 Devin in Pylon: Driving faster Median Time To Fix Product" [ref=f3e651] [cursor=pointer]':
+            - /url: /blog/devin-in-pylon
+            - time [ref=f3e652]: "10.13"
+            - generic [ref=f3e653]: "Devin in Pylon: Driving faster Median Time To Fix"
+            - generic [ref=f3e654]: Product
+          - link "10.13 Gemini 4 Argon is now available in Devin Product" [ref=f3e658] [cursor=pointer]:
+            - /url: /blog/gemini-4-argon
+            - time [ref=f3e659]: "10.13"
+            - generic [ref=f3e660]: Gemini 4 Argon is now available in Devin
+            - generic [ref=f3e661]: Product
+          - link "10.07 Claude Haiku 5.5 is now available in Devin Product" [ref=f3e665] [cursor=pointer]:
+            - /url: /blog/claude-haiku-5-5
+            - time [ref=f3e666]: "10.07"
+            - generic [ref=f3e667]: Claude Haiku 5.5 is now available in Devin
+            - generic [ref=f3e668]: Product
+          - 'link "10.05 Memory and dreaming: how Devin learns from working with you Product" [ref=f3e672] [cursor=pointer]':
+            - /url: /blog/memory-and-dreaming
+            - time [ref=f3e673]: "10.05"
+            - generic [ref=f3e674]: "Memory and dreaming: how Devin learns from working with you"
+            - generic [ref=f3e675]: Product
+          - link "09.29 GPT-6.1 Sol is now available in Devin Product" [ref=f3e679] [cursor=pointer]:
+            - /url: /blog/gpt-6-1-sol
+            - time [ref=f3e680]: "09.29"
+            - generic [ref=f3e681]: GPT-6.1 Sol is now available in Devin
+            - generic [ref=f3e682]: Product
+          - link "09.29 Sign in with ChatGPT Product" [ref=f3e686] [cursor=pointer]:
+            - /url: /blog/sign-in-with-chatgpt
+            - time [ref=f3e687]: "09.29"
+            - generic [ref=f3e688]: Sign in with ChatGPT
+            - generic [ref=f3e689]: Product
+    - region [ref=f3e693]:
+      - generic [ref=f3e694]:
+        - heading "Enterprise security with fine-grained controls" [level=2] [ref=f3e695]: Enterprise securitywith fine-grained controls
+        - generic [ref=f3e696]:
+          - generic [ref=f3e697]:
+            - img "SOC 2" [ref=f3e699]
+            - img "ISO 27001" [ref=f3e701]
+            - img "FedRAMP" [ref=f3e703]
+          - generic [ref=f3e704]:
+            - list [ref=f3e705]:
+              - listitem [ref=f3e706]: Inputs and outputs are always your IP
+              - listitem [ref=f3e707]: Zero data retention enforced with model providers
+              - listitem [ref=f3e708]: Comprehensive audit logs
+            - list [ref=f3e709]:
+              - listitem [ref=f3e710]: Every session runs in its own VM
+              - listitem [ref=f3e711]: RBAC / SSO / SCIM / OIDC
+              - listitem [ref=f3e712]: Private networking available
+    - generic [ref=f3e714]:
+      - heading "Stop deprioritizing Do it all with Devin" [level=2] [ref=f3e715]:
+        - generic [ref=f3e716]: Stop deprioritizing
+        - generic [ref=f3e717]: Do it all with Devin
+      - generic [ref=f3e718]:
+        - link "Get started" [ref=f3e719] [cursor=pointer]:
+          - /url: https://app.devin.ai/auth/signup
+        - link "Book a demo" [ref=f3e720] [cursor=pointer]:
+          - /url: /demo
+  - contentinfo [ref=f3e722]:
+    - generic [ref=f3e723]:
+      - generic [ref=f3e724]:
+        - link "Devin home" [ref=f3e725] [cursor=pointer]:
+          - /url: /
+        - link "© 2026 — Built by the team at Cognition" [ref=f3e733] [cursor=pointer]:
+          - /url: https://cognition.com
+      - generic [ref=f3e735]:
+        - generic [ref=f3e736]:
+          - heading "Company" [level=2] [ref=f3e737]
+          - list [ref=f3e738]:
+            - listitem [ref=f3e739]:
+              - link "Careers" [ref=f3e740] [cursor=pointer]:
+                - /url: https://cognition.com/careers
+            - listitem [ref=f3e741]:
+              - link "Brand" [ref=f3e742] [cursor=pointer]:
+                - /url: /brand
+            - listitem [ref=f3e743]:
+              - link "About" [ref=f3e744] [cursor=pointer]:
+                - /url: https://cognition.com/about
+            - listitem [ref=f3e745]:
+              - link "Support" [ref=f3e746] [cursor=pointer]:
+                - /url: /support
+        - generic [ref=f3e747]:
+          - heading "Legal" [level=2] [ref=f3e748]
+          - list [ref=f3e749]:
+            - listitem [ref=f3e750]:
+              - link "Terms of Service" [ref=f3e751] [cursor=pointer]:
+                - /url: https://cognition.com/legal/platform-terms-of-service
+            - listitem [ref=f3e752]:
+              - link "Acceptable Use Policy" [ref=f3e753] [cursor=pointer]:
+                - /url: https://cognition.com/legal/acceptable-use-policy
+            - listitem [ref=f3e754]:
+              - link "Privacy Policy" [ref=f3e755] [cursor=pointer]:
+                - /url: https://cognition.com/legal/privacy-policy
+            - listitem [ref=f3e756]:
+              - link "Data Use" [ref=f3e757] [cursor=pointer]:
+                - /url: https://cognition.com/legal/data-processing-statement
+            - listitem [ref=f3e758]:
+              - link "Your Privacy Choices" [ref=f3e759] [cursor=pointer]:
+                - /url: /privacy-choices
+        - generic [ref=f3e760]:
+          - heading "Connect" [level=2] [ref=f3e761]
+          - list [ref=f3e762]:
+            - listitem [ref=f3e763]:
+              - link "X" [ref=f3e764] [cursor=pointer]:
+                - /url: https://x.com/cognition
+            - listitem [ref=f3e765]:
+              - link "LinkedIn" [ref=f3e766] [cursor=pointer]:
+                - /url: https://www.linkedin.com/company/cognition-ai-labs/
+            - listitem [ref=f3e767]:
+              - link "YouTube" [ref=f3e768] [cursor=pointer]:
+                - /url: https://www.youtube.com/@cognition-labs
+            - listitem [ref=f3e769]:
+              - link "Reddit" [ref=f3e770] [cursor=pointer]:
+                - /url: https://www.reddit.com/r/CognitionLabs/

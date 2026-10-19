@@ -1,0 +1,1 @@
+import{n as e}from"./rolldown-runtime-C0FnF6B9.js";import{i as t,n,r,t as i}from"./toDate-0HhV9vjb.js";function a(e,t,i){let a=n(e,i?.in);return isNaN(t)?r(i?.in||e,NaN):(t&&a.setDate(a.getDate()+t),a)}function o(){return(o=e((()=>{t(),i()})))()}export{o as n,a as t};

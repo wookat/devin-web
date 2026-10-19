@@ -1,0 +1,38 @@
+.devin-persona-wake-l1 { transform-origin: 0px 0px; will-change: var(--devin-persona-will-change,transform, opacity); animation-name: devin-persona-wake-l1-kf; animation-duration: var(--devin-persona-duration); animation-timing-function: linear; animation-iteration-count: var(--devin-persona-iteration-count,infinite); animation-play-state: var(--devin-persona-play-state,running); animation-fill-mode: var(--devin-persona-fill-mode,none); animation-delay: var(--devin-persona-delay,0s); }
+.devin-persona-wake-l2 { transform-origin: 0px 0px; will-change: var(--devin-persona-will-change,transform, opacity); animation-name: devin-persona-wake-l2-kf; animation-duration: var(--devin-persona-duration); animation-timing-function: linear; animation-iteration-count: var(--devin-persona-iteration-count,infinite); animation-play-state: var(--devin-persona-play-state,running); animation-fill-mode: var(--devin-persona-fill-mode,none); animation-delay: var(--devin-persona-delay,0s); }
+.devin-persona-wake-l3 { transform-origin: 0px 0px; will-change: var(--devin-persona-will-change,transform, opacity); animation-name: devin-persona-wake-l3-kf; animation-duration: var(--devin-persona-duration); animation-timing-function: linear; animation-iteration-count: var(--devin-persona-iteration-count,infinite); animation-play-state: var(--devin-persona-play-state,running); animation-fill-mode: var(--devin-persona-fill-mode,none); animation-delay: var(--devin-persona-delay,0s); }
+.devin-persona-wake-l4 { transform-origin: 0px 0px; will-change: var(--devin-persona-will-change,transform, opacity); animation-name: devin-persona-wake-l4-kf; animation-duration: var(--devin-persona-duration); animation-timing-function: linear; animation-iteration-count: var(--devin-persona-iteration-count,infinite); animation-play-state: var(--devin-persona-play-state,running); animation-fill-mode: var(--devin-persona-fill-mode,none); animation-delay: var(--devin-persona-delay,0s); }
+.devin-persona-wake-l5 { transform-origin: 0px 0px; will-change: var(--devin-persona-will-change,transform, opacity); animation-name: devin-persona-wake-l5-kf; animation-duration: var(--devin-persona-duration); animation-timing-function: linear; animation-iteration-count: var(--devin-persona-iteration-count,infinite); animation-play-state: var(--devin-persona-play-state,running); animation-fill-mode: var(--devin-persona-fill-mode,none); animation-delay: var(--devin-persona-delay,0s); }
+.devin-persona-wake-l6 { transform-origin: 0px 0px; will-change: var(--devin-persona-will-change,transform, opacity); animation-name: devin-persona-wake-l6-kf; animation-duration: var(--devin-persona-duration); animation-timing-function: linear; animation-iteration-count: var(--devin-persona-iteration-count,infinite); animation-play-state: var(--devin-persona-play-state,running); animation-fill-mode: var(--devin-persona-fill-mode,none); animation-delay: var(--devin-persona-delay,0s); }
+@keyframes devin-persona-wake-l1-kf { 
+  0% { opacity: 1; animation-timing-function: cubic-bezier(0.9, 0, 0.1, 1); transform: translate(50%, 50%) rotate(-120deg) scale(1.25) translate(0%); }
+  98.3607% { opacity: 1; transform: translate(50%, 50%) rotate(0deg) scale(1) translate(0%); }
+  100% { opacity: 1; transform: translate(50%, 50%) rotate(0deg) scale(1) translate(0%); }
+}
+@keyframes devin-persona-wake-l2-kf { 
+  0% { opacity: 0; transform: translate(0.0422%, 11.7501%) rotate(0deg) scale(1) translate(-11.2469%, -11.631%); }
+  50.8197% { opacity: 0; transform: translate(0.0422%, 11.7501%) rotate(0deg) scale(1) translate(-11.2469%, -11.631%); }
+  52.459% { opacity: 1; transform: translate(0.0422%, 11.7501%) rotate(0deg) scale(1) translate(-11.2469%, -11.631%); }
+  100% { opacity: 1; transform: translate(0.0422%, 11.7501%) rotate(0deg) scale(1) translate(-11.2469%, -11.631%); }
+}
+@keyframes devin-persona-wake-l3-kf { 
+  0% { opacity: 0; transform: translateY(-11.6258%) rotate(0deg) scale(1) translate(-11.2238%, -11.7527%); }
+  50.8197% { opacity: 0; transform: translateY(-11.6258%) rotate(0deg) scale(1) translate(-11.2238%, -11.7527%); }
+  52.459% { opacity: 1; transform: translateY(-11.6258%) rotate(0deg) scale(1) translate(-11.2238%, -11.7527%); }
+  100% { opacity: 1; transform: translateY(-11.6258%) rotate(0deg) scale(1) translate(-11.2238%, -11.7527%); }
+}
+@keyframes devin-persona-wake-l4-kf { 
+  0% { opacity: 1; animation-timing-function: cubic-bezier(0.9, 0, 0.1, 1); transform: translate(0%) rotate(0deg) scale(1) translate(-18.0512%, -20.5994%); }
+  98.3607% { opacity: 1; transform: translate(-20.4142%, 23.5725%) rotate(0deg) scale(1) translate(-18.0512%, -20.5994%); }
+  100% { opacity: 1; transform: translate(-20.4142%, 23.5725%) rotate(0deg) scale(1) translate(-18.0512%, -20.5994%); }
+}
+@keyframes devin-persona-wake-l5-kf { 
+  0% { opacity: 1; animation-timing-function: cubic-bezier(0.9, 0, 0.1, 1); transform: translate(0%) rotate(0deg) scale(1) translate(-18.0512%, -20.5994%); }
+  98.3607% { opacity: 1; transform: translate(-20.415%, -23.5725%) rotate(0deg) scale(1) translate(-18.0512%, -20.5994%); }
+  100% { opacity: 1; transform: translate(-20.415%, -23.5725%) rotate(0deg) scale(1) translate(-18.0512%, -20.5994%); }
+}
+@keyframes devin-persona-wake-l6-kf { 
+  0% { opacity: 1; animation-timing-function: cubic-bezier(0.9, 0, 0.1, 1); transform: translate(0%) rotate(0deg) scale(1) translate(-18.0512%, -20.5994%); }
+  98.3607% { opacity: 1; transform: translate(20.415%, 0.0007%) rotate(0deg) scale(1) translate(-18.0512%, -20.5994%); }
+  100% { opacity: 1; transform: translate(20.415%, 0.0007%) rotate(0deg) scale(1) translate(-18.0512%, -20.5994%); }
+}

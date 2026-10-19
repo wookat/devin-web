@@ -1,0 +1,182 @@
+import fs from "node:fs/promises";
+import { DevinAcp, type DevinAcpEvents } from "./acp.js";
+import { isRateLimitError } from "./accounts.js";
+import { TerminalRunner } from "./terminal.js";
+import { DEFAULT_AGENT, type AgentDef } from "./agents.js";
+
+export interface ManagedProcess {
+  acp: DevinAcp;
+  cwd: string;
+  startedAt: number;
+}
+
+export interface ManagerEvents extends Omit<DevinAcpEvents, "onExit"> {
+  onExit: (cwd: string, code: number | null, agent: string, sessionId?: string) => void;
+  /** Called with the owning process for each permission request. */
+  onPermissionOwner: (requestId: string, owner: DevinAcp) => void;
+  /** Agent log line matched the rate-limit signature; account may be null. */
+  onRateLimited?: (account: string | null, sessionId: string, message: string) => void;
+}
+
+/**
+ * ACP child processes. Multi-session agents (Devin) get one pooled process
+ * per workspace directory with sessions multiplexed by sessionId; single-
+ * session agents (Prime) get a dedicated process per session.
+ */
+export class AcpManager {
+  /** `${agent.id}:${cwd}` → pooled process (multi-session agents). */
+  private pooled = new Map<string, ManagedProcess>();
+  private starting = new Map<string, Promise<DevinAcp>>();
+  /** Bumped by killPooled — a spawn started before a rotation lands with the
+   *  old account's key, so get() discards and respawns stale births. */
+  private spawnGen = 0;
+  /** sessionId → dedicated process (single-session agents). */
+  private bySession = new Map<string, ManagedProcess>();
+  readonly terminal = new TerminalRunner();
+  /** Supplies spawn-time env (e.g. WINDSURF_API_KEY) + which account it belongs to. */
+  envFor: ((agent: AgentDef) => { env: Record<string, string>; account: string | null }) | null = null;
+
+  constructor(private ev: ManagerEvents) {}
+
+  private async spawn(cwd: string, agent: AgentDef, onExit: (code: number | null) => void): Promise<DevinAcp> {
+    await fs.mkdir(cwd, { recursive: true });
+    let instance: DevinAcp | null = null;
+    const inj = this.envFor?.(agent) ?? { env: {}, account: null };
+    const acp = await DevinAcp.start(
+      cwd,
+      this.terminal,
+      {
+        ...this.ev,
+        onPermissionRequest: (requestId, sessionId, toolCall, options) => {
+          if (instance) this.ev.onPermissionOwner(requestId, instance);
+          this.ev.onPermissionRequest(requestId, sessionId, toolCall, options);
+        },
+        onAgentLog: (sessionId, channel, message, level) => {
+          if (isRateLimitError(message)) {
+            this.ev.onRateLimited?.(instance?.account ?? null, sessionId, message);
+          }
+          this.ev.onAgentLog(sessionId, channel, message, level);
+        },
+        onExit,
+      },
+      agent,
+      inj.env,
+      inj.account,
+    );
+    instance = acp;
+    return acp;
+  }
+
+  /** Get (or lazily start) the pooled process for a multi-session agent. */
+  async get(cwd: string, agent: AgentDef = DEFAULT_AGENT): Promise<DevinAcp> {
+    if (!agent.multiSession) {
+      throw new Error(`${agent.label} runs one session per process — use startForSession`);
+    }
+    const key = `${agent.id}:${cwd}`;
+    const existing = this.pooled.get(key);
+    if (existing && !existing.acp.exited) return existing.acp;
+
+    const pending = this.starting.get(key);
+    if (pending) return pending;
+
+    const p = (async () => {
+      for (;;) {
+        const g = this.spawnGen;
+        const acp = await this.spawn(cwd, agent, (code) => {
+          this.pooled.delete(key);
+          this.ev.onExit(cwd, code, agent.id);
+        });
+        if (this.spawnGen === g) {
+          this.pooled.set(key, { acp, cwd, startedAt: Date.now() });
+          return acp;
+        }
+        acp.kill(); // born pre-rotation — carries the old account's key
+      }
+    })();
+
+    this.starting.set(key, p);
+    try {
+      return await p;
+    } finally {
+      this.starting.delete(key);
+    }
+  }
+
+  /** Spawn a dedicated process for one session of a single-session agent. */
+  async startForSession(cwd: string, agent: AgentDef): Promise<DevinAcp> {
+    const acp = await this.spawn(cwd, agent, (code) => {
+      let sessionId: string | undefined;
+      for (const [sid, m] of this.bySession) {
+        if (m.acp === acp) {
+          sessionId = sid;
+          this.bySession.delete(sid);
+        }
+      }
+      this.ev.onExit(cwd, code, agent.id, sessionId);
+    });
+    return acp;
+  }
+
+  /** Register the session a dedicated process ended up hosting. */
+  bindSession(sessionId: string, acp: DevinAcp): void {
+    this.bySession.set(sessionId, { acp, cwd: acp.cwd, startedAt: Date.now() });
+  }
+
+  /** The live dedicated process for a session, if any. */
+  forSession(sessionId: string): DevinAcp | undefined {
+    const m = this.bySession.get(sessionId);
+    return m && !m.acp.exited ? m.acp : undefined;
+  }
+
+  status() {
+    const describe = (m: ManagedProcess, sessionId?: string) => ({
+      cwd: m.cwd,
+      agent: m.acp.agent.id,
+      sessionId,
+      startedAt: m.startedAt,
+      exited: m.acp.exited,
+      capabilities: {
+        loadSession: m.acp.capabilities?.agentCapabilities?.loadSession ?? false,
+        image: m.acp.capabilities?.agentCapabilities?.promptCapabilities?.image ?? false,
+      },
+    });
+    return [
+      ...[...this.pooled.values()].map((m) => describe(m)),
+      ...[...this.bySession.entries()].map(([sid, m]) => describe(m, sid)),
+    ];
+  }
+
+  /** Kill every pooled process for an agent so the next get() respawns it —
+   *  used after account rotation so new spawns pick up the new key.
+   *  `keepAccount` spares processes already running the target account. */
+  killPooled(agentId?: string, keepAccount?: string | null) {
+    this.spawnGen++;
+    for (const [key, m] of this.pooled) {
+      if (agentId && !key.startsWith(`${agentId}:`)) continue;
+      if (keepAccount && m.acp.account === keepAccount) continue;
+      m.acp.kill();
+      this.pooled.delete(key);
+    }
+  }
+
+  /** Account name a pooled process was spawned with, if known. */
+  accountOf(cwd: string, agentId = "devin"): string | null {
+    return this.pooled.get(`${agentId}:${cwd}`)?.acp.account ?? null;
+  }
+
+  /** Kill one specific acp process wherever it's registered — pooled or
+   *  dedicated — so the next get()/forSession() respawns fresh. */
+  killProcess(acp: DevinAcp) {
+    for (const [key, m] of this.pooled) if (m.acp === acp) this.pooled.delete(key);
+    for (const [sid, m] of this.bySession) if (m.acp === acp) this.bySession.delete(sid);
+    acp.kill();
+  }
+
+  killAll() {
+    for (const m of this.pooled.values()) m.acp.kill();
+    this.pooled.clear();
+    for (const m of this.bySession.values()) m.acp.kill();
+    this.bySession.clear();
+    this.terminal.killAll();
+  }
+}

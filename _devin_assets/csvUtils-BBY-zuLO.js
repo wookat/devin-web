@@ -1,0 +1,2 @@
+import{n as e}from"./rolldown-runtime-C0FnF6B9.js";var t;function n(){return(n=e((()=>{t=e=>{if(e==null)return``;let t=String(e);return/^[=+\-@]/.test(t)&&(t=`'${t}`),t.includes(`,`)||t.includes(`"`)||t.includes(`
+`)?`"${t.replace(/"/g,`""`)}"`:t}})))()}export{n,t};

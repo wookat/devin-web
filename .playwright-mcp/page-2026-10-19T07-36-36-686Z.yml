@@ -1,0 +1,40 @@
+- generic [ref=e3]:
+  - complementary [ref=e4]:
+    - link "Back to app" [ref=e6] [cursor=pointer]:
+      - /url: /admin/new
+    - navigation [ref=e9]:
+      - paragraph [ref=e10]: Personal
+      - generic [ref=e11]: 首选项
+      - paragraph [ref=e12]: Organization
+      - generic [ref=e13]: 本地实例（local）
+  - main [ref=e14]:
+    - generic [ref=e16]:
+      - generic [ref=e18]:
+        - heading "首选项" [level=2] [ref=e19]
+        - paragraph [ref=e20]: 管理本地工作台的偏好设置
+      - generic [ref=e21]:
+        - heading "Devin 会话" [level=3] [ref=e23]
+        - generic [ref=e27]:
+          - generic [ref=e29]:
+            - heading "会话中断后自动继续" [level=4] [ref=e30]
+            - generic [ref=e31]: 服务重启或进程终止导致回复中断时，自动发送「继续」恢复未完成的任务（不需要打开会话页面）。每个中断轮最多自动恢复 2 次。
+          - switch [ref=e33] [cursor=pointer]
+      - generic [ref=e35]:
+        - heading "发送" [level=3] [ref=e37]
+        - generic [ref=e41]:
+          - generic [ref=e43]:
+            - heading "发送快捷键" [level=4] [ref=e44]
+            - generic [ref=e45]: 发送消息使用的按键（等价官方 Send shortcut）
+          - generic [ref=e47]:
+            - button "Enter" [ref=e48] [cursor=pointer]
+            - button "Ctrl+Enter" [ref=e49] [cursor=pointer]
+      - generic [ref=e50]:
+        - heading "外观" [level=3] [ref=e52]
+        - generic [ref=e56]:
+          - generic [ref=e58]:
+            - heading "主题" [level=4] [ref=e59]
+            - generic [ref=e60]: 选择界面色彩主题
+          - generic [ref=e62]:
+            - button "跟随系统" [ref=e63] [cursor=pointer]
+            - button "浅色" [ref=e64] [cursor=pointer]
+            - button "深色" [ref=e65] [cursor=pointer]

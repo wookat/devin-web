@@ -1,0 +1,1 @@
+import{n as e}from"./rolldown-runtime-C0FnF6B9.js";import{t}from"./jsx-runtime-BdxMnOeJ.js";import{n,t as r}from"./useNavigate-JptBsM-o.js";function i(){return(0,a.jsx)(r,{to:`/settings/learning`,replace:!0})}var a;function o(){return(o=e((()=>{n(),a=t()})))()}o();export{i as component};

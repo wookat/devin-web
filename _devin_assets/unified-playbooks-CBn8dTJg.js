@@ -1,0 +1,1 @@
+import{n as e}from"./rolldown-runtime-C0FnF6B9.js";import{t}from"./jsx-runtime-BdxMnOeJ.js";import{n,t as r}from"./app-initial-C1_LlZmJ.js";import{n as i,t as a}from"./UnifiedResourcesPage-BAclGZD6.js";function o(){return(0,s.jsx)(a,{kind:`playbooks`})}var s,c;function l(){return(l=e((()=>{n(),i(),s=t(),c=r(o,`/settings/unified-playbooks`)})))()}l();export{c as component};

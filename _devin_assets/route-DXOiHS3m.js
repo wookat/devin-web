@@ -1,0 +1,1 @@
+import{n as e}from"./rolldown-runtime-C0FnF6B9.js";import{n as t,t as n}from"./app-initial-C1_LlZmJ.js";import{n as r,r as i}from"./Match-B2okXuPo.js";var a;function o(){return(o=e((()=>{t(),i(),a=n(r,`/_user/account`)})))()}o();export{a as component};

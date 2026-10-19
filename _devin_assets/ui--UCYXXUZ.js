@@ -1,0 +1,1 @@
+import{n as e}from"./rolldown-runtime-C0FnF6B9.js";function t(e,t){if(!e)return!0;let n=e.toLowerCase();return t.some(e=>e.toLowerCase().includes(n))}function n(){return(n=e((()=>{})))()}export{t as n,n as t};

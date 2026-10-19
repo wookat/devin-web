@@ -1,0 +1,1 @@
+import{n as e}from"./rolldown-runtime-C0FnF6B9.js";import{t}from"./jsx-runtime-BdxMnOeJ.js";import{C as n,x as r}from"./app-initial-CX3SklJD.js";function i({pr:e,size:t}){return(0,a.jsx)(r,{state:e.state,merged:!!e.pull_request.merged_at,draft:e.draft,size:t})}var a;function o(){return(o=e((()=>{n(),a=t()})))()}export{o as n,i as t};

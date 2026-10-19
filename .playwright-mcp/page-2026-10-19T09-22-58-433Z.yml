@@ -1,0 +1,1199 @@
+- generic [ref=f3e3]:
+  - complementary [ref=f3e4]:
+    - generic [ref=f3e5]:
+      - button "本 本地 Devin" [ref=f3e7] [cursor=pointer]:
+        - generic [ref=f3e8]: 本
+        - generic [ref=f3e9]: 本地 Devin
+      - button "Search" [ref=f3e12]
+      - button "Collapse sidebar" [ref=f3e16]
+    - navigation [ref=f3e20]:
+      - link "新会话" [ref=f3e21] [cursor=pointer]:
+        - /url: /admin/new
+      - button "更多" [ref=f3e24] [cursor=pointer]
+    - generic [ref=f3e29]:
+      - generic [ref=f3e30]:
+        - generic [ref=f3e31]: Sessions
+        - button "Properties" [ref=f3e32] [cursor=pointer]
+        - button "More" [ref=f3e36] [cursor=pointer]
+      - generic [ref=f3e41]:
+        - generic [ref=f3e42]:
+          - button "管理 1" [expanded] [ref=f3e43] [cursor=pointer]:
+            - generic [ref=f3e47]: 管理
+            - generic [ref=f3e48]: "1"
+          - button "Search" [ref=f3e49] [cursor=pointer]
+          - button "Folder options" [ref=f3e53] [cursor=pointer]
+        - generic [ref=f3e58]:
+          - link "网页devin" [ref=f3e59] [cursor=pointer]:
+            - /url: /admin/d/secret-lobster
+          - generic "工作中" [ref=f3e60]
+          - generic [ref=f3e63]:
+            - generic [ref=f3e64]: 网页devin
+            - generic [ref=f3e65]: Working
+          - generic:
+            - button "Pin":
+              - generic [ref=f3e67] [cursor=pointer]
+            - button "Archive":
+              - generic [ref=f3e68] [cursor=pointer]
+              - generic [ref=f3e69] [cursor=pointer]
+            - button "More":
+              - generic [ref=f3e70] [cursor=pointer]
+              - generic [ref=f3e71] [cursor=pointer]
+              - generic [ref=f3e72] [cursor=pointer]
+      - generic [ref=f3e73]:
+        - button "Recent" [expanded] [ref=f3e75] [cursor=pointer]
+        - generic [ref=f3e81]:
+          - link "打招呼" [ref=f3e82] [cursor=pointer]:
+            - /url: /admin/d/local-scooter
+          - generic "等待输入" [ref=f3e83]
+          - generic [ref=f3e84]:
+            - generic [ref=f3e85]: 打招呼
+            - generic [ref=f3e86]: 8 hours ago
+          - generic:
+            - button "Pin":
+              - generic [ref=f3e88] [cursor=pointer]
+            - button "Archive":
+              - generic [ref=f3e89] [cursor=pointer]
+              - generic [ref=f3e90] [cursor=pointer]
+            - button "More":
+              - generic [ref=f3e91] [cursor=pointer]
+              - generic [ref=f3e92] [cursor=pointer]
+              - generic [ref=f3e93] [cursor=pointer]
+        - generic [ref=f3e94]:
+          - link "/dingtalk-tag 这我什么时候安装的呀？这是什么插件" [ref=f3e95] [cursor=pointer]:
+            - /url: /admin/d/alert-jasper
+          - generic "等待输入" [ref=f3e96]
+          - generic [ref=f3e97]:
+            - generic [ref=f3e98]: /dingtalk-tag 这我什么时候安装的呀？这是什么插件
+            - generic [ref=f3e99]: 8 hours ago
+          - generic:
+            - button "Pin":
+              - generic [ref=f3e101] [cursor=pointer]
+            - button "Archive":
+              - generic [ref=f3e102] [cursor=pointer]
+              - generic [ref=f3e103] [cursor=pointer]
+            - button "More":
+              - generic [ref=f3e104] [cursor=pointer]
+              - generic [ref=f3e105] [cursor=pointer]
+              - generic [ref=f3e106] [cursor=pointer]
+        - generic [ref=f3e107]:
+          - link "Acknowledge with OK only" [ref=f3e108] [cursor=pointer]:
+            - /url: /admin/d/lucky-badger
+          - generic "等待输入" [ref=f3e109]
+          - generic [ref=f3e110]:
+            - generic [ref=f3e111]: Acknowledge with OK only
+            - generic [ref=f3e112]: 8 hours ago
+          - generic:
+            - button "Pin":
+              - generic [ref=f3e114] [cursor=pointer]
+            - button "Archive":
+              - generic [ref=f3e115] [cursor=pointer]
+              - generic [ref=f3e116] [cursor=pointer]
+            - button "More":
+              - generic [ref=f3e117] [cursor=pointer]
+              - generic [ref=f3e118] [cursor=pointer]
+              - generic [ref=f3e119] [cursor=pointer]
+        - generic [ref=f3e120]:
+          - link "询问当前使用的模型身份" [ref=f3e121] [cursor=pointer]:
+            - /url: /admin/d/coral-catboat
+          - generic "等待输入" [ref=f3e122]
+          - generic [ref=f3e123]:
+            - generic [ref=f3e124]: 询问当前使用的模型身份
+            - generic [ref=f3e125]: 8 hours ago
+          - generic:
+            - button "Pin":
+              - generic [ref=f3e127] [cursor=pointer]
+            - button "Archive":
+              - generic [ref=f3e128] [cursor=pointer]
+              - generic [ref=f3e129] [cursor=pointer]
+            - button "More":
+              - generic [ref=f3e130] [cursor=pointer]
+              - generic [ref=f3e131] [cursor=pointer]
+              - generic [ref=f3e132] [cursor=pointer]
+        - generic [ref=f3e133]:
+          - link "空白测试会话" [ref=f3e134] [cursor=pointer]:
+            - /url: /admin/d/productive-cheese
+          - generic "等待输入" [ref=f3e135]
+          - generic [ref=f3e136]:
+            - generic [ref=f3e137]: 空白测试会话
+            - generic [ref=f3e138]: 8 hours ago
+          - generic:
+            - button "Pin":
+              - generic [ref=f3e140] [cursor=pointer]
+            - button "Archive":
+              - generic [ref=f3e141] [cursor=pointer]
+              - generic [ref=f3e142] [cursor=pointer]
+            - button "More":
+              - generic [ref=f3e143] [cursor=pointer]
+              - generic [ref=f3e144] [cursor=pointer]
+              - generic [ref=f3e145] [cursor=pointer]
+        - generic [ref=f3e146]:
+          - link "确认" [ref=f3e147] [cursor=pointer]:
+            - /url: /admin/d/sordid-beluga
+          - generic "等待输入" [ref=f3e148]
+          - generic [ref=f3e149]:
+            - generic [ref=f3e150]: 确认
+            - generic [ref=f3e151]: 8 hours ago
+          - generic:
+            - button "Pin":
+              - generic [ref=f3e153] [cursor=pointer]
+            - button "Archive":
+              - generic [ref=f3e154] [cursor=pointer]
+              - generic [ref=f3e155] [cursor=pointer]
+            - button "More":
+              - generic [ref=f3e156] [cursor=pointer]
+              - generic [ref=f3e157] [cursor=pointer]
+              - generic [ref=f3e158] [cursor=pointer]
+        - generic [ref=f3e159]:
+          - link "解码乱码消息" [ref=f3e160] [cursor=pointer]:
+            - /url: /admin/d/brick-hardware
+          - generic "等待输入" [ref=f3e161]
+          - generic [ref=f3e162]:
+            - generic [ref=f3e163]: 解码乱码消息
+            - generic [ref=f3e164]: 8 hours ago
+          - generic:
+            - button "Pin":
+              - generic [ref=f3e166] [cursor=pointer]
+            - button "Archive":
+              - generic [ref=f3e167] [cursor=pointer]
+              - generic [ref=f3e168] [cursor=pointer]
+            - button "More":
+              - generic [ref=f3e169] [cursor=pointer]
+              - generic [ref=f3e170] [cursor=pointer]
+              - generic [ref=f3e171] [cursor=pointer]
+        - generic [ref=f3e172]:
+          - link "读取会话上下文并下载最新文档" [ref=f3e173] [cursor=pointer]:
+            - /url: /admin/d/slime-handball
+          - generic "等待输入" [ref=f3e174]
+          - generic "Locked by another process" [ref=f3e175]
+          - generic [ref=f3e179]:
+            - generic [ref=f3e180]: 读取会话上下文并下载最新文档
+            - generic [ref=f3e181]: 14 hours ago
+          - generic:
+            - button "Pin":
+              - generic [ref=f3e183] [cursor=pointer]
+            - button "Archive":
+              - generic [ref=f3e184] [cursor=pointer]
+              - generic [ref=f3e185] [cursor=pointer]
+            - button "More":
+              - generic [ref=f3e186] [cursor=pointer]
+              - generic [ref=f3e187] [cursor=pointer]
+              - generic [ref=f3e188] [cursor=pointer]
+        - generic [ref=f3e189]:
+          - link "查询最近3天抢购记录" [ref=f3e190] [cursor=pointer]:
+            - /url: /admin/d/five-opera
+          - generic "等待输入" [ref=f3e191]
+          - generic "Locked by another process" [ref=f3e192]
+          - generic [ref=f3e196]:
+            - generic [ref=f3e197]: 查询最近3天抢购记录
+            - generic [ref=f3e198]: 15 hours ago
+          - generic:
+            - button "Pin":
+              - generic [ref=f3e200] [cursor=pointer]
+            - button "Archive":
+              - generic [ref=f3e201] [cursor=pointer]
+              - generic [ref=f3e202] [cursor=pointer]
+            - button "More":
+              - generic [ref=f3e203] [cursor=pointer]
+              - generic [ref=f3e204] [cursor=pointer]
+              - generic [ref=f3e205] [cursor=pointer]
+        - generic [ref=f3e206]:
+          - link "多平台服务器部署结构与服务清单梳理" [ref=f3e207] [cursor=pointer]:
+            - /url: /admin/d/enshrined-reindeer
+          - generic "等待输入" [ref=f3e208]
+          - generic "Locked by another process" [ref=f3e209]
+          - generic [ref=f3e213]:
+            - generic [ref=f3e214]: 多平台服务器部署结构与服务清单梳理
+            - generic [ref=f3e215]: 15 hours ago
+          - generic:
+            - button "Pin":
+              - generic [ref=f3e217] [cursor=pointer]
+            - button "Archive":
+              - generic [ref=f3e218] [cursor=pointer]
+              - generic [ref=f3e219] [cursor=pointer]
+            - button "More":
+              - generic [ref=f3e220] [cursor=pointer]
+              - generic [ref=f3e221] [cursor=pointer]
+              - generic [ref=f3e222] [cursor=pointer]
+        - generic [ref=f3e223]:
+          - link "单机版 Hivetix 前端位置与访问方式" [ref=f3e224] [cursor=pointer]:
+            - /url: /admin/d/polarized-marimba
+          - generic "等待输入" [ref=f3e225]
+          - generic "Locked by another process" [ref=f3e226]
+          - generic [ref=f3e230]:
+            - generic [ref=f3e231]: 单机版 Hivetix 前端位置与访问方式
+            - generic [ref=f3e232]: 15 hours ago
+          - generic:
+            - button "Pin":
+              - generic [ref=f3e234] [cursor=pointer]
+            - button "Archive":
+              - generic [ref=f3e235] [cursor=pointer]
+              - generic [ref=f3e236] [cursor=pointer]
+            - button "More":
+              - generic [ref=f3e237] [cursor=pointer]
+              - generic [ref=f3e238] [cursor=pointer]
+              - generic [ref=f3e239] [cursor=pointer]
+        - generic [ref=f3e240]:
+          - link "了解 Hivetix 前端项目结构" [ref=f3e241] [cursor=pointer]:
+            - /url: /admin/d/troubled-danthus
+          - generic "等待输入" [ref=f3e242]
+          - generic "Locked by another process" [ref=f3e243]
+          - generic [ref=f3e247]:
+            - generic [ref=f3e248]: 了解 Hivetix 前端项目结构
+            - generic [ref=f3e249]: 15 hours ago
+          - generic:
+            - button "Pin":
+              - generic [ref=f3e251] [cursor=pointer]
+            - button "Archive":
+              - generic [ref=f3e252] [cursor=pointer]
+              - generic [ref=f3e253] [cursor=pointer]
+            - button "More":
+              - generic [ref=f3e254] [cursor=pointer]
+              - generic [ref=f3e255] [cursor=pointer]
+              - generic [ref=f3e256] [cursor=pointer]
+        - generic [ref=f3e257]:
+          - link "读取 Devin 会话并查找 GitHub 项目了解情况" [ref=f3e258] [cursor=pointer]:
+            - /url: /admin/d/lake-platinum
+          - generic "等待输入" [ref=f3e259]
+          - generic "Locked by another process" [ref=f3e260]
+          - generic [ref=f3e264]:
+            - generic [ref=f3e265]: 读取 Devin 会话并查找 GitHub 项目了解情况
+            - generic [ref=f3e266]: 15 hours ago
+          - generic:
+            - button "Pin":
+              - generic [ref=f3e268] [cursor=pointer]
+            - button "Archive":
+              - generic [ref=f3e269] [cursor=pointer]
+              - generic [ref=f3e270] [cursor=pointer]
+            - button "More":
+              - generic [ref=f3e271] [cursor=pointer]
+              - generic [ref=f3e272] [cursor=pointer]
+              - generic [ref=f3e273] [cursor=pointer]
+        - generic [ref=f3e274]:
+          - link "Hivetix tools目录代码说明" [ref=f3e275] [cursor=pointer]:
+            - /url: /admin/d/power-nurse
+          - generic "等待输入" [ref=f3e276]
+          - generic "Locked by another process" [ref=f3e277]
+          - generic [ref=f3e281]:
+            - generic [ref=f3e282]: Hivetix tools目录代码说明
+            - generic [ref=f3e283]: 15 hours ago
+          - generic:
+            - button "Pin":
+              - generic [ref=f3e285] [cursor=pointer]
+            - button "Archive":
+              - generic [ref=f3e286] [cursor=pointer]
+              - generic [ref=f3e287] [cursor=pointer]
+            - button "More":
+              - generic [ref=f3e288] [cursor=pointer]
+              - generic [ref=f3e289] [cursor=pointer]
+              - generic [ref=f3e290] [cursor=pointer]
+        - generic [ref=f3e291]:
+          - link "anchor-probe2" [ref=f3e292] [cursor=pointer]:
+            - /url: /admin/d/gold-fish
+          - generic "等待输入" [ref=f3e293]
+          - generic [ref=f3e294]:
+            - generic [ref=f3e295]: anchor-probe2
+            - generic [ref=f3e296]: 17 hours ago
+          - generic:
+            - button "Pin":
+              - generic [ref=f3e298] [cursor=pointer]
+            - button "Archive":
+              - generic [ref=f3e299] [cursor=pointer]
+              - generic [ref=f3e300] [cursor=pointer]
+            - button "More":
+              - generic [ref=f3e301] [cursor=pointer]
+              - generic [ref=f3e302] [cursor=pointer]
+              - generic [ref=f3e303] [cursor=pointer]
+        - generic [ref=f3e304]:
+          - link "chain-route-test" [ref=f3e305] [cursor=pointer]:
+            - /url: /admin/d/ionized-meteorite
+          - generic "等待输入" [ref=f3e306]
+          - generic [ref=f3e307]:
+            - generic [ref=f3e308]: chain-route-test
+            - generic [ref=f3e309]: 18 hours ago
+          - generic:
+            - button "Pin":
+              - generic [ref=f3e311] [cursor=pointer]
+            - button "Archive":
+              - generic [ref=f3e312] [cursor=pointer]
+              - generic [ref=f3e313] [cursor=pointer]
+            - button "More":
+              - generic [ref=f3e314] [cursor=pointer]
+              - generic [ref=f3e315] [cursor=pointer]
+              - generic [ref=f3e316] [cursor=pointer]
+        - generic [ref=f3e317]:
+          - link "live subagent test" [ref=f3e318] [cursor=pointer]:
+            - /url: /admin/d/tested-cart
+          - generic "等待输入" [ref=f3e319]
+          - generic [ref=f3e320]:
+            - generic [ref=f3e321]: live subagent test
+            - generic [ref=f3e322]: 19 hours ago
+          - generic:
+            - button "Pin":
+              - generic [ref=f3e324] [cursor=pointer]
+            - button "Archive":
+              - generic [ref=f3e325] [cursor=pointer]
+              - generic [ref=f3e326] [cursor=pointer]
+            - button "More":
+              - generic [ref=f3e327] [cursor=pointer]
+              - generic [ref=f3e328] [cursor=pointer]
+              - generic [ref=f3e329] [cursor=pointer]
+        - generic [ref=f3e330]:
+          - link "Spawn a Background Subagent to Count Slowly to 50" [ref=f3e331] [cursor=pointer]:
+            - /url: /admin/d/darkened-pulsar
+          - generic "等待输入" [ref=f3e332]
+          - generic [ref=f3e333]:
+            - generic [ref=f3e334]: Spawn a Background Subagent to Count Slowly to 50
+            - generic [ref=f3e335]: 19 hours ago
+          - generic:
+            - button "Pin":
+              - generic [ref=f3e337] [cursor=pointer]
+            - button "Archive":
+              - generic [ref=f3e338] [cursor=pointer]
+              - generic [ref=f3e339] [cursor=pointer]
+            - button "More":
+              - generic [ref=f3e340] [cursor=pointer]
+              - generic [ref=f3e341] [cursor=pointer]
+              - generic [ref=f3e342] [cursor=pointer]
+        - generic [ref=f3e343]:
+          - link "anchor-probe" [ref=f3e344] [cursor=pointer]:
+            - /url: /admin/d/darkened-petalite
+          - generic "等待输入" [ref=f3e345]
+          - generic [ref=f3e346]:
+            - generic [ref=f3e347]: anchor-probe
+            - generic [ref=f3e348]: 19 hours ago
+          - generic:
+            - button "Pin":
+              - generic [ref=f3e350] [cursor=pointer]
+            - button "Archive":
+              - generic [ref=f3e351] [cursor=pointer]
+              - generic [ref=f3e352] [cursor=pointer]
+            - button "More":
+              - generic [ref=f3e353] [cursor=pointer]
+              - generic [ref=f3e354] [cursor=pointer]
+              - generic [ref=f3e355] [cursor=pointer]
+        - generic [ref=f3e356]:
+          - link "chain-route-test2" [ref=f3e357] [cursor=pointer]:
+            - /url: /admin/d/marked-region
+          - generic "等待输入" [ref=f3e358]
+          - generic [ref=f3e359]:
+            - generic [ref=f3e360]: chain-route-test2
+            - generic [ref=f3e361]: 19 hours ago
+          - generic:
+            - button "Pin":
+              - generic [ref=f3e363] [cursor=pointer]
+            - button "Archive":
+              - generic [ref=f3e364] [cursor=pointer]
+              - generic [ref=f3e365] [cursor=pointer]
+            - button "More":
+              - generic [ref=f3e366] [cursor=pointer]
+              - generic [ref=f3e367] [cursor=pointer]
+              - generic [ref=f3e368] [cursor=pointer]
+        - generic [ref=f3e369]:
+          - link "Spawn Background Subagent and Return Its Agent ID" [ref=f3e370] [cursor=pointer]:
+            - /url: /admin/d/island-file
+          - generic "等待输入" [ref=f3e371]
+          - generic [ref=f3e372]:
+            - generic [ref=f3e373]: Spawn Background Subagent and Return Its Agent ID
+            - generic [ref=f3e374]: 20 hours ago
+          - generic:
+            - button "Pin":
+              - generic [ref=f3e376] [cursor=pointer]
+            - button "Archive":
+              - generic [ref=f3e377] [cursor=pointer]
+              - generic [ref=f3e378] [cursor=pointer]
+            - button "More":
+              - generic [ref=f3e379] [cursor=pointer]
+              - generic [ref=f3e380] [cursor=pointer]
+              - generic [ref=f3e381] [cursor=pointer]
+        - generic [ref=f3e382]:
+          - link "Spawn a background subagent to slowly count from 1 to 20" [ref=f3e383] [cursor=pointer]:
+            - /url: /admin/d/ancient-meat
+          - generic "等待输入" [ref=f3e384]
+          - generic [ref=f3e385]:
+            - generic [ref=f3e386]: Spawn a background subagent to slowly count from 1 to 20
+            - generic [ref=f3e387]: 20 hours ago
+          - generic:
+            - button "Pin":
+              - generic [ref=f3e389] [cursor=pointer]
+            - button "Archive":
+              - generic [ref=f3e390] [cursor=pointer]
+              - generic [ref=f3e391] [cursor=pointer]
+            - button "More":
+              - generic [ref=f3e392] [cursor=pointer]
+              - generic [ref=f3e393] [cursor=pointer]
+              - generic [ref=f3e394] [cursor=pointer]
+        - generic [ref=f3e395]:
+          - link "中文问候 starter session" [ref=f3e396] [cursor=pointer]:
+            - /url: /admin/d/zigzag-fern
+          - generic "等待输入" [ref=f3e397]
+          - generic [ref=f3e398]:
+            - generic [ref=f3e399]: 中文问候 starter session
+            - generic [ref=f3e400]: 23 hours ago
+          - generic:
+            - button "Pin":
+              - generic [ref=f3e402] [cursor=pointer]
+            - button "Archive":
+              - generic [ref=f3e403] [cursor=pointer]
+              - generic [ref=f3e404] [cursor=pointer]
+            - button "More":
+              - generic [ref=f3e405] [cursor=pointer]
+              - generic [ref=f3e406] [cursor=pointer]
+              - generic [ref=f3e407] [cursor=pointer]
+        - generic [ref=f3e408]:
+          - link "Greeting in Chinese" [ref=f3e409] [cursor=pointer]:
+            - /url: /admin/d/different-athlete
+          - generic "等待输入" [ref=f3e410]
+          - generic [ref=f3e411]:
+            - generic [ref=f3e412]: Greeting in Chinese
+            - generic [ref=f3e413]: 23 hours ago
+          - generic:
+            - button "Pin":
+              - generic [ref=f3e415] [cursor=pointer]
+            - button "Archive":
+              - generic [ref=f3e416] [cursor=pointer]
+              - generic [ref=f3e417] [cursor=pointer]
+            - button "More":
+              - generic [ref=f3e418] [cursor=pointer]
+              - generic [ref=f3e419] [cursor=pointer]
+              - generic [ref=f3e420] [cursor=pointer]
+        - generic [ref=f3e421]:
+          - 'link "reply with exactly: ok" [ref=f3e422] [cursor=pointer]':
+            - /url: /admin/d/important-ship
+          - generic "等待输入" [ref=f3e423]
+          - generic [ref=f3e424]:
+            - generic [ref=f3e425]: "reply with exactly: ok"
+            - generic [ref=f3e426]: 23 hours ago
+          - generic:
+            - button "Pin":
+              - generic [ref=f3e428] [cursor=pointer]
+            - button "Archive":
+              - generic [ref=f3e429] [cursor=pointer]
+              - generic [ref=f3e430] [cursor=pointer]
+            - button "More":
+              - generic [ref=f3e431] [cursor=pointer]
+              - generic [ref=f3e432] [cursor=pointer]
+              - generic [ref=f3e433] [cursor=pointer]
+        - generic [ref=f3e434]:
+          - link "协助填写2026年学生心理健康普查量表" [ref=f3e435] [cursor=pointer]:
+            - /url: /admin/d/lead-ranunculus
+          - generic "等待输入" [ref=f3e436]
+          - generic [ref=f3e437]:
+            - generic [ref=f3e438]: 协助填写2026年学生心理健康普查量表
+            - generic [ref=f3e439]: 1 day ago
+          - generic:
+            - button "Pin":
+              - generic [ref=f3e441] [cursor=pointer]
+            - button "Archive":
+              - generic [ref=f3e442] [cursor=pointer]
+              - generic [ref=f3e443] [cursor=pointer]
+            - button "More":
+              - generic [ref=f3e444] [cursor=pointer]
+              - generic [ref=f3e445] [cursor=pointer]
+              - generic [ref=f3e446] [cursor=pointer]
+        - generic [ref=f3e447]:
+          - link "Acknowledge with Exact “ok” Response" [ref=f3e448] [cursor=pointer]:
+            - /url: /admin/d/pear-enthusiasm
+          - generic "等待输入" [ref=f3e449]
+          - generic [ref=f3e450]:
+            - generic [ref=f3e451]: Acknowledge with Exact “ok” Response
+            - generic [ref=f3e452]: 1 day ago
+          - generic:
+            - button "Pin":
+              - generic [ref=f3e454] [cursor=pointer]
+            - button "Archive":
+              - generic [ref=f3e455] [cursor=pointer]
+              - generic [ref=f3e456] [cursor=pointer]
+            - button "More":
+              - generic [ref=f3e457] [cursor=pointer]
+              - generic [ref=f3e458] [cursor=pointer]
+              - generic [ref=f3e459] [cursor=pointer]
+        - generic [ref=f3e460]:
+          - link "Devin Session Context Understanding" [ref=f3e461] [cursor=pointer]:
+            - /url: /admin/d/prickle-comet
+          - generic "等待输入" [ref=f3e462]
+          - generic [ref=f3e463]:
+            - generic [ref=f3e464]: Devin Session Context Understanding
+            - generic [ref=f3e465]: 1 day ago
+          - generic:
+            - button "Pin":
+              - generic [ref=f3e467] [cursor=pointer]
+            - button "Archive":
+              - generic [ref=f3e468] [cursor=pointer]
+              - generic [ref=f3e469] [cursor=pointer]
+            - button "More":
+              - generic [ref=f3e470] [cursor=pointer]
+              - generic [ref=f3e471] [cursor=pointer]
+              - generic [ref=f3e472] [cursor=pointer]
+        - generic [ref=f3e473]:
+          - link "问候语：“你好”" [ref=f3e474] [cursor=pointer]:
+            - /url: /admin/d/butter-diascia
+          - generic "等待输入" [ref=f3e475]
+          - generic [ref=f3e476]:
+            - generic [ref=f3e477]: 问候语：“你好”
+            - generic [ref=f3e478]: 1 day ago
+          - generic:
+            - button "Pin":
+              - generic [ref=f3e480] [cursor=pointer]
+            - button "Archive":
+              - generic [ref=f3e481] [cursor=pointer]
+              - generic [ref=f3e482] [cursor=pointer]
+            - button "More":
+              - generic [ref=f3e483] [cursor=pointer]
+              - generic [ref=f3e484] [cursor=pointer]
+              - generic [ref=f3e485] [cursor=pointer]
+        - generic [ref=f3e486]:
+          - link "你怎么更新" [ref=f3e487] [cursor=pointer]:
+            - /url: /admin/d/time-chalk
+          - generic "等待输入" [ref=f3e488]
+          - generic [ref=f3e489]:
+            - generic [ref=f3e490]: 你怎么更新
+            - generic [ref=f3e491]: 1 day ago
+          - generic:
+            - button "Pin":
+              - generic [ref=f3e493] [cursor=pointer]
+            - button "Archive":
+              - generic [ref=f3e494] [cursor=pointer]
+              - generic [ref=f3e495] [cursor=pointer]
+            - button "More":
+              - generic [ref=f3e496] [cursor=pointer]
+              - generic [ref=f3e497] [cursor=pointer]
+              - generic [ref=f3e498] [cursor=pointer]
+        - generic [ref=f3e499]:
+          - link "Reply with exactly ok" [ref=f3e500] [cursor=pointer]:
+            - /url: /admin/d/colorful-atmosphere
+          - generic "等待输入" [ref=f3e501]
+          - generic [ref=f3e502]:
+            - generic [ref=f3e503]: Reply with exactly ok
+            - generic [ref=f3e504]: 1 day ago
+          - generic:
+            - button "Pin":
+              - generic [ref=f3e506] [cursor=pointer]
+            - button "Archive":
+              - generic [ref=f3e507] [cursor=pointer]
+              - generic [ref=f3e508] [cursor=pointer]
+            - button "More":
+              - generic [ref=f3e509] [cursor=pointer]
+              - generic [ref=f3e510] [cursor=pointer]
+              - generic [ref=f3e511] [cursor=pointer]
+        - generic [ref=f3e512]:
+          - link "比较本地与 GitHub 云端代码" [ref=f3e513] [cursor=pointer]:
+            - /url: /admin/d/glow-perch
+          - generic "等待输入" [ref=f3e514]
+          - generic [ref=f3e515]:
+            - generic [ref=f3e516]: 比较本地与 GitHub 云端代码
+            - generic [ref=f3e517]: 1 day ago
+          - generic:
+            - button "Pin":
+              - generic [ref=f3e519] [cursor=pointer]
+            - button "Archive":
+              - generic [ref=f3e520] [cursor=pointer]
+              - generic [ref=f3e521] [cursor=pointer]
+            - button "More":
+              - generic [ref=f3e522] [cursor=pointer]
+              - generic [ref=f3e523] [cursor=pointer]
+              - generic [ref=f3e524] [cursor=pointer]
+        - generic [ref=f3e525]:
+          - link "了解 Devin 会话上下文并拉取项目" [ref=f3e526] [cursor=pointer]:
+            - /url: /admin/d/tender-mailbox
+          - generic "等待输入" [ref=f3e527]
+          - generic [ref=f3e528]:
+            - generic [ref=f3e529]: 了解 Devin 会话上下文并拉取项目
+            - generic [ref=f3e530]: 5 days ago
+          - generic:
+            - button "Pin":
+              - generic [ref=f3e532] [cursor=pointer]
+            - button "Archive":
+              - generic [ref=f3e533] [cursor=pointer]
+              - generic [ref=f3e534] [cursor=pointer]
+            - button "More":
+              - generic [ref=f3e535] [cursor=pointer]
+              - generic [ref=f3e536] [cursor=pointer]
+              - generic [ref=f3e537] [cursor=pointer]
+        - generic [ref=f3e538]:
+          - link "继续 Devin 会话" [ref=f3e539] [cursor=pointer]:
+            - /url: /admin/d/chartreuse-furniture
+          - generic "等待输入" [ref=f3e540]
+          - generic [ref=f3e541]:
+            - generic [ref=f3e542]: 继续 Devin 会话
+            - generic [ref=f3e543]: 5 days ago
+          - generic:
+            - button "Pin":
+              - generic [ref=f3e545] [cursor=pointer]
+            - button "Archive":
+              - generic [ref=f3e546] [cursor=pointer]
+              - generic [ref=f3e547] [cursor=pointer]
+            - button "More":
+              - generic [ref=f3e548] [cursor=pointer]
+              - generic [ref=f3e549] [cursor=pointer]
+              - generic [ref=f3e550] [cursor=pointer]
+        - generic [ref=f3e551]:
+          - link "询问 Devin 会话链接用途" [ref=f3e552] [cursor=pointer]:
+            - /url: /admin/d/bouncy-nigella
+          - generic "等待输入" [ref=f3e553]
+          - generic [ref=f3e554]:
+            - generic [ref=f3e555]: 询问 Devin 会话链接用途
+            - generic [ref=f3e556]: 5 days ago
+          - generic:
+            - button "Pin":
+              - generic [ref=f3e558] [cursor=pointer]
+            - button "Archive":
+              - generic [ref=f3e559] [cursor=pointer]
+              - generic [ref=f3e560] [cursor=pointer]
+            - button "More":
+              - generic [ref=f3e561] [cursor=pointer]
+              - generic [ref=f3e562] [cursor=pointer]
+              - generic [ref=f3e563] [cursor=pointer]
+        - generic [ref=f3e564]:
+          - link "提交 PR" [ref=f3e565] [cursor=pointer]:
+            - /url: /admin/d/able-basement
+          - generic "等待输入" [ref=f3e566]
+          - generic [ref=f3e567]:
+            - generic [ref=f3e568]: 提交 PR
+            - generic [ref=f3e569]: 5 days ago
+          - generic:
+            - button "Pin":
+              - generic [ref=f3e571] [cursor=pointer]
+            - button "Archive":
+              - generic [ref=f3e572] [cursor=pointer]
+              - generic [ref=f3e573] [cursor=pointer]
+            - button "More":
+              - generic [ref=f3e574] [cursor=pointer]
+              - generic [ref=f3e575] [cursor=pointer]
+              - generic [ref=f3e576] [cursor=pointer]
+        - generic [ref=f3e577]:
+          - link "拉取云端和本地，进行同步" [ref=f3e578] [cursor=pointer]:
+            - /url: /admin/d/carpal-seal
+          - generic "等待输入" [ref=f3e579]
+          - generic [ref=f3e580]:
+            - generic [ref=f3e581]: 拉取云端和本地，进行同步
+            - generic [ref=f3e582]: 5 days ago
+          - generic:
+            - button "Pin":
+              - generic [ref=f3e584] [cursor=pointer]
+            - button "Archive":
+              - generic [ref=f3e585] [cursor=pointer]
+              - generic [ref=f3e586] [cursor=pointer]
+            - button "More":
+              - generic [ref=f3e587] [cursor=pointer]
+              - generic [ref=f3e588] [cursor=pointer]
+              - generic [ref=f3e589] [cursor=pointer]
+        - generic [ref=f3e590]:
+          - link "查看GitHub抢购系统版本" [ref=f3e591] [cursor=pointer]:
+            - /url: /admin/d/dazzling-garage
+          - generic "等待输入" [ref=f3e592]
+          - generic [ref=f3e593]:
+            - generic [ref=f3e594]: 查看GitHub抢购系统版本
+            - generic [ref=f3e595]: 5 days ago
+          - generic:
+            - button "Pin":
+              - generic [ref=f3e597] [cursor=pointer]
+            - button "Archive":
+              - generic [ref=f3e598] [cursor=pointer]
+              - generic [ref=f3e599] [cursor=pointer]
+            - button "More":
+              - generic [ref=f3e600] [cursor=pointer]
+              - generic [ref=f3e601] [cursor=pointer]
+              - generic [ref=f3e602] [cursor=pointer]
+        - generic [ref=f3e603]:
+          - 'link "functions.bash:0{\"command\": \"git status -sb && echo \\\"---\\\" && git log --onel..." [ref=f3e604] [cursor=pointer]':
+            - /url: /admin/d/majestic-yacht
+          - generic "等待输入" [ref=f3e605]
+          - generic [ref=f3e606]:
+            - generic [ref=f3e607]: "functions.bash:0{\"command\": \"git status -sb && echo \\\"---\\\" && git log --onel..."
+            - generic [ref=f3e608]: 6 days ago
+          - generic:
+            - button "Pin":
+              - generic [ref=f3e610] [cursor=pointer]
+            - button "Archive":
+              - generic [ref=f3e611] [cursor=pointer]
+              - generic [ref=f3e612] [cursor=pointer]
+            - button "More":
+              - generic [ref=f3e613] [cursor=pointer]
+              - generic [ref=f3e614] [cursor=pointer]
+              - generic [ref=f3e615] [cursor=pointer]
+        - generic [ref=f3e616]:
+          - link "继续会话" [ref=f3e617] [cursor=pointer]:
+            - /url: /admin/d/sustaining-rook
+          - generic "等待输入" [ref=f3e618]
+          - generic [ref=f3e619]:
+            - generic [ref=f3e620]: 继续会话
+            - generic [ref=f3e621]: 6 days ago
+          - generic:
+            - button "Pin":
+              - generic [ref=f3e623] [cursor=pointer]
+            - button "Archive":
+              - generic [ref=f3e624] [cursor=pointer]
+              - generic [ref=f3e625] [cursor=pointer]
+            - button "More":
+              - generic [ref=f3e626] [cursor=pointer]
+              - generic [ref=f3e627] [cursor=pointer]
+              - generic [ref=f3e628] [cursor=pointer]
+        - generic [ref=f3e629]:
+          - link "继续 Devin 会话" [ref=f3e630] [cursor=pointer]:
+            - /url: /admin/d/zesty-kettle
+          - generic "等待输入" [ref=f3e631]
+          - generic [ref=f3e632]:
+            - generic [ref=f3e633]: 继续 Devin 会话
+            - generic [ref=f3e634]: 6 days ago
+          - generic:
+            - button "Pin":
+              - generic [ref=f3e636] [cursor=pointer]
+            - button "Archive":
+              - generic [ref=f3e637] [cursor=pointer]
+              - generic [ref=f3e638] [cursor=pointer]
+            - button "More":
+              - generic [ref=f3e639] [cursor=pointer]
+              - generic [ref=f3e640] [cursor=pointer]
+              - generic [ref=f3e641] [cursor=pointer]
+        - generic [ref=f3e642]:
+          - link "无法直接操作你本地 D 盘的 PDF 文件，但可以给你一个 Python 脚本，在本地运行即可实现：删除（覆盖）旧页码并从第二页开始重新编号，第一页目录不..." [ref=f3e643] [cursor=pointer]:
+            - /url: /admin/d/cyber-lamprey
+          - generic "等待输入" [ref=f3e644]
+          - generic [ref=f3e645]:
+            - generic [ref=f3e646]: 无法直接操作你本地 D 盘的 PDF 文件，但可以给你一个 Python 脚本，在本地运行即可实现：删除（覆盖）旧页码并从第二页开始重新编号，第一页目录不...
+            - generic [ref=f3e647]: 6 days ago
+          - generic:
+            - button "Pin":
+              - generic [ref=f3e649] [cursor=pointer]
+            - button "Archive":
+              - generic [ref=f3e650] [cursor=pointer]
+              - generic [ref=f3e651] [cursor=pointer]
+            - button "More":
+              - generic [ref=f3e652] [cursor=pointer]
+              - generic [ref=f3e653] [cursor=pointer]
+              - generic [ref=f3e654] [cursor=pointer]
+        - generic [ref=f3e655]:
+          - link "I can't do that. I won't log into external accounts with your credentials, ac..." [ref=f3e656] [cursor=pointer]:
+            - /url: /admin/d/ionized-lantana
+          - generic "等待输入" [ref=f3e657]
+          - generic [ref=f3e658]:
+            - generic [ref=f3e659]: I can't do that. I won't log into external accounts with your credentials, ac...
+            - generic [ref=f3e660]: 7 days ago
+          - generic:
+            - button "Pin":
+              - generic [ref=f3e662] [cursor=pointer]
+            - button "Archive":
+              - generic [ref=f3e663] [cursor=pointer]
+              - generic [ref=f3e664] [cursor=pointer]
+            - button "More":
+              - generic [ref=f3e665] [cursor=pointer]
+              - generic [ref=f3e666] [cursor=pointer]
+              - generic [ref=f3e667] [cursor=pointer]
+        - generic [ref=f3e668]:
+          - link "I can't log into devin.ai or any service using credentials you provide, nor c..." [ref=f3e669] [cursor=pointer]:
+            - /url: /admin/d/airy-crib
+          - generic "等待输入" [ref=f3e670]
+          - generic [ref=f3e671]:
+            - generic [ref=f3e672]: I can't log into devin.ai or any service using credentials you provide, nor c...
+            - generic [ref=f3e673]: 7 days ago
+          - generic:
+            - button "Pin":
+              - generic [ref=f3e675] [cursor=pointer]
+            - button "Archive":
+              - generic [ref=f3e676] [cursor=pointer]
+              - generic [ref=f3e677] [cursor=pointer]
+            - button "More":
+              - generic [ref=f3e678] [cursor=pointer]
+              - generic [ref=f3e679] [cursor=pointer]
+              - generic [ref=f3e680] [cursor=pointer]
+        - generic [ref=f3e681]:
+          - link "SSH 经 xu-3 跳转至 xu-1 10.8.8.72 连接排查" [ref=f3e682] [cursor=pointer]:
+            - /url: /admin/d/field-salesman
+          - generic "等待输入" [ref=f3e683]
+          - generic [ref=f3e684]:
+            - generic [ref=f3e685]: SSH 经 xu-3 跳转至 xu-1 10.8.8.72 连接排查
+            - generic [ref=f3e686]: 7 days ago
+          - generic:
+            - button "Pin":
+              - generic [ref=f3e688] [cursor=pointer]
+            - button "Archive":
+              - generic [ref=f3e689] [cursor=pointer]
+              - generic [ref=f3e690] [cursor=pointer]
+            - button "More":
+              - generic [ref=f3e691] [cursor=pointer]
+              - generic [ref=f3e692] [cursor=pointer]
+              - generic [ref=f3e693] [cursor=pointer]
+        - generic [ref=f3e694]:
+          - link "aicdks.com 全链路访问速度很慢吗" [ref=f3e695] [cursor=pointer]:
+            - /url: /admin/d/impartial-option
+          - generic "等待输入" [ref=f3e696]
+          - generic [ref=f3e697]:
+            - generic [ref=f3e698]: aicdks.com 全链路访问速度很慢吗
+            - generic [ref=f3e699]: 7 days ago
+          - generic:
+            - button "Pin":
+              - generic [ref=f3e701] [cursor=pointer]
+            - button "Archive":
+              - generic [ref=f3e702] [cursor=pointer]
+              - generic [ref=f3e703] [cursor=pointer]
+            - button "More":
+              - generic [ref=f3e704] [cursor=pointer]
+              - generic [ref=f3e705] [cursor=pointer]
+              - generic [ref=f3e706] [cursor=pointer]
+        - generic [ref=f3e707]:
+          - link "服务后端部署服务器IP查询" [ref=f3e708] [cursor=pointer]:
+            - /url: /admin/d/nine-caution
+          - generic "等待输入" [ref=f3e709]
+          - generic [ref=f3e710]:
+            - generic [ref=f3e711]: 服务后端部署服务器IP查询
+            - generic [ref=f3e712]: 18 days ago
+          - generic:
+            - button "Pin":
+              - generic [ref=f3e714] [cursor=pointer]
+            - button "Archive":
+              - generic [ref=f3e715] [cursor=pointer]
+              - generic [ref=f3e716] [cursor=pointer]
+            - button "More":
+              - generic [ref=f3e717] [cursor=pointer]
+              - generic [ref=f3e718] [cursor=pointer]
+              - generic [ref=f3e719] [cursor=pointer]
+        - generic [ref=f3e720]:
+          - link "ChatGPT桌面端无法打开原因排查" [ref=f3e721] [cursor=pointer]:
+            - /url: /admin/d/forest-rover
+          - generic "等待输入" [ref=f3e722]
+          - generic [ref=f3e723]:
+            - generic [ref=f3e724]: ChatGPT桌面端无法打开原因排查
+            - generic [ref=f3e725]: 22 days ago
+          - generic:
+            - button "Pin":
+              - generic [ref=f3e727] [cursor=pointer]
+            - button "Archive":
+              - generic [ref=f3e728] [cursor=pointer]
+              - generic [ref=f3e729] [cursor=pointer]
+            - button "More":
+              - generic [ref=f3e730] [cursor=pointer]
+              - generic [ref=f3e731] [cursor=pointer]
+              - generic [ref=f3e732] [cursor=pointer]
+        - generic [ref=f3e733]:
+          - link "aicdks.com 运行位置查询" [ref=f3e734] [cursor=pointer]:
+            - /url: /admin/d/typical-cinema
+          - generic "等待输入" [ref=f3e735]
+          - generic [ref=f3e736]:
+            - generic [ref=f3e737]: aicdks.com 运行位置查询
+            - generic [ref=f3e738]: 24 days ago
+          - generic:
+            - button "Pin":
+              - generic [ref=f3e740] [cursor=pointer]
+            - button "Archive":
+              - generic [ref=f3e741] [cursor=pointer]
+              - generic [ref=f3e742] [cursor=pointer]
+            - button "More":
+              - generic [ref=f3e743] [cursor=pointer]
+              - generic [ref=f3e744] [cursor=pointer]
+              - generic [ref=f3e745] [cursor=pointer]
+        - generic [ref=f3e746]:
+          - link "D:\\yotal\\Documents\\Projects\\pengming-tfcd-samd-thesis D:\\yotal\\Documents\\Proj..." [ref=f3e747] [cursor=pointer]:
+            - /url: /admin/d/holy-baritone
+          - generic "等待输入" [ref=f3e748]
+          - generic [ref=f3e749]:
+            - generic [ref=f3e750]: D:\yotal\Documents\Projects\pengming-tfcd-samd-thesis D:\yotal\Documents\Proj...
+            - generic [ref=f3e751]: 27 days ago
+          - generic:
+            - button "Pin":
+              - generic [ref=f3e753] [cursor=pointer]
+            - button "Archive":
+              - generic [ref=f3e754] [cursor=pointer]
+              - generic [ref=f3e755] [cursor=pointer]
+            - button "More":
+              - generic [ref=f3e756] [cursor=pointer]
+              - generic [ref=f3e757] [cursor=pointer]
+              - generic [ref=f3e758] [cursor=pointer]
+        - generic [ref=f3e759]:
+          - 'link "# 前端重建提示词 —— MergePilot 审修演示 ## 一句话定位 构建一个\"证据驱动的 PR 审修流程回放器\"演示页：一个 PR 令牌沿**地铁..." [ref=f3e760] [cursor=pointer]':
+            - /url: /admin/d/misty-diamond
+          - generic "等待输入" [ref=f3e761]
+          - generic [ref=f3e762]:
+            - generic [ref=f3e763]: "# 前端重建提示词 —— MergePilot 审修演示 ## 一句话定位 构建一个\"证据驱动的 PR 审修流程回放器\"演示页：一个 PR 令牌沿**地铁..."
+            - generic [ref=f3e764]: 27 days ago
+          - generic:
+            - button "Pin":
+              - generic [ref=f3e766] [cursor=pointer]
+            - button "Archive":
+              - generic [ref=f3e767] [cursor=pointer]
+              - generic [ref=f3e768] [cursor=pointer]
+            - button "More":
+              - generic [ref=f3e769] [cursor=pointer]
+              - generic [ref=f3e770] [cursor=pointer]
+              - generic [ref=f3e771] [cursor=pointer]
+        - generic [ref=f3e772]:
+          - link "有赞抢购系统云端版本同步确认" [ref=f3e773] [cursor=pointer]:
+            - /url: /admin/d/northern-feast
+          - generic "等待输入" [ref=f3e774]
+          - generic [ref=f3e775]:
+            - generic [ref=f3e776]: 有赞抢购系统云端版本同步确认
+            - generic [ref=f3e777]: 28 days ago
+          - generic:
+            - button "Pin":
+              - generic [ref=f3e779] [cursor=pointer]
+            - button "Archive":
+              - generic [ref=f3e780] [cursor=pointer]
+              - generic [ref=f3e781] [cursor=pointer]
+            - button "More":
+              - generic [ref=f3e782] [cursor=pointer]
+              - generic [ref=f3e783] [cursor=pointer]
+              - generic [ref=f3e784] [cursor=pointer]
+        - generic [ref=f3e785]:
+          - link "检查 QuickGrabSystem-2.0 后端服务异常" [ref=f3e786] [cursor=pointer]:
+            - /url: /admin/d/zinc-fuel
+          - generic "等待输入" [ref=f3e787]
+          - generic [ref=f3e788]:
+            - generic [ref=f3e789]: 检查 QuickGrabSystem-2.0 后端服务异常
+            - generic [ref=f3e790]: 29 days ago
+          - generic:
+            - button "Pin":
+              - generic [ref=f3e792] [cursor=pointer]
+            - button "Archive":
+              - generic [ref=f3e793] [cursor=pointer]
+              - generic [ref=f3e794] [cursor=pointer]
+            - button "More":
+              - generic [ref=f3e795] [cursor=pointer]
+              - generic [ref=f3e796] [cursor=pointer]
+              - generic [ref=f3e797] [cursor=pointer]
+        - generic [ref=f3e798]:
+          - link "帮我检查数据和配置是否迁移完成 账号----apikey 旧账号wookat520@gmail.com----cfk_9Ivw8oHAL8m11WR7HT... (fork)" [ref=f3e799] [cursor=pointer]:
+            - /url: /admin/d/soapy-range
+          - generic "等待输入" [ref=f3e800]
+          - generic [ref=f3e801]:
+            - generic [ref=f3e802]: 帮我检查数据和配置是否迁移完成 账号----apikey 旧账号wookat520@gmail.com----cfk_9Ivw8oHAL8m11WR7HT... (fork)
+            - generic [ref=f3e803]: 29 days ago
+          - generic:
+            - button "Pin":
+              - generic [ref=f3e805] [cursor=pointer]
+            - button "Archive":
+              - generic [ref=f3e806] [cursor=pointer]
+              - generic [ref=f3e807] [cursor=pointer]
+            - button "More":
+              - generic [ref=f3e808] [cursor=pointer]
+              - generic [ref=f3e809] [cursor=pointer]
+              - generic [ref=f3e810] [cursor=pointer]
+        - generic [ref=f3e811]:
+          - link "[PinTuanYa](file:///d%3A/yotal/Documents/Projects/ticketing/PinTuanYa) 比较远程仓库的差异" [ref=f3e812] [cursor=pointer]:
+            - /url: /admin/d/cyclic-exoplanet
+          - generic "等待输入" [ref=f3e813]
+          - generic [ref=f3e814]:
+            - generic [ref=f3e815]: "[PinTuanYa](file:///d%3A/yotal/Documents/Projects/ticketing/PinTuanYa) 比较远程仓库的差异"
+            - generic [ref=f3e816]: 29 days ago
+          - generic:
+            - button "Pin":
+              - generic [ref=f3e818] [cursor=pointer]
+            - button "Archive":
+              - generic [ref=f3e819] [cursor=pointer]
+              - generic [ref=f3e820] [cursor=pointer]
+            - button "More":
+              - generic [ref=f3e821] [cursor=pointer]
+              - generic [ref=f3e822] [cursor=pointer]
+              - generic [ref=f3e823] [cursor=pointer]
+        - generic [ref=f3e824]:
+          - link "嗯，这是如图所示，这是我们呃这个magic plot的演示 是前端。我们目前是怎么说呢？就是目前我们做的这个产品 manager 相当于是说吗？我们 Ma..." [ref=f3e825] [cursor=pointer]:
+            - /url: /admin/d/awesome-braid
+          - generic "等待输入" [ref=f3e826]
+          - generic [ref=f3e827]:
+            - generic [ref=f3e828]: 嗯，这是如图所示，这是我们呃这个magic plot的演示 是前端。我们目前是怎么说呢？就是目前我们做的这个产品 manager 相当于是说吗？我们 Ma...
+            - generic [ref=f3e829]: 1 month ago
+          - generic:
+            - button "Pin":
+              - generic [ref=f3e831] [cursor=pointer]
+            - button "Archive":
+              - generic [ref=f3e832] [cursor=pointer]
+              - generic [ref=f3e833] [cursor=pointer]
+            - button "More":
+              - generic [ref=f3e834] [cursor=pointer]
+              - generic [ref=f3e835] [cursor=pointer]
+              - generic [ref=f3e836] [cursor=pointer]
+        - generic [ref=f3e837]:
+          - link "[QuickGrabSystem-2.0](file:///d%3A/yotal/Documents/Projects/ticketing/QuickGr..." [ref=f3e838] [cursor=pointer]:
+            - /url: /admin/d/cubic-house
+          - generic "等待输入" [ref=f3e839]
+          - generic [ref=f3e840]:
+            - generic [ref=f3e841]: "[QuickGrabSystem-2.0](file:///d%3A/yotal/Documents/Projects/ticketing/QuickGr..."
+            - generic [ref=f3e842]: 1 month ago
+          - generic:
+            - button "Pin":
+              - generic [ref=f3e844] [cursor=pointer]
+            - button "Archive":
+              - generic [ref=f3e845] [cursor=pointer]
+              - generic [ref=f3e846] [cursor=pointer]
+            - button "More":
+              - generic [ref=f3e847] [cursor=pointer]
+              - generic [ref=f3e848] [cursor=pointer]
+              - generic [ref=f3e849] [cursor=pointer]
+        - generic [ref=f3e850]:
+          - link "D:\\yotal\\Documents\\Projects\\ticketing\\GrabSystems\\QuickGrabSystem-2.0 D:\\yota..." [ref=f3e851] [cursor=pointer]:
+            - /url: /admin/d/lead-saltopus
+          - generic "等待输入" [ref=f3e852]
+          - generic [ref=f3e853]:
+            - generic [ref=f3e854]: D:\yotal\Documents\Projects\ticketing\GrabSystems\QuickGrabSystem-2.0 D:\yota...
+            - generic [ref=f3e855]: 1 month ago
+          - generic:
+            - button "Pin":
+              - generic [ref=f3e857] [cursor=pointer]
+            - button "Archive":
+              - generic [ref=f3e858] [cursor=pointer]
+              - generic [ref=f3e859] [cursor=pointer]
+            - button "More":
+              - generic [ref=f3e860] [cursor=pointer]
+              - generic [ref=f3e861] [cursor=pointer]
+              - generic [ref=f3e862] [cursor=pointer]
+        - generic [ref=f3e863]:
+          - link "帮我检查数据和配置是否迁移完成 账号----apikey 旧账号wookat520@gmail.com----cfk_9Ivw8oHAL8m11WR7HT..." [ref=f3e864] [cursor=pointer]:
+            - /url: /admin/d/royal-piccolo
+          - generic "等待输入" [ref=f3e865]
+          - generic [ref=f3e866]:
+            - generic [ref=f3e867]: 帮我检查数据和配置是否迁移完成 账号----apikey 旧账号wookat520@gmail.com----cfk_9Ivw8oHAL8m11WR7HT...
+            - generic [ref=f3e868]: 1 month ago
+          - generic:
+            - button "Pin":
+              - generic [ref=f3e870] [cursor=pointer]
+            - button "Archive":
+              - generic [ref=f3e871] [cursor=pointer]
+              - generic [ref=f3e872] [cursor=pointer]
+            - button "More":
+              - generic [ref=f3e873] [cursor=pointer]
+              - generic [ref=f3e874] [cursor=pointer]
+              - generic [ref=f3e875] [cursor=pointer]
+        - generic [ref=f3e876]:
+          - link "连接xu-1，看看网络是否有问题，为什么我用devin桌面端ssh连接xu-1不能使用ai服务" [ref=f3e877] [cursor=pointer]:
+            - /url: /admin/d/bemused-cheek
+          - generic "等待输入" [ref=f3e878]
+          - generic [ref=f3e879]:
+            - generic [ref=f3e880]: 连接xu-1，看看网络是否有问题，为什么我用devin桌面端ssh连接xu-1不能使用ai服务
+            - generic [ref=f3e881]: 1 month ago
+          - generic:
+            - button "Pin":
+              - generic [ref=f3e883] [cursor=pointer]
+            - button "Archive":
+              - generic [ref=f3e884] [cursor=pointer]
+              - generic [ref=f3e885] [cursor=pointer]
+            - button "More":
+              - generic [ref=f3e886] [cursor=pointer]
+              - generic [ref=f3e887] [cursor=pointer]
+              - generic [ref=f3e888] [cursor=pointer]
+        - generic [ref=f3e889]:
+          - link "查询会话内容" [ref=f3e890] [cursor=pointer]:
+            - /url: /admin/d/invited-maize
+          - generic "等待输入" [ref=f3e891]
+          - generic [ref=f3e892]:
+            - generic [ref=f3e893]: 查询会话内容
+            - generic [ref=f3e894]: 1 month ago
+          - generic:
+            - button "Pin":
+              - generic [ref=f3e896] [cursor=pointer]
+            - button "Archive":
+              - generic [ref=f3e897] [cursor=pointer]
+              - generic [ref=f3e898] [cursor=pointer]
+            - button "More":
+              - generic [ref=f3e899] [cursor=pointer]
+              - generic [ref=f3e900] [cursor=pointer]
+              - generic [ref=f3e901] [cursor=pointer]
+        - generic [ref=f3e902]:
+          - link "[启动Demo.bat](file:///d%3A/yotal/Documents/Projects/MergePilot/01-Demo/%E5%90%..." [ref=f3e903] [cursor=pointer]:
+            - /url: /admin/d/gossamer-ceder
+          - generic "等待输入" [ref=f3e904]
+          - generic [ref=f3e905]:
+            - generic [ref=f3e906]: "[启动Demo.bat](file:///d%3A/yotal/Documents/Projects/MergePilot/01-Demo/%E5%90%..."
+            - generic [ref=f3e907]: 1 month ago
+          - generic:
+            - button "Pin":
+              - generic [ref=f3e909] [cursor=pointer]
+            - button "Archive":
+              - generic [ref=f3e910] [cursor=pointer]
+              - generic [ref=f3e911] [cursor=pointer]
+            - button "More":
+              - generic [ref=f3e912] [cursor=pointer]
+              - generic [ref=f3e913] [cursor=pointer]
+              - generic [ref=f3e914] [cursor=pointer]
+        - generic [ref=f3e915]:
+          - link "1221都1" [ref=f3e916] [cursor=pointer]:
+            - /url: /admin/d/reliable-politician
+          - generic "等待输入" [ref=f3e917]
+          - generic [ref=f3e918]:
+            - generic [ref=f3e919]: 1221都1
+            - generic [ref=f3e920]: 1 month ago
+          - generic:
+            - button "Pin":
+              - generic [ref=f3e922] [cursor=pointer]
+            - button "Archive":
+              - generic [ref=f3e923] [cursor=pointer]
+              - generic [ref=f3e924] [cursor=pointer]
+            - button "More":
+              - generic [ref=f3e925] [cursor=pointer]
+              - generic [ref=f3e926] [cursor=pointer]
+              - generic [ref=f3e927] [cursor=pointer]
+        - generic [ref=f3e928]:
+          - link "搜索devin桌面端/cli是否有app或者能够局域网访问" [ref=f3e929] [cursor=pointer]:
+            - /url: /admin/d/awesome-willow
+          - generic "等待输入" [ref=f3e930]
+          - generic [ref=f3e931]:
+            - generic [ref=f3e932]: 搜索devin桌面端/cli是否有app或者能够局域网访问
+            - generic [ref=f3e933]: 1 month ago
+          - generic:
+            - button "Pin":
+              - generic [ref=f3e935] [cursor=pointer]
+            - button "Archive":
+              - generic [ref=f3e936] [cursor=pointer]
+              - generic [ref=f3e937] [cursor=pointer]
+            - button "More":
+              - generic [ref=f3e938] [cursor=pointer]
+              - generic [ref=f3e939] [cursor=pointer]
+              - generic [ref=f3e940] [cursor=pointer]
+        - generic [ref=f3e941]:
+          - link "拉取有赞项目到这个目录" [ref=f3e942] [cursor=pointer]:
+            - /url: /admin/d/polished-lillipilli
+          - generic "等待输入" [ref=f3e943]
+          - generic [ref=f3e944]:
+            - generic [ref=f3e945]: 拉取有赞项目到这个目录
+            - generic [ref=f3e946]: 1 month ago
+          - generic:
+            - button "Pin":
+              - generic [ref=f3e948] [cursor=pointer]
+            - button "Archive":
+              - generic [ref=f3e949] [cursor=pointer]
+              - generic [ref=f3e950] [cursor=pointer]
+            - button "More":
+              - generic [ref=f3e951] [cursor=pointer]
+              - generic [ref=f3e952] [cursor=pointer]
+              - generic [ref=f3e953] [cursor=pointer]
+        - generic [ref=f3e954]:
+          - link "cfg-probe" [ref=f3e955] [cursor=pointer]:
+            - /url: /admin/d/impartial-bell
+          - generic "等待输入" [ref=f3e956]
+          - generic [ref=f3e957]:
+            - generic [ref=f3e958]: cfg-probe
+            - generic [ref=f3e959]: 691 months ago
+          - generic:
+            - button "Pin":
+              - generic [ref=f3e961] [cursor=pointer]
+            - button "Archive":
+              - generic [ref=f3e962] [cursor=pointer]
+              - generic [ref=f3e963] [cursor=pointer]
+            - button "More":
+              - generic [ref=f3e964] [cursor=pointer]
+              - generic [ref=f3e965] [cursor=pointer]
+              - generic [ref=f3e966] [cursor=pointer]
+    - generic [ref=f3e968]:
+      - generic "无可用账号" [ref=f3e969]
+      - generic [ref=f3e970]: 无账号
+      - button "轮换" [ref=f3e971] [cursor=pointer]
+      - button "添加" [ref=f3e977] [cursor=pointer]
+      - link "首选项" [ref=f3e979] [cursor=pointer]:
+        - /url: /settings
+      - button "CLI 工具" [ref=f3e983] [cursor=pointer]
+      - button "展开账号列表" [ref=f3e987] [cursor=pointer]
+  - generic [ref=f3e990]:
+    - banner [ref=f3e991]:
+      - generic [ref=f3e992]:
+        - button "Expand sidebar" [ref=f3e993] [cursor=pointer]
+        - heading "会话镜像" [level=1] [ref=f3e996]
+      - generic [ref=f3e997]:
+        - button "Session settings" [ref=f3e999] [cursor=pointer]
+        - button "Show tabs panel" [ref=f3e1004] [cursor=pointer]
+    - contentinfo [ref=f3e1032]:
+      - generic [ref=f3e1037]:
+        - textbox "Message Devin" [ref=f3e1039]: Message Devin…
+        - generic [ref=f3e1040]:
+          - button "Attach or mention" [ref=f3e1043] [cursor=pointer]
+          - generic [ref=f3e1045]:
+            - button "Record voice prompt" [ref=f3e1046] [cursor=pointer]
+            - group [ref=f3e1051]:
+              - button "Send" [disabled] [ref=f3e1052]
+              - button "More send options" [disabled] [ref=f3e1056] [cursor=pointer]

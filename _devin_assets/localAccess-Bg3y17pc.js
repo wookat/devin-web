@@ -1,0 +1,1 @@
+import{n as e}from"./rolldown-runtime-C0FnF6B9.js";function t(e,t){let n=e===`macos`?`macOS`:e===`windows`?`Windows`:e===`linux`?`Linux`:e;return n?t?`${n} ${t}`:n:t}function n(e){return e===`connected`||e===`disconnected`}function r(){return(r=e((()=>{})))()}export{r as n,n as r,t};

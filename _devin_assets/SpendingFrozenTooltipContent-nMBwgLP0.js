@@ -1,0 +1,1 @@
+import{n as e}from"./rolldown-runtime-C0FnF6B9.js";import{t}from"./jsx-runtime-BdxMnOeJ.js";import{Ft as n,It as r}from"./ScrollAreaCorner-C-sn5SVv.js";function i(){let{t:e}=r();return(0,a.jsx)(`span`,{className:`block max-w-[260px]`,children:e(`blockers.spendingFrozen`)})}var a;function o(){return(o=e((()=>{n(),a=t()})))()}export{o as n,i as t};

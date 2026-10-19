@@ -1,0 +1,41 @@
+- generic [ref=f2e3]:
+  - generic [ref=f2e5]:
+    - banner [ref=f2e6]:
+      - generic [ref=f2e7]:
+        - button "Expand sidebar" [ref=f2e8] [cursor=pointer]
+        - heading "会话镜像" [level=1] [ref=f2e11]
+      - button "Session settings" [ref=f2e14] [cursor=pointer]
+    - contentinfo [ref=f2e44]:
+      - generic [ref=f2e49]:
+        - textbox "Message Devin" [ref=f2e51]: Message Devin…
+        - generic [ref=f2e52]:
+          - generic [ref=f2e53]:
+            - button "Attach or mention" [ref=f2e55] [cursor=pointer]
+            - button "Select mode" [ref=f2e58] [cursor=pointer]:
+              - generic [ref=f2e59]: …
+          - generic [ref=f2e60]:
+            - button "Record voice prompt" [ref=f2e61] [cursor=pointer]
+            - group [ref=f2e66]:
+              - button "Send" [disabled] [ref=f2e67]
+              - button "More send options" [disabled] [ref=f2e71] [cursor=pointer]
+  - separator [ref=f2e74]
+  - complementary [ref=f2e75]:
+    - generic [ref=f2e76]:
+      - tablist [ref=f2e77]:
+        - tab "Close tab Progress" [ref=f2e78]:
+          - button "Close tab" [ref=f2e83] [cursor=pointer]
+          - generic [ref=f2e86]: Progress
+        - tab "Close tab Changes" [selected] [ref=f2e87]:
+          - button "Close tab" [ref=f2e92] [cursor=pointer]
+          - generic [ref=f2e95]: Changes
+      - button "Add tab" [ref=f2e97] [cursor=pointer]
+      - button "Full width" [ref=f2e100] [cursor=pointer]
+      - button "Hide tabs panel" [ref=f2e103] [cursor=pointer]
+    - generic [ref=f2e109]:
+      - generic [ref=f2e110]:
+        - button "All changes" [ref=f2e111] [cursor=pointer]
+        - generic [ref=f2e115]:
+          - generic [ref=f2e116]: 0 files
+          - generic [ref=f2e117]: "+0"
+          - generic [ref=f2e118]: −0
+      - generic [ref=f2e119]: No changes yet

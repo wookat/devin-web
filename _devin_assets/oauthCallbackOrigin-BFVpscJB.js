@@ -1,0 +1,1 @@
+import{n as e}from"./rolldown-runtime-C0FnF6B9.js";import{kn as t,sn as n}from"./app-initial-Ddv4R4Zz.js";import{It as r,Nt as i}from"./app-initial-8fmMceYE.js";import{at as a,ot as o}from"./app-initial-CSzLfAvr.js";function s(){let e=i();return o(e)?`https://${e}/api`:n}function c(){return(c=e((()=>{r(),a(),t()})))()}export{c as n,s as t};

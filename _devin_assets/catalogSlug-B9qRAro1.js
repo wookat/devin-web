@@ -1,0 +1,1 @@
+import{n as e}from"./rolldown-runtime-C0FnF6B9.js";function t(e){return e.marketplace_server_slug??e.slug}function n(e,n){let i;for(let a of e??[])t(a)===n&&(!i||r(a)>r(i))&&(i=a);return i}function r(e){return e.is_installed?e.is_enabled?e.has_oauth_tokens&&!e.oauth_refresh_invalid?3:2:1:0}function i(){return(i=e((()=>{})))()}export{n,i as r,t};

@@ -1,0 +1,1 @@
+import{n as e}from"./rolldown-runtime-C0FnF6B9.js";import{t}from"./react-B3wg_K76.js";import{n,t as r}from"./useAsyncFn-DIPph7zY.js";function i(e,t){t===void 0&&(t=[]);var r=n(e,t,{loading:!0}),i=r[0],o=r[1];return(0,a.useEffect)(function(){o()},[o]),i}var a;function o(){return(o=e((()=>{a=t(),r()})))()}export{i as n,o as t};

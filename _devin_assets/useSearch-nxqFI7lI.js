@@ -1,0 +1,1 @@
+import{n as e}from"./rolldown-runtime-C0FnF6B9.js";import{a as t,o as n}from"./link-6OiMDHJY.js";function r(e){return n({from:e.from,strict:e.strict,shouldThrow:e.shouldThrow,structuralSharing:e.structuralSharing,select:t=>e.select?e.select(t.search):t.search})}function i(){return(i=e((()=>{t()})))()}export{r as n,i as t};

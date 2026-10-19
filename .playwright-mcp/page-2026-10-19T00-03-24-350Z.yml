@@ -1,0 +1,77 @@
+- generic [ref=e3]:
+  - generic [ref=e5]:
+    - banner [ref=e6]:
+      - generic [ref=e7]:
+        - button "Expand sidebar" [ref=e8] [cursor=pointer]
+        - heading "会话镜像" [level=1]
+        - generic "D:\\yotal\\Documents\\Projects\\devin-workbench-local" [ref=e49]
+        - generic "Work time" [ref=e53]: 1s
+      - button "Session settings" [ref=e14] [cursor=pointer]
+    - generic [ref=e57]:
+      - generic [ref=e60]:
+        - generic [ref=e61]:
+          - generic [ref=e62]:
+            - generic [ref=e63]: User
+            - generic [ref=e64]: 8:03 AM
+          - img "User" [ref=e65]:
+            - generic [ref=e66]: U
+          - paragraph [ref=e71]: 只回复两个字：收到
+          - generic [ref=e72]:
+            - button "Start new session with this prompt" [ref=e73] [cursor=pointer]
+            - button "Copy" [ref=e77] [cursor=pointer]
+            - button "Copy link" [ref=e81] [cursor=pointer]
+            - button "Translate" [ref=e85] [cursor=pointer]
+            - button "Side chat" [ref=e90] [cursor=pointer]
+        - generic [ref=e93]: working
+      - button "Session index" [ref=e120] [cursor=pointer]
+    - contentinfo [ref=e19]:
+      - generic [ref=e24]:
+        - generic [ref=e25]:
+          - generic [aria-hidden]:
+            - generic:
+              - text: Guide Devin while it works, or press
+              - generic: Ctrl
+              - text: to queue
+          - textbox "Message Devin" [ref=e26]
+        - generic [ref=e27]:
+          - generic [ref=e28]:
+            - button "Attach or mention" [ref=e30] [cursor=pointer]
+            - button "Session mode" [ref=e124] [cursor=pointer]:
+              - generic [ref=e129]: Code
+            - button "Select mode" [ref=e33] [cursor=pointer]:
+              - generic [ref=e34]: SWE-2 · Max
+          - generic [ref=e35]:
+            - button "Record voice prompt" [ref=e36] [cursor=pointer]
+            - button "Stop Devin" [ref=e130] [cursor=pointer]
+  - separator [ref=e133]
+  - complementary [ref=e134]:
+    - generic [ref=e135]:
+      - tablist
+      - button "Add tab" [ref=e137] [cursor=pointer]
+      - button "Full width" [ref=e140] [cursor=pointer]
+      - button "Hide tabs panel" [ref=e143] [cursor=pointer]
+    - generic [ref=e150]:
+      - button "Computer Watch and control Devin's Computer" [ref=e151] [cursor=pointer]:
+        - generic [ref=e155]:
+          - generic [ref=e156]: Computer
+          - generic [ref=e157]: Watch and control Devin's Computer
+      - button "Editor Full control of Devin's machine" [ref=e158] [cursor=pointer]:
+        - generic [ref=e162]:
+          - generic [ref=e163]: Editor
+          - generic [ref=e164]: Full control of Devin's machine
+      - button "Changes See Devin's file edits" [ref=e165] [cursor=pointer]:
+        - generic [ref=e169]:
+          - generic [ref=e170]: Changes
+          - generic [ref=e171]: See Devin's file edits
+      - button "Progress Understand Devin's history and actions" [ref=e172] [cursor=pointer]:
+        - generic [ref=e176]:
+          - generic [ref=e177]: Progress
+          - generic [ref=e178]: Understand Devin's history and actions
+      - button "Agents Manage this session's child sessions" [ref=e179] [cursor=pointer]:
+        - generic [ref=e183]:
+          - generic [ref=e184]: Agents
+          - generic [ref=e185]: Manage this session's child sessions
+      - button "Side chat Ask questions without interrupting main agent" [ref=e186] [cursor=pointer]:
+        - generic [ref=e190]:
+          - generic [ref=e191]: Side chat
+          - generic [ref=e192]: Ask questions without interrupting main agent

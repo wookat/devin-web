@@ -1,0 +1,1 @@
+import{n as e}from"./rolldown-runtime-C0FnF6B9.js";function t(e){let t=new Set;for(let n of e??[]){let e=n.lastIndexOf(`/`);e<=0||t.add(n.slice(0,e))}return[...t]}function n(){return(n=e((()=>{})))()}export{t as n,n as t};

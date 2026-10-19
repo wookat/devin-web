@@ -1,0 +1,1 @@
+import{n as e}from"./rolldown-runtime-C0FnF6B9.js";import{t}from"./jsx-runtime-BdxMnOeJ.js";import{n,r}from"./Match-B2okXuPo.js";import{at as i,it as a}from"./app-initial-CjPkusmS.js";function o(){return i(`Review`),(0,s.jsx)(n,{})}var s;function c(){return(c=e((()=>{r(),a(),s=t()})))()}c();export{o as component};

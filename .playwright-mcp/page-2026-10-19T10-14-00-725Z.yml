@@ -1,0 +1,3316 @@
+- generic [ref=e3]:
+  - generic [ref=e5]:
+    - banner [ref=e6]:
+      - generic [ref=e7]:
+        - button "Expand sidebar" [ref=e8] [cursor=pointer]
+        - heading "会话镜像" [level=1]
+        - generic "D:\\yotal\\Documents\\Projects\\devin-workbench-local" [ref=e11]
+        - generic "Work time" [ref=e15]: 3m 24s
+      - button "Session settings" [ref=e21] [cursor=pointer]
+    - generic [ref=e26]:
+      - generic [ref=e29]:
+        - generic [ref=e30]:
+          - button "Thoughts" [ref=e36] [cursor=pointer]
+          - generic: 18:10
+        - generic [ref=e38]:
+          - generic [ref=e39]:
+            - generic [ref=e40]: Devin
+            - generic [ref=e41]: 6:10 PM
+          - img "Devin" [ref=e42]
+          - generic "18:10" [ref=e46]:
+            - paragraph [ref=e48]: 编码问题导致匹配失败，用 read 看真实尾部：
+          - generic [ref=e49]:
+            - button "Good response" [ref=e50] [cursor=pointer]
+            - button "Bad response" [ref=e53] [cursor=pointer]
+            - button "Copy" [ref=e56] [cursor=pointer]
+            - button "Copy link" [ref=e60] [cursor=pointer]
+            - button "Translate" [ref=e64] [cursor=pointer]
+            - button "Side chat" [ref=e69] [cursor=pointer]
+        - generic [ref=e72]:
+          - button "Thoughts" [ref=e78] [cursor=pointer]
+          - generic: 18:10
+        - generic [ref=e80]:
+          - generic "18:10" [ref=e81]:
+            - paragraph [ref=e83]: 验证 content-sized 宽度生效：
+          - generic [ref=e84]:
+            - button "Good response" [ref=e85] [cursor=pointer]
+            - button "Bad response" [ref=e88] [cursor=pointer]
+            - button "Copy" [ref=e91] [cursor=pointer]
+            - button "Copy link" [ref=e95] [cursor=pointer]
+            - button "Translate" [ref=e99] [cursor=pointer]
+            - button "Side chat" [ref=e104] [cursor=pointer]
+        - generic [ref=e107]:
+          - button "Thoughts" [ref=e113] [cursor=pointer]
+          - generic: 18:10
+        - generic [ref=e115]:
+          - generic "18:10" [ref=e116]:
+            - generic [ref=e117]:
+              - heading "方法论已固化 + 本轮自查抓到的差异全修了" [level=2] [ref=e118]
+              - heading "为什么之前要靠你提醒" [level=3] [ref=e119]
+              - paragraph [ref=e120]:
+                - text: 我的缺陷模式：
+                - strong [ref=e121]: 只量被点名的元素、只量关闭态、肉眼替代数字
+                - text: 。你问"下拉框"我就只量触发器——弹层、开关色值、宽度规则这些没问到的全部漏检。
+              - heading [level=3] [ref=e122]:
+                - text: 已写入
+                - code [ref=e123]: AGENTS.md
+                - text: 的「云端 Parity 复刻协议」
+              - generic [ref=e125]:
+                - generic "Actions" [ref=e127]:
+                  - button "Wrap lines" [ref=e128] [cursor=pointer]
+                  - button "Copy code" [ref=e132] [cursor=pointer]
+                - code [ref=e138]:
+                  - generic [ref=e139]: 1. 全控件清点（eval 枚举每个可交互元素，不许跳）
+                  - generic [ref=e141]: 2. 每个控件量三态：关闭/展开/hover
+                  - generic [ref=e143]: 3. 移植真实 DOM 结构，只换数据源
+                  - generic [ref=e145]: 4. 同视口逐项数字对账——rect/computed 相等才算过
+                  - generic [ref=e147]: 5. 双端截图终检
+              - paragraph [ref=e149]:
+                - text: 官方资产全部在手边：登录态 Playwright +
+                - code [ref=e150]: _devin_assets/
+                - text: 903 个 chunk +
+                - code [ref=e151]: official-*-dom.txt
+                - text: ，之后任何页面复刻都跑这套，不等报障。
+              - heading "本轮协议自查出的新差异（你没提，我主动抓的）" [level=3] [ref=e152]
+              - generic [ref=e153]:
+                - button "Copy table" [ref=e155] [cursor=pointer]
+                - table [ref=e161]:
+                  - rowgroup [ref=e162]:
+                    - row [ref=e163]:
+                      - columnheader [ref=e164] [cursor=pointer]:
+                        - text: 发现
+                        - button "Sort by 发现" [ref=e165]
+                      - columnheader [ref=e169] [cursor=pointer]:
+                        - text: 官方实测
+                        - button "Sort by 官方实测" [ref=e170]
+                      - columnheader [ref=e174] [cursor=pointer]:
+                        - text: 修复
+                        - button "Sort by 修复" [ref=e175]
+                  - rowgroup [ref=e179]:
+                    - row [ref=e180]:
+                      - cell [ref=e181]:
+                        - strong [ref=e182]: 下拉宽度是内容自适应
+                      - cell "Enter=68, Manual=80, System=176——176 只是\"System\"的宽度" [ref=e183]
+                      - cell [ref=e184]:
+                        - text: 改
+                        - code [ref=e185]: w-fit min-w-68
+                        - text: ，实测本地
+                        - code [ref=e186]: Enter
+                        - text: 触发器现在正好
+                        - strong [ref=e187]: 68px
+                        - text: ，与官方一致
+                    - row [ref=e188]:
+                      - cell "侧栏导航项高度" [ref=e189]
+                      - cell "30px（我写的 28）" [ref=e190]
+                      - cell "已改" [ref=e191]
+                    - row [ref=e192]:
+                      - cell "弹层形态" [ref=e193]
+                      - cell "自定义 listbox 浮层（blur+outline+shadow-L4）" [ref=e194]
+                      - cell "上轮已换自定义 combobox" [ref=e195]
+                    - row [ref=e196]:
+                      - cell "开关选中色" [ref=e197]
+                      - cell [ref=e198]:
+                        - code [ref=e199]: "#317CFF"
+                        - text: 蓝
+                      - cell "上轮已换" [ref=e200]
+              - paragraph [ref=e201]:
+                - text: 现在
+                - code [ref=e202]: /settings
+                - text: 页所有控件：combobox（content-sized 触发器 + 浮层 listbox）、switch（官方 36×20 蓝）、行/卡/轨/面包屑几何——全部数字级对账通过。刷新即见。
+          - generic [ref=e203]:
+            - button "Good response" [ref=e204] [cursor=pointer]
+            - button "Bad response" [ref=e207] [cursor=pointer]
+            - button "Copy" [ref=e210] [cursor=pointer]
+            - button "Copy link" [ref=e214] [cursor=pointer]
+            - button "Translate" [ref=e218] [cursor=pointer]
+            - button "Side chat" [ref=e223] [cursor=pointer]
+        - generic [ref=e226]:
+          - generic [ref=e227]:
+            - generic [ref=e228]: User
+            - generic [ref=e229]: 6:10 PM
+          - img "User" [ref=e230]:
+            - generic [ref=e231]: U
+          - paragraph [ref=e236]: 那就遍历查所有页面的组件以及组件的位置（绝对和相对）
+          - generic [ref=e237]:
+            - button "Start new session with this prompt" [ref=e238] [cursor=pointer]
+            - button "Copy" [ref=e242] [cursor=pointer]
+            - button "Copy link" [ref=e246] [cursor=pointer]
+            - button "Translate" [ref=e250] [cursor=pointer]
+            - button "Side chat" [ref=e255] [cursor=pointer]
+        - generic [ref=e258]:
+          - button "Thoughts" [ref=e264] [cursor=pointer]
+          - generic: 18:10
+        - generic [ref=e266]:
+          - generic [ref=e267]:
+            - generic [ref=e268]: Devin
+            - generic [ref=e269]: 6:10 PM
+          - img "Devin" [ref=e270]
+          - generic "18:10" [ref=e274]:
+            - paragraph [ref=e276]: 好——按协议对全站做遍历对账。列计划并执行：
+          - generic [ref=e277]:
+            - button "Good response" [ref=e278] [cursor=pointer]
+            - button "Bad response" [ref=e281] [cursor=pointer]
+            - button "Copy" [ref=e284] [cursor=pointer]
+            - button "Copy link" [ref=e288] [cursor=pointer]
+            - button "Translate" [ref=e292] [cursor=pointer]
+            - button "Side chat" [ref=e297] [cursor=pointer]
+        - generic [ref=e300]:
+          - button "Thoughts" [ref=e306] [cursor=pointer]
+          - generic: 18:10
+        - generic [ref=e308]:
+          - generic "18:10" [ref=e309]:
+            - paragraph [ref=e311]:
+              - text: 官方首页结构拿到了。现在本地
+              - code [ref=e312]: /admin/new
+              - text: 跑同款清点对比：
+          - generic [ref=e313]:
+            - button "Good response" [ref=e314] [cursor=pointer]
+            - button "Bad response" [ref=e317] [cursor=pointer]
+            - button "Copy" [ref=e320] [cursor=pointer]
+            - button "Copy link" [ref=e324] [cursor=pointer]
+            - button "Translate" [ref=e328] [cursor=pointer]
+            - button "Side chat" [ref=e333] [cursor=pointer]
+        - generic [ref=e336]:
+          - button "Thoughts" [ref=e342] [cursor=pointer]
+          - generic: 18:10
+        - generic [ref=e344]:
+          - generic "18:10" [ref=e345]:
+            - paragraph [ref=e347]: 本地清点异常稀疏（sidebar 像被收起了、composer 缺模型/模式胶囊）。截图看实际状态：
+          - generic [ref=e348]:
+            - button "Good response" [ref=e349] [cursor=pointer]
+            - button "Bad response" [ref=e352] [cursor=pointer]
+            - button "Copy" [ref=e355] [cursor=pointer]
+            - button "Copy link" [ref=e359] [cursor=pointer]
+            - button "Translate" [ref=e363] [cursor=pointer]
+            - button "Side chat" [ref=e368] [cursor=pointer]
+        - generic [ref=e371]:
+          - button "Thoughts" [ref=e377] [cursor=pointer]
+          - generic: 18:10
+        - generic [ref=e379]:
+          - generic "18:10" [ref=e380]:
+            - generic [ref=e381]:
+              - paragraph [ref=e382]: 本地草稿页截图 vs 官方首页，主要差异清晰了：
+              - generic [ref=e383]:
+                - button "Copy table" [ref=e385] [cursor=pointer]
+                - table [ref=e391]:
+                  - rowgroup [ref=e392]:
+                    - row [ref=e393]:
+                      - columnheader [ref=e394] [cursor=pointer]:
+                        - text: 官方有
+                        - button "Sort by 官方有" [ref=e395]
+                      - columnheader [ref=e399] [cursor=pointer]:
+                        - text: 本地
+                        - button "Sort by 本地" [ref=e400]
+                  - rowgroup [ref=e404]:
+                    - row [ref=e405]:
+                      - cell [ref=e406]:
+                        - text: composer 卡内右上
+                        - strong [ref=e407]: Agent|Ask 分段控件
+                        - text: （h28 圆角胶囊）
+                      - cell "无" [ref=e408]
+                    - row [ref=e409]:
+                      - cell [ref=e410]:
+                        - text: 工具栏
+                        - strong [ref=e411]: Normal 模式胶囊
+                      - cell "只有 Ultra 模型胶囊，无模式胶囊" [ref=e412]
+                    - row [ref=e413]:
+                      - cell "下方 Get started 清单" [ref=e414]
+                      - cell "无（云端 onboarding，可选）" [ref=e415]
+                    - row [ref=e416]:
+                      - cell "卡内嵌入通知横幅区" [ref=e417]
+                      - cell "无" [ref=e418]
+              - paragraph [ref=e419]: 查草稿页 composer 的胶囊渲染逻辑，看为什么 mode 胶囊没出来：
+          - generic [ref=e420]:
+            - button "Good response" [ref=e421] [cursor=pointer]
+            - button "Bad response" [ref=e424] [cursor=pointer]
+            - button "Copy" [ref=e427] [cursor=pointer]
+            - button "Copy link" [ref=e431] [cursor=pointer]
+            - button "Translate" [ref=e435] [cursor=pointer]
+            - button "Side chat" [ref=e440] [cursor=pointer]
+        - generic [ref=e443]:
+          - button "Thoughts" [ref=e449] [cursor=pointer]
+          - generic: 18:10
+        - generic [ref=e451]:
+          - generic "18:10" [ref=e452]:
+            - paragraph [ref=e454]: 草稿态的居中块看到了。找 composer 卡本体（模型/模式胶囊渲染处）：
+          - generic [ref=e455]:
+            - button "Good response" [ref=e456] [cursor=pointer]
+            - button "Bad response" [ref=e459] [cursor=pointer]
+            - button "Copy" [ref=e462] [cursor=pointer]
+            - button "Copy link" [ref=e466] [cursor=pointer]
+            - button "Translate" [ref=e470] [cursor=pointer]
+            - button "Side chat" [ref=e475] [cursor=pointer]
+        - generic [ref=e478]:
+          - button "Thoughts" [ref=e484] [cursor=pointer]
+          - generic: 18:10
+        - generic [ref=e486]:
+          - generic "18:10" [ref=e487]:
+            - paragraph [ref=e489]:
+              - text: 草稿页已有模型胶囊（Ultra）但模式胶囊没渲染——因为
+              - code [ref=e490]: localModeGroup
+              - text: 依赖
+              - code [ref=e491]: localCfg
+              - text: ，而草稿态用的是缓存的
+              - code [ref=e492]: lastSeenLocalCfg
+              - text: （首次为空）。查 composer-meta 有没有带模式配置：
+          - generic [ref=e493]:
+            - button "Good response" [ref=e494] [cursor=pointer]
+            - button "Bad response" [ref=e497] [cursor=pointer]
+            - button "Copy" [ref=e500] [cursor=pointer]
+            - button "Copy link" [ref=e504] [cursor=pointer]
+            - button "Translate" [ref=e508] [cursor=pointer]
+            - button "Side chat" [ref=e513] [cursor=pointer]
+        - generic [ref=e516]:
+          - button "Thoughts" [ref=e522] [cursor=pointer]
+          - generic: 18:10
+        - generic [ref=e524]:
+          - generic "18:10" [ref=e525]:
+            - generic [ref=e526]:
+              - paragraph [ref=e527]:
+                - code [ref=e528]: sessionConfig
+                - text: 返回
+                - code [ref=e529]: "{options,mode,commands,model}"
+                - text: ——正好是前端
+                - code [ref=e530]: LocalCfg
+                - text: 形状。方案：composer-meta 捎带
+                - code [ref=e531]: cfg
+                - text: 字段，草稿态用它填充
+                - code [ref=e532]: localCfg
+                - text: → 模式/模型胶囊在草稿页就能渲染。
+              - paragraph [ref=e533]: 改 server（复用已有的 newest-session 循环）：
+          - generic [ref=e534]:
+            - button "Good response" [ref=e535] [cursor=pointer]
+            - button "Bad response" [ref=e538] [cursor=pointer]
+            - button "Copy" [ref=e541] [cursor=pointer]
+            - button "Copy link" [ref=e545] [cursor=pointer]
+            - button "Translate" [ref=e549] [cursor=pointer]
+            - button "Side chat" [ref=e554] [cursor=pointer]
+        - generic [ref=e557]:
+          - button "Thoughts" [ref=e563] [cursor=pointer]
+          - generic: 18:10
+        - generic [ref=e565]:
+          - generic "18:10" [ref=e566]:
+            - paragraph [ref=e568]: LocalCfg 与 sessionConfig 返回形状一致，直接接线。查 wbstore 的 lastConfig getter 一并带上：
+          - generic [ref=e569]:
+            - button "Good response" [ref=e570] [cursor=pointer]
+            - button "Bad response" [ref=e573] [cursor=pointer]
+            - button "Copy" [ref=e576] [cursor=pointer]
+            - button "Copy link" [ref=e580] [cursor=pointer]
+            - button "Translate" [ref=e584] [cursor=pointer]
+            - button "Side chat" [ref=e589] [cursor=pointer]
+        - generic [ref=e592]:
+          - button "Thoughts" [ref=e598] [cursor=pointer]
+          - generic: 18:10
+        - generic [ref=e600]:
+          - generic [ref=e601]:
+            - generic [ref=e602]: User
+            - generic [ref=e603]: 6:10 PM
+          - img "User" [ref=e604]:
+            - generic [ref=e605]: U
+          - paragraph [ref=e610]: 那就遍历查所有页面的组件以及组件的位置（绝对和相对）
+          - generic [ref=e611]:
+            - button "Start new session with this prompt" [ref=e612] [cursor=pointer]
+            - button "Copy" [ref=e616] [cursor=pointer]
+            - button "Copy link" [ref=e620] [cursor=pointer]
+            - button "Translate" [ref=e624] [cursor=pointer]
+            - button "Side chat" [ref=e629] [cursor=pointer]
+        - generic [ref=e632]:
+          - button "Thoughts" [ref=e638] [cursor=pointer]
+          - generic: 18:10
+        - generic [ref=e640]:
+          - generic [ref=e641]:
+            - generic [ref=e642]: Devin
+            - generic [ref=e643]: 6:10 PM
+          - img "Devin" [ref=e644]
+          - generic "18:10" [ref=e648]:
+            - paragraph [ref=e650]: 继续遍历。先看官方账号有没有可打开的会话页供清点：
+          - generic [ref=e651]:
+            - button "Good response" [ref=e652] [cursor=pointer]
+            - button "Bad response" [ref=e655] [cursor=pointer]
+            - button "Copy" [ref=e658] [cursor=pointer]
+            - button "Copy link" [ref=e662] [cursor=pointer]
+            - button "Translate" [ref=e666] [cursor=pointer]
+            - button "Side chat" [ref=e671] [cursor=pointer]
+        - generic [ref=e674]:
+          - button "Thoughts" [ref=e680] [cursor=pointer]
+          - generic: 18:10
+        - generic [ref=e682]:
+          - generic "18:10" [ref=e683]:
+            - paragraph [ref=e685]:
+              - text: 官方账号无会话（免费额度耗尽）——会话页真身抓不了，但
+              - strong [ref=e686]: 会话列表页
+              - text: 当前就在眼前，先清点它和完整的侧边栏结构：
+          - generic [ref=e687]:
+            - button "Good response" [ref=e688] [cursor=pointer]
+            - button "Bad response" [ref=e691] [cursor=pointer]
+            - button "Copy" [ref=e694] [cursor=pointer]
+            - button "Copy link" [ref=e698] [cursor=pointer]
+            - button "Translate" [ref=e702] [cursor=pointer]
+            - button "Side chat" [ref=e707] [cursor=pointer]
+        - generic [ref=e710]:
+          - button "Thoughts" [ref=e716] [cursor=pointer]
+          - generic: 18:10
+        - generic [ref=e718]:
+          - generic "18:10" [ref=e719]:
+            - paragraph [ref=e721]: 官方侧边栏+会话列表页结构到手。现在本地侧：先把收起的侧边栏展开，清点 rail + 会话页：
+          - generic [ref=e722]:
+            - button "Good response" [ref=e723] [cursor=pointer]
+            - button "Bad response" [ref=e726] [cursor=pointer]
+            - button "Copy" [ref=e729] [cursor=pointer]
+            - button "Copy link" [ref=e733] [cursor=pointer]
+            - button "Translate" [ref=e737] [cursor=pointer]
+            - button "Side chat" [ref=e742] [cursor=pointer]
+        - generic [ref=e745]:
+          - button "Thoughts" [ref=e751] [cursor=pointer]
+          - generic: 18:10
+        - generic [ref=e753]:
+          - generic "18:10" [ref=e754]:
+            - paragraph [ref=e756]: 本地 rail 清点完成，差异浮出。量两侧 rail 总宽 + 看 SessionTree 顶部结构：
+          - generic [ref=e757]:
+            - button "Good response" [ref=e758] [cursor=pointer]
+            - button "Bad response" [ref=e761] [cursor=pointer]
+            - button "Copy" [ref=e764] [cursor=pointer]
+            - button "Copy link" [ref=e768] [cursor=pointer]
+            - button "Translate" [ref=e772] [cursor=pointer]
+            - button "Side chat" [ref=e777] [cursor=pointer]
+        - generic [ref=e780]:
+          - button "Thoughts" [ref=e786] [cursor=pointer]
+          - generic: 18:10
+        - generic [ref=e788]:
+          - generic "18:10" [ref=e789]:
+            - paragraph [ref=e791]: 本地 rail 已是 300px 宽 ✓，但顶部结构与官方有差异。看 rail 头部代码定位插入点：
+          - generic [ref=e792]:
+            - button "Good response" [ref=e793] [cursor=pointer]
+            - button "Bad response" [ref=e796] [cursor=pointer]
+            - button "Copy" [ref=e799] [cursor=pointer]
+            - button "Copy link" [ref=e803] [cursor=pointer]
+            - button "Translate" [ref=e807] [cursor=pointer]
+            - button "Side chat" [ref=e812] [cursor=pointer]
+        - generic [ref=e815]:
+          - button "Thoughts" [ref=e821] [cursor=pointer]
+          - generic: 18:10
+        - generic [ref=e823]:
+          - generic "18:10" [ref=e824]:
+            - paragraph [ref=e826]:
+              - text: 官方 rail 顶部是
+              - code [ref=e827]: Z zalize1
+              - text: 组织按钮 + 3 个 28px 图标；本地是
+              - code [ref=e828]: ← 会话
+              - text: + 2 个 24px 图标。先确认官方那 3 个图标是什么再动手：
+          - generic [ref=e829]:
+            - button "Good response" [ref=e830] [cursor=pointer]
+            - button "Bad response" [ref=e833] [cursor=pointer]
+            - button "Copy" [ref=e836] [cursor=pointer]
+            - button "Copy link" [ref=e840] [cursor=pointer]
+            - button "Translate" [ref=e844] [cursor=pointer]
+            - button "Side chat" [ref=e849] [cursor=pointer]
+        - generic [ref=e852]:
+          - button "Thoughts" [ref=e858] [cursor=pointer]
+          - generic: 18:10
+        - generic [ref=e860]:
+          - generic "18:10" [ref=e861]:
+            - paragraph [ref=e863]: 跑错页了（还在本地）。回官方查那 3 个图标的身份：
+          - generic [ref=e864]:
+            - button "Good response" [ref=e865] [cursor=pointer]
+            - button "Bad response" [ref=e868] [cursor=pointer]
+            - button "Copy" [ref=e871] [cursor=pointer]
+            - button "Copy link" [ref=e875] [cursor=pointer]
+            - button "Translate" [ref=e879] [cursor=pointer]
+            - button "Side chat" [ref=e884] [cursor=pointer]
+        - generic [ref=e887]:
+          - button "Thoughts" [ref=e893] [cursor=pointer]
+          - generic: 18:10
+        - generic [ref=e895]:
+          - generic "18:10" [ref=e896]:
+            - generic [ref=e897]:
+              - paragraph [ref=e898]: 官方侧边栏结构完全确认：
+              - generic [ref=e900]:
+                - generic "Actions" [ref=e902]:
+                  - button "Wrap lines" [ref=e903] [cursor=pointer]
+                  - button "Copy code" [ref=e907] [cursor=pointer]
+                - code [ref=e913]:
+                  - generic [ref=e914]: "[Z zalize1 ▾] [Search][Notifications][Collapse] ← 顶部行"
+                  - generic [ref=e916]: "[✚ New session] ← 导航行 274×30"
+                  - generic [ref=e918]: "[⋯ More] ← 导航行"
+                  - generic [ref=e920]: "[Sessions 区头: New/Properties(蓝)/More]"
+                  - generic [ref=e922]: "[Recent ▸ 折叠头]"
+              - paragraph [ref=e924]:
+                - text: 本地是
+                - code [ref=e925]: ← 会话
+                - text: + Search/New 图标 —— 形状不同。按官方重排 rail 顶部。查现有 imports：
+          - generic [ref=e926]:
+            - button "Good response" [ref=e927] [cursor=pointer]
+            - button "Bad response" [ref=e930] [cursor=pointer]
+            - button "Copy" [ref=e933] [cursor=pointer]
+            - button "Copy link" [ref=e937] [cursor=pointer]
+            - button "Translate" [ref=e941] [cursor=pointer]
+            - button "Side chat" [ref=e946] [cursor=pointer]
+        - generic [ref=e949]:
+          - button "Thoughts" [ref=e955] [cursor=pointer]
+          - generic: 18:10
+        - generic [ref=e957]:
+          - generic "18:10" [ref=e958]:
+            - paragraph [ref=e960]: 验证本地侧（dist 已更新，旧进程也直接出新前端；server 重启已在上一轮间隙完成）：
+          - generic [ref=e961]:
+            - button "Good response" [ref=e962] [cursor=pointer]
+            - button "Bad response" [ref=e965] [cursor=pointer]
+            - button "Copy" [ref=e968] [cursor=pointer]
+            - button "Copy link" [ref=e972] [cursor=pointer]
+            - button "Translate" [ref=e976] [cursor=pointer]
+            - button "Side chat" [ref=e981] [cursor=pointer]
+        - generic [ref=e984]:
+          - button "Thoughts" [ref=e990] [cursor=pointer]
+          - generic: 18:10
+        - generic [ref=e992]:
+          - generic "18:10" [ref=e993]:
+            - paragraph [ref=e995]: 视口回到 932（<1024 自动收起是正常的）。放大到 1440 重测：
+          - generic [ref=e996]:
+            - button "Good response" [ref=e997] [cursor=pointer]
+            - button "Bad response" [ref=e1000] [cursor=pointer]
+            - button "Copy" [ref=e1003] [cursor=pointer]
+            - button "Copy link" [ref=e1007] [cursor=pointer]
+            - button "Translate" [ref=e1011] [cursor=pointer]
+            - button "Side chat" [ref=e1016] [cursor=pointer]
+        - generic [ref=e1019]:
+          - button "Thoughts" [ref=e1025] [cursor=pointer]
+          - generic: 18:10
+        - generic [ref=e1027]:
+          - generic "18:10" [ref=e1028]:
+            - paragraph [ref=e1030]:
+              - text: 侧栏形状已对（org 按钮 30px、导航行 30px、图标 28px）。模式胶囊还差——因为重启后还没有会话加载过，
+              - code [ref=e1031]: lastAgentCfg
+              - text: 是空的。打开一个会话触发 load 再回来看：
+          - generic [ref=e1032]:
+            - button "Good response" [ref=e1033] [cursor=pointer]
+            - button "Bad response" [ref=e1036] [cursor=pointer]
+            - button "Copy" [ref=e1039] [cursor=pointer]
+            - button "Copy link" [ref=e1043] [cursor=pointer]
+            - button "Translate" [ref=e1047] [cursor=pointer]
+            - button "Side chat" [ref=e1052] [cursor=pointer]
+        - generic [ref=e1055]:
+          - button "Thoughts" [ref=e1061] [cursor=pointer]
+          - generic: 18:10
+        - generic [ref=e1063]:
+          - generic "18:10" [ref=e1064]:
+            - paragraph [ref=e1066]:
+              - text: 模式胶囊还没出——直接查 composer-meta 的
+              - code [ref=e1067]: cfg
+              - text: 字段实际返回了什么：
+          - generic [ref=e1068]:
+            - button "Good response" [ref=e1069] [cursor=pointer]
+            - button "Bad response" [ref=e1072] [cursor=pointer]
+            - button "Copy" [ref=e1075] [cursor=pointer]
+            - button "Copy link" [ref=e1079] [cursor=pointer]
+            - button "Translate" [ref=e1083] [cursor=pointer]
+            - button "Side chat" [ref=e1088] [cursor=pointer]
+        - generic [ref=e1091]:
+          - button "Thoughts" [ref=e1097] [cursor=pointer]
+          - generic: 18:10
+        - generic [ref=e1099]:
+          - generic "18:10" [ref=e1100]:
+            - generic [ref=e1101]:
+              - paragraph [ref=e1102]:
+                - text: 原因明确：
+                - code [ref=e1103]: hasCfg:false
+                - text: ——
+                - strong [ref=e1104]: server 重启排在队列里
+                - text: （排空在等我这轮结束），旧进程还没有
+                - code [ref=e1105]: cfg
+                - text: 字段。前端部分已是新的。本轮先交付审计结论，重启后模式胶囊会自动出现。
+              - paragraph [ref=e1106]: 更新进度并汇总：## 全页面遍历审计结果（按协议执行，全控件+几何）
+              - heading "侧边栏 rail（300px 宽 — 本来就对）" [level=3] [ref=e1107]
+              - generic [ref=e1108]:
+                - button "Copy table" [ref=e1110] [cursor=pointer]
+                - table [ref=e1116]:
+                  - rowgroup [ref=e1117]:
+                    - row [ref=e1118]:
+                      - columnheader [ref=e1119] [cursor=pointer]:
+                        - text: 官方实测
+                        - button "Sort by 官方实测" [ref=e1120]
+                      - columnheader [ref=e1124] [cursor=pointer]:
+                        - text: 本地之前
+                        - button "Sort by 本地之前" [ref=e1125]
+                      - columnheader [ref=e1129] [cursor=pointer]:
+                        - text: 本轮修复
+                        - button "Sort by 本轮修复" [ref=e1130]
+                  - rowgroup [ref=e1134]:
+                    - row [ref=e1135]:
+                      - cell [ref=e1136]:
+                        - text: 顶部
+                        - code [ref=e1137]: Z zalize1 ▾
+                        - text: 组织按钮（h30, x8)
+                      - cell [ref=e1138]:
+                        - code [ref=e1139]: ← 会话
+                        - text: 标题
+                      - cell [ref=e1140]:
+                        - text: ✅
+                        - code [ref=e1141]: "[本 本地 Devin ▾]"
+                        - text: org 菜单（首选项/重启/重建）
+                    - row [ref=e1142]:
+                      - cell "右侧 Search+Notifications+Collapse 图标（28px, x194/223/252)" [ref=e1143]
+                      - cell "2×24px (x231/255)" [ref=e1144]
+                      - cell "✅ Search+Collapse 28px；Notifications 无本地对应，未加" [ref=e1145]
+                    - row [ref=e1146]:
+                      - cell [ref=e1147]:
+                        - code [ref=e1148]: New session
+                        - text: 导航行 274×30 @y44
+                      - cell "仅草稿态临时行" [ref=e1149]
+                      - cell "✅ 常驻导航行（283×30 @y42)，草稿态高亮" [ref=e1150]
+                    - row [ref=e1151]:
+                      - cell [ref=e1152]:
+                        - code [ref=e1153]: More
+                        - text: 导航行 @y75
+                      - cell "无" [ref=e1154]
+                      - cell [ref=e1155]:
+                        - text: ✅
+                        - code [ref=e1156]: 更多
+                        - text: 展开行 → 首选项
+                    - row [ref=e1157]:
+                      - cell "Sessions 区头右 icon 24px" [ref=e1158]
+                      - cell "✅ 已有同款" [ref=e1159]
+                      - cell "—" [ref=e1160]
+                    - row [ref=e1161]:
+                      - cell "底部 icons @y828" [ref=e1162]
+                      - cell "LocalDock 占据" [ref=e1163]
+                      - cell "✅ 功能等价" [ref=e1164]
+              - heading "/admin/new 草稿页" [level=3] [ref=e1165]
+              - generic [ref=e1166]:
+                - button "Copy table" [ref=e1168] [cursor=pointer]
+                - table [ref=e1174]:
+                  - rowgroup [ref=e1175]:
+                    - row [ref=e1176]:
+                      - columnheader [ref=e1177] [cursor=pointer]:
+                        - text: 官方
+                        - button "Sort by 官方" [ref=e1178]
+                      - columnheader [ref=e1182] [cursor=pointer]:
+                        - text: 本地
+                        - button "Sort by 本地" [ref=e1183]
+                      - columnheader [ref=e1187] [cursor=pointer]:
+                        - text: 状态
+                        - button "Sort by 状态" [ref=e1188]
+                  - rowgroup [ref=e1192]:
+                    - row [ref=e1193]:
+                      - cell [ref=e1194]:
+                        - text: 工具栏 Normal
+                        - strong [ref=e1195]: 模式胶囊
+                      - cell "缺失（草稿态无 localCfg)" [ref=e1196]
+                      - cell [ref=e1197]:
+                        - text: ✅ composer-meta 新增
+                        - code [ref=e1198]: cfg
+                        - text: +
+                        - code [ref=e1199]: last_config
+                        - text: ，草稿态播真实配置——
+                        - strong [ref=e1200]: 待重启生效
+                        - text: （队列中）
+                    - row [ref=e1201]:
+                      - cell [ref=e1202]:
+                        - code [ref=e1203]: Agent|Ask
+                        - text: 分段控件 @卡内右上
+                      - cell "无" [ref=e1204]
+                      - cell [ref=e1205]:
+                        - text: ⚠️ 官方独有的交互模式，本地 acp 无 Ask 语义——
+                        - strong [ref=e1206]: 有意不加
+                        - text: （假按钮比缺失更糟）
+                    - row [ref=e1207]:
+                      - cell "Get started 清单（541×34 行）" [ref=e1208]
+                      - cell "无" [ref=e1209]
+                      - cell "⚠️ 云端 onboarding，无本地对应" [ref=e1210]
+                    - row [ref=e1211]:
+                      - cell "composer 卡/工具栏/发送按钮" [ref=e1212]
+                      - cell "已有同款结构" [ref=e1213]
+                      - cell "✓" [ref=e1214]
+              - heading "/settings —— 已数字级对齐（前几轮）" [level=3] [ref=e1215]
+              - list [ref=e1216]:
+                - listitem [ref=e1217]: combobox 触发器 content-sized（实测 Enter=68px 与官方完全一致）+ 自定义浮层（blur8/outline/L3/200px）
+                - listitem [ref=e1218]:
+                  - text: switch 36×20 蓝
+                  - code [ref=e1219]: "#317CFF"
+                  - text: 、双层卡、300px 轨、44px 面包屑栏
+              - heading "会话列表页" [level=3] [ref=e1220]
+              - paragraph [ref=e1221]:
+                - text: 官方
+                - code [ref=e1222]: /sessions
+                - text: 是过滤药丸式表格页（creator/archived/date pills + Display 菜单）；本地以侧边栏树承载同一功能——结构差异属产品形态差异，不动。
+              - heading "无法实测的" [level=3] [ref=e1223]
+              - paragraph [ref=e1224]:
+                - strong [ref=e1225]: 官方会话页
+                - text: ——账号免费额度耗尽且无历史会话，打不开。只能从 bundle 反推（
+                - code [ref=e1226]: RestartSuspendedSessionsDialog
+                - text: 等已逆向）。真要对齐会话页像素级细节，需要一个有会话的官方账号。
+              - heading "待重启验证（本轮结束自动触发）" [level=3] [ref=e1227]
+              - list [ref=e1228]:
+                - listitem [ref=e1229]:
+                  - text: 草稿页模式胶囊（
+                  - code [ref=e1230]: cfg
+                  - text: 字段已在 dist，等 respawn 后 composer-meta 返回）
+                - listitem [ref=e1231]: 侧栏新结构已可刷新即见
+          - generic [ref=e1232]:
+            - button "Good response" [ref=e1233] [cursor=pointer]
+            - button "Bad response" [ref=e1236] [cursor=pointer]
+            - button "Copy" [ref=e1239] [cursor=pointer]
+            - button "Copy link" [ref=e1243] [cursor=pointer]
+            - button "Translate" [ref=e1247] [cursor=pointer]
+            - button "Side chat" [ref=e1252] [cursor=pointer]
+        - generic [ref=e1255]:
+          - generic [ref=e1256]:
+            - generic [ref=e1257]: User
+            - generic [ref=e1258]: 6:10 PM
+          - img "User" [ref=e1259]:
+            - generic [ref=e1260]: U
+          - paragraph [ref=e1265]: 对于账号详情可以放进入设置里面，以及其他更多配置和设置
+          - generic [ref=e1266]:
+            - button "Start new session with this prompt" [ref=e1267] [cursor=pointer]
+            - button "Copy" [ref=e1271] [cursor=pointer]
+            - button "Copy link" [ref=e1275] [cursor=pointer]
+            - button "Translate" [ref=e1279] [cursor=pointer]
+            - button "Side chat" [ref=e1284] [cursor=pointer]
+        - generic [ref=e1287]:
+          - button "Thoughts" [ref=e1293] [cursor=pointer]
+          - generic: 18:10
+        - generic [ref=e1295]:
+          - generic [ref=e1296]:
+            - generic [ref=e1297]: Devin
+            - generic [ref=e1298]: 6:10 PM
+          - img "Devin" [ref=e1299]
+          - generic "18:10" [ref=e1303]:
+            - paragraph [ref=e1305]: 好——把账号详情和更多本地配置收进设置页（官方 Preferences 分区风格）。先取需要的信息：accounts 响应形状 + TREE_PREFS_KEY + 有没有版本/服务信息端点：
+          - generic [ref=e1306]:
+            - button "Good response" [ref=e1307] [cursor=pointer]
+            - button "Bad response" [ref=e1310] [cursor=pointer]
+            - button "Copy" [ref=e1313] [cursor=pointer]
+            - button "Copy link" [ref=e1317] [cursor=pointer]
+            - button "Translate" [ref=e1321] [cursor=pointer]
+            - button "Side chat" [ref=e1326] [cursor=pointer]
+        - generic [ref=e1329]:
+          - button "Thoughts" [ref=e1335] [cursor=pointer]
+          - generic: 18:10
+        - generic [ref=e1337]:
+          - generic "18:10" [ref=e1338]:
+            - paragraph [ref=e1340]:
+              - text: 信息齐了。账号详情（email/plan/配额/冷却）+ 侧栏偏好 + 服务操作，全部按官方分区样式加进
+              - code [ref=e1341]: /settings
+              - text: 。重写 Settings.tsx 扩展这些区：
+          - generic [ref=e1342]:
+            - button "Good response" [ref=e1343] [cursor=pointer]
+            - button "Bad response" [ref=e1346] [cursor=pointer]
+            - button "Copy" [ref=e1349] [cursor=pointer]
+            - button "Copy link" [ref=e1353] [cursor=pointer]
+            - button "Translate" [ref=e1357] [cursor=pointer]
+            - button "Side chat" [ref=e1362] [cursor=pointer]
+        - generic [ref=e1365]:
+          - button "Thoughts" [ref=e1371] [cursor=pointer]
+          - generic: 18:10
+        - generic [ref=e1373]:
+          - generic "18:10" [ref=e1374]:
+            - paragraph [ref=e1376]: 提取开关/次级按钮为共用组件，加账号/侧栏/服务三个新区：
+          - generic [ref=e1377]:
+            - button "Good response" [ref=e1378] [cursor=pointer]
+            - button "Bad response" [ref=e1381] [cursor=pointer]
+            - button "Copy" [ref=e1384] [cursor=pointer]
+            - button "Copy link" [ref=e1388] [cursor=pointer]
+            - button "Translate" [ref=e1392] [cursor=pointer]
+            - button "Side chat" [ref=e1397] [cursor=pointer]
+        - generic [ref=e1400]:
+          - button "Thoughts" [ref=e1406] [cursor=pointer]
+          - generic: 18:10
+        - generic [ref=e1408]:
+          - generic "18:10" [ref=e1409]:
+            - paragraph [ref=e1411]: 全区块渲染正确。移动端再验一眼：
+          - generic [ref=e1412]:
+            - button "Good response" [ref=e1413] [cursor=pointer]
+            - button "Bad response" [ref=e1416] [cursor=pointer]
+            - button "Copy" [ref=e1419] [cursor=pointer]
+            - button "Copy link" [ref=e1423] [cursor=pointer]
+            - button "Translate" [ref=e1427] [cursor=pointer]
+            - button "Side chat" [ref=e1432] [cursor=pointer]
+        - generic [ref=e1435]:
+          - button "Thoughts" [ref=e1441] [cursor=pointer]
+          - generic: 18:10
+        - generic [ref=e1443]:
+          - generic "18:10" [ref=e1444]:
+            - generic [ref=e1445]:
+              - paragraph [ref=e1446]: 移动端也正常——控件自动换行不挤压。清理截图文件，交付：## 设置页扩展完成（双端截图已验）
+              - paragraph [ref=e1447]: 新增三个官方分区样式的配置区，全部接本地 API：
+              - heading [level=3] [ref=e1448]:
+                - text: 账号（
+                - code [ref=e1449]: /api/accounts
+                - text: ）
+              - list [ref=e1450]:
+                - listitem [ref=e1451]:
+                  - text: 每个账号一行：头像圆 + 邮箱 +
+                  - code [ref=e1452]: 当前
+                  - text: （蓝）/
+                  - code [ref=e1453]: 冷却中
+                  - text: （琥珀）徽章 +
+                  - code [ref=e1454]: Pro · 日余 100% · 周余 77% · 到期日期
+                - listitem [ref=e1455]:
+                  - text: 行内操作：
+                  - strong [ref=e1456]: 切换
+                  - text: （rotate 到该账号）、
+                  - strong [ref=e1457]: 解除冷却
+                  - text: （unlimited）、
+                  - strong [ref=e1458]: 刷新
+                  - text: （refresh 配额）
+                - listitem [ref=e1459]:
+                  - text: 底部"＋ 添加账号"——展开输入框粘贴
+                  - code [ref=e1460]: devin-session-token
+                  - text: ，校验失败有提示
+              - heading [level=3] [ref=e1461]:
+                - text: 侧栏（写
+                - code [ref=e1462]: sidebar-sessions-prefs
+                - text: ，与会话树同一份 localStorage）
+              - list [ref=e1463]:
+                - listitem [ref=e1464]:
+                  - strong [ref=e1465]: 会话分组
+                  - text: ：文件夹 / 按项目（对应
+                  - code [ref=e1466]: "groupBy: folders|project"
+                  - text: ）
+                - listitem [ref=e1467]:
+                  - strong [ref=e1468]: 紧凑模式
+                  - text: ：单行会话行
+                - listitem [ref=e1469]:
+                  - strong [ref=e1470]: 显示已归档
+              - heading "服务" [level=3] [ref=e1471]
+              - list [ref=e1472]:
+                - listitem [ref=e1473]:
+                  - strong [ref=e1474]: 重启服务
+                  - text: /
+                  - strong [ref=e1475]: 重新构建并重启
+                  - text: （confirm 确认 + 进度提示）
+              - heading "顺带重构" [level=3] [ref=e1476]
+              - paragraph [ref=e1477]:
+                - text: 官方 switch（36×20 蓝
+                - code [ref=e1478]: "#317CFF"
+                - text: ）和次级按钮（h28 白底 .08 border fw500，
+                - code [ref=e1479]: Enable
+                - text: /
+                - code [ref=e1480]: Display
+                - text: 实测样式）提取成
+                - code [ref=e1481]: Sw
+                - text: /
+                - code [ref=e1482]: Btn2
+                - text: 共用组件——后续加新设置行直接复用，样式不会漂移。
+              - paragraph [ref=e1483]:
+                - text: typecheck+build 已过，前端即时生效——刷新
+                - code [ref=e1484]: /settings
+                - text: 即见。
+          - generic [ref=e1485]:
+            - button "Good response" [ref=e1486] [cursor=pointer]
+            - button "Bad response" [ref=e1489] [cursor=pointer]
+            - button "Copy" [ref=e1492] [cursor=pointer]
+            - button "Copy link" [ref=e1496] [cursor=pointer]
+            - button "Translate" [ref=e1500] [cursor=pointer]
+            - button "Side chat" [ref=e1505] [cursor=pointer]
+        - generic [ref=e1508]:
+          - generic [ref=e1509]:
+            - generic [ref=e1510]: User
+            - generic [ref=e1511]: 6:10 PM
+          - img "User" [ref=e1512]:
+            - generic [ref=e1513]: U
+          - paragraph [ref=e1518]: 会话页面的右上角菜单项需要优化，重新思考需要放哪些，哪些需要丢掉
+          - generic [ref=e1519]:
+            - button "Start new session with this prompt" [ref=e1520] [cursor=pointer]
+            - button "Copy" [ref=e1524] [cursor=pointer]
+            - button "Copy link" [ref=e1528] [cursor=pointer]
+            - button "Translate" [ref=e1532] [cursor=pointer]
+            - button "Side chat" [ref=e1537] [cursor=pointer]
+        - generic [ref=e1540]:
+          - button "Thoughts" [ref=e1546] [cursor=pointer]
+          - generic: 18:10
+        - generic [ref=e1548]:
+          - generic [ref=e1549]:
+            - generic [ref=e1550]: Devin
+            - generic [ref=e1551]: 6:10 PM
+          - img "Devin" [ref=e1552]
+          - generic "18:10" [ref=e1556]:
+            - paragraph [ref=e1558]: 先看当前 ⋯ 菜单里到底有什么项，再按"官方有啥/本地有啥用"重新裁剪：
+          - generic [ref=e1559]:
+            - button "Good response" [ref=e1560] [cursor=pointer]
+            - button "Bad response" [ref=e1563] [cursor=pointer]
+            - button "Copy" [ref=e1566] [cursor=pointer]
+            - button "Copy link" [ref=e1570] [cursor=pointer]
+            - button "Translate" [ref=e1574] [cursor=pointer]
+            - button "Side chat" [ref=e1579] [cursor=pointer]
+        - generic [ref=e1582]:
+          - button "Thoughts" [ref=e1588] [cursor=pointer]
+          - generic: 18:10
+        - generic [ref=e1590]:
+          - generic "18:10" [ref=e1591]:
+            - paragraph [ref=e1593]: 找错区域了。定位 header ⋯ 按钮和它开的菜单内容：
+          - generic [ref=e1594]:
+            - button "Good response" [ref=e1595] [cursor=pointer]
+            - button "Bad response" [ref=e1598] [cursor=pointer]
+            - button "Copy" [ref=e1601] [cursor=pointer]
+            - button "Copy link" [ref=e1605] [cursor=pointer]
+            - button "Translate" [ref=e1609] [cursor=pointer]
+            - button "Side chat" [ref=e1614] [cursor=pointer]
+        - generic [ref=e1617]:
+          - button "Thoughts" [ref=e1623] [cursor=pointer]
+          - generic: 18:10
+        - generic [ref=e1625]:
+          - generic "18:10" [ref=e1626]:
+            - paragraph [ref=e1628]: 看菜单剩余部分（主题/访客/服务段）：
+          - generic [ref=e1629]:
+            - button "Good response" [ref=e1630] [cursor=pointer]
+            - button "Bad response" [ref=e1633] [cursor=pointer]
+            - button "Copy" [ref=e1636] [cursor=pointer]
+            - button "Copy link" [ref=e1640] [cursor=pointer]
+            - button "Translate" [ref=e1644] [cursor=pointer]
+            - button "Side chat" [ref=e1649] [cursor=pointer]
+        - generic [ref=e1652]:
+          - button "Thoughts" [ref=e1658] [cursor=pointer]
+          - generic: 18:10
+        - generic [ref=e1660]:
+          - generic "18:10" [ref=e1661]:
+            - generic [ref=e1662]:
+              - paragraph [ref=e1663]:
+                - text: 菜单现在塞了 3 类东西：
+                - strong [ref=e1664]: 会话级
+                - text: （Rename/Folder/Archive/Restart agent/Copy link/Share/End）、
+                - strong [ref=e1665]: 全局偏好
+                - text: （Send with/主题——已在 /settings）、
+                - strong [ref=e1666]: 服务级
+                - text: （重启/重建——已进侧栏 org 菜单）、信息块、访客权限。
+              - paragraph [ref=e1667]:
+                - text: 重新裁剪原则：
+                - strong [ref=e1668]: ⋯ 菜单只留会话级操作
+                - text: ，全局的各回各家：
+              - generic [ref=e1669]:
+                - button "Copy table" [ref=e1671] [cursor=pointer]
+                - table [ref=e1677]:
+                  - rowgroup [ref=e1678]:
+                    - row [ref=e1679]:
+                      - columnheader [ref=e1680] [cursor=pointer]:
+                        - text: 项
+                        - button "Sort by 项" [ref=e1681]
+                      - columnheader [ref=e1685] [cursor=pointer]:
+                        - text: 处置
+                        - button "Sort by 处置" [ref=e1686]
+                  - rowgroup [ref=e1690]:
+                    - row [ref=e1691]:
+                      - cell "Send messages with →" [ref=e1692]
+                      - cell "丢（→ /settings 已有）" [ref=e1693]
+                    - row [ref=e1694]:
+                      - cell "Rename / Folder / Archive" [ref=e1695]
+                      - cell "留（会话级）" [ref=e1696]
+                    - row [ref=e1697]:
+                      - cell "Copy link / Share to cloud / Open in new window" [ref=e1698]
+                      - cell "留" [ref=e1699]
+                    - row [ref=e1700]:
+                      - cell "访客权限" [ref=e1701]
+                      - cell "留（会话级）" [ref=e1702]
+                    - row [ref=e1703]:
+                      - cell "Restart agent process / End session" [ref=e1704]
+                      - cell "留（尾部）" [ref=e1705]
+                    - row [ref=e1706]:
+                      - cell "主题 select" [ref=e1707]
+                      - cell "丢（→ /settings）" [ref=e1708]
+                    - row [ref=e1709]:
+                      - cell "服务段（首选项/重启/重建）" [ref=e1710]
+                      - cell "丢（→ 侧栏 org 菜单 + LocalDock 齿轮已有）" [ref=e1711]
+                    - row [ref=e1712]:
+                      - cell "信息块（消息数/Platform/推送URL)" [ref=e1713]
+                      - cell "留但精简（看板集成用）" [ref=e1714]
+              - paragraph [ref=e1715]: 重构菜单块：
+          - generic [ref=e1716]:
+            - button "Good response" [ref=e1717] [cursor=pointer]
+            - button "Bad response" [ref=e1720] [cursor=pointer]
+            - button "Copy" [ref=e1723] [cursor=pointer]
+            - button "Copy link" [ref=e1727] [cursor=pointer]
+            - button "Translate" [ref=e1731] [cursor=pointer]
+            - button "Side chat" [ref=e1736] [cursor=pointer]
+        - generic [ref=e1739]:
+          - button "Thoughts" [ref=e1745] [cursor=pointer]
+          - generic: 18:10
+        - generic [ref=e1747]:
+          - generic "18:10" [ref=e1748]:
+            - paragraph [ref=e1750]: 第二处编辑误删了 Folder 子菜单的定位容器。看当前结构修正：
+          - generic [ref=e1751]:
+            - button "Good response" [ref=e1752] [cursor=pointer]
+            - button "Bad response" [ref=e1755] [cursor=pointer]
+            - button "Copy" [ref=e1758] [cursor=pointer]
+            - button "Copy link" [ref=e1762] [cursor=pointer]
+            - button "Translate" [ref=e1766] [cursor=pointer]
+            - button "Side chat" [ref=e1771] [cursor=pointer]
+        - generic [ref=e1774]:
+          - button "Thoughts" [ref=e1780] [cursor=pointer]
+          - generic: 18:10
+        - generic [ref=e1782]:
+          - generic "18:10" [ref=e1783]:
+            - paragraph [ref=e1785]:
+              - text: 修 Folder 的 relative 容器（子菜单靠它定位，且 2474 有个游离
+              - code [ref=e1786]: </div>
+              - text: ）：
+          - generic [ref=e1787]:
+            - button "Good response" [ref=e1788] [cursor=pointer]
+            - button "Bad response" [ref=e1791] [cursor=pointer]
+            - button "Copy" [ref=e1794] [cursor=pointer]
+            - button "Copy link" [ref=e1798] [cursor=pointer]
+            - button "Translate" [ref=e1802] [cursor=pointer]
+            - button "Side chat" [ref=e1807] [cursor=pointer]
+        - generic [ref=e1810]:
+          - button "Thoughts" [ref=e1816] [cursor=pointer]
+          - generic: 18:10
+        - generic [ref=e1818]:
+          - generic "18:10" [ref=e1819]:
+            - paragraph [ref=e1821]:
+              - text: 删尾部全局段（主题/服务），并检查残留的
+              - code [ref=e1822]: "</>)}"
+              - text: 闭合：
+          - generic [ref=e1823]:
+            - button "Good response" [ref=e1824] [cursor=pointer]
+            - button "Bad response" [ref=e1827] [cursor=pointer]
+            - button "Copy" [ref=e1830] [cursor=pointer]
+            - button "Copy link" [ref=e1834] [cursor=pointer]
+            - button "Translate" [ref=e1838] [cursor=pointer]
+            - button "Side chat" [ref=e1843] [cursor=pointer]
+        - generic [ref=e1846]:
+          - button "Thoughts" [ref=e1852] [cursor=pointer]
+          - generic: 18:10
+        - generic [ref=e1854]:
+          - generic "18:10" [ref=e1855]:
+            - paragraph [ref=e1857]: 重构菜单为纯会话级操作（重排顺序：链接组→访客权限→危险组→信息脚注）：
+          - generic [ref=e1858]:
+            - button "Good response" [ref=e1859] [cursor=pointer]
+            - button "Bad response" [ref=e1862] [cursor=pointer]
+            - button "Copy" [ref=e1865] [cursor=pointer]
+            - button "Copy link" [ref=e1869] [cursor=pointer]
+            - button "Translate" [ref=e1873] [cursor=pointer]
+            - button "Side chat" [ref=e1878] [cursor=pointer]
+        - generic [ref=e1881]:
+          - button "Thoughts" [ref=e1887] [cursor=pointer]
+          - generic: 18:10
+        - generic [ref=e1889]:
+          - generic "18:10" [ref=e1890]:
+            - generic [ref=e1891]:
+              - heading "⋯ 菜单已按\"会话级操作\"裁剪完毕（实测生效）" [level=2] [ref=e1892]
+              - heading "现在菜单只有 8 项，全会话级" [level=3] [ref=e1893]
+              - generic [ref=e1895]:
+                - generic "Actions" [ref=e1897]:
+                  - button "Wrap lines" [ref=e1898] [cursor=pointer]
+                  - button "Copy code" [ref=e1902] [cursor=pointer]
+                - code [ref=e1908]:
+                  - generic [ref=e1909]: Rename
+                  - generic [ref=e1911]: Folder → (子菜单)
+                  - generic [ref=e1913]: Archive / Unarchive
+                  - generic [ref=e1915]: ───
+                  - generic [ref=e1917]: Copy session link
+                  - generic [ref=e1919]: Share to Devin cloud
+                  - generic [ref=e1921]: Open in new window
+                  - generic [ref=e1923]: ───
+                  - generic [ref=e1925]: 访客权限 [select]
+                  - generic [ref=e1927]: ───
+                  - generic [ref=e1929]: Restart agent process
+                  - generic [ref=e1931]: End session
+                  - generic [ref=e1933]: ───
+                  - generic [ref=e1935]: User messages / Platform / 看板推送接口（信息脚注）
+              - heading "丢掉的（各回各家，不是删功能）" [level=3] [ref=e1937]
+              - generic [ref=e1938]:
+                - button "Copy table" [ref=e1940] [cursor=pointer]
+                - table [ref=e1946]:
+                  - rowgroup [ref=e1947]:
+                    - row [ref=e1948]:
+                      - columnheader [ref=e1949] [cursor=pointer]:
+                        - text: 移除项
+                        - button "Sort by 移除项" [ref=e1950]
+                      - columnheader [ref=e1954] [cursor=pointer]:
+                        - text: 去处
+                        - button "Sort by 去处" [ref=e1955]
+                  - rowgroup [ref=e1959]:
+                    - row [ref=e1960]:
+                      - cell "Send messages with →" [ref=e1961]
+                      - cell [ref=e1962]:
+                        - code [ref=e1963]: /settings
+                        - text: → 发送
+                    - row [ref=e1964]:
+                      - cell "主题 select" [ref=e1965]
+                      - cell [ref=e1966]:
+                        - code [ref=e1967]: /settings
+                        - text: → 外观
+                    - row [ref=e1968]:
+                      - cell "首选项…" [ref=e1969]
+                      - cell [ref=e1970]:
+                        - text: 侧栏
+                        - code [ref=e1971]: 本地 Devin ▾
+                        - text: org 菜单 + LocalDock 齿轮
+                    - row [ref=e1972]:
+                      - cell "重启服务 / 重新构建并重启" [ref=e1973]
+                      - cell [ref=e1974]:
+                        - text: org 菜单 +
+                        - code [ref=e1975]: /settings
+                        - text: → 服务
+              - heading "顺手重排" [level=3] [ref=e1976]
+              - list [ref=e1977]:
+                - listitem [ref=e1978]: "\"Open in new window\" 从信息块下面挪进链接组（和 Copy/Share 同区）"
+                - listitem [ref=e1979]: 危险动作（Restart agent / End session）沉底，符合菜单惯例
+                - listitem [ref=e1980]:
+                  - text: 草稿页（
+                  - code [ref=e1981]: /admin/new
+                  - text: ）不再渲染 ⋯ 菜单——它没有会话上下文，打开只会是空的
+              - paragraph [ref=e1982]:
+                - text: 两个入口的分工现在是干净的：
+                - strong [ref=e1983]: 右上角 ⋯ = 这个会话
+                - text: ，
+                - strong [ref=e1984]:
+                  - text: 侧栏左下/
+                  - code [ref=e1985]: 本地 Devin ▾
+                  - text: = 整个工作台
+                - text: 。typecheck+build 已过，刷新会话页即生效。
+          - generic [ref=e1986]:
+            - button "Good response" [ref=e1987] [cursor=pointer]
+            - button "Bad response" [ref=e1990] [cursor=pointer]
+            - button "Copy" [ref=e1993] [cursor=pointer]
+            - button "Copy link" [ref=e1997] [cursor=pointer]
+            - button "Translate" [ref=e2001] [cursor=pointer]
+            - button "Side chat" [ref=e2006] [cursor=pointer]
+        - generic [ref=e2009]:
+          - generic [ref=e2010]:
+            - generic [ref=e2011]: User
+            - generic [ref=e2012]: 6:10 PM
+          - img "User" [ref=e2013]:
+            - generic [ref=e2014]: U
+          - paragraph [ref=e2019]: 为什么还有很多下拉框还是用原生的
+          - generic [ref=e2020]:
+            - button "Start new session with this prompt" [ref=e2021] [cursor=pointer]
+            - button "Copy" [ref=e2025] [cursor=pointer]
+            - button "Copy link" [ref=e2029] [cursor=pointer]
+            - button "Translate" [ref=e2033] [cursor=pointer]
+            - button "Side chat" [ref=e2038] [cursor=pointer]
+        - generic [ref=e2041]:
+          - button "Thoughts" [ref=e2047] [cursor=pointer]
+          - generic: 18:10
+        - generic [ref=e2049]:
+          - generic [ref=e2050]:
+            - generic [ref=e2051]: Devin
+            - generic [ref=e2052]: 6:10 PM
+          - img "Devin" [ref=e2053]
+          - generic "18:10" [ref=e2057]:
+            - paragraph [ref=e2059]:
+              - text: 对——自定义 combobox 只做了 Settings 页内部，其他地方的
+              - code [ref=e2060]: <Select>
+              - text: 还是原生。先全量盘点所有原生下拉的位置：
+          - generic [ref=e2061]:
+            - button "Good response" [ref=e2062] [cursor=pointer]
+            - button "Bad response" [ref=e2065] [cursor=pointer]
+            - button "Copy" [ref=e2068] [cursor=pointer]
+            - button "Copy link" [ref=e2072] [cursor=pointer]
+            - button "Translate" [ref=e2076] [cursor=pointer]
+            - button "Side chat" [ref=e2081] [cursor=pointer]
+        - generic [ref=e2084]:
+          - button "Thoughts" [ref=e2090] [cursor=pointer]
+          - generic: 18:10
+        - generic [ref=e2092]:
+          - generic "18:10" [ref=e2093]:
+            - paragraph [ref=e2095]:
+              - text: 4 处：
+              - code [ref=e2096]: ui.tsx
+              - text: 的
+              - code [ref=e2097]: Select
+              - text: 本体 + AdminMirror 访客权限 + AgentsPanel + AdminSession。看 ui.tsx 的 Select 定义，把 Settings 里验证过的 combobox 提取成共享组件：
+          - generic [ref=e2098]:
+            - button "Good response" [ref=e2099] [cursor=pointer]
+            - button "Bad response" [ref=e2102] [cursor=pointer]
+            - button "Copy" [ref=e2105] [cursor=pointer]
+            - button "Copy link" [ref=e2109] [cursor=pointer]
+            - button "Translate" [ref=e2113] [cursor=pointer]
+            - button "Side chat" [ref=e2118] [cursor=pointer]
+        - generic [ref=e2121]:
+          - button "Thoughts" [ref=e2127] [cursor=pointer]
+          - generic: 18:10
+        - generic [ref=e2129]:
+          - generic "18:10" [ref=e2130]:
+            - paragraph [ref=e2132]:
+              - text: 建共享
+              - code [ref=e2133]: Combo
+              - text: （Settings 里已验证的 combobox 实现提到 ui.tsx），然后替换 3 处调用：
+          - generic [ref=e2134]:
+            - button "Good response" [ref=e2135] [cursor=pointer]
+            - button "Bad response" [ref=e2138] [cursor=pointer]
+            - button "Copy" [ref=e2141] [cursor=pointer]
+            - button "Copy link" [ref=e2145] [cursor=pointer]
+            - button "Translate" [ref=e2149] [cursor=pointer]
+            - button "Side chat" [ref=e2154] [cursor=pointer]
+        - generic [ref=e2157]:
+          - button "Thoughts" [ref=e2163] [cursor=pointer]
+          - generic: 18:10
+        - generic [ref=e2165]:
+          - generic "18:10" [ref=e2166]:
+            - paragraph [ref=e2168]: 替换 3 处调用。先看各自 import：
+          - generic [ref=e2169]:
+            - button "Good response" [ref=e2170] [cursor=pointer]
+            - button "Bad response" [ref=e2173] [cursor=pointer]
+            - button "Copy" [ref=e2176] [cursor=pointer]
+            - button "Copy link" [ref=e2180] [cursor=pointer]
+            - button "Translate" [ref=e2184] [cursor=pointer]
+            - button "Side chat" [ref=e2189] [cursor=pointer]
+        - generic [ref=e2192]:
+          - button "Thoughts" [ref=e2198] [cursor=pointer]
+          - generic: 18:10
+        - generic [ref=e2200]:
+          - generic "18:10" [ref=e2201]:
+            - paragraph [ref=e2203]:
+              - text: 把 Settings.tsx 里的
+              - code [ref=e2204]: Sel
+              - text: 也换成共享
+              - code [ref=e2205]: Combo
+              - text: （单一实现，防漂移）：
+          - generic [ref=e2206]:
+            - button "Good response" [ref=e2207] [cursor=pointer]
+            - button "Bad response" [ref=e2210] [cursor=pointer]
+            - button "Copy" [ref=e2213] [cursor=pointer]
+            - button "Copy link" [ref=e2217] [cursor=pointer]
+            - button "Translate" [ref=e2221] [cursor=pointer]
+            - button "Side chat" [ref=e2226] [cursor=pointer]
+        - generic [ref=e2229]:
+          - button "Thoughts" [ref=e2235] [cursor=pointer]
+          - generic: 18:10
+        - generic [ref=e2237]:
+          - generic "18:10" [ref=e2238]:
+            - paragraph [ref=e2240]: 验证 ⋯ 菜单里的"访客权限"现在弹的是自定义浮层：
+          - generic [ref=e2241]:
+            - button "Good response" [ref=e2242] [cursor=pointer]
+            - button "Bad response" [ref=e2245] [cursor=pointer]
+            - button "Copy" [ref=e2248] [cursor=pointer]
+            - button "Copy link" [ref=e2252] [cursor=pointer]
+            - button "Translate" [ref=e2256] [cursor=pointer]
+            - button "Side chat" [ref=e2261] [cursor=pointer]
+        - generic [ref=e2264]:
+          - button "Thoughts" [ref=e2270] [cursor=pointer]
+          - generic: 18:10
+        - generic [ref=e2272]:
+          - generic "18:10" [ref=e2273]:
+            - generic [ref=e2274]:
+              - heading "全部原生下拉已清除（实测通过）" [level=2] [ref=e2275]
+              - paragraph [ref=e2276]:
+                - text: 新建了共享组件
+                - code [ref=e2277]: Combo
+                - text: （
+                - code [ref=e2278]: web/src/components/ui.tsx
+                - text: ）——就是之前实测对齐过官方的那套 combobox：
+                - code [ref=e2279]: role=combobox
+                - text: 按钮（h28、pl-8/pr-6、13px、透明底+hover:tint、content-sized）+ 浮层 listbox（bg-elevated 95%、blur-8、outline、rounded-10、min-w-200、30px 选项、右侧对勾、方向键/Enter/Esc/外点关闭）。
+              - heading [level=3] [ref=e2280]:
+                - text: 迁移清单（原生
+                - code [ref=e2281]: <select>
+                - text: →
+                - code [ref=e2282]: Combo
+                - text: ）
+              - generic [ref=e2283]:
+                - button "Copy table" [ref=e2285] [cursor=pointer]
+                - table [ref=e2291]:
+                  - rowgroup [ref=e2292]:
+                    - row [ref=e2293]:
+                      - columnheader [ref=e2294] [cursor=pointer]:
+                        - text: 位置
+                        - button "Sort by 位置" [ref=e2295]
+                      - columnheader [ref=e2299] [cursor=pointer]:
+                        - text: 用途
+                        - button "Sort by 用途" [ref=e2300]
+                  - rowgroup [ref=e2304]:
+                    - row [ref=e2305]:
+                      - cell [ref=e2306]:
+                        - code [ref=e2307]: AdminMirror.tsx
+                        - text: ⋯ 菜单
+                      - cell "访客权限 —— 实测浮层 256×128，4 项齐全 ✓" [ref=e2308]
+                    - row [ref=e2309]:
+                      - cell [ref=e2310]:
+                        - code [ref=e2311]: AdminSession.tsx
+                      - cell "分享链接页权限选择" [ref=e2312]
+                    - row [ref=e2313]:
+                      - cell [ref=e2314]:
+                        - code [ref=e2315]: AgentsPanel.tsx
+                      - cell "workflow run 切换器" [ref=e2316]
+                    - row [ref=e2317]:
+                      - cell [ref=e2318]:
+                        - code [ref=e2319]: Settings.tsx
+                        - text: 的
+                        - code [ref=e2320]: Sel
+                      - cell [ref=e2321]:
+                        - text: 改为包装共享
+                        - code [ref=e2322]: Combo
+                        - text: ——
+                        - strong [ref=e2323]: 全站单一实现
+                        - text: ，之后修一处全站生效
+              - paragraph [ref=e2324]:
+                - code [ref=e2325]: Select
+                - text: （原生）保留在 ui.tsx 未删但已无任何调用方；typecheck+build 过。以后任何新下拉直接用
+                - code [ref=e2326]: Combo
+                - text: ，别再写
+                - code [ref=e2327]: <select>
+                - text: ——这条约束也含在前面的 parity 协议里了。刷新即见。
+          - generic [ref=e2328]:
+            - button "Good response" [ref=e2329] [cursor=pointer]
+            - button "Bad response" [ref=e2332] [cursor=pointer]
+            - button "Copy" [ref=e2335] [cursor=pointer]
+            - button "Copy link" [ref=e2339] [cursor=pointer]
+            - button "Translate" [ref=e2343] [cursor=pointer]
+            - button "Side chat" [ref=e2348] [cursor=pointer]
+        - generic [ref=e2351]:
+          - generic [ref=e2352]:
+            - generic [ref=e2353]: User
+            - generic [ref=e2354]: 6:10 PM
+          - img "User" [ref=e2355]:
+            - generic [ref=e2356]: U
+          - paragraph [ref=e2361]: 我发现很多悬浮菜单的二级菜单的层级不对或者其他问题，导致二级菜单被遮盖
+          - generic [ref=e2362]:
+            - button "Start new session with this prompt" [ref=e2363] [cursor=pointer]
+            - button "Copy" [ref=e2367] [cursor=pointer]
+            - button "Copy link" [ref=e2371] [cursor=pointer]
+            - button "Translate" [ref=e2375] [cursor=pointer]
+            - button "Side chat" [ref=e2380] [cursor=pointer]
+        - generic [ref=e2383]:
+          - button "Thoughts" [ref=e2389] [cursor=pointer]
+          - generic: 18:10
+        - generic [ref=e2391]:
+          - generic [ref=e2392]:
+            - generic [ref=e2393]: Devin
+            - generic [ref=e2394]: 6:10 PM
+          - img "Devin" [ref=e2395]
+          - generic "18:10" [ref=e2399]:
+            - paragraph [ref=e2401]:
+              - text: 对——典型病根：父菜单
+              - code [ref=e2402]: overflow-hidden
+              - text: ，二级菜单
+              - code [ref=e2403]: absolute right-full
+              - text: 弹出到父盒子
+              - strong [ref=e2404]: 外面
+              - text: 直接被裁。先全量排查所有二级菜单的定位方式：
+          - generic [ref=e2405]:
+            - button "Good response" [ref=e2406] [cursor=pointer]
+            - button "Bad response" [ref=e2409] [cursor=pointer]
+            - button "Copy" [ref=e2412] [cursor=pointer]
+            - button "Copy link" [ref=e2416] [cursor=pointer]
+            - button "Translate" [ref=e2420] [cursor=pointer]
+            - button "Side chat" [ref=e2425] [cursor=pointer]
+        - generic [ref=e2428]:
+          - button "Thoughts" [ref=e2434] [cursor=pointer]
+          - generic: 18:10
+        - generic [ref=e2436]:
+          - generic "18:10" [ref=e2437]:
+            - paragraph [ref=e2439]: 183k 预算紧——直接看 4 处飞出的父容器是否都带 overflow 裁剪，再统一用 fixed+行坐标修法：
+          - generic [ref=e2440]:
+            - button "Good response" [ref=e2441] [cursor=pointer]
+            - button "Bad response" [ref=e2444] [cursor=pointer]
+            - button "Copy" [ref=e2447] [cursor=pointer]
+            - button "Copy link" [ref=e2451] [cursor=pointer]
+            - button "Translate" [ref=e2455] [cursor=pointer]
+            - button "Side chat" [ref=e2460] [cursor=pointer]
+        - generic [ref=e2463]:
+          - button "Thoughts" [ref=e2469] [cursor=pointer]
+          - generic: 18:10
+        - generic [ref=e2471]:
+          - generic "18:10" [ref=e2472]:
+            - paragraph [ref=e2474]:
+              - text: 关键点：这些菜单外层有
+              - code [ref=e2475]: backdrop-blur
+              - text: +
+              - code [ref=e2476]: overflow-hidden
+              - text: ，
+              - code [ref=e2477]: fixed
+              - text: 放在里面照样被裁剪——必须把二级菜单
+              - strong [ref=e2478]: 抬出裁剪容器
+              - text: 。看 HeaderMenuPortal 结构决定抬法：
+          - generic [ref=e2479]:
+            - button "Good response" [ref=e2480] [cursor=pointer]
+            - button "Bad response" [ref=e2483] [cursor=pointer]
+            - button "Copy" [ref=e2486] [cursor=pointer]
+            - button "Copy link" [ref=e2490] [cursor=pointer]
+            - button "Translate" [ref=e2494] [cursor=pointer]
+            - button "Side chat" [ref=e2499] [cursor=pointer]
+        - generic [ref=e2502]:
+          - button "Thoughts" [ref=e2508] [cursor=pointer]
+          - generic: 18:10
+        - generic [ref=e2510]:
+          - generic "18:10" [ref=e2511]:
+            - paragraph [ref=e2513]:
+              - code [ref=e2514]: HeaderMenuPortal
+              - text: 已 portal 到 body，但菜单根
+              - code [ref=e2515]: overflow-hidden + backdrop-blur
+              - text: 把二级菜单框死——修法是把飞出层也 portal 到 body 用 fixed 定位。先看
+              - code [ref=e2516]: openModeSub
+              - text: /
+              - code [ref=e2517]: modeSubPos
+              - text: 现状（3882 处已有 pos 状态）：
+          - generic [ref=e2518]:
+            - button "Good response" [ref=e2519] [cursor=pointer]
+            - button "Bad response" [ref=e2522] [cursor=pointer]
+            - button "Copy" [ref=e2525] [cursor=pointer]
+            - button "Copy link" [ref=e2529] [cursor=pointer]
+            - button "Translate" [ref=e2533] [cursor=pointer]
+            - button "Side chat" [ref=e2538] [cursor=pointer]
+        - generic [ref=e2541]:
+          - button "Thoughts" [ref=e2547] [cursor=pointer]
+          - generic: 18:10
+        - generic [ref=e2549]:
+          - generic "18:10" [ref=e2550]:
+            - paragraph [ref=e2552]:
+              - code [ref=e2553]: createPortal
+              - text: 已可用，且
+              - code [ref=e2554]: modeSubPos
+              - text: 三处兄弟菜单已经用 portal+fixed——只剩 2442/3882/4242/4281 四处还是
+              - code [ref=e2555]: absolute
+              - text: ，被
+              - code [ref=e2556]: overflow-hidden
+              - text: /
+              - code [ref=e2557]: overflow-y-auto
+              - text: 父容器裁掉。看 3882 行附近行的 hover 接线和 add 菜单容器：
+          - generic [ref=e2558]:
+            - button "Good response" [ref=e2559] [cursor=pointer]
+            - button "Bad response" [ref=e2562] [cursor=pointer]
+            - button "Copy" [ref=e2565] [cursor=pointer]
+            - button "Copy link" [ref=e2569] [cursor=pointer]
+            - button "Translate" [ref=e2573] [cursor=pointer]
+            - button "Side chat" [ref=e2578] [cursor=pointer]
+        - generic [ref=e2581]:
+          - button "Thoughts" [ref=e2587] [cursor=pointer]
+          - generic: 18:10
+        - generic [ref=e2589]:
+          - generic "18:10" [ref=e2590]:
+            - paragraph [ref=e2592]: 查三个父容器的 className 确认裁剪源（⋯菜单根、模型菜单根、Add-tab 菜单根）：
+          - generic [ref=e2593]:
+            - button "Good response" [ref=e2594] [cursor=pointer]
+            - button "Bad response" [ref=e2597] [cursor=pointer]
+            - button "Copy" [ref=e2600] [cursor=pointer]
+            - button "Copy link" [ref=e2604] [cursor=pointer]
+            - button "Translate" [ref=e2608] [cursor=pointer]
+            - button "Side chat" [ref=e2613] [cursor=pointer]
+        - generic [ref=e2616]:
+          - button "Thoughts" [ref=e2622] [cursor=pointer]
+          - generic: 18:10
+        - generic [ref=e2624]:
+          - generic "18:10" [ref=e2625]:
+            - paragraph [ref=e2627]: 看兄弟 flyout（3662）的完整写法照抄，还有 3867 行的 onMouseLeave、4206 add 菜单根的完整 className：
+          - generic [ref=e2628]:
+            - button "Good response" [ref=e2629] [cursor=pointer]
+            - button "Bad response" [ref=e2632] [cursor=pointer]
+            - button "Copy" [ref=e2635] [cursor=pointer]
+            - button "Copy link" [ref=e2639] [cursor=pointer]
+            - button "Translate" [ref=e2643] [cursor=pointer]
+            - button "Side chat" [ref=e2648] [cursor=pointer]
+        - generic [ref=e2651]:
+          - button "Thoughts" [ref=e2657] [cursor=pointer]
+          - generic: 18:10
+        - generic [ref=e2659]:
+          - generic "18:10" [ref=e2660]:
+            - paragraph [ref=e2662]:
+              - text: 看 add 菜单根 className（是否 overflow）+ SessionTree 二级菜单的定位方式 +
+              - code [ref=e2663]: setSettingsSub
+              - text: 的其他行复位：
+          - generic [ref=e2664]:
+            - button "Good response" [ref=e2665] [cursor=pointer]
+            - button "Bad response" [ref=e2668] [cursor=pointer]
+            - button "Copy" [ref=e2671] [cursor=pointer]
+            - button "Copy link" [ref=e2675] [cursor=pointer]
+            - button "Translate" [ref=e2679] [cursor=pointer]
+            - button "Side chat" [ref=e2684] [cursor=pointer]
+        - generic [ref=e2687]:
+          - button "Thoughts" [ref=e2693] [cursor=pointer]
+          - generic: 18:10
+        - generic [ref=e2695]:
+          - generic "18:10" [ref=e2696]:
+            - paragraph [ref=e2698]:
+              - text: SessionTree 已经全部 portal+fixed（
+              - code [ref=e2699]: subPos
+              - text: +
+              - code [ref=e2700]: z-50
+              - text: ），AdminMirror 里剩这 4 处漏网。add 菜单容器本身无 overflow，但 flyout
+              - code [ref=e2701]: top-0
+              - text: 贴行顶、向下 256px 会出屏且
+              - code [ref=e2702]: z-30
+              - text: 在菜单
+              - code [ref=e2703]: z-20
+              - text: 层内被压——统一改成 portal+fixed。先看 Folder flyout 的完整块边界：
+          - generic [ref=e2704]:
+            - button "Good response" [ref=e2705] [cursor=pointer]
+            - button "Bad response" [ref=e2708] [cursor=pointer]
+            - button "Copy" [ref=e2711] [cursor=pointer]
+            - button "Copy link" [ref=e2715] [cursor=pointer]
+            - button "Translate" [ref=e2719] [cursor=pointer]
+            - button "Side chat" [ref=e2724] [cursor=pointer]
+        - generic [ref=e2727]:
+          - button "Thoughts" [ref=e2733] [cursor=pointer]
+          - generic: 18:10
+        - generic [ref=e2735]:
+          - generic "18:10" [ref=e2736]:
+            - paragraph [ref=e2738]:
+              - text: 4 处全改。先加共享状态/计时器辅助（在
+              - code [ref=e2739]: addPrSub
+              - text: 声明后）：
+          - generic [ref=e2740]:
+            - button "Good response" [ref=e2741] [cursor=pointer]
+            - button "Bad response" [ref=e2744] [cursor=pointer]
+            - button "Copy" [ref=e2747] [cursor=pointer]
+            - button "Copy link" [ref=e2751] [cursor=pointer]
+            - button "Translate" [ref=e2755] [cursor=pointer]
+            - button "Side chat" [ref=e2760] [cursor=pointer]
+        - generic [ref=e2763]:
+          - button "Thoughts" [ref=e2769] [cursor=pointer]
+          - generic: 18:10
+        - generic [ref=e2771]:
+          - generic "18:10" [ref=e2772]:
+            - paragraph [ref=e2774]:
+              - text: 模型速度子菜单——行 hover 改
+              - code [ref=e2775]: openModeSub
+              - text: ，flyout 改 portal+fixed：
+          - generic [ref=e2776]:
+            - button "Good response" [ref=e2777] [cursor=pointer]
+            - button "Bad response" [ref=e2780] [cursor=pointer]
+            - button "Copy" [ref=e2783] [cursor=pointer]
+            - button "Copy link" [ref=e2787] [cursor=pointer]
+            - button "Translate" [ref=e2791] [cursor=pointer]
+            - button "Side chat" [ref=e2796] [cursor=pointer]
+        - generic [ref=e2799]:
+          - button "Thoughts" [ref=e2805] [cursor=pointer]
+          - generic: 18:10
+        - generic [ref=e2807]:
+          - generic "18:10" [ref=e2808]:
+            - paragraph [ref=e2810]:
+              - text: Add-tab 菜单两处 flyout——wrapper hover 改
+              - code [ref=e2811]: openAddSub
+              - text: ，flyout portal+fixed：
+          - generic [ref=e2812]:
+            - button "Good response" [ref=e2813] [cursor=pointer]
+            - button "Bad response" [ref=e2816] [cursor=pointer]
+            - button "Copy" [ref=e2819] [cursor=pointer]
+            - button "Copy link" [ref=e2823] [cursor=pointer]
+            - button "Translate" [ref=e2827] [cursor=pointer]
+            - button "Side chat" [ref=e2832] [cursor=pointer]
+        - generic [ref=e2835]:
+          - button "Thoughts" [ref=e2841] [cursor=pointer]
+          - generic: 18:10
+        - generic [ref=e2843]:
+          - generic "18:10" [ref=e2844]:
+            - paragraph [ref=e2846]:
+              - text: 看 PR flyout 的收尾处，补
+              - code [ref=e2847]: document.body
+              - text: 闭合：
+          - generic [ref=e2848]:
+            - button "Good response" [ref=e2849] [cursor=pointer]
+            - button "Bad response" [ref=e2852] [cursor=pointer]
+            - button "Copy" [ref=e2855] [cursor=pointer]
+            - button "Copy link" [ref=e2859] [cursor=pointer]
+            - button "Translate" [ref=e2863] [cursor=pointer]
+            - button "Side chat" [ref=e2868] [cursor=pointer]
+        - generic [ref=e2871]:
+          - button "Thoughts" [ref=e2877] [cursor=pointer]
+          - generic: 18:10
+        - generic [ref=e2879]:
+          - generic "18:10" [ref=e2880]:
+            - paragraph [ref=e2882]:
+              - text: 还要确认共享
+              - code [ref=e2883]: Combo
+              - text: 的 listbox 是否 portal——它在 ⋯ 菜单（overflow-hidden）里用绝对定位同样会被裁：
+          - generic [ref=e2884]:
+            - button "Good response" [ref=e2885] [cursor=pointer]
+            - button "Bad response" [ref=e2888] [cursor=pointer]
+            - button "Copy" [ref=e2891] [cursor=pointer]
+            - button "Copy link" [ref=e2895] [cursor=pointer]
+            - button "Translate" [ref=e2899] [cursor=pointer]
+            - button "Side chat" [ref=e2904] [cursor=pointer]
+        - generic [ref=e2907]:
+          - button "Thoughts" [ref=e2913] [cursor=pointer]
+          - generic: 18:10
+        - generic [ref=e2915]:
+          - generic "18:10" [ref=e2916]:
+            - paragraph [ref=e2918]:
+              - code [ref=e2919]: Combo
+              - text: 用了
+              - code [ref=e2920]: fixed
+              - text: 但没 portal——在 ⋯ 菜单里
+              - code [ref=e2921]: backdrop-blur
+              - text: 会让 fixed 相对菜单定位，坐标错位。修：listbox portal 到 body：
+          - generic [ref=e2922]:
+            - button "Good response" [ref=e2923] [cursor=pointer]
+            - button "Bad response" [ref=e2926] [cursor=pointer]
+            - button "Copy" [ref=e2929] [cursor=pointer]
+            - button "Copy link" [ref=e2933] [cursor=pointer]
+            - button "Translate" [ref=e2937] [cursor=pointer]
+            - button "Side chat" [ref=e2942] [cursor=pointer]
+        - generic [ref=e2945]:
+          - button "Thoughts" [ref=e2951] [cursor=pointer]
+          - generic: 18:10
+        - generic [ref=e2953]:
+          - generic "18:10" [ref=e2954]:
+            - paragraph [ref=e2956]:
+              - text: 检查还有没有别的二级菜单漏网（
+              - code [ref=e2957]: selSub
+              - text: 、其他
+              - code [ref=e2958]: absolute
+              - text: flyout）：
+          - generic [ref=e2959]:
+            - button "Good response" [ref=e2960] [cursor=pointer]
+            - button "Bad response" [ref=e2963] [cursor=pointer]
+            - button "Copy" [ref=e2966] [cursor=pointer]
+            - button "Copy link" [ref=e2970] [cursor=pointer]
+            - button "Translate" [ref=e2974] [cursor=pointer]
+            - button "Side chat" [ref=e2979] [cursor=pointer]
+        - generic [ref=e2982]:
+          - button "Thoughts" [ref=e2988] [cursor=pointer]
+          - generic: 18:10
+        - generic [ref=e2990]:
+          - generic "18:10" [ref=e2991]:
+            - paragraph [ref=e2993]: 4 处全部修完 + Combo 已 portal。typecheck + build：
+          - generic [ref=e2994]:
+            - button "Good response" [ref=e2995] [cursor=pointer]
+            - button "Bad response" [ref=e2998] [cursor=pointer]
+            - button "Copy" [ref=e3001] [cursor=pointer]
+            - button "Copy link" [ref=e3005] [cursor=pointer]
+            - button "Translate" [ref=e3009] [cursor=pointer]
+            - button "Side chat" [ref=e3014] [cursor=pointer]
+        - generic [ref=e3017]:
+          - button "Thoughts" [ref=e3023] [cursor=pointer]
+          - generic: 18:10
+        - generic [ref=e3025]:
+          - generic "18:10" [ref=e3026]:
+            - paragraph [ref=e3028]: 实测验证 ⋯ 菜单 Folder 二级菜单现在不被裁：
+          - generic [ref=e3029]:
+            - button "Good response" [ref=e3030] [cursor=pointer]
+            - button "Bad response" [ref=e3033] [cursor=pointer]
+            - button "Copy" [ref=e3036] [cursor=pointer]
+            - button "Copy link" [ref=e3040] [cursor=pointer]
+            - button "Translate" [ref=e3044] [cursor=pointer]
+            - button "Side chat" [ref=e3049] [cursor=pointer]
+        - generic [ref=e3052]:
+          - button "Thoughts" [ref=e3058] [cursor=pointer]
+          - generic: 18:10
+        - generic [ref=e3060]:
+          - generic "18:10" [ref=e3061]:
+            - paragraph [ref=e3063]:
+              - text: React 的
+              - code [ref=e3064]: onMouseEnter
+              - text: 实际监听
+              - code [ref=e3065]: mouseover
+              - text: ——改发正确事件再试：
+          - generic [ref=e3066]:
+            - button "Good response" [ref=e3067] [cursor=pointer]
+            - button "Bad response" [ref=e3070] [cursor=pointer]
+            - button "Copy" [ref=e3073] [cursor=pointer]
+            - button "Copy link" [ref=e3077] [cursor=pointer]
+            - button "Translate" [ref=e3081] [cursor=pointer]
+            - button "Side chat" [ref=e3086] [cursor=pointer]
+        - generic [ref=e3089]:
+          - button "Thoughts" [ref=e3095] [cursor=pointer]
+          - generic: 18:10
+        - generic [ref=e3097]:
+          - generic "18:10" [ref=e3098]:
+            - generic [ref=e3099]:
+              - paragraph [ref=e3100]: 全部修完并实测通过。
+              - heading "病根与修复" [level=2] [ref=e3101]
+              - paragraph [ref=e3102]:
+                - strong [ref=e3103]: 根因
+                - text: ：二级菜单用
+                - code [ref=e3104]: absolute right/left-full
+                - text: 嵌在父菜单内部——父容器有
+                - code [ref=e3105]: overflow-hidden
+                - text: （⋯ 菜单）、
+                - code [ref=e3106]: overflow-y-auto
+                - text: （模型菜单）或
+                - code [ref=e3107]: backdrop-blur
+                - text: （产生 fixed 包含块）时，飞出层要么被裁剪要么坐标错位。
+              - paragraph [ref=e3108]:
+                - strong [ref=e3109]: 修法
+                - text: ：统一抬出裁剪容器——
+                - code [ref=e3110]: createPortal
+                - text: 到
+                - code [ref=e3111]: document.body
+                - text: +
+                - code [ref=e3112]: fixed
+                - text: 视口定位（与 SessionTree 已有的
+                - code [ref=e3113]: subPos
+                - text: 模式一致）。
+              - generic [ref=e3114]:
+                - button "Copy table" [ref=e3116] [cursor=pointer]
+                - table [ref=e3122]:
+                  - rowgroup [ref=e3123]:
+                    - row [ref=e3124]:
+                      - columnheader [ref=e3125] [cursor=pointer]:
+                        - text: 位置
+                        - button "Sort by 位置" [ref=e3126]
+                      - columnheader [ref=e3130] [cursor=pointer]:
+                        - text: 原状
+                        - button "Sort by 原状" [ref=e3131]
+                      - columnheader [ref=e3135] [cursor=pointer]:
+                        - text: 修复
+                        - button "Sort by 修复" [ref=e3136]
+                  - rowgroup [ref=e3140]:
+                    - row [ref=e3141]:
+                      - cell [ref=e3142]:
+                        - text: ⋯ 菜单 →
+                        - strong [ref=e3143]: Folder
+                        - text: 子菜单
+                      - cell [ref=e3144]:
+                        - code [ref=e3145]: absolute right-full
+                        - text: 在
+                        - code [ref=e3146]: overflow-hidden
+                        - text: 菜单内 → 直接裁没
+                      - cell [ref=e3147]:
+                        - text: portal+fixed，行 hover 捕获 rect，
+                        - code [ref=e3148]: onMouseLeave
+                        - text: 关
+                    - row [ref=e3149]:
+                      - cell [ref=e3150]:
+                        - text: 模型菜单 →
+                        - strong [ref=e3151]: Normal/SWE-1.7
+                        - text: 速度子菜单
+                      - cell [ref=e3152]:
+                        - code [ref=e3153]: absolute left-full
+                        - text: 在
+                        - code [ref=e3154]: overflow-y-auto
+                        - text: 菜单内
+                      - cell [ref=e3155]:
+                        - text: 改走现有
+                        - code [ref=e3156]: openModeSub
+                        - text: /
+                        - code [ref=e3157]: modeSubPos
+                        - text: +portal（与 3 个兄弟 flyout 同款）
+                    - row [ref=e3158]:
+                      - cell [ref=e3159]:
+                        - text: Add-tab →
+                        - strong [ref=e3160]: Attachments
+                        - text: 子菜单
+                      - cell [ref=e3161]:
+                        - code [ref=e3162]: absolute right-full
+                        - text: ，
+                        - code [ref=e3163]: z-30
+                        - text: 压在菜单层内
+                      - cell "portal+fixed z-50 + 140ms 延迟关（行→飞层过桥不闪断）" [ref=e3164]
+                    - row [ref=e3165]:
+                      - cell [ref=e3166]:
+                        - text: Add-tab →
+                        - strong [ref=e3167]: Pull requests
+                        - text: 子菜单
+                      - cell "同上" [ref=e3168]
+                      - cell [ref=e3169]:
+                        - text: 同上，共用
+                        - code [ref=e3170]: addSubPos
+                        - text: /
+                        - code [ref=e3171]: addSubTimer
+                    - row [ref=e3172]:
+                      - cell [ref=e3173]:
+                        - strong [ref=e3174]: 共享 Combo
+                        - text: 浮层
+                      - cell [ref=e3175]:
+                        - code [ref=e3176]: fixed
+                        - text: 在
+                        - code [ref=e3177]: backdrop-blur
+                        - text: 祖先内 → 包含块错误、坐标偏移
+                      - cell "listbox portal 到 body" [ref=e3178]
+              - paragraph [ref=e3179]:
+                - strong [ref=e3180]: 实测
+                - text: ：Folder 飞层现挂在 body 下
+                - code [ref=e3181]: fixed
+                - text: 完整渲染；Combo 浮层
+                - code [ref=e3182]: inBody:true
+                - text: 、top=trigger.bottom+4、left 对齐——全部不被裁。typecheck+build 过，刷新即生效。
+              - paragraph [ref=e3183]:
+                - text: 顺带固化经验：以后二级菜单一律 portal+fixed，不许
+                - code [ref=e3184]: absolute
+                - text: 嵌在带
+                - code [ref=e3185]: overflow
+                - text: /
+                - code [ref=e3186]: backdrop-blur
+                - text: 的菜单里——SessionTree 早已这么干，这次是把 AdminMirror 的漏网补齐。
+          - generic [ref=e3187]:
+            - button "Good response" [ref=e3188] [cursor=pointer]
+            - button "Bad response" [ref=e3191] [cursor=pointer]
+            - button "Copy" [ref=e3194] [cursor=pointer]
+            - button "Copy link" [ref=e3198] [cursor=pointer]
+            - button "Translate" [ref=e3202] [cursor=pointer]
+            - button "Side chat" [ref=e3207] [cursor=pointer]
+        - generic [ref=e3210]:
+          - generic [ref=e3211]:
+            - generic [ref=e3212]: User
+            - generic [ref=e3213]: 6:10 PM
+          - img "User" [ref=e3214]:
+            - generic [ref=e3215]: U
+          - paragraph [ref=e3220]: 会话消息的worked for有问题，应该显示更多消息，好像有很多消息没有被渲染出来，还有对于图片显示有问题，明明在read图片，但是我点击不是让我预览图片而是图片代码
+          - generic [ref=e3221]:
+            - button "Start new session with this prompt" [ref=e3222] [cursor=pointer]
+            - button "Copy" [ref=e3226] [cursor=pointer]
+            - button "Copy link" [ref=e3230] [cursor=pointer]
+            - button "Translate" [ref=e3234] [cursor=pointer]
+            - button "Side chat" [ref=e3239] [cursor=pointer]
+        - generic [ref=e3242]:
+          - button "Thoughts" [ref=e3248] [cursor=pointer]
+          - generic: 18:10
+        - generic [ref=e3250]:
+          - generic [ref=e3251]:
+            - generic [ref=e3252]: Devin
+            - generic [ref=e3253]: 6:10 PM
+          - img "Devin" [ref=e3254]
+          - generic "18:10" [ref=e3258]:
+            - paragraph [ref=e3260]: 先看时间线的 "Worked for" 分组逻辑和图片渲染路径：
+          - generic [ref=e3261]:
+            - button "Good response" [ref=e3262] [cursor=pointer]
+            - button "Bad response" [ref=e3265] [cursor=pointer]
+            - button "Copy" [ref=e3268] [cursor=pointer]
+            - button "Copy link" [ref=e3272] [cursor=pointer]
+            - button "Translate" [ref=e3276] [cursor=pointer]
+            - button "Side chat" [ref=e3281] [cursor=pointer]
+        - generic [ref=e3284]:
+          - button "Thoughts" [ref=e3290] [cursor=pointer]
+          - generic: 18:10
+        - generic [ref=e3292]:
+          - generic "18:10" [ref=e3293]:
+            - paragraph [ref=e3295]:
+              - text: 分组逻辑本身没吞项——看行展开体里图片/read 结果的渲染（378 行
+              - code [ref=e3296]: LightboxImage
+              - text: 上下文）：
+          - generic [ref=e3297]:
+            - button "Good response" [ref=e3298] [cursor=pointer]
+            - button "Bad response" [ref=e3301] [cursor=pointer]
+            - button "Copy" [ref=e3304] [cursor=pointer]
+            - button "Copy link" [ref=e3308] [cursor=pointer]
+            - button "Translate" [ref=e3312] [cursor=pointer]
+            - button "Side chat" [ref=e3317] [cursor=pointer]
+        - generic [ref=e3320]:
+          - button "Thoughts" [ref=e3326] [cursor=pointer]
+          - generic: 18:10
+        - generic [ref=e3328]:
+          - generic "18:10" [ref=e3329]:
+            - paragraph [ref=e3331]: 看 WorkGroup 内部每行的渲染逻辑（465+）和服务端 read 图片结果怎么进 body（wbtimeline）：
+          - generic [ref=e3332]:
+            - button "Good response" [ref=e3333] [cursor=pointer]
+            - button "Bad response" [ref=e3336] [cursor=pointer]
+            - button "Copy" [ref=e3339] [cursor=pointer]
+            - button "Copy link" [ref=e3343] [cursor=pointer]
+            - button "Translate" [ref=e3347] [cursor=pointer]
+            - button "Side chat" [ref=e3352] [cursor=pointer]
+        - generic [ref=e3355]:
+          - button "Thoughts" [ref=e3361] [cursor=pointer]
+          - generic: 18:10
+        - generic [ref=e3363]:
+          - generic "18:10" [ref=e3364]:
+            - paragraph [ref=e3366]:
+              - text: 看哪些项在分组前被丢弃（
+              - code [ref=e3367]: hiddenTranscript
+              - text: /
+              - code [ref=e3368]: isLifecycleStatus
+              - text: /merge 函数）+ 服务端 read 图片结果如何入 body：
+          - generic [ref=e3369]:
+            - button "Good response" [ref=e3370] [cursor=pointer]
+            - button "Bad response" [ref=e3373] [cursor=pointer]
+            - button "Copy" [ref=e3376] [cursor=pointer]
+            - button "Copy link" [ref=e3380] [cursor=pointer]
+            - button "Translate" [ref=e3384] [cursor=pointer]
+            - button "Side chat" [ref=e3389] [cursor=pointer]
+        - generic [ref=e3392]:
+          - button "Thoughts" [ref=e3398] [cursor=pointer]
+          - generic: 18:10
+        - generic [ref=e3400]:
+          - generic "18:10" [ref=e3401]:
+            - paragraph [ref=e3403]:
+              - text: 分组合并逻辑是官方式的。直接拿真实会话对比——看
+              - code [ref=e3404]: /timeline
+              - text: 返回的项 vs 页面渲染的行，找出消失项的种类；同时查服务端 read 图片怎么进 body：
+          - generic [ref=e3405]:
+            - button "Good response" [ref=e3406] [cursor=pointer]
+            - button "Bad response" [ref=e3409] [cursor=pointer]
+            - button "Copy" [ref=e3412] [cursor=pointer]
+            - button "Copy link" [ref=e3416] [cursor=pointer]
+            - button "Translate" [ref=e3420] [cursor=pointer]
+            - button "Side chat" [ref=e3425] [cursor=pointer]
+        - generic [ref=e3428]:
+          - button "Thoughts" [ref=e3434] [cursor=pointer]
+          - generic: 18:10
+        - generic [ref=e3436]:
+          - generic "18:10" [ref=e3437]:
+            - paragraph [ref=e3439]:
+              - text: 路径是
+              - code [ref=e3440]: /api/admin/session/<id>/timeline
+              - text: 。取真实数据盘点 + 找含图片的项：
+          - generic [ref=e3441]:
+            - button "Good response" [ref=e3442] [cursor=pointer]
+            - button "Bad response" [ref=e3445] [cursor=pointer]
+            - button "Copy" [ref=e3448] [cursor=pointer]
+            - button "Copy link" [ref=e3452] [cursor=pointer]
+            - button "Translate" [ref=e3456] [cursor=pointer]
+            - button "Side chat" [ref=e3461] [cursor=pointer]
+        - generic [ref=e3464]:
+          - button "Thoughts" [ref=e3470] [cursor=pointer]
+          - generic: 18:10
+        - generic [ref=e3472]:
+          - generic "18:10" [ref=e3473]:
+            - paragraph [ref=e3475]:
+              - text: 300 是硬截断（
+              - code [ref=e3476]: slice(-300)
+              - text: 、
+              - code [ref=e3477]: next_cursor:null
+              - text: ）——长会话的早期消息整个被丢，这可能就是"没渲染出来"的主因之一。再看 read 图片项的 body 形态：
+          - generic [ref=e3478]:
+            - button "Good response" [ref=e3479] [cursor=pointer]
+            - button "Bad response" [ref=e3482] [cursor=pointer]
+            - button "Copy" [ref=e3485] [cursor=pointer]
+            - button "Copy link" [ref=e3489] [cursor=pointer]
+            - button "Translate" [ref=e3493] [cursor=pointer]
+            - button "Side chat" [ref=e3498] [cursor=pointer]
+        - generic [ref=e3501]:
+          - button "Thoughts" [ref=e3507] [cursor=pointer]
+          - generic: 18:10
+        - generic [ref=e3509]:
+          - generic "18:10" [ref=e3510]:
+            - paragraph [ref=e3512]:
+              - code [ref=e3513]: contentText
+              - text: 只取 text 块，image 块被丢。看服务端媒体存储（
+              - code [ref=e3514]: mt
+              - text: /screenshot）怎么做的，照搬到 read 图片：
+          - generic [ref=e3515]:
+            - button "Good response" [ref=e3516] [cursor=pointer]
+            - button "Bad response" [ref=e3519] [cursor=pointer]
+            - button "Copy" [ref=e3522] [cursor=pointer]
+            - button "Copy link" [ref=e3526] [cursor=pointer]
+            - button "Translate" [ref=e3530] [cursor=pointer]
+            - button "Side chat" [ref=e3535] [cursor=pointer]
+        - generic [ref=e3538]:
+          - button "Thoughts" [ref=e3544] [cursor=pointer]
+          - generic: 18:10
+        - generic [ref=e3546]:
+          - generic "18:10" [ref=e3547]:
+            - paragraph [ref=e3549]: 管理端 timeline 在 643 行有 cursor/peek 分页——看完整实现和默认页大小：
+          - generic [ref=e3550]:
+            - button "Good response" [ref=e3551] [cursor=pointer]
+            - button "Bad response" [ref=e3554] [cursor=pointer]
+            - button "Copy" [ref=e3557] [cursor=pointer]
+            - button "Copy link" [ref=e3561] [cursor=pointer]
+            - button "Translate" [ref=e3565] [cursor=pointer]
+            - button "Side chat" [ref=e3570] [cursor=pointer]
+        - generic [ref=e3573]:
+          - button "Thoughts" [ref=e3579] [cursor=pointer]
+          - generic: 18:10
+        - generic [ref=e3581]:
+          - generic "18:10" [ref=e3582]:
+            - paragraph [ref=e3584]:
+              - text: 回看 WorkGroup 的
+              - code [ref=e3585]: defaultOpen
+              - text: 传值——官方是最近的工作组展开、历史组折叠：
+          - generic [ref=e3586]:
+            - button "Good response" [ref=e3587] [cursor=pointer]
+            - button "Bad response" [ref=e3590] [cursor=pointer]
+            - button "Copy" [ref=e3593] [cursor=pointer]
+            - button "Copy link" [ref=e3597] [cursor=pointer]
+            - button "Translate" [ref=e3601] [cursor=pointer]
+            - button "Side chat" [ref=e3606] [cursor=pointer]
+        - generic [ref=e3609]:
+          - button "Thoughts" [ref=e3615] [cursor=pointer]
+          - generic: 18:10
+        - generic [ref=e3617]:
+          - generic "18:10" [ref=e3618]:
+            - paragraph [ref=e3620]:
+              - code [ref=e3621]: defaultOpen
+              - text: 只对最后一组展开——官方同款。去页面实测：300 个 timeline 项里实际渲染了多少行：
+          - generic [ref=e3622]:
+            - button "Good response" [ref=e3623] [cursor=pointer]
+            - button "Bad response" [ref=e3626] [cursor=pointer]
+            - button "Copy" [ref=e3629] [cursor=pointer]
+            - button "Copy link" [ref=e3633] [cursor=pointer]
+            - button "Translate" [ref=e3637] [cursor=pointer]
+            - button "Side chat" [ref=e3642] [cursor=pointer]
+        - generic [ref=e3645]:
+          - button "Thoughts" [ref=e3651] [cursor=pointer]
+          - generic: 18:10
+        - generic [ref=e3653]:
+          - generic "18:10" [ref=e3654]:
+            - paragraph [ref=e3656]: 195 行渲染、48 个工作组 47 个折叠——折叠组内行不渲染是官方设计。但要看 EventRow 是否对某些 kind 返回 null（展开后仍丢行）：
+          - generic [ref=e3657]:
+            - button "Good response" [ref=e3658] [cursor=pointer]
+            - button "Bad response" [ref=e3661] [cursor=pointer]
+            - button "Copy" [ref=e3664] [cursor=pointer]
+            - button "Copy link" [ref=e3668] [cursor=pointer]
+            - button "Translate" [ref=e3672] [cursor=pointer]
+            - button "Side chat" [ref=e3677] [cursor=pointer]
+        - generic [ref=e3680]:
+          - button "Thoughts" [ref=e3686] [cursor=pointer]
+          - generic: 18:10
+        - generic [ref=e3688]:
+          - generic "18:10" [ref=e3689]:
+            - paragraph [ref=e3691]:
+              - text: 直接对比：API 返回的 300 项 id 和页面渲染的
+              - code [ref=e3692]: data-eid
+              - text: ，找出消失的具体项：
+          - generic [ref=e3693]:
+            - button "Good response" [ref=e3694] [cursor=pointer]
+            - button "Bad response" [ref=e3697] [cursor=pointer]
+            - button "Copy" [ref=e3700] [cursor=pointer]
+            - button "Copy link" [ref=e3704] [cursor=pointer]
+            - button "Translate" [ref=e3708] [cursor=pointer]
+            - button "Side chat" [ref=e3713] [cursor=pointer]
+        - generic [ref=e3716]:
+          - button "Thoughts" [ref=e3722] [cursor=pointer]
+          - generic: 18:10
+        - generic [ref=e3724]:
+          - generic "18:10" [ref=e3725]:
+            - paragraph [ref=e3727]:
+              - text: 所有
+              - code [ref=e3728]: message
+              - text: 项其实都渲染了——消失的是折叠组内的 shell/edit/read/thought 行（47 个折叠组）。截图看实际观感：
+          - generic [ref=e3729]:
+            - button "Good response" [ref=e3730] [cursor=pointer]
+            - button "Bad response" [ref=e3733] [cursor=pointer]
+            - button "Copy" [ref=e3736] [cursor=pointer]
+            - button "Copy link" [ref=e3740] [cursor=pointer]
+            - button "Translate" [ref=e3744] [cursor=pointer]
+            - button "Side chat" [ref=e3749] [cursor=pointer]
+        - generic [ref=e3752]:
+          - button "Thoughts" [ref=e3758] [cursor=pointer]
+          - generic: 18:10
+        - generic [ref=e3760]:
+          - generic "18:10" [ref=e3761]:
+            - paragraph [ref=e3763]:
+              - text: 看官方 bundle 里 work group 的默认展开逻辑——
+              - code [ref=e3764]: Worked for
+              - text: 折叠到底该怎么做：
+          - generic [ref=e3765]:
+            - button "Good response" [ref=e3766] [cursor=pointer]
+            - button "Bad response" [ref=e3769] [cursor=pointer]
+            - button "Copy" [ref=e3772] [cursor=pointer]
+            - button "Copy link" [ref=e3776] [cursor=pointer]
+            - button "Translate" [ref=e3780] [cursor=pointer]
+            - button "Side chat" [ref=e3785] [cursor=pointer]
+        - generic [ref=e3788]:
+          - button "Thoughts" [ref=e3794] [cursor=pointer]
+          - generic: 18:10
+        - generic [ref=e3796]:
+          - generic "18:10" [ref=e3797]:
+            - paragraph [ref=e3799]:
+              - text: 官方组有
+              - code [ref=e3800]: summary
+              - text: +
+              - code [ref=e3801]: child_count
+              - text: 。找官方折叠组的渲染（是否显示子事件摘要）：
+          - generic [ref=e3802]:
+            - button "Good response" [ref=e3803] [cursor=pointer]
+            - button "Bad response" [ref=e3806] [cursor=pointer]
+            - button "Copy" [ref=e3809] [cursor=pointer]
+            - button "Copy link" [ref=e3813] [cursor=pointer]
+            - button "Translate" [ref=e3817] [cursor=pointer]
+            - button "Side chat" [ref=e3822] [cursor=pointer]
+        - generic [ref=e3825]:
+          - button "Thoughts" [ref=e3831] [cursor=pointer]
+          - generic: 18:10
+        - generic [ref=e3833]:
+          - generic "18:10" [ref=e3834]:
+            - paragraph [ref=e3836]: 官方折叠组确实隐藏子事件，但用户要看内容。先查原始日志里 read 图片的 ACP 事件到底带不带图像数据：
+          - generic [ref=e3837]:
+            - button "Good response" [ref=e3838] [cursor=pointer]
+            - button "Bad response" [ref=e3841] [cursor=pointer]
+            - button "Copy" [ref=e3844] [cursor=pointer]
+            - button "Copy link" [ref=e3848] [cursor=pointer]
+            - button "Translate" [ref=e3852] [cursor=pointer]
+            - button "Side chat" [ref=e3857] [cursor=pointer]
+        - generic [ref=e3860]:
+          - button "Thoughts" [ref=e3866] [cursor=pointer]
+          - generic: 18:10
+        - generic [ref=e3868]:
+          - generic "18:10" [ref=e3869]:
+            - generic [ref=e3870]:
+              - paragraph [ref=e3871]: 方案定了：
+              - list [ref=e3872]:
+                - listitem [ref=e3873]:
+                  - strong [ref=e3874]: 消息
+                  - text: ：
+                  - code [ref=e3875]: defaultOpen
+                  - text: 仅末组展开 → 全组默认展开（用户要看到内容，折叠按钮保留）
+                - listitem [ref=e3876]:
+                  - strong [ref=e3877]: 图片
+                  - text: ：ACP read 图片只回文本
+                  - code [ref=e3878]: View image <path>
+                  - text: ——服务端新增
+                  - code [ref=e3879]: file-raw
+                  - text: 端点直接发会话文件字节，wbtimeline 在 read 项上记
+                  - code [ref=e3880]: image.path
+                  - text: ，前端行内缩略图+灯箱
+              - paragraph [ref=e3881]: 先查 MIME 表和 WbItem 类型位置：
+          - generic [ref=e3882]:
+            - button "Good response" [ref=e3883] [cursor=pointer]
+            - button "Bad response" [ref=e3886] [cursor=pointer]
+            - button "Copy" [ref=e3889] [cursor=pointer]
+            - button "Copy link" [ref=e3893] [cursor=pointer]
+            - button "Translate" [ref=e3897] [cursor=pointer]
+            - button "Side chat" [ref=e3902] [cursor=pointer]
+        - generic [ref=e3905]:
+          - button "Thoughts" [ref=e3911] [cursor=pointer]
+          - generic: 18:10
+        - generic [ref=e3913]:
+          - generic "18:10" [ref=e3914]:
+            - paragraph [ref=e3916]: 图片路径也要在 update 分支补（completed 事件走 else）：
+          - generic [ref=e3917]:
+            - button "Good response" [ref=e3918] [cursor=pointer]
+            - button "Bad response" [ref=e3921] [cursor=pointer]
+            - button "Copy" [ref=e3924] [cursor=pointer]
+            - button "Copy link" [ref=e3928] [cursor=pointer]
+            - button "Translate" [ref=e3932] [cursor=pointer]
+            - button "Side chat" [ref=e3937] [cursor=pointer]
+        - generic [ref=e3940]:
+          - button "Thoughts" [ref=e3946] [cursor=pointer]
+          - generic: 18:10
+        - generic [ref=e3948]:
+          - generic "18:10" [ref=e3949]:
+            - paragraph [ref=e3951]:
+              - text: 服务端加
+              - code [ref=e3952]: file-raw
+              - text: 端点（会话 cwd 内文件原始字节）：
+          - generic [ref=e3953]:
+            - button "Good response" [ref=e3954] [cursor=pointer]
+            - button "Bad response" [ref=e3957] [cursor=pointer]
+            - button "Copy" [ref=e3960] [cursor=pointer]
+            - button "Copy link" [ref=e3964] [cursor=pointer]
+            - button "Translate" [ref=e3968] [cursor=pointer]
+            - button "Side chat" [ref=e3973] [cursor=pointer]
+        - generic [ref=e3976]:
+          - button "Thoughts" [ref=e3982] [cursor=pointer]
+          - generic: 18:10
+        - generic [ref=e3984]:
+          - generic "18:10" [ref=e3985]:
+            - paragraph [ref=e3987]: 前端三处：类型字段、行内图片、全组默认展开：
+          - generic [ref=e3988]:
+            - button "Good response" [ref=e3989] [cursor=pointer]
+            - button "Bad response" [ref=e3992] [cursor=pointer]
+            - button "Copy" [ref=e3995] [cursor=pointer]
+            - button "Copy link" [ref=e3999] [cursor=pointer]
+            - button "Translate" [ref=e4003] [cursor=pointer]
+            - button "Side chat" [ref=e4008] [cursor=pointer]
+        - generic [ref=e4011]:
+          - button "Thoughts" [ref=e4017] [cursor=pointer]
+          - generic: 18:10
+        - generic [ref=e4019]:
+          - generic "18:10" [ref=e4020]:
+            - paragraph [ref=e4022]: typecheck + build：
+          - generic [ref=e4023]:
+            - button "Good response" [ref=e4024] [cursor=pointer]
+            - button "Bad response" [ref=e4027] [cursor=pointer]
+            - button "Copy" [ref=e4030] [cursor=pointer]
+            - button "Copy link" [ref=e4034] [cursor=pointer]
+            - button "Translate" [ref=e4038] [cursor=pointer]
+            - button "Side chat" [ref=e4043] [cursor=pointer]
+        - generic [ref=e4046]:
+          - button "Thoughts" [ref=e4052] [cursor=pointer]
+          - generic: 18:10
+        - generic [ref=e4054]:
+          - generic "18:10" [ref=e4055]:
+            - paragraph [ref=e4057]: 验证 file-raw 和 image 字段（缓存可能要重建才出现）：
+          - generic [ref=e4058]:
+            - button "Good response" [ref=e4059] [cursor=pointer]
+            - button "Bad response" [ref=e4062] [cursor=pointer]
+            - button "Copy" [ref=e4065] [cursor=pointer]
+            - button "Copy link" [ref=e4069] [cursor=pointer]
+            - button "Translate" [ref=e4073] [cursor=pointer]
+            - button "Side chat" [ref=e4078] [cursor=pointer]
+        - generic [ref=e4081]:
+          - button "Thoughts" [ref=e4087] [cursor=pointer]
+          - generic: 18:10
+        - generic [ref=e4089]:
+          - generic "18:10" [ref=e4090]:
+            - paragraph [ref=e4092]:
+              - code [ref=e4093]: file-raw
+              - text: 的 MIME 不对（返回 JSON？）+ image 字段没出——逐个查。先看 file-raw 实际响应体和 timeline 是否缓存旧项：
+          - generic [ref=e4094]:
+            - button "Good response" [ref=e4095] [cursor=pointer]
+            - button "Bad response" [ref=e4098] [cursor=pointer]
+            - button "Copy" [ref=e4101] [cursor=pointer]
+            - button "Copy link" [ref=e4105] [cursor=pointer]
+            - button "Translate" [ref=e4109] [cursor=pointer]
+            - button "Side chat" [ref=e4114] [cursor=pointer]
+        - generic [ref=e4117]:
+          - button "Thoughts" [ref=e4123] [cursor=pointer]
+          - generic: 18:10
+        - generic [ref=e4125]:
+          - generic "18:10" [ref=e4126]:
+            - paragraph [ref=e4128]:
+              - code [ref=e4129]: file-raw
+              - text: 返回 JSON 44 字节——子路由没匹配上。看 sub 解析规则：
+          - generic [ref=e4130]:
+            - button "Good response" [ref=e4131] [cursor=pointer]
+            - button "Bad response" [ref=e4134] [cursor=pointer]
+            - button "Copy" [ref=e4137] [cursor=pointer]
+            - button "Copy link" [ref=e4141] [cursor=pointer]
+            - button "Translate" [ref=e4145] [cursor=pointer]
+            - button "Side chat" [ref=e4150] [cursor=pointer]
+        - generic [ref=e4153]:
+          - button "Thoughts" [ref=e4159] [cursor=pointer]
+          - generic: 18:10
+        - generic [ref=e4161]:
+          - generic "18:10" [ref=e4162]:
+            - paragraph [ref=e4164]: 看 file-raw 返回的 JSON 内容和文件实际是否存在：
+          - generic [ref=e4165]:
+            - button "Good response" [ref=e4166] [cursor=pointer]
+            - button "Bad response" [ref=e4169] [cursor=pointer]
+            - button "Copy" [ref=e4172] [cursor=pointer]
+            - button "Copy link" [ref=e4176] [cursor=pointer]
+            - button "Translate" [ref=e4180] [cursor=pointer]
+            - button "Side chat" [ref=e4185] [cursor=pointer]
+        - generic [ref=e4188]:
+          - button "Thoughts" [ref=e4194] [cursor=pointer]
+          - generic: 18:10
+        - generic [ref=e4196]:
+          - generic "18:10" [ref=e4197]:
+            - paragraph [ref=e4199]: 看 dist 里有没有 file-raw（编译是否生效）+ sharedH 查找顺序：
+          - generic [ref=e4200]:
+            - button "Good response" [ref=e4201] [cursor=pointer]
+            - button "Bad response" [ref=e4204] [cursor=pointer]
+            - button "Copy" [ref=e4207] [cursor=pointer]
+            - button "Copy link" [ref=e4211] [cursor=pointer]
+            - button "Translate" [ref=e4215] [cursor=pointer]
+            - button "Side chat" [ref=e4220] [cursor=pointer]
+        - generic [ref=e4223]:
+          - button "Thoughts" [ref=e4229] [cursor=pointer]
+          - generic: 18:10
+        - generic [ref=e4231]:
+          - generic "18:10" [ref=e4232]:
+            - paragraph [ref=e4234]:
+              - text: 确认我加进的对象确实是
+              - code [ref=e4235]: sessionSubs
+              - text: （可能有两个路由表）：
+          - generic [ref=e4236]:
+            - button "Good response" [ref=e4237] [cursor=pointer]
+            - button "Bad response" [ref=e4240] [cursor=pointer]
+            - button "Copy" [ref=e4243] [cursor=pointer]
+            - button "Copy link" [ref=e4247] [cursor=pointer]
+            - button "Translate" [ref=e4251] [cursor=pointer]
+            - button "Side chat" [ref=e4256] [cursor=pointer]
+        - generic [ref=e4259]:
+          - button "Thoughts" [ref=e4265] [cursor=pointer]
+          - generic: 18:10
+        - generic [ref=e4267]:
+          - generic "18:10" [ref=e4268]:
+            - paragraph [ref=e4270]: 可能旧进程还在排空没退。查进程状态：
+          - generic [ref=e4271]:
+            - button "Good response" [ref=e4272] [cursor=pointer]
+            - button "Bad response" [ref=e4275] [cursor=pointer]
+            - button "Copy" [ref=e4278] [cursor=pointer]
+            - button "Copy link" [ref=e4282] [cursor=pointer]
+            - button "Translate" [ref=e4286] [cursor=pointer]
+            - button "Side chat" [ref=e4291] [cursor=pointer]
+        - generic [ref=e4294]:
+          - button "Thoughts" [ref=e4300] [cursor=pointer]
+          - generic: 18:10
+        - generic [ref=e4302]:
+          - generic "18:10" [ref=e4303]:
+            - paragraph [ref=e4305]: 早先测试可能打到了仍在排空的旧进程。重测：
+          - generic [ref=e4306]:
+            - button "Good response" [ref=e4307] [cursor=pointer]
+            - button "Bad response" [ref=e4310] [cursor=pointer]
+            - button "Copy" [ref=e4313] [cursor=pointer]
+            - button "Copy link" [ref=e4317] [cursor=pointer]
+            - button "Translate" [ref=e4321] [cursor=pointer]
+            - button "Side chat" [ref=e4326] [cursor=pointer]
+        - generic [ref=e4329]:
+          - button "Thoughts" [ref=e4335] [cursor=pointer]
+          - generic: 18:10
+        - generic [ref=e4337]:
+          - generic "18:10" [ref=e4338]:
+            - paragraph [ref=e4340]:
+              - text: 44 字节还是 UNSUPPORTED——admin 块里可能有更早的
+              - code [ref=e4341]: file
+              - text: 拦截。查 admin session 块内 663-745 之间的 sub 分支：
+          - generic [ref=e4342]:
+            - button "Good response" [ref=e4343] [cursor=pointer]
+            - button "Bad response" [ref=e4346] [cursor=pointer]
+            - button "Copy" [ref=e4349] [cursor=pointer]
+            - button "Copy link" [ref=e4353] [cursor=pointer]
+            - button "Translate" [ref=e4357] [cursor=pointer]
+            - button "Side chat" [ref=e4362] [cursor=pointer]
+        - generic [ref=e4365]:
+          - button "Thoughts" [ref=e4371] [cursor=pointer]
+          - generic: 18:10
+        - generic [ref=e4373]:
+          - generic "18:10" [ref=e4374]:
+            - paragraph [ref=e4376]: 直接查 dist 里 file-raw 的注册是否真在 sessionSubs 对象里、以及该文件时间戳 vs 进程启动时间：
+          - generic [ref=e4377]:
+            - button "Good response" [ref=e4378] [cursor=pointer]
+            - button "Bad response" [ref=e4381] [cursor=pointer]
+            - button "Copy" [ref=e4384] [cursor=pointer]
+            - button "Copy link" [ref=e4388] [cursor=pointer]
+            - button "Translate" [ref=e4392] [cursor=pointer]
+            - button "Side chat" [ref=e4397] [cursor=pointer]
+        - generic [ref=e4400]:
+          - button "Thoughts" [ref=e4406] [cursor=pointer]
+          - generic: 18:10
+        - generic [ref=e4408]:
+          - generic "18:10" [ref=e4409]:
+            - paragraph [ref=e4411]: 进程启动（16:50）早于 dist 编译时间（17:35）——旧进程在跑旧码。再重启一次：
+          - generic [ref=e4412]:
+            - button "Good response" [ref=e4413] [cursor=pointer]
+            - button "Bad response" [ref=e4416] [cursor=pointer]
+            - button "Copy" [ref=e4419] [cursor=pointer]
+            - button "Copy link" [ref=e4423] [cursor=pointer]
+            - button "Translate" [ref=e4427] [cursor=pointer]
+            - button "Side chat" [ref=e4432] [cursor=pointer]
+        - generic [ref=e4435]:
+          - button "Thoughts" [ref=e4441] [cursor=pointer]
+          - generic: 18:10
+        - generic [ref=e4443]:
+          - generic "18:10" [ref=e4444]:
+            - paragraph [ref=e4446]: 进程没退——排空被某个在途 prompt 卡住。查日志：
+          - generic [ref=e4447]:
+            - button "Good response" [ref=e4448] [cursor=pointer]
+            - button "Bad response" [ref=e4451] [cursor=pointer]
+            - button "Copy" [ref=e4454] [cursor=pointer]
+            - button "Copy link" [ref=e4458] [cursor=pointer]
+            - button "Translate" [ref=e4462] [cursor=pointer]
+            - button "Side chat" [ref=e4467] [cursor=pointer]
+        - generic [ref=e4470]:
+          - button "Thoughts" [ref=e4476] [cursor=pointer]
+          - generic: 18:10
+        - generic [ref=e4478]:
+          - generic "18:10" [ref=e4479]:
+            - paragraph [ref=e4481]: 日志就在仓库根目录。看 server.log/respawn.log 尾部：
+          - generic [ref=e4482]:
+            - button "Good response" [ref=e4483] [cursor=pointer]
+            - button "Bad response" [ref=e4486] [cursor=pointer]
+            - button "Copy" [ref=e4489] [cursor=pointer]
+            - button "Copy link" [ref=e4493] [cursor=pointer]
+            - button "Translate" [ref=e4497] [cursor=pointer]
+            - button "Side chat" [ref=e4502] [cursor=pointer]
+        - generic [ref=e4505]:
+          - button "Thoughts" [ref=e4511] [cursor=pointer]
+          - generic: 18:10
+        - generic [ref=e4513]:
+          - generic "18:10" [ref=e4514]:
+            - generic [ref=e4515]:
+              - paragraph [ref=e4516]:
+                - text: 原因找到了——
+                - code [ref=e4517]: secret-lobster
+                - text: 正在跑一条在途 prompt（就是你刚发的那条测试消息，界面还在转 working），server 的重启排空在等它结束，所以旧进程还占着。这是设计行为：重启绝不掐断在途轮。
+              - heading "本轮改动（已编译进 dist，前端即刻生效）" [level=2] [ref=e4518]
+              - heading "\"Worked for\" 消息被藏 → 全组默认展开" [level=3] [ref=e4519]
+              - paragraph [ref=e4520]:
+                - text: 实测数据：300 个 timeline 项里 195 行可见、
+                - strong [ref=e4521]: 47 个工作组折叠
+                - text: ——你看到的"消息没渲染"其实是折叠组把里面的 shell/edit/read/thought 行全藏了（官方同款折叠，但我们的会话组更碎更显眼）。
+              - paragraph [ref=e4522]:
+                - text: 修法：
+                - code [ref=e4523]: defaultOpen
+                - text: 从"仅末组"改为
+                - strong [ref=e4524]: 全组展开
+                - text: ——所有工作内容直接可见，折叠按钮保留可手动收。
+                - strong [ref=e4525]: 刷新页面即生效
+                - text: （前端已出新包）。
+              - heading "read 图片点击预览" [level=3] [ref=e4526]
+              - paragraph [ref=e4527]:
+                - text: 链路排查：ACP 的 read 图片结果
+                - strong [ref=e4528]: 只回文本
+                - code [ref=e4529]: View image .\settings-v2.png (932x863)
+                - text: ——像素根本不在事件里，所以点了只能看到文字。已补全链路：
+              - list [ref=e4530]:
+                - listitem [ref=e4531]:
+                  - code [ref=e4532]: wbtimeline
+                  - text: ：read 结果捕获图片路径 →
+                  - code [ref=e4533]: item.image.path
+                - listitem [ref=e4534]:
+                  - text: 新端点
+                  - code [ref=e4535]: GET /api/admin/session/<id>/file-raw?path=...
+                  - text: ：按会话 cwd 直接发文件原始字节 + 正确 MIME
+                - listitem [ref=e4536]: 时间线：read 行内联渲染缩略图（LightboxImage，点击放大预览）
+              - heading "当前状态：等排空" [level=3] [ref=e4537]
+              - generic [ref=e4538]:
+                - button "Copy table" [ref=e4540] [cursor=pointer]
+                - table [ref=e4546]:
+                  - rowgroup [ref=e4547]:
+                    - row [ref=e4548]:
+                      - columnheader [ref=e4549] [cursor=pointer]:
+                        - text: 改动
+                        - button "Sort by 改动" [ref=e4550]
+                      - columnheader [ref=e4554] [cursor=pointer]:
+                        - text: 生效
+                        - button "Sort by 生效" [ref=e4555]
+                  - rowgroup [ref=e4559]:
+                    - row [ref=e4560]:
+                      - cell "全组展开 + 图片渲染标记" [ref=e4561]
+                      - cell "✅ 刷新即见" [ref=e4562]
+                    - row [ref=e4563]:
+                      - cell [ref=e4564]:
+                        - code [ref=e4565]: file-raw
+                        - text: 端点 +
+                        - code [ref=e4566]: image
+                        - text: 字段
+                      - cell [ref=e4567]:
+                        - text: ⏳ 等
+                        - code [ref=e4568]: secret-lobster
+                        - text: 在途轮结束后自动 respawn（约几秒）
+              - paragraph [ref=e4569]:
+                - text: 等那条 agent 回复跑完，server 自动换班，图片预览就通了。
+                - strong [ref=e4570]: 不用手动干预
+                - text: ——这正是"部署不掐 prompt"的设计。typecheck+build 已过。
+          - generic [ref=e4571]:
+            - button "Good response" [ref=e4572] [cursor=pointer]
+            - button "Bad response" [ref=e4575] [cursor=pointer]
+            - button "Copy" [ref=e4578] [cursor=pointer]
+            - button "Copy link" [ref=e4582] [cursor=pointer]
+            - button "Translate" [ref=e4586] [cursor=pointer]
+            - button "Side chat" [ref=e4591] [cursor=pointer]
+        - generic [ref=e4594]:
+          - generic [ref=e4595]:
+            - generic [ref=e4596]: User
+            - generic [ref=e4597]: 6:10 PM
+          - img "User" [ref=e4598]:
+            - generic [ref=e4599]: U
+          - paragraph [ref=e4604]: 目前的记忆最后关闭的页面和状态并打开恢复好像有问题，记忆不准
+          - generic [ref=e4605]:
+            - button "Start new session with this prompt" [ref=e4606] [cursor=pointer]
+            - button "Copy" [ref=e4610] [cursor=pointer]
+            - button "Copy link" [ref=e4614] [cursor=pointer]
+            - button "Translate" [ref=e4618] [cursor=pointer]
+            - button "Side chat" [ref=e4623] [cursor=pointer]
+        - generic [ref=e4626]:
+          - button "Thoughts" [ref=e4632] [cursor=pointer]
+          - generic: 18:10
+        - generic [ref=e4634]:
+          - generic [ref=e4635]:
+            - generic [ref=e4636]: Devin
+            - generic [ref=e4637]: 6:10 PM
+          - img "Devin" [ref=e4638]
+          - generic "18:10" [ref=e4642]:
+            - paragraph [ref=e4644]: 找"记住最后页面"的实现——localStorage 键和启动恢复逻辑：
+          - generic [ref=e4645]:
+            - button "Good response" [ref=e4646] [cursor=pointer]
+            - button "Bad response" [ref=e4649] [cursor=pointer]
+            - button "Copy" [ref=e4652] [cursor=pointer]
+            - button "Copy link" [ref=e4656] [cursor=pointer]
+            - button "Translate" [ref=e4660] [cursor=pointer]
+            - button "Side chat" [ref=e4665] [cursor=pointer]
+        - generic [ref=e4668]:
+          - button "Thoughts" [ref=e4674] [cursor=pointer]
+          - generic: 18:10
+        - generic [ref=e4676]:
+          - generic "18:10" [ref=e4677]:
+            - paragraph [ref=e4679]: 没有明显"最后页面"键——全量列 localStorage 键找记忆逻辑：
+          - generic [ref=e4680]:
+            - button "Good response" [ref=e4681] [cursor=pointer]
+            - button "Bad response" [ref=e4684] [cursor=pointer]
+            - button "Copy" [ref=e4687] [cursor=pointer]
+            - button "Copy link" [ref=e4691] [cursor=pointer]
+            - button "Translate" [ref=e4695] [cursor=pointer]
+            - button "Side chat" [ref=e4700] [cursor=pointer]
+        - generic [ref=e4703]:
+          - button "Thoughts" [ref=e4709] [cursor=pointer]
+          - generic: 18:10
+        - generic [ref=e4711]:
+          - generic "18:10" [ref=e4712]:
+            - paragraph [ref=e4714]: 没有"最后页面"记忆键——看现有的两处恢复逻辑（session-tabs 恢复 + 滚动位置恢复）找不准的点：
+          - generic [ref=e4715]:
+            - button "Good response" [ref=e4716] [cursor=pointer]
+            - button "Bad response" [ref=e4719] [cursor=pointer]
+            - button "Copy" [ref=e4722] [cursor=pointer]
+            - button "Copy link" [ref=e4726] [cursor=pointer]
+            - button "Translate" [ref=e4730] [cursor=pointer]
+            - button "Side chat" [ref=e4735] [cursor=pointer]
+        - generic [ref=e4738]:
+          - button "Thoughts" [ref=e4744] [cursor=pointer]
+          - generic: 18:10
+        - generic [ref=e4746]:
+          - generic "18:10" [ref=e4747]:
+            - paragraph [ref=e4749]: 直接实测复现：查 localStorage 里存的 tab/会话状态，重开页面验证恢复是否对：
+          - generic [ref=e4750]:
+            - button "Good response" [ref=e4751] [cursor=pointer]
+            - button "Bad response" [ref=e4754] [cursor=pointer]
+            - button "Copy" [ref=e4757] [cursor=pointer]
+            - button "Copy link" [ref=e4761] [cursor=pointer]
+            - button "Translate" [ref=e4765] [cursor=pointer]
+            - button "Side chat" [ref=e4770] [cursor=pointer]
+        - generic [ref=e4773]:
+          - button "Thoughts" [ref=e4779] [cursor=pointer]
+          - generic: 18:10
+        - generic [ref=e4781]:
+          - generic "18:10" [ref=e4782]:
+            - paragraph [ref=e4784]: 页面在 about:blank。回会话页测恢复：
+          - generic [ref=e4785]:
+            - button "Good response" [ref=e4786] [cursor=pointer]
+            - button "Bad response" [ref=e4789] [cursor=pointer]
+            - button "Copy" [ref=e4792] [cursor=pointer]
+            - button "Copy link" [ref=e4796] [cursor=pointer]
+            - button "Translate" [ref=e4800] [cursor=pointer]
+            - button "Side chat" [ref=e4805] [cursor=pointer]
+        - generic [ref=e4808]:
+          - button "Thoughts" [ref=e4814] [cursor=pointer]
+          - generic: 18:10
+        - generic [ref=e4816]:
+          - generic "18:10" [ref=e4817]:
+            - paragraph [ref=e4819]:
+              - text: 看
+              - code [ref=e4820]: tlSnapshots
+              - text: 快照恢复的时效判断——重开时可能先亮出旧缓存：
+          - generic [ref=e4821]:
+            - button "Good response" [ref=e4822] [cursor=pointer]
+            - button "Bad response" [ref=e4825] [cursor=pointer]
+            - button "Copy" [ref=e4828] [cursor=pointer]
+            - button "Copy link" [ref=e4832] [cursor=pointer]
+            - button "Translate" [ref=e4836] [cursor=pointer]
+            - button "Side chat" [ref=e4841] [cursor=pointer]
+        - generic [ref=e4844]:
+          - button "Thoughts" [ref=e4850] [cursor=pointer]
+          - generic: 18:10
+        - generic [ref=e4852]:
+          - generic "18:10" [ref=e4853]:
+            - paragraph [ref=e4855]: 测恢复回路：切到 changes tab → 刷新 → 看 activeTabId 是否正确恢复：
+          - generic [ref=e4856]:
+            - button "Good response" [ref=e4857] [cursor=pointer]
+            - button "Bad response" [ref=e4860] [cursor=pointer]
+            - button "Copy" [ref=e4863] [cursor=pointer]
+            - button "Copy link" [ref=e4867] [cursor=pointer]
+            - button "Translate" [ref=e4871] [cursor=pointer]
+            - button "Side chat" [ref=e4876] [cursor=pointer]
+        - generic [ref=e4879]:
+          - button "Thoughts" [ref=e4885] [cursor=pointer]
+          - generic: 18:10
+        - generic [ref=e4887]:
+          - generic "18:10" [ref=e4888]:
+            - paragraph [ref=e4890]:
+              - text: 恢复回路其实通（
+              - code [ref=e4891]: "?tab=diff"
+              - text: 正确回写）。再查有没有"上次会话"记忆：
+          - generic [ref=e4892]:
+            - button "Good response" [ref=e4893] [cursor=pointer]
+            - button "Bad response" [ref=e4896] [cursor=pointer]
+            - button "Copy" [ref=e4899] [cursor=pointer]
+            - button "Copy link" [ref=e4903] [cursor=pointer]
+            - button "Translate" [ref=e4907] [cursor=pointer]
+            - button "Side chat" [ref=e4912] [cursor=pointer]
+        - generic [ref=e4915]:
+          - button "Thoughts" [ref=e4921] [cursor=pointer]
+          - generic: 18:10
+        - generic [ref=e4923]:
+          - generic "18:10" [ref=e4924]:
+            - paragraph [ref=e4926]:
+              - text: 看侧边栏会话链接是否携带
+              - code [ref=e4927]: "?tab="
+              - text: （跨会话污染上次 tab）：
+          - generic [ref=e4928]:
+            - button "Good response" [ref=e4929] [cursor=pointer]
+            - button "Bad response" [ref=e4932] [cursor=pointer]
+            - button "Copy" [ref=e4935] [cursor=pointer]
+            - button "Copy link" [ref=e4939] [cursor=pointer]
+            - button "Translate" [ref=e4943] [cursor=pointer]
+            - button "Side chat" [ref=e4948] [cursor=pointer]
+        - generic [ref=e4951]:
+          - button "Thoughts" [ref=e4957] [cursor=pointer]
+          - generic: 18:10
+        - generic [ref=e4959]:
+          - generic "18:10" [ref=e4960]:
+            - generic [ref=e4961]:
+              - paragraph [ref=e4962]:
+                - text: 确认了：根本没实现"记住最后页面"——
+                - code [ref=e4963]: /
+                - text: 永远跳
+                - code [ref=e4964]: /admin/new
+                - text: ，草稿用 sessionStorage（关页面就丢），tab 恢复还有个 A→B 串写竞态。按"打开恢复最后页面+状态"实现：
+              - list [ref=e4965]:
+                - listitem [ref=e4966]:
+                  - code [ref=e4967]: wb2-last-route
+                  - text: 记每次路由（跳
+                  - code [ref=e4968]: /
+                  - text: 、
+                  - code [ref=e4969]: /s/
+                  - text: 、
+                  - code [ref=e4970]: /admin/d/
+                  - text: 解析页），
+                  - code [ref=e4971]: /
+                  - text: → 恢复最后页面
+                - listitem [ref=e4972]:
+                  - text: 草稿
+                  - code [ref=e4973]: wb2-new-session-draft
+                  - text: → localStorage（关页面不丢）
+                - listitem [ref=e4974]: session-tabs 保存竞态修复
+              - paragraph [ref=e4975]: 先找草稿读写处：
+          - generic [ref=e4976]:
+            - button "Good response" [ref=e4977] [cursor=pointer]
+            - button "Bad response" [ref=e4980] [cursor=pointer]
+            - button "Copy" [ref=e4983] [cursor=pointer]
+            - button "Copy link" [ref=e4987] [cursor=pointer]
+            - button "Translate" [ref=e4991] [cursor=pointer]
+            - button "Side chat" [ref=e4996] [cursor=pointer]
+        - generic [ref=e4999]:
+          - generic [ref=e5000]:
+            - generic [ref=e5001]: User
+            - generic [ref=e5002]: 6:10 PM
+          - img "User" [ref=e5003]:
+            - generic [ref=e5004]: U
+          - paragraph [ref=e5009]: 不需要按钮，这个是底层设计
+          - generic [ref=e5010]:
+            - button "Start new session with this prompt" [ref=e5011] [cursor=pointer]
+            - button "Copy" [ref=e5015] [cursor=pointer]
+            - button "Copy link" [ref=e5019] [cursor=pointer]
+            - button "Translate" [ref=e5023] [cursor=pointer]
+            - button "Side chat" [ref=e5028] [cursor=pointer]
+        - generic [ref=e5031]:
+          - button "Thoughts" [ref=e5037] [cursor=pointer]
+          - generic: 18:10
+        - generic [ref=e5039]:
+          - generic [ref=e5040]:
+            - generic [ref=e5041]: Devin
+            - generic [ref=e5042]: 6:10 PM
+          - img "Devin" [ref=e5043]
+          - generic "18:10" [ref=e5047]:
+            - paragraph [ref=e5049]: 明白——不做开关/按钮，恢复就是底层默认行为：打开自动回到最后页面+最后状态。落实现有四处草稿读写 + 路由记忆 + tab 竞态修复：
+          - generic [ref=e5050]:
+            - button "Good response" [ref=e5051] [cursor=pointer]
+            - button "Bad response" [ref=e5054] [cursor=pointer]
+            - button "Copy" [ref=e5057] [cursor=pointer]
+            - button "Copy link" [ref=e5061] [cursor=pointer]
+            - button "Translate" [ref=e5065] [cursor=pointer]
+            - button "Side chat" [ref=e5070] [cursor=pointer]
+        - generic [ref=e5073]:
+          - button "Thoughts" [ref=e5079] [cursor=pointer]
+          - generic: 18:10
+        - generic [ref=e5081]:
+          - generic "18:10" [ref=e5082]:
+            - paragraph [ref=e5084]:
+              - text: 全貌清楚了：草稿用的是
+              - strong [ref=e5085]: sessionStorage
+              - text: ——关浏览器就丢，这就是"记忆不准"的主因。改 localStorage 持久化 + 路由记忆 + tab 竞态：
+          - generic [ref=e5086]:
+            - button "Good response" [ref=e5087] [cursor=pointer]
+            - button "Bad response" [ref=e5090] [cursor=pointer]
+            - button "Copy" [ref=e5093] [cursor=pointer]
+            - button "Copy link" [ref=e5097] [cursor=pointer]
+            - button "Translate" [ref=e5101] [cursor=pointer]
+            - button "Side chat" [ref=e5106] [cursor=pointer]
+        - generic [ref=e5109]:
+          - button "Thoughts" [ref=e5115] [cursor=pointer]
+          - generic: 18:10
+        - generic [ref=e5117]:
+          - generic "18:10" [ref=e5118]:
+            - paragraph [ref=e5120]: 修 tab 保存竞态——hydrate 当帧跳过写入（否则 A 会话的 tab 会短暂写进 B 的键）：
+          - generic [ref=e5121]:
+            - button "Good response" [ref=e5122] [cursor=pointer]
+            - button "Bad response" [ref=e5125] [cursor=pointer]
+            - button "Copy" [ref=e5128] [cursor=pointer]
+            - button "Copy link" [ref=e5132] [cursor=pointer]
+            - button "Translate" [ref=e5136] [cursor=pointer]
+            - button "Side chat" [ref=e5141] [cursor=pointer]
+        - generic [ref=e5144]:
+          - button "Thoughts" [ref=e5150] [cursor=pointer]
+          - generic: 18:10
+        - generic [ref=e5152]:
+          - generic "18:10" [ref=e5153]:
+            - paragraph [ref=e5155]: typecheck + build：
+          - generic [ref=e5156]:
+            - button "Good response" [ref=e5157] [cursor=pointer]
+            - button "Bad response" [ref=e5160] [cursor=pointer]
+            - button "Copy" [ref=e5163] [cursor=pointer]
+            - button "Copy link" [ref=e5167] [cursor=pointer]
+            - button "Translate" [ref=e5171] [cursor=pointer]
+            - button "Side chat" [ref=e5176] [cursor=pointer]
+        - generic [ref=e5179]:
+          - button "Thoughts" [ref=e5185] [cursor=pointer]
+          - generic: 18:10
+        - generic [ref=e5187]:
+          - generic "18:10" [ref=e5188]:
+            - generic [ref=e5189]:
+              - paragraph [ref=e5190]:
+                - text: 验证通过：
+                - code [ref=e5191]: /
+                - text: → 自动恢复
+                - code [ref=e5192]: /admin/secret-lobster
+                - text: 。
+              - heading "底层记忆修复（无按钮，默认行为）" [level=2] [ref=e5193]
+              - heading "病根" [level=3] [ref=e5194]
+              - generic [ref=e5195]:
+                - button "Copy table" [ref=e5197] [cursor=pointer]
+                - table [ref=e5203]:
+                  - rowgroup [ref=e5204]:
+                    - row [ref=e5205]:
+                      - columnheader [ref=e5206] [cursor=pointer]:
+                        - text: 该记住的
+                        - button "Sort by 该记住的" [ref=e5207]
+                      - columnheader [ref=e5211] [cursor=pointer]:
+                        - text: 之前
+                        - button "Sort by 之前" [ref=e5212]
+                      - columnheader [ref=e5216] [cursor=pointer]:
+                        - text: 现在
+                        - button "Sort by 现在" [ref=e5217]
+                  - rowgroup [ref=e5221]:
+                    - row [ref=e5222]:
+                      - cell "最后打开的页面" [ref=e5223]
+                      - cell [ref=e5224]:
+                        - strong [ref=e5225]: 完全没实现
+                        - text: ——
+                        - code [ref=e5226]: /
+                        - text: 永远跳
+                        - code [ref=e5227]: /admin/new
+                      - cell [ref=e5228]:
+                        - code [ref=e5229]: wb2-last-route
+                        - text: 每次路由都记，
+                        - code [ref=e5230]: /
+                        - text: → 恢复最后页面（会话/草稿/设置/含
+                        - code [ref=e5231]: "?tab="
+                        - text: 参数）
+                    - row [ref=e5232]:
+                      - cell "未发出的输入框文字" [ref=e5233]
+                      - cell [ref=e5234]:
+                        - code [ref=e5235]: sessionStorage
+                        - text: ——
+                        - strong [ref=e5236]: 关标签页就丢
+                      - cell [ref=e5237]:
+                        - code [ref=e5238]: localStorage
+                        - text: ——关浏览器也保留，按会话隔离
+                        - code [ref=e5239]: wb2-input-draft:<id>
+                    - row [ref=e5240]:
+                      - cell "面板 tab/滚动位置" [ref=e5241]
+                      - cell "localStorage ✓（原本就对）" [ref=e5242]
+                      - cell "不变" [ref=e5243]
+                    - row [ref=e5244]:
+                      - cell "tab 状态跨会话污染" [ref=e5245]
+                      - cell "A→B 切换当帧会把 A 的 tabs 写进 B 的键" [ref=e5246]
+                      - cell [ref=e5247]:
+                        - code [ref=e5248]: pendingTabsHydrate
+                        - text: 跳过 hydration 当帧写入
+              - heading "说明" [level=3] [ref=e5249]
+              - list [ref=e5250]:
+                - listitem [ref=e5251]:
+                  - text: 分享页
+                  - code [ref=e5252]: /s/
+                  - text: 、官方链接解析
+                  - code [ref=e5253]: /admin/d/
+                  - text: 不覆盖记忆（访客场景不该污染）
+                - listitem [ref=e5254]: 兼容旧数据：老的 sessionStorage 草稿首次读取时会被接管
+                - listitem [ref=e5255]:
+                  - text: 实测：
+                  - code [ref=e5256]: /
+                  - text: →
+                  - code [ref=e5257]: secret-lobster
+                  - text: 正确恢复；再开新会话走
+                  - code [ref=e5258]: New session
+                  - text: 不受影响
+              - paragraph [ref=e5259]:
+                - text: typecheck+build 过，刷新生效——打开
+                - code [ref=e5260]: http://<ip>:7791/
+                - text: 会直接回到你最后看的页面。
+          - generic [ref=e5261]:
+            - button "Good response" [ref=e5262] [cursor=pointer]
+            - button "Bad response" [ref=e5265] [cursor=pointer]
+            - button "Copy" [ref=e5268] [cursor=pointer]
+            - button "Copy link" [ref=e5272] [cursor=pointer]
+            - button "Translate" [ref=e5276] [cursor=pointer]
+            - button "Side chat" [ref=e5281] [cursor=pointer]
+        - generic [ref=e5284]:
+          - generic [ref=e5285]:
+            - generic [ref=e5286]: User
+            - generic [ref=e5287]: 6:10 PM
+          - img "User" [ref=e5288]:
+            - generic [ref=e5289]: U
+          - paragraph [ref=e5294]: 所有旧的代码和配置都应该被取代，而不是兼容
+          - generic [ref=e5295]:
+            - button "Start new session with this prompt" [ref=e5296] [cursor=pointer]
+            - button "Copy" [ref=e5300] [cursor=pointer]
+            - button "Copy link" [ref=e5304] [cursor=pointer]
+            - button "Translate" [ref=e5308] [cursor=pointer]
+            - button "Side chat" [ref=e5313] [cursor=pointer]
+        - generic [ref=e5316]:
+          - button "Thoughts" [ref=e5322] [cursor=pointer]
+          - generic: 18:10
+        - generic [ref=e5324]:
+          - generic [ref=e5325]:
+            - generic [ref=e5326]: Devin
+            - generic [ref=e5327]: 6:10 PM
+          - img "Devin" [ref=e5328]
+          - generic "18:10" [ref=e5332]:
+            - paragraph [ref=e5334]: 对——旧的直接废弃，不留兼容路径。清掉 sessionStorage 回退：
+          - generic [ref=e5335]:
+            - button "Good response" [ref=e5336] [cursor=pointer]
+            - button "Bad response" [ref=e5339] [cursor=pointer]
+            - button "Copy" [ref=e5342] [cursor=pointer]
+            - button "Copy link" [ref=e5346] [cursor=pointer]
+            - button "Translate" [ref=e5350] [cursor=pointer]
+            - button "Side chat" [ref=e5355] [cursor=pointer]
+        - generic [ref=e5358]:
+          - button "Thoughts" [ref=e5364] [cursor=pointer]
+          - generic: 18:10
+        - generic [ref=e5366]:
+          - generic "18:10" [ref=e5367]:
+            - paragraph [ref=e5369]: 顺手全仓扫 sessionStorage 残留——同一原则全部取代：
+          - generic [ref=e5370]:
+            - button "Good response" [ref=e5371] [cursor=pointer]
+            - button "Bad response" [ref=e5374] [cursor=pointer]
+            - button "Copy" [ref=e5377] [cursor=pointer]
+            - button "Copy link" [ref=e5381] [cursor=pointer]
+            - button "Translate" [ref=e5385] [cursor=pointer]
+            - button "Side chat" [ref=e5390] [cursor=pointer]
+        - generic [ref=e5393]:
+          - button "Thoughts" [ref=e5399] [cursor=pointer]
+          - generic: 18:10
+        - generic [ref=e5401]:
+          - generic "18:10" [ref=e5402]:
+            - paragraph [ref=e5404]: sessionStorage 已全清。typecheck + build：
+          - generic [ref=e5405]:
+            - button "Good response" [ref=e5406] [cursor=pointer]
+            - button "Bad response" [ref=e5409] [cursor=pointer]
+            - button "Copy" [ref=e5412] [cursor=pointer]
+            - button "Copy link" [ref=e5416] [cursor=pointer]
+            - button "Translate" [ref=e5420] [cursor=pointer]
+            - button "Side chat" [ref=e5425] [cursor=pointer]
+        - generic [ref=e5428]:
+          - button "Thoughts" [ref=e5434] [cursor=pointer]
+          - generic: 18:10
+        - generic [ref=e5436]:
+          - generic "18:10" [ref=e5437]:
+            - generic [ref=e5438]:
+              - paragraph [ref=e5439]: 已全清——sessionStorage 引用归零，草稿纯 localStorage，无回退。
+              - heading "取代完成" [level=2] [ref=e5440]
+              - generic [ref=e5441]:
+                - button "Copy table" [ref=e5443] [cursor=pointer]
+                - table [ref=e5449]:
+                  - rowgroup [ref=e5450]:
+                    - row [ref=e5451]:
+                      - columnheader [ref=e5452] [cursor=pointer]:
+                        - text: 位置
+                        - button "Sort by 位置" [ref=e5453]
+                      - columnheader [ref=e5457] [cursor=pointer]:
+                        - text: 处理
+                        - button "Sort by 处理" [ref=e5458]
+                  - rowgroup [ref=e5462]:
+                    - row [ref=e5463]:
+                      - cell [ref=e5464]:
+                        - code [ref=e5465]: wb2-new-session-draft
+                      - cell "sessionStorage → localStorage，旧的直接废弃不读" [ref=e5466]
+                    - row [ref=e5467]:
+                      - cell [ref=e5468]:
+                        - code [ref=e5469]: wb2-input-draft:<id>
+                      - cell "同上" [ref=e5470]
+                    - row [ref=e5471]:
+                      - cell "全部 5 处读写点" [ref=e5472]
+                      - cell "单一 localStorage 路径，无双写双读" [ref=e5473]
+              - paragraph [ref=e5474]: 刷新即生效。旧 sessionStorage 里的草稿会自然消失（本就是易失的半成品输入，不值得迁移）。
+              - heading "保留说明（非并行实现，是历史数据解码）" [level=3] [ref=e5475]
+              - paragraph [ref=e5476]:
+                - text: 有几处"旧"代码我没删，因为它们解码的是
+                - strong [ref=e5477]: 磁盘上的旧数据
+                - text: ，不是并行的第二套实现：
+              - list [ref=e5478]:
+                - listitem [ref=e5479]: "`` 标记解析——旧会话日志里仍含此格式，删了老会话的附件显示会坏"
+                - listitem [ref=e5480]:
+                  - code [ref=e5481]: ~/.devin-console
+                  - text: →
+                  - code [ref=e5482]: ~/.devin-remote
+                  - text: 数据目录迁移——一次性搬历史数据
+                - listitem [ref=e5483]:
+                  - code [ref=e5484]: respawn.bat
+                  - text: shim——仅当旧版 server 进程请求重生时用到，新版走
+                  - code [ref=e5485]: respawn.mjs
+              - paragraph [ref=e5486]: 如果连这些也要清掉（老会话日志可以不要），说一声就删。
+          - generic [ref=e5487]:
+            - button "Good response" [ref=e5488] [cursor=pointer]
+            - button "Bad response" [ref=e5491] [cursor=pointer]
+            - button "Copy" [ref=e5494] [cursor=pointer]
+            - button "Copy link" [ref=e5498] [cursor=pointer]
+            - button "Translate" [ref=e5502] [cursor=pointer]
+            - button "Side chat" [ref=e5507] [cursor=pointer]
+        - generic [ref=e5510]:
+          - generic [ref=e5511]:
+            - generic [ref=e5512]: User
+            - generic [ref=e5513]: 6:10 PM
+          - img "User" [ref=e5514]:
+            - generic [ref=e5515]: U
+          - generic [ref=e5519]:
+            - paragraph [ref=e5520]: Worked for 57s
+            - paragraph [ref=e5521]: Ran node
+            - paragraph [ref=e5522]: Ran node, dir
+            - paragraph [ref=e5523]: Ran node
+            - paragraph [ref=e5524]: Ran node
+            - paragraph [ref=e5525]: Ran command
+            - paragraph [ref=e5526]: 这个显示有问题，是没有显示完全吧
+          - generic [ref=e5527]:
+            - button "Start new session with this prompt" [ref=e5528] [cursor=pointer]
+            - button "Copy" [ref=e5532] [cursor=pointer]
+            - button "Copy link" [ref=e5536] [cursor=pointer]
+            - button "Translate" [ref=e5540] [cursor=pointer]
+            - button "Side chat" [ref=e5545] [cursor=pointer]
+        - generic [ref=e5548]:
+          - button "Thoughts" [ref=e5554] [cursor=pointer]
+          - generic: 18:10
+        - generic [ref=e5556]:
+          - generic [ref=e5557]:
+            - generic [ref=e5558]: Devin
+            - generic [ref=e5559]: 6:10 PM
+          - img "Devin" [ref=e5560]
+          - generic "18:10" [ref=e5564]:
+            - paragraph [ref=e5566]: 看 shell 行的标题/命令从哪来——"Ran node" 这种裸标题没显示具体命令：
+          - generic [ref=e5567]:
+            - button "Good response" [ref=e5568] [cursor=pointer]
+            - button "Bad response" [ref=e5571] [cursor=pointer]
+            - button "Copy" [ref=e5574] [cursor=pointer]
+            - button "Copy link" [ref=e5578] [cursor=pointer]
+            - button "Translate" [ref=e5582] [cursor=pointer]
+            - button "Side chat" [ref=e5587] [cursor=pointer]
+        - generic [ref=e5590]:
+          - button "Thoughts" [ref=e5596] [cursor=pointer]
+          - generic: 18:10
+        - generic [ref=e5598]:
+          - generic "18:10" [ref=e5599]:
+            - paragraph [ref=e5601]:
+              - code [ref=e5602]: body
+              - text: 空——命令本体没存进去。查原始 tool_call 事件的 rawInput：
+          - generic [ref=e5603]:
+            - button "Good response" [ref=e5604] [cursor=pointer]
+            - button "Bad response" [ref=e5607] [cursor=pointer]
+            - button "Copy" [ref=e5610] [cursor=pointer]
+            - button "Copy link" [ref=e5614] [cursor=pointer]
+            - button "Translate" [ref=e5618] [cursor=pointer]
+            - button "Side chat" [ref=e5623] [cursor=pointer]
+        - generic [ref=e5626]:
+          - button "Thoughts" [ref=e5632] [cursor=pointer]
+          - generic: 18:10
+        - generic [ref=e5634]:
+          - generic "18:10" [ref=e5635]:
+            - paragraph [ref=e5637]:
+              - text: 找到了：命令本体在
+              - code [ref=e5638]: rawInput.command
+              - text: /
+              - code [ref=e5639]: tool://preview
+              - text: resource 里，但
+              - code [ref=e5640]: contentText
+              - text: 只取 text 块 →
+              - code [ref=e5641]: body
+              - text: 为空 → 行只显示"Ran node"。看 tool_call 分支怎么取字段：
+          - generic [ref=e5642]:
+            - button "Good response" [ref=e5643] [cursor=pointer]
+            - button "Bad response" [ref=e5646] [cursor=pointer]
+            - button "Copy" [ref=e5649] [cursor=pointer]
+            - button "Copy link" [ref=e5653] [cursor=pointer]
+            - button "Translate" [ref=e5657] [cursor=pointer]
+            - button "Side chat" [ref=e5662] [cursor=pointer]
+        - generic [ref=e5665]:
+          - button "Thoughts" [ref=e5671] [cursor=pointer]
+          - generic: 18:10
+        - generic [ref=e5673]:
+          - generic "18:10" [ref=e5674]:
+            - paragraph [ref=e5676]:
+              - text: 命令在
+              - code [ref=e5677]: rawInput.command
+              - text: /
+              - code [ref=e5678]: tool://preview
+              - text: resource 里——
+              - code [ref=e5679]: contentText
+              - text: 只取 text 块所以丢了。在两分支汇合处统一提取：
+          - generic [ref=e5680]:
+            - button "Good response" [ref=e5681] [cursor=pointer]
+            - button "Bad response" [ref=e5684] [cursor=pointer]
+            - button "Copy" [ref=e5687] [cursor=pointer]
+            - button "Copy link" [ref=e5691] [cursor=pointer]
+            - button "Translate" [ref=e5695] [cursor=pointer]
+            - button "Side chat" [ref=e5700] [cursor=pointer]
+        - generic [ref=e5703]:
+          - button "Thoughts" [ref=e5709] [cursor=pointer]
+          - generic: 18:10
+        - generic [ref=e5711]:
+          - generic "18:10" [ref=e5712]:
+            - paragraph [ref=e5714]: 验证逻辑位置正确（合流点后、push 前）并编译：
+          - generic [ref=e5715]:
+            - button "Good response" [ref=e5716] [cursor=pointer]
+            - button "Bad response" [ref=e5719] [cursor=pointer]
+            - button "Copy" [ref=e5722] [cursor=pointer]
+            - button "Copy link" [ref=e5726] [cursor=pointer]
+            - button "Translate" [ref=e5730] [cursor=pointer]
+            - button "Side chat" [ref=e5735] [cursor=pointer]
+        - generic [ref=e5738]:
+          - button "Thoughts" [ref=e5744] [cursor=pointer]
+          - generic: 18:10
+        - generic [ref=e5746]:
+          - generic "18:10" [ref=e5747]:
+            - paragraph [ref=e5749]:
+              - text: 位置正确（两分支合流后、
+              - code [ref=e5750]: dirty
+              - text: 推送前；
+              - code [ref=e5751]: "!it.body"
+              - text: 保证不覆盖已累积文本）。编译：
+          - generic [ref=e5752]:
+            - button "Good response" [ref=e5753] [cursor=pointer]
+            - button "Bad response" [ref=e5756] [cursor=pointer]
+            - button "Copy" [ref=e5759] [cursor=pointer]
+            - button "Copy link" [ref=e5763] [cursor=pointer]
+            - button "Translate" [ref=e5767] [cursor=pointer]
+            - button "Side chat" [ref=e5772] [cursor=pointer]
+        - generic [ref=e5775]:
+          - button "Thoughts" [ref=e5781] [cursor=pointer]
+          - generic: 18:10
+        - generic [ref=e5783]:
+          - generic "18:10" [ref=e5784]:
+            - paragraph [ref=e5786]:
+              - text: 服务已排空完成重启（最后一行
+              - code [ref=e5787]: listening
+              - text: ）。验证命令字段和图片链路：
+          - generic [ref=e5788]:
+            - button "Good response" [ref=e5789] [cursor=pointer]
+            - button "Bad response" [ref=e5792] [cursor=pointer]
+            - button "Copy" [ref=e5795] [cursor=pointer]
+            - button "Copy link" [ref=e5799] [cursor=pointer]
+            - button "Translate" [ref=e5803] [cursor=pointer]
+            - button "Side chat" [ref=e5808] [cursor=pointer]
+        - generic [ref=e5811]:
+          - button "Thoughts" [ref=e5817] [cursor=pointer]
+          - generic: 18:10
+        - generic [ref=e5819]:
+          - generic "18:10" [ref=e5820]:
+            - paragraph [ref=e5822]: 还是空。查 dist 是否真的包含新代码：
+          - generic [ref=e5823]:
+            - button "Good response" [ref=e5824] [cursor=pointer]
+            - button "Bad response" [ref=e5827] [cursor=pointer]
+            - button "Copy" [ref=e5830] [cursor=pointer]
+            - button "Copy link" [ref=e5834] [cursor=pointer]
+            - button "Translate" [ref=e5838] [cursor=pointer]
+            - button "Side chat" [ref=e5843] [cursor=pointer]
+        - generic [ref=e5846]:
+          - button "Thoughts" [ref=e5852] [cursor=pointer]
+          - generic: 18:10
+        - generic [ref=e5854]:
+          - generic "18:10" [ref=e5855]:
+            - paragraph [ref=e5857]: dist 已编译。查实际在跑的 server 进程（可能旧进程还在占端口）：
+          - generic [ref=e5858]:
+            - button "Good response" [ref=e5859] [cursor=pointer]
+            - button "Bad response" [ref=e5862] [cursor=pointer]
+            - button "Copy" [ref=e5865] [cursor=pointer]
+            - button "Copy link" [ref=e5869] [cursor=pointer]
+            - button "Translate" [ref=e5873] [cursor=pointer]
+            - button "Side chat" [ref=e5878] [cursor=pointer]
+        - generic [ref=e5881]:
+          - button "Thoughts" [ref=e5887] [cursor=pointer]
+          - generic: 18:10
+        - generic [ref=e5889]:
+          - generic "18:10" [ref=e5890]:
+            - paragraph [ref=e5892]: 运行进程 17:51 启动，而我的 tsc 是 18:06——进程跑着旧 dist。再重启一次让它吃新代码：
+          - generic [ref=e5893]:
+            - button "Good response" [ref=e5894] [cursor=pointer]
+            - button "Bad response" [ref=e5897] [cursor=pointer]
+            - button "Copy" [ref=e5900] [cursor=pointer]
+            - button "Copy link" [ref=e5904] [cursor=pointer]
+            - button "Translate" [ref=e5908] [cursor=pointer]
+            - button "Side chat" [ref=e5913] [cursor=pointer]
+        - generic [ref=e5916]:
+          - button "Thoughts" [ref=e5922] [cursor=pointer]
+          - generic: 18:10
+        - generic [ref=e5924]:
+          - generic "18:10" [ref=e5925]:
+            - paragraph [ref=e5927]: 可能命中的还是排空中的旧进程。查进程状态：
+          - generic [ref=e5928]:
+            - button "Good response" [ref=e5929] [cursor=pointer]
+            - button "Bad response" [ref=e5932] [cursor=pointer]
+            - button "Copy" [ref=e5935] [cursor=pointer]
+            - button "Copy link" [ref=e5939] [cursor=pointer]
+            - button "Translate" [ref=e5943] [cursor=pointer]
+            - button "Side chat" [ref=e5948] [cursor=pointer]
+        - generic [ref=e5951]:
+          - button "Thoughts" [ref=e5957] [cursor=pointer]
+          - generic: 18:10
+        - generic [ref=e5959]:
+          - generic "18:10" [ref=e5960]:
+            - paragraph [ref=e5962]:
+              - text: 还是同一个旧进程（PID 81984 @ 17:41）——
+              - code [ref=e5963]: secret-lobster
+              - text: 的在途轮一直没结束，排空还在等。查这个轮次是真在跑还是卡死了：
+          - generic [ref=e5964]:
+            - button "Good response" [ref=e5965] [cursor=pointer]
+            - button "Bad response" [ref=e5968] [cursor=pointer]
+            - button "Copy" [ref=e5971] [cursor=pointer]
+            - button "Copy link" [ref=e5975] [cursor=pointer]
+            - button "Translate" [ref=e5979] [cursor=pointer]
+            - button "Side chat" [ref=e5984] [cursor=pointer]
+        - generic [ref=e5987]:
+          - button "Thoughts" [ref=e5993] [cursor=pointer]
+          - generic: 18:10
+        - generic [ref=e5995]:
+          - generic "18:10" [ref=e5996]:
+            - generic [ref=e5997]:
+              - paragraph [ref=e5998]:
+                - text: 离线回放证明新代码有效：
+                - strong [ref=e5999]: 547/547 条 shell 项全部带上了命令本体
+                - text: 。线上 API 还是旧进程在排空（
+                - code [ref=e6000]: secret-lobster
+                - text: 轮次仍在跑，结束后自动换班）。
+              - paragraph [ref=e6001]:
+                - text: 再确认前端行渲染会显示命令——看
+                - code [ref=e6002]: preview()
+                - text: 对 shell 的处理：
+          - generic [ref=e6003]:
+            - button "Good response" [ref=e6004] [cursor=pointer]
+            - button "Bad response" [ref=e6007] [cursor=pointer]
+            - button "Copy" [ref=e6010] [cursor=pointer]
+            - button "Copy link" [ref=e6014] [cursor=pointer]
+            - button "Translate" [ref=e6018] [cursor=pointer]
+            - button "Side chat" [ref=e6023] [cursor=pointer]
+        - generic [ref=e6026]:
+          - button "Thoughts" [ref=e6032] [cursor=pointer]
+          - generic: 18:10
+        - generic [ref=e6034]:
+          - generic "18:10" [ref=e6035]:
+            - paragraph [ref=e6037]: shell 行被显式排除在 preview 外。看 shell 行现在渲染什么：
+          - generic [ref=e6038]:
+            - button "Good response" [ref=e6039] [cursor=pointer]
+            - button "Bad response" [ref=e6042] [cursor=pointer]
+            - button "Copy" [ref=e6045] [cursor=pointer]
+            - button "Copy link" [ref=e6049] [cursor=pointer]
+            - button "Translate" [ref=e6053] [cursor=pointer]
+            - button "Side chat" [ref=e6058] [cursor=pointer]
+        - generic [ref=e6061]:
+          - button "Thoughts" [ref=e6067] [cursor=pointer]
+          - generic: 18:10
+        - generic [ref=e6069]:
+          - generic "18:10" [ref=e6070]:
+            - paragraph [ref=e6072]:
+              - code [ref=e6073]: preview()
+              - text: 本来就是为 shell 设计的（取 body 首行=命令），但 289 行把 shell 排除了——改回显示：
+          - generic [ref=e6074]:
+            - button "Good response" [ref=e6075] [cursor=pointer]
+            - button "Bad response" [ref=e6078] [cursor=pointer]
+            - button "Copy" [ref=e6081] [cursor=pointer]
+            - button "Copy link" [ref=e6085] [cursor=pointer]
+            - button "Translate" [ref=e6089] [cursor=pointer]
+            - button "Side chat" [ref=e6094] [cursor=pointer]
+        - generic [ref=e6097]:
+          - button "Thoughts" [ref=e6103] [cursor=pointer]
+          - generic: 18:10
+        - generic [ref=e6105]:
+          - generic "18:10" [ref=e6106]:
+            - paragraph [ref=e6108]:
+              - text: 再核
+              - code [ref=e6109]: defaultOpen
+              - text: 实际值（之前有互相矛盾的记录）：
+          - generic [ref=e6110]:
+            - button "Good response" [ref=e6111] [cursor=pointer]
+            - button "Bad response" [ref=e6114] [cursor=pointer]
+            - button "Copy" [ref=e6117] [cursor=pointer]
+            - button "Copy link" [ref=e6121] [cursor=pointer]
+            - button "Translate" [ref=e6125] [cursor=pointer]
+            - button "Side chat" [ref=e6130] [cursor=pointer]
+        - generic [ref=e6133]:
+          - button "Thoughts" [ref=e6139] [cursor=pointer]
+          - generic: 18:10
+        - generic [ref=e6141]:
+          - generic "18:10" [ref=e6142]:
+            - paragraph [ref=e6144]:
+              - code [ref=e6145]: defaultOpen
+              - text: 已是全组展开 ✓。现在构建前端：
+          - generic [ref=e6146]:
+            - button "Good response" [ref=e6147] [cursor=pointer]
+            - button "Bad response" [ref=e6150] [cursor=pointer]
+            - button "Copy" [ref=e6153] [cursor=pointer]
+            - button "Copy link" [ref=e6157] [cursor=pointer]
+            - button "Translate" [ref=e6161] [cursor=pointer]
+            - button "Side chat" [ref=e6166] [cursor=pointer]
+        - generic [ref=e6169]:
+          - button "Thoughts" [ref=e6175] [cursor=pointer]
+          - generic: 18:10
+        - generic [ref=e6177]:
+          - generic "18:10" [ref=e6178]:
+            - paragraph [ref=e6180]: 跑 web typecheck 收尾：
+          - generic [ref=e6181]:
+            - button "Good response" [ref=e6182] [cursor=pointer]
+            - button "Bad response" [ref=e6185] [cursor=pointer]
+            - button "Copy" [ref=e6188] [cursor=pointer]
+            - button "Copy link" [ref=e6192] [cursor=pointer]
+            - button "Translate" [ref=e6196] [cursor=pointer]
+            - button "Side chat" [ref=e6201] [cursor=pointer]
+        - generic [ref=e6204]:
+          - button "Thoughts" [ref=e6210] [cursor=pointer]
+          - generic: 18:10
+        - generic [ref=e6212]:
+          - generic "18:10" [ref=e6213]:
+            - generic [ref=e6214]:
+              - paragraph [ref=e6215]: 问题确认并修复。根因找到了：
+              - heading "为什么显示\"不完全\"" [level=2] [ref=e6216]
+              - paragraph [ref=e6217]:
+                - code [ref=e6218]: Ran node
+                - text: /
+                - code [ref=e6219]: Ran command
+                - text: 这类行
+                - strong [ref=e6220]: 只显示了工具名，命令本体丢了
+                - text: ——所以看起来像消息没渲染全：
+              - list [ref=e6221]:
+                - listitem [ref=e6222]:
+                  - text: devin acp 的事件里，命令文本在
+                  - code [ref=e6223]: rawInput.command
+                  - text: 和
+                  - code [ref=e6224]: tool://preview
+                  - text: resource 块里，不在 text 块中
+                - listitem [ref=e6225]:
+                  - code [ref=e6226]: wbtimeline.ts
+                  - text: 的
+                  - code [ref=e6227]: contentText()
+                  - text: 只提取 text 块 →
+                  - code [ref=e6228]: item.body
+                  - text: 为空 → 行只有光秃秃的 "Ran node" 标题，点开也只有
+                  - code [ref=e6229]: Exited with code 0
+              - heading "修复（两层）" [level=2] [ref=e6230]
+              - generic [ref=e6231]:
+                - button "Copy table" [ref=e6233] [cursor=pointer]
+                - table [ref=e6239]:
+                  - rowgroup [ref=e6240]:
+                    - row [ref=e6241]:
+                      - columnheader [ref=e6242] [cursor=pointer]:
+                        - text: 层
+                        - button "Sort by 层" [ref=e6243]
+                      - columnheader [ref=e6247] [cursor=pointer]:
+                        - text: 改动
+                        - button "Sort by 改动" [ref=e6248]
+                  - rowgroup [ref=e6252]:
+                    - row [ref=e6253]:
+                      - cell [ref=e6254]:
+                        - code [ref=e6255]: server/src/wbtimeline.ts
+                      - cell [ref=e6256]:
+                        - text: tool_call 分支合流处统一提取
+                        - code [ref=e6257]: rawInput.command
+                        - text: （兜底
+                        - code [ref=e6258]: tool://preview
+                        - text: resource 的
+                        - code [ref=e6259]: text
+                        - text: ）→
+                        - code [ref=e6260]: it.body
+                    - row [ref=e6261]:
+                      - cell [ref=e6262]:
+                        - code [ref=e6263]: web/.../TimelineRows.tsx
+                      - cell [ref=e6264]:
+                        - code [ref=e6265]: preview()
+                        - text: 本来就是取 body 首行给 shell 用的，但渲染处
+                        - code [ref=e6266]: item.kind !== 'shell'
+                        - text: 把它排除了 → 移除排除条件
+              - paragraph [ref=e6267]:
+                - strong [ref=e6268]: 离线回放验证
+                - text: ：用新代码重放
+                - code [ref=e6269]: secret-lobster
+                - text: 的完整日志——547/547 条 shell 项全部带上命令。修复后每行显示为
+                - code [ref=e6270]: Ran node
+                - text: + 命令首行（mono 灰字），展开看完整命令+输出。
+              - heading "生效状态" [level=2] [ref=e6271]
+              - list [ref=e6272]:
+                - listitem [ref=e6273]:
+                  - strong [ref=e6274]: 前端
+                  - text: ：已构建出新包，刷新即生效
+                - listitem [ref=e6275]:
+                  - strong [ref=e6276]: 服务端
+                  - text: ：旧进程还在等
+                  - code [ref=e6277]: secret-lobster
+                  - text: 的在途轮（你这条 prompt 本身在跑，不是卡死）——轮次结束后 respawn 自动换新 dist，不用干预。如果它跑太久不想等，
+                  - code [ref=e6278]: ⋯
+                  - text: 菜单 → End session 会释放排空
+              - paragraph [ref=e6279]: typecheck + build 均通过。
+          - generic [ref=e6280]:
+            - button "Good response" [ref=e6281] [cursor=pointer]
+            - button "Bad response" [ref=e6284] [cursor=pointer]
+            - button "Copy" [ref=e6287] [cursor=pointer]
+            - button "Copy link" [ref=e6291] [cursor=pointer]
+            - button "Translate" [ref=e6295] [cursor=pointer]
+            - button "Side chat" [ref=e6300] [cursor=pointer]
+        - generic [ref=e6303]:
+          - generic [ref=e6304]:
+            - generic [ref=e6305]: User
+            - generic [ref=e6306]: 6:13 PM
+          - img "User" [ref=e6307]:
+            - generic [ref=e6308]: U
+          - paragraph [ref=e6313]: 为什么现在这些不显示了，只显示thought
+          - generic [ref=e6314]:
+            - button "Start new session with this prompt" [ref=e6315] [cursor=pointer]
+            - button "Copy" [ref=e6319] [cursor=pointer]
+            - button "Copy link" [ref=e6323] [cursor=pointer]
+            - button "Translate" [ref=e6327] [cursor=pointer]
+            - button "Side chat" [ref=e6332] [cursor=pointer]
+        - generic [ref=e6335]:
+          - button "Thoughts" [ref=e6341] [cursor=pointer]
+          - generic: 18:13
+        - generic [ref=e6343]:
+          - generic [ref=e6344]:
+            - generic [ref=e6345]: Devin
+            - generic [ref=e6346]: 6:13 PM
+          - img "Devin" [ref=e6347]
+          - generic "18:13" [ref=e6351]:
+            - paragraph [ref=e6353]: 查实时状态——先看服务端是否已重启到新代码、API 现在返回什么：
+          - generic [ref=e6354]:
+            - button "Good response" [ref=e6355] [cursor=pointer]
+            - button "Bad response" [ref=e6358] [cursor=pointer]
+            - button "Copy" [ref=e6361] [cursor=pointer]
+            - button "Copy link" [ref=e6365] [cursor=pointer]
+            - button "Translate" [ref=e6369] [cursor=pointer]
+            - button "Side chat" [ref=e6374] [cursor=pointer]
+        - generic [ref=e6377]:
+          - button "Worked for 23s 18:13" [expanded] [ref=e6379] [cursor=pointer]:
+            - generic [ref=e6383]:
+              - generic [ref=e6384]: Worked for 23s
+              - generic: 18:13
+          - generic [ref=e6385]:
+            - generic [aria-hidden] [ref=e6386] [cursor=pointer]
+            - generic [ref=e6389]:
+              - generic [ref=e6391]:
+                - button "Ran powershell, node cd" [ref=e6392] [cursor=pointer]:
+                  - generic [ref=e6393]: Ran powershell, node
+                  - generic [ref=e6394]: cd
+                - generic: 18:13
+              - generic [ref=e6396]:
+                - button "Thoughts" [ref=e6397] [cursor=pointer]
+                - generic: 18:13
+        - generic [ref=e6402]:
+          - generic "18:13" [ref=e6403]:
+            - paragraph [ref=e6405]: 新进程已起（18:10），命令提取生效（shell-body 1/1）。但末尾 120 项里 thought:57 / message:62 / shell:1——先开页面看用户实际看到的画面：
+          - generic [ref=e6406]:
+            - button "Good response" [ref=e6407] [cursor=pointer]
+            - button "Bad response" [ref=e6410] [cursor=pointer]
+            - button "Copy" [ref=e6413] [cursor=pointer]
+            - button "Copy link" [ref=e6417] [cursor=pointer]
+            - button "Translate" [ref=e6421] [cursor=pointer]
+            - button "Side chat" [ref=e6426] [cursor=pointer]
+        - generic [ref=e6429]:
+          - button "Worked for 13s 18:13" [expanded] [ref=e6431] [cursor=pointer]:
+            - generic [ref=e6435]:
+              - generic [ref=e6436]: Worked for 13s
+              - generic: 18:13
+          - generic [ref=e6437]:
+            - generic [aria-hidden] [ref=e6438] [cursor=pointer]
+            - generic [ref=e6441]:
+              - generic [ref=e6443]:
+                - button "Ran node cd" [ref=e6444] [cursor=pointer]:
+                  - generic [ref=e6445]: Ran node
+                  - generic [ref=e6446]: cd
+                - generic: 18:13
+              - generic [ref=e6448]:
+                - button "Thoughts" [ref=e6449] [cursor=pointer]
+                - generic: 18:13
+        - generic [ref=e6454]:
+          - generic "18:13" [ref=e6455]:
+            - paragraph [ref=e6457]: 截图看页面实际渲染状态：
+          - generic [ref=e6458]:
+            - button "Good response" [ref=e6459] [cursor=pointer]
+            - button "Bad response" [ref=e6462] [cursor=pointer]
+            - button "Copy" [ref=e6465] [cursor=pointer]
+            - button "Copy link" [ref=e6469] [cursor=pointer]
+            - button "Translate" [ref=e6473] [cursor=pointer]
+            - button "Side chat" [ref=e6478] [cursor=pointer]
+        - generic [ref=e6481]:
+          - generic "6:13 PM" [ref=e6485]: Calling browser_navigate from mcp-playwrightrunning
+          - generic: 18:13
+        - generic [ref=e6487]: working
+      - button "Session index" [ref=e6514] [cursor=pointer]
+    - contentinfo [ref=e6528]:
+      - generic [ref=e6533]:
+        - generic [ref=e6534]:
+          - generic [aria-hidden]:
+            - generic:
+              - text: Guide Devin while it works, or press
+              - generic: Ctrl
+              - text: to queue
+          - textbox "Message Devin" [ref=e6535]
+        - generic [ref=e6536]:
+          - generic [ref=e6537]:
+            - button "Attach or mention" [ref=e6539] [cursor=pointer]
+            - button "Select mode" [ref=e6542] [cursor=pointer]:
+              - generic [ref=e6543]: …
+            - generic "上下文 57,345 / 262,000 tokens（22%） 输入 56,744 · 输出 601 · 缓存命中 55,519" [ref=e6544]: 57k/262k
+          - generic [ref=e6547]:
+            - button "Record voice prompt" [ref=e6548] [cursor=pointer]
+            - button "Stop Devin" [ref=e6552] [cursor=pointer]
+  - separator [ref=e6555]
+  - complementary [ref=e6556]:
+    - generic [ref=e6557]:
+      - tablist [ref=e6558]:
+        - tab "Close tab Progress" [ref=e6559]:
+          - button "Close tab" [ref=e6564] [cursor=pointer]
+          - generic [ref=e6567]: Progress
+        - tab "Close tab Changes" [selected] [ref=e6568]:
+          - button "Close tab" [ref=e6573] [cursor=pointer]
+          - generic [ref=e6576]: Changes
+      - button "Add tab" [ref=e6578] [cursor=pointer]
+      - button "Full width" [ref=e6581] [cursor=pointer]
+      - button "Hide tabs panel" [ref=e6584] [cursor=pointer]
+    - generic [ref=e6590]:
+      - generic [ref=e6591]:
+        - button "All changes" [ref=e6592] [cursor=pointer]
+        - generic [ref=e6596]:
+          - generic [ref=e6597]: 0 files
+          - generic [ref=e6598]: "+0"
+          - generic [ref=e6599]: −0
+      - generic [ref=e6600]: No changes yet

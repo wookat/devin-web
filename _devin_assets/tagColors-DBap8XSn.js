@@ -1,0 +1,1 @@
+import{n as e}from"./rolldown-runtime-C0FnF6B9.js";function t(e){let t=n[e];if(t)return t;let i=Object.keys(n).length%r.length,a=r[i]??r[0];return n[e]=a,a}var n,r;function i(){return(i=e((()=>{n={},r=[`bg-blue`,`bg-green`,`bg-orange`,`bg-purple`,`bg-red`]})))()}export{i as n,t};

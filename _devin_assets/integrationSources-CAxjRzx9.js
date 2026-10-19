@@ -1,0 +1,1 @@
+import{n as e}from"./rolldown-runtime-C0FnF6B9.js";function t(e){return r[e]??e}function n(e,n){return e[t(n)]}var r;function i(){return(i=e((()=>{r={teams:`microsoft_teams`,bitbucket_data_center:`bitbucket`}})))()}export{i as n,n as t};

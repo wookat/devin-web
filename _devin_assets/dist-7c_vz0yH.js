@@ -1,0 +1,1 @@
+import{n as e,r as t}from"./rolldown-runtime-C0FnF6B9.js";import{a as n,c as r,n as i,o as a,s as o}from"./chunk-JAPRZBRM-DpwAdIQU.js";var s=t({Block:()=>i,Streamdown:()=>o,defaultRehypePlugins:()=>a,defaultRemarkPlugins:()=>n});function c(){return(c=e((()=>{r()})))()}export{c as n,s as t};

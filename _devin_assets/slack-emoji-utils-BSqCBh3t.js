@@ -1,0 +1,1 @@
+import{n as e}from"./rolldown-runtime-C0FnF6B9.js";import{_t as t}from"./app-initial-lLCneCz0.js";import{n,t as r}from"./slack-emoji-data-C9W0Y0s1.js";function i(e){return a.get(e)}var a;function o(){return(o=e((()=>{r(),t(),a=new Map(n.flatMap(e=>{let t={char:e.e,name:e.n};return[[e.n,t],...(e.a??[]).map(e=>[e,t])]}))})))()}export{o as n,i as t};

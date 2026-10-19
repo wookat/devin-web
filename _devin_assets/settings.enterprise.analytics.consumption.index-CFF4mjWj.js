@@ -1,0 +1,1 @@
+import{n as e}from"./rolldown-runtime-C0FnF6B9.js";import{n as t,t as n}from"./legacyPrimaryOrgRedirect-DCrvLzBN.js";var r;function i(){return(i=e((()=>{n(),r=t(`/_user/_redirects/_org/settings/enterprise/analytics/consumption/`,`/settings/analytics?tab=consumption`)})))()}i();export{r as component};

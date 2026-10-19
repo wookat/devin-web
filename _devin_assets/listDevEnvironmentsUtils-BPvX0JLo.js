@@ -1,0 +1,1 @@
+import{n as e}from"./rolldown-runtime-C0FnF6B9.js";function t(e){let t=new Date,n=new Date(e),r=Math.floor((t.getTime()-n.getTime())/1e3);for(let[e,t]of Object.entries({year:31536e3,month:2592e3,week:604800,day:86400,hour:3600,minute:60})){let n=Math.floor(r/t);if(n>=1)return`${n} ${e}${n===1?``:`s`} ago`}return`Just now`}function n(){return(n=e((()=>{})))()}export{n,t};

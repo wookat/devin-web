@@ -1,0 +1,36 @@
+- generic [ref=e3]:
+  - complementary [ref=e4]:
+    - generic [ref=e5]:
+      - link [ref=e6] [cursor=pointer]:
+        - /url: /
+      - generic [ref=e9]: 会话
+      - button "Search" [ref=e10]
+      - link "New session" [ref=e14] [cursor=pointer]:
+        - /url: /admin/new
+    - generic [ref=e16]: 新会话
+    - generic [ref=e21]:
+      - generic "无可用账号" [ref=e22]
+      - generic [ref=e23]: 无账号
+      - button "轮换" [ref=e24] [cursor=pointer]
+      - button "添加" [ref=e30] [cursor=pointer]
+      - button "CLI 工具" [ref=e32] [cursor=pointer]
+      - button "展开账号列表" [ref=e36] [cursor=pointer]
+  - generic [ref=e39]:
+    - banner [ref=e40]:
+      - generic [ref=e41]:
+        - button "Collapse sidebar" [ref=e42] [cursor=pointer]
+        - heading "新会话" [level=1] [ref=e46]
+      - button "Session settings" [ref=e49] [cursor=pointer]
+    - contentinfo [ref=e55]:
+      - generic [ref=e60]:
+        - textbox "Message Devin" [ref=e62]: Message Devin…
+        - generic [ref=e63]:
+          - generic [ref=e64]:
+            - button "Attach or mention" [ref=e66] [cursor=pointer]
+            - button "Select mode" [ref=e69] [cursor=pointer]:
+              - generic [ref=e70]: …
+          - generic [ref=e71]:
+            - button "Record voice prompt" [ref=e72] [cursor=pointer]
+            - group [ref=e77]:
+              - button "Send" [disabled] [ref=e78]
+              - button "More send options" [disabled] [ref=e82] [cursor=pointer]

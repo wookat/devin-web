@@ -1,0 +1,1 @@
+import{n as e}from"./rolldown-runtime-C0FnF6B9.js";import{t}from"./jsx-runtime-BdxMnOeJ.js";import{n,r}from"./Match-B2okXuPo.js";function i(){return(0,a.jsx)(n,{})}var a;function o(){return(o=e((()=>{r(),a=t()})))()}o();export{i as component};
