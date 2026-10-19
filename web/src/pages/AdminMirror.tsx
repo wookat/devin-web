@@ -5,7 +5,8 @@
 import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState, type KeyboardEvent as ReactKeyboardEvent } from 'react'
 import { createPortal } from 'react-dom'
 import { Link, useLocation, useNavigate, useParams } from 'react-router-dom'
-import { ArrowLeft, Loader2, ChevronRight, ChevronDown, ChevronUp, Settings2, Copy, Check, RotateCcw, Archive, ArchiveRestore, Plus, FileText, Circle, PanelLeftClose, PanelLeft, ArrowUp, ArrowUpRight, Square, Link2, X, Expand, Code, Workflow as WorkflowIcon, BookOpen, UploadCloud, Folder as FolderIcon, Pencil, Search, Clock, Lightbulb, Info, Laptop, FolderOpen, Image as ImageIcon, Share2, RefreshCw, AlertTriangle, Bell, Rows3 } from 'lucide-react'
+import { ArrowLeft, Loader2, ChevronRight, ChevronDown, ChevronUp, Settings2, Copy, Check, RotateCcw, Archive, ArchiveRestore, Plus, FileText, Circle, ArrowUp, ArrowUpRight, Square, Link2, X, Expand, Code, Workflow as WorkflowIcon, BookOpen, UploadCloud, Folder as FolderIcon, Pencil, Clock, Lightbulb, Info, Laptop, FolderOpen, Image as ImageIcon, Share2, RefreshCw, AlertTriangle, Rows3 } from 'lucide-react'
+import { OArchive, OBell, OCollapse, OCompose, OExpand, OSearch } from '../components/officialIcons'
 import { adminFetch, adminFetchSwr, shareFetchSwr, type AdminSession, type PublicMessage, type DashboardData } from '@/lib/api'
 import { adminViewer, visitorViewer, setViewer, sessionFetch, sessionFetchSwr, attachmentUrl, type Viewer, type SharePermission } from '@/lib/viewer'
 import { visibleInterval } from '@/lib/poll'
@@ -2256,7 +2257,7 @@ const groups = useMemo(() => groupItems(allItems, sessionWorking), [allItems, se
               aria-label="Search"
               title="Search (Ctrl+K)"
             >
-              <Search size={16} />
+              <OSearch size={16} />
             </button>
             {/* official header has a Notifications bell between Search and
                 Collapse — locally it lists unread sessions */}
@@ -2266,7 +2267,7 @@ const groups = useMemo(() => groupItems(allItems, sessionWorking), [allItems, se
               aria-label="Notifications"
               title="Notifications"
             >
-              <Bell size={16} />
+              <OBell size={16} />
               {unreadCount > 0 && <span className="absolute right-1 top-1 size-1.5 rounded-full bg-red-500" />}
             </button>
             {notifOpen && (
@@ -2295,7 +2296,7 @@ const groups = useMemo(() => groupItems(allItems, sessionWorking), [allItems, se
               aria-label="Collapse sidebar"
               title="Collapse sidebar"
             >
-              <PanelLeftClose size={16} />
+              <OCollapse size={16} />
             </button>
           </div>
           {/* Official nav rows: New session + More (274×30) above the sections */}
@@ -2305,7 +2306,7 @@ const groups = useMemo(() => groupItems(allItems, sessionWorking), [allItems, se
               aria-current={isDraft ? 'page' : undefined}
               className={cn('mb-px flex h-[30px] items-center gap-2 rounded-[6px] px-2 text-[13px] leading-[18px] text-foreground hover:bg-tint-secondary', isDraft && 'bg-tint-secondary font-medium')}
             >
-              <Plus size={14} className="shrink-0 text-muted-foreground" />
+              <OCompose size={14} className="shrink-0 text-muted-foreground" />
               <span className="min-w-0 flex-1 truncate">新会话</span>
             </Link>
             <Link
@@ -2377,7 +2378,7 @@ const groups = useMemo(() => groupItems(allItems, sessionWorking), [allItems, se
               className="flex size-7 shrink-0 cursor-pointer items-center justify-center rounded-md text-muted-foreground hover:bg-accent hover:text-foreground focus-visible:bg-accent focus-visible:text-foreground"
               aria-label="Expand sidebar"
             >
-              <PanelLeft size={16} />
+              <OExpand size={16} />
             </button>
           )}
           {detail?.session.parent_devin_id && (
@@ -2584,7 +2585,7 @@ const groups = useMemo(() => groupItems(allItems, sessionWorking), [allItems, se
                   }}
                   className={settingsRowCls}
                 >
-                  {detail.session.archived ? <><ArchiveRestore size={14} className="text-muted-foreground" /> Unarchive</> : <><Archive size={14} className="text-muted-foreground" /> Archive</>}
+                  {detail.session.archived ? <><OArchive size={14} className="text-muted-foreground" /> Unarchive</> : <><OArchive size={14} className="text-muted-foreground" /> Archive</>}
                 </button>}
                 <div className={settingsSeparatorCls} />
                 <button
@@ -2741,7 +2742,7 @@ const groups = useMemo(() => groupItems(allItems, sessionWorking), [allItems, se
         <div className={cn('relative flex min-h-0 flex-1 flex-col', isDraft && 'hidden')}>
         {findOpen && (
           <div className="absolute right-4 top-2 z-30 flex items-center gap-1 rounded-lg border border-border bg-card px-2 py-1 shadow-lg">
-            <Search size={13} className="text-muted-foreground" />
+            <OSearch size={13} className="text-muted-foreground" />
             <input
               ref={findInputRef}
               autoFocus

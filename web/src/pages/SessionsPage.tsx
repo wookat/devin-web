@@ -1,7 +1,8 @@
 import { useEffect, useMemo, useRef, useState, type MouseEvent as ReactMouseEvent, type ReactNode } from 'react'
 import { Link, useNavigate } from 'react-router-dom'
 import { createPortal } from 'react-dom'
-import { Archive, ArchiveRestore, Bell, Bot, Check, ChevronDown, ChevronRight, Download, FolderInput, ListFilter, PanelLeft, PanelLeftClose, Pin, PinOff, Plus, RefreshCw, RotateCcw, Rows3, Search, Settings2, Tag, X } from 'lucide-react'
+import { Bot, Download, FolderInput, Plus, RefreshCw, RotateCcw, Rows3, Settings2, Tag } from 'lucide-react'
+import { OArchive, OBell, OCheck, OChevronDown, OChevronRight, OCollapse, OCompose, OExpand, OPin, OSearch, OX } from '../components/officialIcons'
 import { adminFetch } from '@/lib/api'
 import { cn } from '@/lib/utils'
 import { type MirrorTreeSession } from './mirror/treeCache'
@@ -117,7 +118,7 @@ function Cb({ checked, onToggle, label, stop = true }: { checked: boolean; onTog
         checked ? 'border-accent-primary bg-accent-primary text-white' : 'border-border bg-transparent hover:bg-tint-tertiary',
       )}
     >
-      {checked && <Check size={12} strokeWidth={3} />}
+      {checked && <OCheck size={12} />}
     </button>
   )
 }
@@ -269,17 +270,17 @@ export default function SessionsPage() {
           </span>
           {hasKids ? (
             <button onClick={(e) => { e.stopPropagation(); loadKids() }} className="flex size-4 shrink-0 cursor-pointer items-center justify-center text-muted-foreground" aria-label={open ? '收起子会话' : '展开子会话'}>
-              {open ? <ChevronDown size={13} /> : <ChevronRight size={13} />}
+              {open ? <OChevronDown size={13} /> : <OChevronRight size={13} />}
             </button>
           ) : <span className="size-4 shrink-0" />}
           {s.status_enum === 'archived'
-            ? <Archive size={14} className="shrink-0 text-text-orange" aria-label="Archived" />
+            ? <OArchive size={14} className="shrink-0 text-text-orange" aria-label="Archived" />
             : <Bot size={14} className={cn('shrink-0', dead ? 'text-muted-foreground/50' : 'text-text-green')} />}
           <div className="flex min-w-0 items-center gap-2 overflow-hidden" style={depth ? { paddingLeft: depth * 18 } : undefined}>
             <span className={cn('truncate text-[13px] font-medium leading-[18px] text-foreground', dead && 'text-muted-foreground')}>{s.title || s.devin_id}</span>
             <span className={cn('flex min-w-0 max-w-56 items-center whitespace-nowrap pr-0.5 text-[13px] leading-[18px]', st.cls)}>{st.label}</span>
             {dead && <span className="shrink-0 rounded bg-muted px-1 text-[10px] leading-[15px] text-muted-foreground">已失效</span>}
-            {s.is_pinned && <Pin size={11} className="shrink-0 text-muted-foreground" />}
+            {s.is_pinned && <OPin size={11} className="shrink-0 text-muted-foreground" />}
           </div>
           <div className="flex min-w-0 max-w-[50%] flex-1 items-center overflow-hidden">
             <span className="truncate text-[13px] leading-[18px] text-muted-foreground">{s.snippet}</span>
@@ -290,10 +291,10 @@ export default function SessionsPage() {
                 meta) — no absolute overlay, so the avatar is never covered */}
             <span className="hidden items-center gap-0.5 group-hover/row:flex">
               <button onClick={(e) => { e.stopPropagation(); pinRow(s) }} title={s.is_pinned ? 'Unpin' : 'Pin'} aria-label={s.is_pinned ? 'Unpin' : 'Pin'} className={cn('flex size-7 cursor-pointer items-center justify-center rounded-[6px] text-muted-foreground hover:bg-tint-secondary hover:text-foreground', FOCUS_RING)}>
-                {s.is_pinned ? <PinOff size={14} /> : <Pin size={14} />}
+                {s.is_pinned ? <OPin size={14} /> : <OPin size={14} />}
               </button>
               <button onClick={(e) => { e.stopPropagation(); archRow(s) }} title={s.status_enum === 'archived' ? '取消归档' : '归档'} aria-label={s.status_enum === 'archived' ? '取消归档' : '归档'} className={cn('flex size-7 cursor-pointer items-center justify-center rounded-[6px] text-muted-foreground hover:bg-tint-secondary hover:text-foreground', FOCUS_RING)}>
-                {s.status_enum === 'archived' ? <ArchiveRestore size={14} /> : <Archive size={14} />}
+                {s.status_enum === 'archived' ? <OArchive size={14} /> : <OArchive size={14} />}
               </button>
             </span>
             {showFolder && s.folder && <span className="flex items-center gap-1 text-[13px] leading-[18px] text-muted-foreground"><Tag size={12} />{s.folder}</span>}
@@ -329,7 +330,7 @@ export default function SessionsPage() {
       <button onClick={openMenu(kind)} className={cn('flex h-full cursor-pointer touch-manipulation items-center gap-1 overflow-hidden whitespace-nowrap rounded-l-full pl-2 pr-1 py-0.5 text-foreground hover:bg-tint-secondary', FOCUS_RING)}>
         {icon}{label}
       </button>
-      <button onClick={onClear} className={cn('flex h-full cursor-pointer items-center rounded-r-full py-0.5 pl-1 pr-1.5 text-muted-foreground hover:bg-tint-secondary hover:text-foreground', FOCUS_RING)} aria-label="Remove filter"><X size={12} /></button>
+      <button onClick={onClear} className={cn('flex h-full cursor-pointer items-center rounded-r-full py-0.5 pl-1 pr-1.5 text-muted-foreground hover:bg-tint-secondary hover:text-foreground', FOCUS_RING)} aria-label="Remove filter"><OX size={12} /></button>
     </span>
   )
 
@@ -348,7 +349,7 @@ export default function SessionsPage() {
               >
                 <span className="flex size-4 shrink-0 items-center justify-center rounded-[4px] bg-foreground text-[9px] font-semibold text-background">本</span>
                 <span className="truncate">本地 Devin</span>
-                <ChevronDown size={12} className="shrink-0 text-muted-foreground" />
+                <OChevronDown size={12} className="shrink-0 text-muted-foreground" />
               </button>
               {orgMenu && (
                 <>
@@ -377,7 +378,7 @@ export default function SessionsPage() {
               aria-label="Search"
               title="Search"
             >
-              <Search size={16} />
+              <OSearch size={16} />
             </button>
             {/* official: Notifications bell between Search and Collapse — lists unread sessions */}
             <button
@@ -386,7 +387,7 @@ export default function SessionsPage() {
               aria-label="Notifications"
               title="Notifications"
             >
-              <Bell size={16} />
+              <OBell size={16} />
               {unreadCount > 0 && <span className="absolute right-1 top-1 size-1.5 rounded-full bg-red-500" />}
             </button>
             {notifOpen && (
@@ -415,7 +416,7 @@ export default function SessionsPage() {
               aria-label="Collapse sidebar"
               title="Collapse sidebar"
             >
-              <PanelLeftClose size={16} />
+              <OCollapse size={16} />
             </button>
           </div>
           <nav className="flex flex-col px-2 pt-1">
@@ -423,7 +424,7 @@ export default function SessionsPage() {
               to="/admin/new"
               className="mb-px flex h-[30px] items-center gap-2 rounded-[6px] px-2 text-[13px] leading-[18px] text-foreground hover:bg-tint-secondary"
             >
-              <Plus size={14} className="shrink-0 text-muted-foreground" />
+              <OCompose size={14} className="shrink-0 text-muted-foreground" />
               <span className="min-w-0 flex-1 truncate">新会话</span>
             </Link>
             <Link
@@ -464,7 +465,7 @@ export default function SessionsPage() {
               aria-label="Expand sidebar"
               title="Expand sidebar"
             >
-              <PanelLeft size={16} />
+              <OExpand size={16} />
             </button>
           )}
           <h1 className="pl-1 text-[13px] font-medium leading-[18px]">Sessions</h1>
@@ -472,7 +473,7 @@ export default function SessionsPage() {
             {/* official input-group: 28px shell, border .06, 16px icon, transparent
                 input pl-6 pr-10 text-13; focus-within → accent border */}
             <div className="flex h-7 w-full min-w-0 max-w-[220px] items-center rounded-[6px] border border-border-secondary bg-card outline-none focus-within:border-accent-primary max-md:max-w-[150px]">
-              <Search size={16} className="ml-[10px] shrink-0 text-muted-foreground" />
+              <OSearch size={16} className="ml-[10px] shrink-0 text-muted-foreground" />
               <input
                 ref={searchRef}
                 value={q}
@@ -480,10 +481,10 @@ export default function SessionsPage() {
                 placeholder="Search sessions…"
                 className="h-[26px] min-w-0 flex-1 bg-transparent py-[5px] pl-[6px] pr-[10px] text-[13px] leading-[16px] text-foreground caret-accent-primary outline-none placeholder:text-muted-foreground"
               />
-              {q && <button onClick={() => setQ('')} className={cn('mr-1.5 flex size-4 shrink-0 cursor-pointer items-center justify-center rounded-[4px] text-muted-foreground hover:bg-tint-secondary hover:text-foreground', FOCUS_RING)} aria-label="清除搜索"><X size={12} /></button>}
+              {q && <button onClick={() => setQ('')} className={cn('mr-1.5 flex size-4 shrink-0 cursor-pointer items-center justify-center rounded-[4px] text-muted-foreground hover:bg-tint-secondary hover:text-foreground', FOCUS_RING)} aria-label="清除搜索"><OX size={12} /></button>}
             </div>
             <button onClick={openMenu('display')} className={cn('flex h-7 cursor-pointer touch-manipulation select-none items-center gap-1 whitespace-nowrap rounded-[6px] border border-border bg-card px-[10px] text-[13px] font-medium leading-[18px] text-foreground hover:bg-tint-secondary', FOCUS_RING)}>
-              Display <ChevronDown size={16} className="shrink-0 text-muted-foreground" />
+              Display <OChevronDown size={16} className="shrink-0 text-muted-foreground" />
             </button>
           </div>
         </header>
@@ -492,7 +493,7 @@ export default function SessionsPage() {
         <div className="flex shrink-0 items-start gap-2 px-3 py-2 sm:items-center">
           <Cb checked={allFiltered} onToggle={() => toggleSet(sorted.map((s) => s.devin_id), !allFiltered)} label="全选" />
           {statusF.length > 0 && (
-            <Chip kind="status" icon={<ListFilter size={14} className="text-muted-foreground" />} label={`Status is any of ${statusF.length} type${statusF.length > 1 ? 's' : ''}`} onClear={() => setStatusF([])} />
+            <Chip kind="status" icon={<FunnelGlyph size={14} className="text-muted-foreground" />} label={`Status is any of ${statusF.length} type${statusF.length > 1 ? 's' : ''}`} onClear={() => setStatusF([])} />
           )}
           {folderF.length > 0 && (
             <Chip kind="folder" icon={<Tag size={14} className="text-muted-foreground" />} label={folderF.length === 1 ? `Folder is ${folderF[0] === '__none' ? 'none' : folderF[0]}` : `Folder is any of ${folderF.length}`} onClear={() => setFolderF([])} />
@@ -529,11 +530,11 @@ export default function SessionsPage() {
         {sel.size > 0 && (
           <div className="dark absolute bottom-4 left-1/2 z-10 flex h-[46px] w-fit -translate-x-1/2 items-center gap-2 rounded-[10px] border border-border-secondary bg-elevated p-2 text-foreground shadow-[0_25px_50px_-12px_rgba(0,0,0,0.5)]">
             <span className="pl-1 pr-1 text-[13px] font-medium leading-[18px]">{sel.size} selected</span>
-            <button onClick={() => void bulkArchive(true)} title="归档" className="flex size-7 cursor-pointer items-center justify-center rounded-[6px] text-muted-foreground hover:bg-tint-secondary hover:text-foreground"><Archive size={16} /></button>
-            <button onClick={() => void bulkArchive(false)} title="取消归档" className="flex size-7 cursor-pointer items-center justify-center rounded-[6px] text-muted-foreground hover:bg-tint-secondary hover:text-foreground"><ArchiveRestore size={16} /></button>
+            <button onClick={() => void bulkArchive(true)} title="归档" className="flex size-7 cursor-pointer items-center justify-center rounded-[6px] text-muted-foreground hover:bg-tint-secondary hover:text-foreground"><OArchive size={16} /></button>
+            <button onClick={() => void bulkArchive(false)} title="取消归档" className="flex size-7 cursor-pointer items-center justify-center rounded-[6px] text-muted-foreground hover:bg-tint-secondary hover:text-foreground"><OArchive size={16} /></button>
             <button onClick={openMenu('move')} title="移到文件夹" className="flex size-7 cursor-pointer items-center justify-center rounded-[6px] text-muted-foreground hover:bg-tint-secondary hover:text-foreground"><FolderInput size={16} /></button>
             <button onClick={() => toggleSet(sorted.slice(0, 50).map((s) => s.devin_id), true)} className="h-7 cursor-pointer rounded-[6px] px-[10px] text-[13px] font-medium leading-[18px] text-accent-primary hover:bg-tint-secondary">Select first 50 sessions</button>
-            <button onClick={() => setSel(new Set())} className="flex size-7 cursor-pointer items-center justify-center rounded-[6px] text-muted-foreground hover:bg-tint-secondary hover:text-foreground" aria-label="清除选择"><X size={16} /></button>
+            <button onClick={() => setSel(new Set())} className="flex size-7 cursor-pointer items-center justify-center rounded-[6px] text-muted-foreground hover:bg-tint-secondary hover:text-foreground" aria-label="清除选择"><OX size={16} /></button>
           </div>
         )}
         {msg && <div className="fixed bottom-4 right-4 z-50 rounded-[8px] border border-border bg-card px-3 py-1.5 text-[12px] leading-[16px] text-muted-foreground shadow">{msg}</div>}
@@ -544,25 +545,25 @@ export default function SessionsPage() {
         <Menu anchor={menu.r} onClose={() => setMenu(null)} minW={280}>
           <div className={menuHead}>Sort by</div>
           {[['updated', 'Updated'], ['created', 'Created']].map(([v, l]) => (
-            <button key={v} className={menuItem} onClick={() => setSort(v as 'updated' | 'created')}>{l}{sort === v && <Check size={14} className="ml-auto" />}</button>
+            <button key={v} className={menuItem} onClick={() => setSort(v as 'updated' | 'created')}>{l}{sort === v && <OCheck size={14} className="ml-auto" />}</button>
           ))}
           <div className={menuSep} />
           <div className={menuHead}>Direction</div>
           {[['desc', 'Newest first'], ['asc', 'Oldest first']].map(([v, l]) => (
-            <button key={v} className={menuItem} onClick={() => setDir(v as 'desc' | 'asc')}>{l}{dir === v && <Check size={14} className="ml-auto" />}</button>
+            <button key={v} className={menuItem} onClick={() => setDir(v as 'desc' | 'asc')}>{l}{dir === v && <OCheck size={14} className="ml-auto" />}</button>
           ))}
           <div className={menuSep} />
           <div className={menuHead}>Grouping</div>
-          <button className={menuItem} onClick={() => setGrouped(true)}>By status{grouped && <Check size={14} className="ml-auto" />}</button>
-          <button className={menuItem} onClick={() => setGrouped(false)}>No grouping{!grouped && <Check size={14} className="ml-auto" />}</button>
+          <button className={menuItem} onClick={() => setGrouped(true)}>By status{grouped && <OCheck size={14} className="ml-auto" />}</button>
+          <button className={menuItem} onClick={() => setGrouped(false)}>No grouping{!grouped && <OCheck size={14} className="ml-auto" />}</button>
           <div className={menuSep} />
           <div className={menuHead}>View</div>
-          <button className={menuItem} onClick={() => setTreeView(false)}>Flat list{!treeView && <Check size={14} className="ml-auto" />}</button>
-          <button className={menuItem} onClick={() => setTreeView(true)}>Tree view{treeView && <Check size={14} className="ml-auto" />}</button>
+          <button className={menuItem} onClick={() => setTreeView(false)}>Flat list{!treeView && <OCheck size={14} className="ml-auto" />}</button>
+          <button className={menuItem} onClick={() => setTreeView(true)}>Tree view{treeView && <OCheck size={14} className="ml-auto" />}</button>
           <div className={menuSep} />
           <div className={menuHead}>Display properties</div>
           {([['Created', showCreated, setShowCreated], ['Updated', showUpdated, setShowUpdated], ['User', showUser, setShowUser], ['Folder', showFolder, setShowFolder]] as [string, boolean, (v: boolean) => void][]).map(([l, on, set]) => (
-            <button key={l} className={menuItem} onClick={() => set(!on)}>{l}{on && <Check size={14} className="ml-auto" />}</button>
+            <button key={l} className={menuItem} onClick={() => set(!on)}>{l}{on && <OCheck size={14} className="ml-auto" />}</button>
           ))}
           <div className={menuSep} />
           <button className={menuItem} onClick={exportCsv}><Download size={14} className="text-muted-foreground" /> Export to CSV</button>
@@ -574,8 +575,8 @@ export default function SessionsPage() {
       {menu?.kind === 'addfilter' && (
         <Menu anchor={menu.r} onClose={() => { setMenu(null); setSub(null) }} minW={220}>
           <div className={menuHead}>Add filter</div>
-          <button className={cn(menuItem, sub?.kind === 'status' && 'bg-tint-secondary')} onClick={(e) => setSub({ kind: 'status', r: e.currentTarget.getBoundingClientRect() })}><ListFilter className="text-muted-foreground" /> <span className="min-w-0 flex-1 truncate">Status</span><ChevronRight className="ml-auto text-muted-foreground" /></button>
-          <button className={cn(menuItem, sub?.kind === 'folder' && 'bg-tint-secondary')} onClick={(e) => setSub({ kind: 'folder', r: e.currentTarget.getBoundingClientRect() })}><Tag className="text-muted-foreground" /> <span className="min-w-0 flex-1 truncate">Folder</span><ChevronRight className="ml-auto text-muted-foreground" /></button>
+          <button className={cn(menuItem, sub?.kind === 'status' && 'bg-tint-secondary')} onClick={(e) => setSub({ kind: 'status', r: e.currentTarget.getBoundingClientRect() })}><FunnelGlyph size={16} className="text-muted-foreground" /> <span className="min-w-0 flex-1 truncate">Status</span><OChevronRight size={16} className="ml-auto text-muted-foreground" /></button>
+          <button className={cn(menuItem, sub?.kind === 'folder' && 'bg-tint-secondary')} onClick={(e) => setSub({ kind: 'folder', r: e.currentTarget.getBoundingClientRect() })}><Tag className="text-muted-foreground" /> <span className="min-w-0 flex-1 truncate">Folder</span><OChevronRight size={16} className="ml-auto text-muted-foreground" /></button>
         </Menu>
       )}
 
@@ -589,7 +590,7 @@ export default function SessionsPage() {
               <button key={o.v} className={menuItem} onClick={() => setStatusF((p) => (on ? p.filter((x) => x !== o.v) : [...p, o.v]))}>
                 <span className={cn('size-2 shrink-0 rounded-full', o.dot)} />
                 <span className="min-w-0 flex-1 truncate">{o.l}</span>
-                {on && <Check size={14} className="ml-auto shrink-0" />}
+                {on && <OCheck size={14} className="ml-auto shrink-0" />}
               </button>
             )
           })}
@@ -606,7 +607,7 @@ export default function SessionsPage() {
               <button key={o.v} className={menuItem} onClick={() => setFolderF((p) => (on ? p.filter((x) => x !== o.v) : [...p, o.v]))}>
                 <Tag className="shrink-0 text-muted-foreground" />
                 <span className="min-w-0 flex-1 truncate">{o.l}</span>
-                {on && <Check size={14} className="ml-auto shrink-0" />}
+                {on && <OCheck size={14} className="ml-auto shrink-0" />}
               </button>
             )
           })}

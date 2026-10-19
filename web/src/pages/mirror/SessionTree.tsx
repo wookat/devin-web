@@ -1,6 +1,7 @@
 import { memo, useEffect, useMemo, useState, type ReactNode } from 'react'
 import { createPortal } from 'react-dom'
-import { ArrowLeft, ChevronRight, ChevronDown, ChevronLeft, Settings2, Copy, Check, RotateCcw, Archive, ArchiveRestore, Plus, CircleDot, ArrowUp, Link2, List, X, Expand, ChevronsUpDown, Pin, PinOff, MoreHorizontal, Folder as FolderIcon, Pencil, Search, Clock, ListFilter, GitPullRequest, Lock } from 'lucide-react'
+import { ArrowLeft, Settings2, Copy, RotateCcw, Plus, CircleDot, ArrowUp, Link2, List, Expand, ChevronsUpDown, Folder as FolderIcon, Pencil, Clock, ListFilter, GitPullRequest, Lock } from 'lucide-react'
+import { OArchive, OCheck, OChevronDown, OChevronLeft, OChevronRight, ODots, OPin, OSearch, OX } from '../../components/officialIcons'
 import { adminFetch } from '@/lib/api'
 import { StatusDot } from '@/components/ui'
 import { cn } from '@/lib/utils'
@@ -80,7 +81,7 @@ function TreeRow({ s, depth, activeDevinId, folders, onOpen, onPrefetch, onRefre
             className="relative z-10 flex size-4 shrink-0 cursor-pointer items-center justify-center rounded text-muted-foreground hover:bg-accent"
             aria-label={open ? 'Collapse' : 'Expand'}
           >
-            {open ? <ChevronDown size={12} /> : <ChevronRight size={12} />}
+            {open ? <OChevronDown size={12} /> : <OChevronRight size={12} />}
           </button>
         )}
         {/* official left icon cell: w-6 h-[18px], 16px status glyph; aligns to
@@ -89,7 +90,7 @@ function TreeRow({ s, depth, activeDevinId, folders, onOpen, onPrefetch, onRefre
           {enu === 'working' ? (
             <svg aria-hidden="true" className="motion-safe:animate-spin text-text-green" width={16} height={16} viewBox="0 0 24 24" fill="none"><path d="M21 12C21 16.9706 16.9706 21 12 21C7.02944 21 3 16.9706 3 12C3 7.02944 7.02944 3 12 3C16.9706 3 21 7.02944 21 12Z" stroke="currentColor" strokeOpacity="0.3" strokeWidth="2" /><path d="M20.9451 13C20.4839 17.1716 17.1716 20.4839 13 20.9451" stroke="currentColor" strokeWidth="2" strokeLinecap="round" /></svg>
           ) : s.status_enum === 'archived' ? (
-            <Archive size={16} className="text-text-orange" />
+            <OArchive size={16} className="text-text-orange" />
           ) : (
             <StatusDot status={enu} className="!h-2 !w-2" />
           )}
@@ -156,7 +157,7 @@ function TreeRow({ s, depth, activeDevinId, folders, onOpen, onPrefetch, onRefre
               {showArchivedIcon && (
                 <>
                   <span className="mx-1 text-muted-foreground/60">·</span>
-                  <span aria-label="Archived" title="Archived" className="flex size-4 shrink-0 items-center justify-center text-orange-500"><Archive size={14} /></span>
+                  <span aria-label="Archived" title="Archived" className="flex size-4 shrink-0 items-center justify-center text-orange-500"><OArchive size={14} /></span>
                 </>
               )}
               {hasKids && !open && (
@@ -183,7 +184,7 @@ function TreeRow({ s, depth, activeDevinId, folders, onOpen, onPrefetch, onRefre
             onClick={(e) => { e.stopPropagation(); rowAction('/api/admin/mirror/session-pin', { devin_id: s.devin_id, pinned: !s.is_pinned }) }}
             className={actionCls(menu !== 'closed')}
           >
-            {s.is_pinned ? <PinOff size={16} /> : <Pin size={16} />}
+            {s.is_pinned ? <OPin size={16} /> : <OPin size={16} />}
           </button>
           <button
             data-slot="sidebar-menu-action"
@@ -193,7 +194,7 @@ function TreeRow({ s, depth, activeDevinId, folders, onOpen, onPrefetch, onRefre
             onClick={(e) => { e.stopPropagation(); rowAction('/api/admin/mirror/session-archive', { devin_id: s.devin_id, archive: !archivedView }) }}
             className={actionCls(menu !== 'closed')}
           >
-            {archivedView ? <ArchiveRestore size={16} /> : <Archive size={16} />}
+            {archivedView ? <OArchive size={16} /> : <OArchive size={16} />}
           </button>
           <button
             data-slot="sidebar-menu-action"
@@ -211,7 +212,7 @@ function TreeRow({ s, depth, activeDevinId, folders, onOpen, onPrefetch, onRefre
             }}
             className={actionCls(menu !== 'closed')}
           >
-            <MoreHorizontal size={16} />
+            <ODots size={16} />
           </button>
         </span>
         {menu !== 'closed' && createPortal(
@@ -256,7 +257,7 @@ function TreeRow({ s, depth, activeDevinId, folders, onOpen, onPrefetch, onRefre
               ) : (
                 <>
                   <button role="menuitem" aria-haspopup="menu" onMouseEnter={(e) => openFolderSub(e)} onClick={(e) => { e.stopPropagation(); openFolderSub(e) }} className="flex w-full cursor-pointer items-center gap-2 rounded px-2 py-1.5 text-[13px] hover:bg-accent">
-                    <FolderIcon size={13} className="text-muted-foreground" /> Folder <ChevronRight size={12} className="ml-auto text-muted-foreground" />
+                    <FolderIcon size={13} className="text-muted-foreground" /> Folder <OChevronRight size={12} className="ml-auto text-muted-foreground" />
                   </button>
                   <button
                     role="menuitem"
@@ -336,7 +337,7 @@ function TreeRow({ s, depth, activeDevinId, folders, onOpen, onPrefetch, onRefre
                     </button>
                     {s.folder && (
                       <button role="menuitem" onClick={(e) => { e.stopPropagation(); setMenu('closed'); rowAction('/api/admin/mirror/session-folder', { devin_id: s.devin_id, folder: null }) }} className="flex w-full cursor-pointer items-center gap-2 rounded px-2 py-1.5 text-[13px] hover:bg-accent">
-                        <X size={13} className="text-muted-foreground" /> Remove from folder
+                        <OX size={13} className="text-muted-foreground" /> Remove from folder
                       </button>
                     )}
                   </>
@@ -388,9 +389,9 @@ function MenuCalendar({ title, range, onPick, onReset }: { title: string; range:
         <span>{label(range[0])}</span><span>{label(range[1])}</span>
       </div>
       <div className="flex items-center justify-between py-1">
-        <button aria-label="Previous month" onClick={() => setMonth(new Date(Date.UTC(month.getUTCFullYear(), month.getUTCMonth() - 1, 1)))} className="flex size-6 items-center justify-center rounded-md hover:bg-muted"><ChevronLeft size={13} /></button>
+        <button aria-label="Previous month" onClick={() => setMonth(new Date(Date.UTC(month.getUTCFullYear(), month.getUTCMonth() - 1, 1)))} className="flex size-6 items-center justify-center rounded-md hover:bg-muted"><OChevronLeft size={13} /></button>
         <span className="text-[13px] font-medium">{month.toLocaleDateString('en-US', { month: 'long', year: 'numeric', timeZone: 'UTC' })}</span>
-        <button aria-label="Next month" onClick={() => setMonth(new Date(Date.UTC(month.getUTCFullYear(), month.getUTCMonth() + 1, 1)))} className="flex size-6 items-center justify-center rounded-md hover:bg-muted"><ChevronRight size={13} /></button>
+        <button aria-label="Next month" onClick={() => setMonth(new Date(Date.UTC(month.getUTCFullYear(), month.getUTCMonth() + 1, 1)))} className="flex size-6 items-center justify-center rounded-md hover:bg-muted"><OChevronRight size={13} /></button>
       </div>
       <div className="grid grid-cols-7 text-center text-[12px] text-muted-foreground">{['Su', 'Mo', 'Tu', 'We', 'Th', 'Fr', 'Sa'].map((d) => <span key={d} className="p-px leading-4">{d}</span>)}</div>
       <div className="grid grid-cols-7">
@@ -564,7 +565,7 @@ const SessionTree = memo(function SessionTree({ tree, archivedTree, activeDevinI
             onClick={(e) => { e.stopPropagation(); setSearchQ(''); setSearchIn(name) }}
             className="flex size-6 shrink-0 cursor-pointer items-center justify-center rounded-md opacity-0 transition-all hover:text-foreground focus:opacity-100 group-hover/label:opacity-100"
           >
-            <Search size={13} />
+            <OSearch size={13} />
           </button>
         )}
         {isFolder && !searching && (
@@ -584,7 +585,7 @@ const SessionTree = memo(function SessionTree({ tree, archivedTree, activeDevinI
             }}
             className="flex size-6 shrink-0 cursor-pointer items-center justify-center rounded-md opacity-0 transition-all hover:text-foreground focus:opacity-100 group-hover/label:opacity-100"
           >
-            <MoreHorizontal size={14} />
+            <ODots size={14} />
           </button>
         )}
       </div>
@@ -661,11 +662,11 @@ const SessionTree = memo(function SessionTree({ tree, archivedTree, activeDevinI
           onClick={(e) => openHeaderMenu(e, 'more')}
           className="flex size-6 shrink-0 cursor-pointer items-center justify-center rounded-md opacity-0 transition-all hover:text-foreground focus:opacity-100 group-hover/label:opacity-100"
         >
-          <MoreHorizontal size={14} />
+          <ODots size={14} />
         </button>
       </div>
       {(previewOrder ?? folderNames).filter((name) => !prefs.hidden[name]).map((name) => <Section key={name} name={name} items={groups.folders.get(name) ?? []} isFolder />)}
-      {groups.pinned.length > 0 && !prefs.hidden['Pinned'] && <Section name="Pinned" items={groups.pinned} icon={<Pin size={14} />} showCount />}
+      {groups.pinned.length > 0 && !prefs.hidden['Pinned'] && <Section name="Pinned" items={groups.pinned} icon={<OPin size={14} />} showCount />}
       {groups.rest.length > 0 && !prefs.hidden['Recent'] && <Section name="Recent" items={groups.rest} icon={<Clock size={14} />} />}
       {[...groups.projects.entries()].map(([cwd, items]) => (
         <Section
@@ -686,7 +687,7 @@ const SessionTree = memo(function SessionTree({ tree, archivedTree, activeDevinI
           {loadingMore ? 'Loading...' : 'Load more...'}
         </button>
       )}
-      {prefs.showArchived && <Section name="Archived" items={archivedTree ?? []} icon={<Archive size={14} />} archived />}
+      {prefs.showArchived && <Section name="Archived" items={archivedTree ?? []} icon={<OArchive size={14} />} archived />}
       {propsMenu && createPortal(
         <>
           <div className="fixed inset-0 z-40" onClick={(e) => { e.stopPropagation(); setPropsMenu(null) }} />
@@ -706,19 +707,19 @@ const SessionTree = memo(function SessionTree({ tree, archivedTree, activeDevinI
                 </div>
                 <button role="menuitem" aria-haspopup="menu" onMouseEnter={(e) => hoverMenu(e, pi, 'sort')} onClick={(e) => { pushMenu(e, 'sort') }} className={menuItemCls}>
                   <ChevronsUpDown size={13} className="text-muted-foreground" /> Sort
-                  <span className="ml-auto flex items-center gap-1 text-muted-foreground">{prefs.sort === 'created_at' ? 'Last created' : 'Last updated'} <ChevronRight size={12} /></span>
+                  <span className="ml-auto flex items-center gap-1 text-muted-foreground">{prefs.sort === 'created_at' ? 'Last created' : 'Last updated'} <OChevronRight size={12} /></span>
                 </button>
                 <button role="menuitem" aria-haspopup="menu" onMouseEnter={(e) => hoverMenu(e, pi, 'filter')} onClick={(e) => { pushMenu(e, 'filter') }} className={menuItemCls}>
                   <ListFilter size={13} className="text-muted-foreground" /> Filter
-                  <span className="ml-auto flex items-center gap-1 text-muted-foreground">{filterCount(prefs) > 0 ? filterCount(prefs) : ''} <ChevronRight size={12} /></span>
+                  <span className="ml-auto flex items-center gap-1 text-muted-foreground">{filterCount(prefs) > 0 ? filterCount(prefs) : ''} <OChevronRight size={12} /></span>
                 </button>
                 <button role="menuitem" aria-haspopup="menu" onMouseEnter={(e) => hoverMenu(e, pi, 'group')} onClick={(e) => { pushMenu(e, 'group') }} className={menuItemCls}>
                   <FolderIcon size={13} className="text-muted-foreground" /> Group
-                  <span className="ml-auto flex items-center gap-1 text-muted-foreground">Folders <ChevronRight size={12} /></span>
+                  <span className="ml-auto flex items-center gap-1 text-muted-foreground">Folders <OChevronRight size={12} /></span>
                 </button>
                 <button role="menuitem" aria-haspopup="menu" onMouseEnter={(e) => hoverMenu(e, pi, 'propvis')} onClick={(e) => { pushMenu(e, 'propvis') }} className={menuItemCls}>
                   <CircleDot size={13} className="text-muted-foreground" /> Property visibility
-                  <span className="ml-auto flex items-center gap-1 text-muted-foreground">{PROP_NAMES.filter((n) => !prefs.propHidden[n]).length} <ChevronRight size={12} /></span>
+                  <span className="ml-auto flex items-center gap-1 text-muted-foreground">{PROP_NAMES.filter((n) => !prefs.propHidden[n]).length} <OChevronRight size={12} /></span>
                 </button>
                 <button
                   role="menuitemcheckbox"
@@ -740,14 +741,14 @@ const SessionTree = memo(function SessionTree({ tree, archivedTree, activeDevinI
                 onClick={(e) => { e.stopPropagation(); onPrefs({ sort: k }); setPropsMenu(null) }}
                 className={menuItemCls}
               >
-                <span className="flex w-4 justify-center">{prefs.sort === k && <Check size={13} />}</span>
+                <span className="flex w-4 justify-center">{prefs.sort === k && <OCheck size={13} />}</span>
                 {k === 'updated_at' ? 'Last updated' : 'Last created'}
               </button>
             ))}
             {panel.mode === 'filter' && (
               <>
                 <div className="mb-1 flex items-center gap-2 border-b border-border px-2 pb-1.5 pt-1">
-                  <Search size={13} className="shrink-0 text-muted-foreground" />
+                  <OSearch size={13} className="shrink-0 text-muted-foreground" />
                   <input
                     autoFocus
                     value={fltSearch}
@@ -764,7 +765,7 @@ const SessionTree = memo(function SessionTree({ tree, archivedTree, activeDevinI
                   ) : (
                   <button key={m} role="menuitem" aria-haspopup="menu" onMouseEnter={(e) => hoverMenu(e, pi, m)} onClick={(e) => { e.stopPropagation(); setFltSearch(''); pushMenu(e, m) }} className={menuItemCls}>
                     {label}
-                    <span className="ml-auto flex items-center gap-1 text-muted-foreground"><ChevronRight size={12} /></span>
+                    <span className="ml-auto flex items-center gap-1 text-muted-foreground"><OChevronRight size={12} /></span>
                   </button>
                   ))}
                 {filterCount(prefs) > 0 ? (
@@ -785,7 +786,7 @@ const SessionTree = memo(function SessionTree({ tree, archivedTree, activeDevinI
                   <button role="menuitem" onClick={(e) => { e.stopPropagation(); onPrefs({ createdBy: 'self' }) }} className="cursor-pointer text-[12px] font-medium text-primary hover:underline">Reset</button>
                 </div>
                 <button role="menuitemcheckbox" aria-checked={prefs.createdBy === 'self'} onClick={(e) => { e.stopPropagation(); onPrefs({ createdBy: prefs.createdBy === 'self' ? 'annotated' : 'self' }) }} className={menuItemCls}>
-                  <span className="flex w-4 justify-center">{prefs.createdBy === 'self' && <Check size={13} />}</span>
+                  <span className="flex w-4 justify-center">{prefs.createdBy === 'self' && <OCheck size={13} />}</span>
                   {meName || 'Me'}
                 </button>
               </>
@@ -797,14 +798,14 @@ const SessionTree = memo(function SessionTree({ tree, archivedTree, activeDevinI
                   <button role="menuitem" onClick={(e) => { e.stopPropagation(); onPrefs({ tags: [] }) }} className="cursor-pointer text-[12px] font-medium text-primary hover:underline">Reset</button>
                 </div>
                 <div className="mb-1 flex items-center gap-2 border-b border-border px-2 pb-1.5">
-                  <Search size={13} className="shrink-0 text-muted-foreground" />
+                  <OSearch size={13} className="shrink-0 text-muted-foreground" />
                   <input autoFocus value={tagSearch} onChange={(e) => setTagSearch(e.target.value)} placeholder="Search tags" onClick={(e) => e.stopPropagation()} className="w-full min-w-0 bg-transparent text-[13px] text-foreground outline-none placeholder:text-muted-foreground" />
                 </div>
                 {orgTags.filter((t) => !tagSearch || t.toLowerCase().includes(tagSearch.toLowerCase())).map((t) => {
                   const on = prefs.tags.includes(t)
                   return (
                     <button key={t} role="menuitemcheckbox" aria-checked={on} onClick={(e) => { e.stopPropagation(); onPrefs({ tags: on ? prefs.tags.filter((x) => x !== t) : [...prefs.tags, t] }) }} className={menuItemCls}>
-                      <span className="flex w-4 justify-center">{on && <Check size={13} />}</span>
+                      <span className="flex w-4 justify-center">{on && <OCheck size={13} />}</span>
                       {t}
                     </button>
                   )
@@ -816,7 +817,7 @@ const SessionTree = memo(function SessionTree({ tree, archivedTree, activeDevinI
               const on = prefs.statuses.includes(s)
               return (
                 <button key={s} role="menuitemcheckbox" aria-checked={on} onClick={(e) => { e.stopPropagation(); onPrefs({ statuses: on ? prefs.statuses.filter((x) => x !== s) : [...prefs.statuses, s] }) }} className={menuItemCls}>
-                  <span className="flex w-4 justify-center">{on && <Check size={13} />}</span>
+                  <span className="flex w-4 justify-center">{on && <OCheck size={13} />}</span>
                   {s === 'running' ? 'Running' : 'Inactive'}
                 </button>
               )
@@ -825,7 +826,7 @@ const SessionTree = memo(function SessionTree({ tree, archivedTree, activeDevinI
               const on = prefs.sessionTypes.includes(v)
               return (
                 <button key={v} role="menuitemcheckbox" aria-checked={on} onClick={(e) => { e.stopPropagation(); onPrefs({ sessionTypes: on ? prefs.sessionTypes.filter((x) => x !== v) : [...prefs.sessionTypes, v] }) }} className={menuItemCls}>
-                  <span className="flex w-4 justify-center">{on && <Check size={13} />}</span>
+                  <span className="flex w-4 justify-center">{on && <OCheck size={13} />}</span>
                   {label}
                 </button>
               )
@@ -834,7 +835,7 @@ const SessionTree = memo(function SessionTree({ tree, archivedTree, activeDevinI
               const on = prefs.platforms.includes(v)
               return (
                 <button key={v} role="menuitemcheckbox" aria-checked={on} onClick={(e) => { e.stopPropagation(); onPrefs({ platforms: on ? prefs.platforms.filter((x) => x !== v) : [...prefs.platforms, v] }) }} className={menuItemCls}>
-                  <span className="flex w-4 justify-center">{on && <Check size={13} />}</span>
+                  <span className="flex w-4 justify-center">{on && <OCheck size={13} />}</span>
                   {label}
                 </button>
               )
@@ -843,7 +844,7 @@ const SessionTree = memo(function SessionTree({ tree, archivedTree, activeDevinI
               const on = prefs.automation.includes(v)
               return (
                 <button key={v} role="menuitemcheckbox" aria-checked={on} onClick={(e) => { e.stopPropagation(); onPrefs({ automation: on ? prefs.automation.filter((x) => x !== v) : [...prefs.automation, v] }) }} className={menuItemCls}>
-                  <span className="flex w-4 justify-center">{on && <Check size={13} />}</span>
+                  <span className="flex w-4 justify-center">{on && <OCheck size={13} />}</span>
                   {label}
                 </button>
               )
@@ -852,7 +853,7 @@ const SessionTree = memo(function SessionTree({ tree, archivedTree, activeDevinI
               const on = prefs.prStates.includes(v)
               return (
                 <button key={v} role="menuitemcheckbox" aria-checked={on} onClick={(e) => { e.stopPropagation(); onPrefs({ prStates: on ? prefs.prStates.filter((x) => x !== v) : [...prefs.prStates, v] }) }} className={menuItemCls}>
-                  <span className="flex w-4 justify-center">{on && <Check size={13} />}</span>
+                  <span className="flex w-4 justify-center">{on && <OCheck size={13} />}</span>
                   {label}
                 </button>
               )
@@ -863,7 +864,7 @@ const SessionTree = memo(function SessionTree({ tree, archivedTree, activeDevinI
               const on = cur === v
               return (
                 <button key={v} role="menuitemcheckbox" aria-checked={on} onClick={(e) => { e.stopPropagation(); onPrefs(created ? { createdRange: on ? '' : v } : { updatedRange: on ? 'month' : v }) }} className={menuItemCls}>
-                  <span className="flex w-4 justify-center">{on && <Check size={13} />}</span>
+                  <span className="flex w-4 justify-center">{on && <OCheck size={13} />}</span>
                   {label}
                 </button>
               )
@@ -909,7 +910,7 @@ const SessionTree = memo(function SessionTree({ tree, archivedTree, activeDevinI
                       onClick={(e) => { e.stopPropagation(); onPrefs({ propHidden: { ...prefs.propHidden, [n]: on } }) }}
                       className={menuItemCls}
                     >
-                      <span className="flex w-4 justify-center">{on && <Check size={13} />}</span>
+                      <span className="flex w-4 justify-center">{on && <OCheck size={13} />}</span>
                       {n}
                     </button>
                   )
@@ -926,7 +927,7 @@ const SessionTree = memo(function SessionTree({ tree, archivedTree, activeDevinI
                     onClick={(e) => { e.stopPropagation(); onPrefs({ groupBy: gb }) }}
                     className={menuItemCls}
                   >
-                    <span className="flex w-4 justify-center">{(prefs.groupBy ?? 'folders') === gb && <Check size={13} />}</span>
+                    <span className="flex w-4 justify-center">{(prefs.groupBy ?? 'folders') === gb && <OCheck size={13} />}</span>
                     <span className="truncate">{gb === 'folders' ? 'Group by Folders' : '按项目目录分组'}</span>
                   </button>
                 ))}
@@ -945,7 +946,7 @@ const SessionTree = memo(function SessionTree({ tree, archivedTree, activeDevinI
                       }}
                       className={menuItemCls}
                     >
-                      <span className="flex w-4 justify-center">{visible && <Check size={13} />}</span>
+                      <span className="flex w-4 justify-center">{visible && <OCheck size={13} />}</span>
                       <span className="truncate">{g}</span>
                     </button>
                   )
@@ -964,14 +965,14 @@ const SessionTree = memo(function SessionTree({ tree, archivedTree, activeDevinI
                   <List size={13} className="text-muted-foreground" /> View all sessions
                 </button>
                 <button role="menuitem" aria-haspopup="menu" onMouseEnter={(e) => hoverMenu(e, pi, 'moreactions')} onClick={(e) => { pushMenu(e, 'moreactions') }} className={menuItemCls}>
-                  <MoreHorizontal size={13} className="text-muted-foreground" /> More actions
-                  <span className="ml-auto flex items-center gap-1 text-muted-foreground"><ChevronRight size={12} /></span>
+                  <ODots size={13} className="text-muted-foreground" /> More actions
+                  <span className="ml-auto flex items-center gap-1 text-muted-foreground"><OChevronRight size={12} /></span>
                 </button>
               </>
             )}
             {panel.mode === 'moreactions' && (
               <div role="menuitem" aria-disabled="true" title="组织级破坏性操作，镜像不接线" className={`${menuItemCls} cursor-default opacity-50`}>
-                <Archive size={13} className="text-muted-foreground" /> Archive all sessions
+                <OArchive size={13} className="text-muted-foreground" /> Archive all sessions
               </div>
             )}
             {panel.mode === 'newfolder' && (
@@ -1053,7 +1054,7 @@ const SessionTree = memo(function SessionTree({ tree, archivedTree, activeDevinI
                     }}
                     className={menuItemCls}
                   >
-                    <Archive size={13} className="text-muted-foreground" /> Empty folder
+                    <OArchive size={13} className="text-muted-foreground" /> Empty folder
                   </button>
                 )}
                 <button
@@ -1061,7 +1062,7 @@ const SessionTree = memo(function SessionTree({ tree, archivedTree, activeDevinI
                   onClick={(e) => { e.stopPropagation(); const n = folderMenu.name; setFolderMenu(null); folderAction('/api/admin/mirror/folder-delete', { name: n }) }}
                   className={cn(menuItemCls, 'text-red-500 hover:text-red-500')}
                 >
-                  <X size={13} /> Delete folder
+                  <OX size={13} /> Delete folder
                 </button>
               </>
             )}
