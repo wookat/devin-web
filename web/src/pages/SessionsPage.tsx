@@ -60,18 +60,22 @@ function Menu({ anchor, onClose, children, minW = 200 }: { anchor: DOMRect | nul
   let top = anchor.bottom + 4
   if (top + 320 > window.innerHeight - 8 && anchor.top - 4 - 320 > 8) top = anchor.top - 4 - 320
   return createPortal(
-    <div ref={ref} className="menu-in fixed z-[100] overflow-y-auto rounded-[10px] bg-card/95 py-1 shadow-lg ring-1 ring-border backdrop-blur-[8px]" style={{ left, top, width: w, maxHeight: 'min(480px, 80vh)' }}>
+    <div ref={ref} className="menu-in fixed z-[100] overflow-y-auto rounded-[10px] bg-elevated/95 py-1 shadow-[0_10px_15px_-3px_rgba(0,0,0,0.06),0_4px_6px_-4px_rgba(0,0,0,0.1)] outline outline-1 outline-border-secondary backdrop-blur-[8px]" style={{ left, top, width: w, maxHeight: 'min(480px, 80vh)' }}>
       {children}
     </div>,
     document.body,
   )
 }
 
-const menuItem = 'flex w-full cursor-pointer select-none items-center gap-2 rounded-[6px] px-2 py-[7px] text-left text-[13px] leading-[18px] text-foreground outline-none hover:bg-tint-secondary'
+/* Official menu item: h-30px px-2 py-1.5 gap-2 rounded-6 text-13, svg 16px */
+const menuItem = 'flex w-full cursor-pointer select-none items-center gap-2 rounded-[6px] px-2 py-1.5 text-left text-[13px] leading-[18px] text-foreground outline-none hover:bg-tint-secondary [&>svg]:size-4 [&>svg]:shrink-0'
 const menuHead = 'px-2 pb-1 pt-2 text-[12px] leading-[16px] text-muted-foreground'
 const menuSep = 'mx-2 my-1 border-t border-border'
 
-/* Official checkbox: 14px rounded-[4px] bordered; checked → bg-accent-primary rgb(49,124,255) white check. */
+/* Official checkbox: 14px rounded-[4px] border .08 transparent; checked →
+   bg-accent-primary rgb(49,124,255) + white check; focus-visible 1px accent
+   outline offset-2 (all measured on app.devin.ai). */
+const FOCUS_RING = 'outline-none focus-visible:outline-1 focus-visible:outline-offset-2 focus-visible:outline-accent-primary'
 function Cb({ checked, onToggle, label, stop = true }: { checked: boolean; onToggle: () => void; label: string; stop?: boolean }) {
   return (
     <button
@@ -81,14 +85,18 @@ function Cb({ checked, onToggle, label, stop = true }: { checked: boolean; onTog
       aria-label={label}
       onClick={(e) => { if (stop) e.stopPropagation(); onToggle() }}
       className={cn(
-        'flex size-[14px] shrink-0 cursor-pointer items-center justify-center rounded-[4px] border transition-colors',
-        checked ? 'border-transparent bg-accent-primary text-white' : 'border-border bg-transparent hover:bg-tint-tertiary',
+        'flex size-[14px] shrink-0 cursor-pointer touch-manipulation items-center justify-center rounded-[4px] border transition-colors',
+        FOCUS_RING,
+        checked ? 'border-accent-primary bg-accent-primary text-white' : 'border-border bg-transparent hover:bg-tint-tertiary',
       )}
     >
       {checked && <Check size={12} strokeWidth={3} />}
     </button>
   )
 }
+/* Official row checkbox hit area: full row height, 38px wide — pulls back over
+   the row's own 16px padding (exact class string measured from app.devin.ai). */
+const CB_HIT = 'relative z-10 -my-2 -ml-4 -mr-2 flex items-center justify-center self-stretch pl-4 pr-2'
 
 export default function SessionsPage() {
   const nav = useNavigate()
@@ -209,11 +217,13 @@ export default function SessionsPage() {
     return (
       <>
         <div
-          className={cn('group/row relative mx-2 flex h-[44px] cursor-pointer touch-manipulation select-none items-center gap-[12px] overflow-hidden rounded-[6px] py-[8px] pl-[16px] pr-[16px] hover:bg-tint-tertiary', sel.has(s.devin_id) && 'bg-tint-secondary hover:bg-tint-secondary')}
+          className={cn('group/row relative isolate flex h-[44px] max-w-full cursor-pointer touch-manipulation select-none items-center gap-[12px] overflow-hidden rounded-[6px] py-[8px] pl-[16px] pr-[16px] hover:bg-tint-tertiary', sel.has(s.devin_id) && 'bg-tint-secondary hover:bg-tint-secondary')}
           onClick={() => nav(`/admin/${s.devin_id}`)}
           title={s.devin_id}
         >
-          <Cb checked={sel.has(s.devin_id)} onToggle={() => toggle(s.devin_id)} label="选择会话" />
+          <span className={CB_HIT}>
+            <Cb checked={sel.has(s.devin_id)} onToggle={() => toggle(s.devin_id)} label="选择会话" />
+          </span>
           {hasKids ? (
             <button onClick={(e) => { e.stopPropagation(); loadKids() }} className="flex size-4 shrink-0 cursor-pointer items-center justify-center text-muted-foreground" aria-label={open ? '收起子会话' : '展开子会话'}>
               {open ? <ChevronDown size={13} /> : <ChevronRight size={13} />}
@@ -239,11 +249,11 @@ export default function SessionsPage() {
             {showUser && <span className="flex size-6 items-center justify-center rounded-full bg-tint-secondary text-[10px] font-medium text-muted-foreground">L</span>}
           </div>
           {/* official hover slide-in actions: Pin + (local) archive */}
-          <div className="absolute right-3 top-1/2 hidden -translate-y-1/2 items-center gap-px group-hover/row:flex">
-            <button onClick={(e) => { e.stopPropagation(); pinRow(s) }} title={s.is_pinned ? 'Unpin' : 'Pin'} aria-label={s.is_pinned ? 'Unpin' : 'Pin'} className="flex size-6 cursor-pointer items-center justify-center rounded-md text-muted-foreground hover:bg-accent hover:text-foreground">
+          <div className="absolute right-3 top-1/2 hidden -translate-y-1/2 items-center gap-0.5 bg-background/80 pl-1 backdrop-blur-sm group-hover/row:flex">
+            <button onClick={(e) => { e.stopPropagation(); pinRow(s) }} title={s.is_pinned ? 'Unpin' : 'Pin'} aria-label={s.is_pinned ? 'Unpin' : 'Pin'} className={cn('flex size-7 cursor-pointer items-center justify-center rounded-[6px] text-muted-foreground hover:bg-tint-primary hover:text-foreground', FOCUS_RING)}>
               {s.is_pinned ? <PinOff size={14} /> : <Pin size={14} />}
             </button>
-            <button onClick={(e) => { e.stopPropagation(); archRow(s) }} title={s.status_enum === 'archived' ? '取消归档' : '归档'} aria-label={s.status_enum === 'archived' ? '取消归档' : '归档'} className="flex size-6 cursor-pointer items-center justify-center rounded-md text-muted-foreground hover:bg-accent hover:text-foreground">
+            <button onClick={(e) => { e.stopPropagation(); archRow(s) }} title={s.status_enum === 'archived' ? '取消归档' : '归档'} aria-label={s.status_enum === 'archived' ? '取消归档' : '归档'} className={cn('flex size-7 cursor-pointer items-center justify-center rounded-[6px] text-muted-foreground hover:bg-tint-primary hover:text-foreground', FOCUS_RING)}>
               {s.status_enum === 'archived' ? <ArchiveRestore size={14} /> : <Archive size={14} />}
             </button>
           </div>
@@ -258,8 +268,8 @@ export default function SessionsPage() {
     const all = ids.length > 0 && ids.every((i) => sel.has(i))
     return (
       <div className="pointer-events-auto sticky top-0 z-[1] w-full select-none">
-        <div className="flex h-9 items-center border-b border-border-secondary bg-background pl-6 text-[13px] font-medium leading-[20px] text-muted-foreground">
-          <span className="-ml-6 flex items-center self-stretch pl-6 pr-3">
+        <div className="flex h-9 items-center border-b border-border-secondary bg-background pl-6 text-[13px] font-medium leading-[18px] text-muted-foreground">
+          <span className="-ml-6 flex items-center self-stretch pl-4 pr-4">
             <Cb checked={all} onToggle={() => toggleSet(ids, !all)} label={`全选 ${name}`} />
           </span>
           {name}
@@ -268,20 +278,23 @@ export default function SessionsPage() {
     )
   }
 
+  /* Official filter chip: 28px rounded-6 bordered card, icon + label + × */
   const Chip = ({ icon, label, onClear, kind }: { icon: ReactNode; label: string; onClear: () => void; kind: string }) => (
-    <span className="inline-flex h-7 items-center gap-1 rounded-full border border-border bg-card pl-2 pr-1 text-[13px] leading-[18px]">
-      <button onClick={openMenu(kind)} className="flex cursor-pointer items-center gap-1 hover:text-foreground">
+    <span className="inline-flex h-7 items-center gap-1 rounded-[6px] border border-border bg-card pr-0.5 text-[13px] leading-[18px] text-foreground">
+      <button onClick={openMenu(kind)} className={cn('flex h-full cursor-pointer touch-manipulation items-center gap-1 rounded-l-[6px] pl-[10px] pr-1 text-foreground hover:bg-tint-secondary', FOCUS_RING)}>
         {icon}{label}
       </button>
-      <button onClick={onClear} className="flex size-5 cursor-pointer items-center justify-center rounded-full text-muted-foreground hover:bg-accent hover:text-foreground" aria-label="移除筛选"><X size={12} /></button>
+      <button onClick={onClear} className={cn('flex size-5 cursor-pointer items-center justify-center rounded-[4px] text-muted-foreground hover:bg-tint-primary hover:text-foreground', FOCUS_RING)} aria-label="移除筛选"><X size={12} /></button>
     </span>
   )
 
   return (
     <div className="flex h-screen bg-background text-foreground">
       {/* ================= official sidebar replica (300px, same as AdminMirror) ================= */}
+      {/* mobile scrim — official overlays the sidebar on a backdrop */}
+      {sideOpen && <div className="fixed inset-0 z-40 bg-scrim md:hidden" onClick={() => setSideOpen(false)} />}
       {sideOpen && (
-        <aside data-slot="sidebar" className="flex w-[300px] shrink-0 flex-col border-r border-border bg-background max-md:fixed max-md:inset-y-0 max-md:left-0 max-md:z-50">
+        <aside data-slot="sidebar" className="flex w-[300px] shrink-0 flex-col border-r border-border bg-background max-md:fixed max-md:inset-y-0 max-md:left-0 max-md:z-50 max-md:shadow-xl">
           <div data-slot="sidebar-header" className="flex items-center gap-0.5 px-2 pt-2">
             <div className="relative">
               <button
@@ -383,45 +396,53 @@ export default function SessionsPage() {
       {/* collapsed → PanelLeft trigger renders inside the main header */}
 
       {/* ================= main ================= */}
-      <main className="flex min-w-0 flex-1 flex-col">
-        {/* header: h-12 px-3 border-b — Sessions | Search sessions… + Display */}
-        <header className="flex h-12 shrink-0 items-center gap-2 border-b border-border px-3">
+      <main className="relative flex min-w-0 flex-1 flex-col">
+        {/* header: official h-[44px] p-2 pr-[7px] border-b — Sessions | Search + Display */}
+        <header className="flex h-11 shrink-0 select-none items-center gap-2 border-b border-border-secondary p-2 pr-[7px]">
           {!sideOpen && (
             <button
               onClick={() => setSideOpen(true)}
-              className="flex size-7 shrink-0 items-center justify-center rounded-[6px] text-muted-foreground hover:bg-tint-secondary hover:text-foreground"
+              className={cn('flex size-7 shrink-0 items-center justify-center rounded-[6px] text-muted-foreground hover:bg-tint-secondary hover:text-foreground', FOCUS_RING)}
               aria-label="Expand sidebar"
               title="Expand sidebar"
             >
               <PanelLeft size={16} />
             </button>
           )}
-          <h1 className="text-[15px] font-medium leading-[20px]">Sessions</h1>
+          <h1 className="pl-1 text-[13px] font-medium leading-[18px]">Sessions</h1>
           <div className="ml-auto flex items-center gap-2">
-            <div className="relative">
-              <Search size={13} className="pointer-events-none absolute left-2.5 top-1/2 -translate-y-1/2 text-muted-foreground" />
-              <input ref={searchRef} value={q} onChange={(e) => setQ(e.target.value)} placeholder="Search sessions…" className="h-8 w-56 rounded-[8px] border border-border bg-card pl-7 pr-7 text-[13px] outline-none placeholder:text-muted-foreground focus:border-foreground/30 max-md:w-36" />
-              {q && <button onClick={() => setQ('')} className="absolute right-1.5 top-1/2 -translate-y-1/2 cursor-pointer text-muted-foreground hover:text-foreground" aria-label="清除搜索"><X size={13} /></button>}
+            {/* official input-group: 28px shell, border .06, 16px icon, transparent
+                input pl-6 pr-10 text-13; focus-within → accent border */}
+            <div className="flex h-7 w-full min-w-0 max-w-[220px] items-center rounded-[6px] border border-border-secondary bg-card outline-none focus-within:border-accent-primary max-md:max-w-[150px]">
+              <Search size={16} className="ml-[10px] shrink-0 text-muted-foreground" />
+              <input
+                ref={searchRef}
+                value={q}
+                onChange={(e) => setQ(e.target.value)}
+                placeholder="Search sessions…"
+                className="h-[26px] min-w-0 flex-1 bg-transparent py-[5px] pl-[6px] pr-[10px] text-[13px] leading-[16px] text-foreground caret-accent-primary outline-none placeholder:text-muted-foreground"
+              />
+              {q && <button onClick={() => setQ('')} className={cn('mr-1.5 flex size-4 shrink-0 cursor-pointer items-center justify-center rounded-[4px] text-muted-foreground hover:bg-tint-secondary hover:text-foreground', FOCUS_RING)} aria-label="清除搜索"><X size={12} /></button>}
             </div>
-            <button onClick={openMenu('display')} className="flex h-8 cursor-pointer select-none items-center gap-1.5 whitespace-nowrap rounded-[8px] border border-border bg-card px-3 text-[13px] font-medium leading-[20px] hover:bg-tint-tertiary">
-              Display <ChevronDown size={14} className="shrink-0 text-muted-foreground" />
+            <button onClick={openMenu('display')} className={cn('flex h-7 cursor-pointer touch-manipulation select-none items-center gap-1 whitespace-nowrap rounded-[6px] border border-border bg-card px-[10px] text-[13px] font-medium leading-[18px] text-foreground hover:bg-tint-secondary', FOCUS_RING)}>
+              Display <ChevronDown size={16} className="shrink-0 text-muted-foreground" />
             </button>
           </div>
         </header>
 
-        {/* filter chips row: select-all + chips + ☰ add-filter + Clear filters */}
-        <div className="flex h-10 shrink-0 items-center gap-2 px-3">
+        {/* filter row: official `flex items-start gap-2 sm:items-center` */}
+        <div className="flex shrink-0 items-start gap-2 px-3 py-2 sm:items-center">
           <Cb checked={allFiltered} onToggle={() => toggleSet(sorted.map((s) => s.devin_id), !allFiltered)} label="全选" />
           {statusF.length > 0 && (
-            <Chip kind="status" icon={<ListFilter size={12} className="text-muted-foreground" />} label={`Status is any of ${statusF.length} type${statusF.length > 1 ? 's' : ''}`} onClear={() => setStatusF([])} />
+            <Chip kind="status" icon={<ListFilter size={14} className="text-muted-foreground" />} label={`Status is any of ${statusF.length} type${statusF.length > 1 ? 's' : ''}`} onClear={() => setStatusF([])} />
           )}
           {folderF.length > 0 && (
-            <Chip kind="folder" icon={<Tag size={12} className="text-muted-foreground" />} label={folderF.length === 1 ? `Folder is ${folderF[0] === '__none' ? 'none' : folderF[0]}` : `Folder is any of ${folderF.length}`} onClear={() => setFolderF([])} />
+            <Chip kind="folder" icon={<Tag size={14} className="text-muted-foreground" />} label={folderF.length === 1 ? `Folder is ${folderF[0] === '__none' ? 'none' : folderF[0]}` : `Folder is any of ${folderF.length}`} onClear={() => setFolderF([])} />
           )}
-          <button onClick={openMenu('addfilter')} className="flex size-7 cursor-pointer items-center justify-center rounded-[6px] border border-border text-muted-foreground hover:bg-tint-secondary hover:text-foreground" aria-label="添加筛选" title="添加筛选">
-            <ListFilter size={14} />
+          <button onClick={openMenu('addfilter')} className={cn('flex size-7 cursor-pointer touch-manipulation items-center justify-center rounded-[6px] text-muted-foreground hover:bg-tint-secondary hover:text-foreground', FOCUS_RING)} aria-label="添加筛选" title="添加筛选">
+            <ListFilter size={16} />
           </button>
-          {filtersOn && <button onClick={() => { setQ(''); setStatusF([]); setFolderF([]) }} className="ml-auto cursor-pointer select-none text-[13px] font-medium leading-[18px] text-foreground hover:underline">Clear filters</button>}
+          {filtersOn && <button onClick={() => { setQ(''); setStatusF([]); setFolderF([]) }} className={cn('flex h-7 cursor-pointer touch-manipulation select-none items-center gap-1 whitespace-nowrap rounded-[6px] px-[10px] text-[13px] font-medium leading-[18px] text-muted-foreground hover:bg-tint-secondary hover:text-foreground', FOCUS_RING)}>Clear filters</button>}
         </div>
 
         {/* list */}
@@ -439,20 +460,21 @@ export default function SessionsPage() {
           {!sorted.length && (
             <div className="flex flex-col items-center gap-2 px-4 py-16 text-center">
               <p className="text-[13px] leading-[18px] text-muted-foreground">{filtersOn ? '没有匹配筛选的会话' : '还没有会话'}</p>
-              {filtersOn && <button onClick={() => { setQ(''); setStatusF([]); setFolderF([]) }} className="cursor-pointer text-[13px] underline">Clear filters</button>}
+              {filtersOn && <button onClick={() => { setQ(''); setStatusF([]); setFolderF([]) }} className={cn('flex h-7 cursor-pointer select-none items-center rounded-[6px] px-[10px] text-[13px] font-medium leading-[18px] text-muted-foreground hover:bg-tint-secondary hover:text-foreground', FOCUS_RING)}>Clear filters</button>}
             </div>
           )}
         </div>
 
-        {/* bulk pill — official dark floating bar (bg-accent-neutral rgb(54,54,54)) */}
+        {/* bulk pill — official: `dark`-classed bg-bg-elevated #1f1f1f card,
+            rounded-10 p-2 gap-2 h-46px, absolute bottom-4 centered, L4 shadow */}
         {sel.size > 0 && (
-          <div className="fixed bottom-4 left-1/2 z-50 flex -translate-x-1/2 items-center gap-1 rounded-[10px] bg-bg-accent-neutral px-3 py-1.5 text-white shadow-xl">
-            <span className="px-1 text-[13px] font-medium leading-[18px]">{sel.size} selected</span>
-            <button onClick={() => void bulkArchive(true)} title="归档" className="flex size-7 cursor-pointer items-center justify-center rounded-md hover:bg-white/15"><Archive size={15} /></button>
-            <button onClick={() => void bulkArchive(false)} title="取消归档" className="flex size-7 cursor-pointer items-center justify-center rounded-md hover:bg-white/15"><ArchiveRestore size={15} /></button>
-            <button onClick={openMenu('move')} title="移到文件夹" className="flex size-7 cursor-pointer items-center justify-center rounded-md hover:bg-white/15"><FolderInput size={15} /></button>
-            <button onClick={() => toggleSet(sorted.slice(0, 50).map((s) => s.devin_id), true)} className="cursor-pointer px-2 text-[13px] font-medium leading-[18px] text-teal-300 hover:underline">Select first 50 sessions</button>
-            <button onClick={() => setSel(new Set())} className="flex size-7 cursor-pointer items-center justify-center rounded-md hover:bg-white/15" aria-label="清除选择"><X size={15} /></button>
+          <div className="dark absolute bottom-4 left-1/2 z-10 flex h-[46px] w-fit -translate-x-1/2 items-center gap-2 rounded-[10px] border border-border-secondary bg-elevated p-2 text-foreground shadow-[0_25px_50px_-12px_rgba(0,0,0,0.5)]">
+            <span className="pl-1 pr-1 text-[13px] font-medium leading-[18px]">{sel.size} selected</span>
+            <button onClick={() => void bulkArchive(true)} title="归档" className="flex size-7 cursor-pointer items-center justify-center rounded-[6px] text-muted-foreground hover:bg-tint-secondary hover:text-foreground"><Archive size={16} /></button>
+            <button onClick={() => void bulkArchive(false)} title="取消归档" className="flex size-7 cursor-pointer items-center justify-center rounded-[6px] text-muted-foreground hover:bg-tint-secondary hover:text-foreground"><ArchiveRestore size={16} /></button>
+            <button onClick={openMenu('move')} title="移到文件夹" className="flex size-7 cursor-pointer items-center justify-center rounded-[6px] text-muted-foreground hover:bg-tint-secondary hover:text-foreground"><FolderInput size={16} /></button>
+            <button onClick={() => toggleSet(sorted.slice(0, 50).map((s) => s.devin_id), true)} className="h-7 cursor-pointer rounded-[6px] px-[10px] text-[13px] font-medium leading-[18px] text-accent-primary hover:bg-tint-secondary">Select first 50 sessions</button>
+            <button onClick={() => setSel(new Set())} className="flex size-7 cursor-pointer items-center justify-center rounded-[6px] text-muted-foreground hover:bg-tint-secondary hover:text-foreground" aria-label="清除选择"><X size={16} /></button>
           </div>
         )}
         {msg && <div className="fixed bottom-4 right-4 z-50 rounded-[8px] border border-border bg-card px-3 py-1.5 text-[12px] leading-[16px] text-muted-foreground shadow">{msg}</div>}
