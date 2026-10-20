@@ -2,7 +2,7 @@ import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { useTranslation } from 'react-i18next'
 import { RefreshCw, Folder as FolderIcon, FileCode, FileText, FileSpreadsheet, FileImage, FileVideo, FileAudio, FileArchive, FileWarning, Save, ZoomIn, ZoomOut, Maximize, Crop as CropIcon, Square, Type, Undo2 } from 'lucide-react'
 import { adminFetch } from '@/lib/api'
-import CodeView from '@/components/CodeView'
+import CodeView, { useShikiTokens, type Tok } from '@/components/CodeView'
 import Markdown from '@/components/Markdown'
 import { OChevronDown, OChevronRight, OSearch, OX } from '@/components/officialIcons'
 import { cn } from '@/lib/utils'
@@ -530,8 +530,7 @@ function Viewer({ id, path, file, rawUrl, draft, onDraft, onDiscard, onSaveText,
   if (k === 'md') return <MdView text={text} savedText={file.text} name={path} onChange={onDraft} onSave={() => void onSaveText(path, text)} onDiscard={onDiscard} />
   if (k === 'html') return <HtmlView text={text} savedText={file.text} name={path} onChange={onDraft} onSave={() => void onSaveText(path, text)} onDiscard={onDiscard} />
   if (k === 'csv') return <CsvView text={text} savedText={file.text} onChange={onDraft} onSave={() => void onSaveText(path, text)} onDiscard={onDiscard} />
-  return <PlainEditor text={text} savedText={file.text} name={path} onChange={onDraft} onSave={() => void onSaveText(path, text)} onDiscard={onDiscard}
-    preview={<div className="overflow-auto"><CodeView text={text} name={path} /></div>} />
+  return <CodeEditor text={text} savedText={file.text} name={path} onChange={onDraft} onSave={() => void onSaveText(path, text)} onDiscard={onDiscard} />
 }
 
 function ErrBox({ msg, onRetry }: { msg: string; onRetry: () => void }) {
@@ -599,11 +598,66 @@ function useSaver(dirty: boolean, onSave: () => void) {
   return { saving, doSave }
 }
 
-/** Text/code editor: mono textarea + synced line-number gutter + Ctrl+S. */
+/** Overlay-highlight editor (VS Code style): a transparent-text textarea sits
+ * over a shiki-highlighted <pre> with identical font metrics — one view, both
+ * colored and editable. No Preview/Edit split for code files. */
+function CodeEditor({ text, savedText, name, onChange, onSave, onDiscard }: {
+  text: string; savedText: string; name: string; onChange: (t: string) => void; onSave: () => void; onDiscard: () => void
+}) {
+  const { t } = useTranslation()
+  const gutRef = useRef<HTMLDivElement>(null)
+  const preRef = useRef<HTMLPreElement>(null)
+  const dirty = text !== savedText
+  const { saving, doSave } = useSaver(dirty, onSave)
+  const lines = useMemo(() => text.split('\n').length, [text])
+  const toks = useShikiTokens(text, name, 250)
+  const rows: Tok[][] = toks ?? text.split('\n').map((l) => [{ content: l }])
+  const sync = (e: React.UIEvent<HTMLTextAreaElement>) => {
+    const el = e.currentTarget
+    if (gutRef.current) gutRef.current.scrollTop = el.scrollTop
+    if (preRef.current) preRef.current.style.transform = `translate(${-el.scrollLeft}px, ${-el.scrollTop}px)`
+  }
+  return (
+    <div className="flex h-full min-h-0 flex-col">
+      <EditBar mode="Edit" setMode={() => {}} modes={[]} dirty={dirty} saving={saving} onSave={doSave} onDiscard={onDiscard} />
+      <div className="flex min-h-0 flex-1 overflow-hidden">
+        <div ref={gutRef} className="shrink-0 select-none overflow-hidden border-r border-border bg-card px-[1ch] pt-3 text-right font-mono text-[11px] leading-[20px] text-muted-foreground" aria-hidden>
+          {Array.from({ length: lines }, (_, i) => <div key={i}>{i + 1}</div>)}
+        </div>
+        <div className="relative min-w-0 flex-1 overflow-hidden bg-background">
+          <pre ref={preRef} aria-hidden
+            className="pointer-events-none absolute left-0 top-0 m-0 w-max min-w-full whitespace-pre bg-background p-3 pl-2 font-mono text-[12px] leading-[20px] text-foreground">
+            {rows.map((toks, i) => (
+              <span key={i}>
+                {toks.map((tk, j) => (
+                  <span key={j}
+                    className={tk.color || tk.darkColor ? 'text-[var(--shiki-light)] dark:text-[var(--shiki-dark)]' : undefined}
+                    style={tk.color || tk.darkColor ? ({ '--shiki-light': tk.color, '--shiki-dark': tk.darkColor } as React.CSSProperties) : undefined}
+                  >{tk.content}</span>
+                ))}
+                {i < rows.length - 1 ? '\n' : ' '}
+              </span>
+            ))}
+          </pre>
+          <textarea
+            value={text}
+            wrap="off"
+            spellCheck={false}
+            onChange={(e) => onChange(e.target.value)}
+            onScroll={sync}
+            className="absolute inset-0 h-full w-full resize-none whitespace-pre bg-transparent p-3 pl-2 font-mono text-[12px] leading-[20px] text-transparent caret-foreground outline-none"
+          />
+        </div>
+      </div>
+    </div>
+  )
+}
+
+/** Plain textarea editor (no highlight) with optional Preview pane — used by
+ * md/html where a rendered preview is meaningful. */
 function PlainEditor({ text, savedText, name, onChange, onSave, onDiscard, preview }: {
   text: string; savedText: string; name: string; onChange: (t: string) => void; onSave: () => void; onDiscard: () => void; preview?: React.ReactNode
 }) {
-  const { t } = useTranslation()
   const gutRef = useRef<HTMLDivElement>(null)
   const [mode, setMode] = useState(preview ? 'Preview' : 'Edit')
   const dirty = text !== savedText
