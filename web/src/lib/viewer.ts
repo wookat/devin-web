@@ -131,7 +131,7 @@ export function screenshotUrl(sessionId: string, key: string, mt: string): strin
 
 /** Attachment bytes. Visitor timelines arrive with links already rewritten to the share proxy; anything else is routed through it. */
 export function attachmentUrl(sessionId: string, url: string, mt: string): string {
-  // Local workbench uploads are already same-origin API urls — serve directly.
+  // Local web uploads are already same-origin API urls — serve directly.
   // Same for produced-file chips: /api/admin/session/*/file-raw?path=…
   if (url.startsWith('/api/')) return url
   const v = current

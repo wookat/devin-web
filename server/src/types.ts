@@ -1,4 +1,4 @@
-// Shared event types between the devin-remote server and its web client.
+// Shared event types between the devin-web server and its web client.
 // Keep in sync with web/src/types.ts.
 
 export interface WsServerEvent {

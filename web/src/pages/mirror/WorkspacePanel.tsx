@@ -273,7 +273,7 @@ function WorkspacePanel({ id }: { id: string }) {
           role="button"
           tabIndex={0}
           draggable={renaming !== n.path}
-          onDragStart={(e) => { setDragNode(n.path); e.dataTransfer.effectAllowed = 'move'; e.dataTransfer.setData('text/x-wb-path', n.path) }}
+          onDragStart={(e) => { setDragNode(n.path); e.dataTransfer.effectAllowed = 'move'; e.dataTransfer.setData('text/x-dw-path', n.path) }}
           onDragEnd={() => { setDragNode(null); setDropDir(null) }}
           onDragOver={n.entry.dir ? (e) => { e.preventDefault(); e.stopPropagation(); setDropDir(n.path) } : undefined}
           onDragLeave={n.entry.dir ? () => setDropDir((d) => (d === n.path ? null : d)) : undefined}

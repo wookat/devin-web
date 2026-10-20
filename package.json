@@ -1,9 +1,10 @@
 {
-  "name": "devin-workbench-local",
+  "name": "devin-web",
   "version": "0.4.0",
-  "description": "A Kimi-web-style browser console for the Devin CLI — chat, streaming, modes, models, usage, terminal and more, over the Agent Client Protocol (ACP).",
+  "description": "devin-web — a local web client for the Devin CLI over ACP: cloud-style sessions, editor, timeline, terminal. LAN/internet accessible.",
   "license": "MIT",
   "type": "module",
+  "bin": { "devin-web": "bin/devin-web.js" },
   "files": [
     "bin",
     "dist"

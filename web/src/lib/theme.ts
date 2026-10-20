@@ -1,6 +1,6 @@
 export type Theme = 'light' | 'dark' | 'system'
 
-const KEY = 'wb-theme'
+const KEY = 'dw-theme'
 
 export function getTheme(): Theme {
   const v = localStorage.getItem(KEY)

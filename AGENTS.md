@@ -1,6 +1,6 @@
-# devin-workbench-local
+# devin-web
 
-Local, LAN-accessible Devin workbench: `devin-workbench-v2` cloud-style frontend
+Local, LAN-accessible Devin web: `devin-web` cloud-style frontend
 on top of local `devin acp` processes, with multi-account rotation on SWE rate limits.
 
 ## Build / run
@@ -9,7 +9,7 @@ on top of local `devin acp` processes, with multi-account rotation on SWE rate l
 npm run build                       :: vite + tsc → dist/
 deploy.bat                          :: build + free :7791 + clean orphan acp + start
 :: or manually:
-set DEVIN_REMOTE_ALLOWED_HOSTS=192.168.6.251:7791
+set DEVIN_WEB_ALLOWED_HOSTS=192.168.6.251:7791
 node dist\server\index.js --host 0.0.0.0 --port 7791
 ```
 
@@ -29,7 +29,7 @@ it logs a `waiting on N inflight` heartbeat every 30s meanwhile.
 Interrupted-turn recovery: `dispatchPrompt` records the outgoing message in
 `<dataDir>/open-turns.json` and clears it when the prompt settles — an entry
 surviving at boot means the server died mid-turn. A successful settle also
-appends `wb_turn_end` to the session log (errors append `wb_notice`); both
+appends `dw_turn_end` to the session log (errors append `dw_notice`); both
 survive replay via the tail re-append and are NOT timeline rows (tlPush
 skips them). `interruptedTurn()` (exported from sessionio) feeds
 `interrupted` on the /timeline response: open-turns evidence first, then a
@@ -38,8 +38,8 @@ only when the tail ends on a bare tool_call/thought (a finished turn never
 does). The client shows an amber resume banner — the `kind` field picks the
 action: 'continue' (turn reached the agent → sends 继续) vs 'resend'
 (prompt never echoed → replays the original message+attachments);
-dismissal persisted in `wb2-intd:<id>`. `autoResumeInterrupted(ctx)` runs
-4s after listen when wb.json `prefs.autoResume` is on (max 2 attempts per
+dismissal persisted in `dw-intd:<id>`. `autoResumeInterrupted(ctx)` runs
+4s after listen when dw.json `prefs.autoResume` is on (max 2 attempts per
 turn, `resumeCount` carried through dispatchPrompt) — it resumes crashed
 turns WITHOUT any tab open. `GET/POST /api/admin/prefs` backs the
 `/settings` page (official Preferences-style layout) whose send-shortcut /
@@ -67,19 +67,19 @@ powershell -File clean-orphans.ps1  :: kill acp processes with dead parents
   retryable). `sessionHost` in `server/src/sessionio.ts` pins ops to the host
   process — never re-resolve cwd for a loaded session (session/list rewrites
   `sessionCwd` and would bounce it to the other pooled acp).
-- Server module map: `localwb.ts` = wb.json registry routes + workspace index
+- Server module map: `localweb.ts` = dw.json registry routes + workspace index
   + the big admin/share router; `sessionio.ts` = hostFor (the ONE session→acp
   resolver: dedicated → sessionHost pin → cwd pool), load/replay dedup, live
   config, attachmentBlocks, promptWithRetry (the ONE rate-limit retry policy:
   cool acp.account → rotate → resend once → status 429 when all cooling),
-  dispatchPrompt, subagents, session listing; `wbtimeline.ts` = log→WbItem
-  builder + tlCache + noteUpdate deltas + tail snapshots; `wbstore.ts` =
-  wb.json registry (meta/folders/pins/lastConfig). `sessionSubs` in localwb.ts
+  dispatchPrompt, subagents, session listing; `dwtimeline.ts` = log→DwItem
+  builder + tlCache + noteUpdate deltas + tail snapshots; `dwstore.ts` =
+  dw.json registry (meta/folders/pins/lastConfig). `sessionSubs` in localweb.ts
   is the shared admin/share subroute table — add identical-semantics subs there
   (message/upload/file-contents/dashboard), keep sanitized share-only or
   admin-only subs in the branches.
 - Attachments are STRUCTURED: dispatchPrompt stores `attachments[]` on the
-  `_local` log entry → `WbItem.attachments` → `TimelineItem.attachments`.
+  `_local` log entry → `DwItem.attachments` → `TimelineItem.attachments`.
   Legacy `ATTACHMENT:"url"` marker lines in old persisted tails are still
   parsed by `splitAttachments` as fallback — keep it.
 - `AdminMirror.tsx` = the page component only (~4.3k). Everything else lives in
@@ -102,14 +102,14 @@ powershell -File clean-orphans.ps1  :: kill acp processes with dead parents
   shell in the session cwd, JSON frames `{d}`). A `ws` WebSocketServer bound
   with `server`+`path` aborts (400) every non-matching upgrade — both endpoints
   use `noServer` + manual `server.on('upgrade')` routing.
-- `wb.json` `lastConfig` remembers the last model/mode/effort/speed pick and
+- `dw.json` `lastConfig` remembers the last model/mode/effort/speed pick and
   `POST /api/admin/sessions/new` applies it (desktop carries the pick forward).
 - New-session flow mirrors desktop: `/` redirects to `/admin/new`, which is the
   `id === 'new'` draft sentinel inside AdminMirror — centered composer
   (`mt-auto` empty state + `mb-auto` footer), no session endpoints fire, first
   send POSTs `/api/admin/sessions/new` {task,folder,cwd} then `nav(replace)`
   into `/admin/<id>`. Draft model/mode pills mutate `lastSeenLocalCfg` +
-  `draftPicks` (replayed via /config after create); `wb2-new-session-draft`
+  `draftPicks` (replayed via /config after create); `dw-new-session-draft`
   sessionStorage hands text between pages. `composer-meta` response carries
   `primary_cwd` for the draft workspace picker. `/admin/new` must stay out of
   every session-scoped fetch (main.tsx boot prefetch excludes it — 'sessions'
@@ -128,7 +128,7 @@ powershell -File clean-orphans.ps1  :: kill acp processes with dead parents
   a session from its page navigates here so archived rows stay discoverable.
   `text-text-orange`/`bg-accent-primary` tokens added for exact palette.
 - Header settings menu is LOCAL-only: Send-with (localStorage), Rename/Folder/
-  Archive (wb.json), Copy link (`/s/<id>?t=local`), Share-to-cloud + End session
+  Archive (dw.json), Copy link (`/s/<id>?t=local`), Share-to-cloud + End session
   (verified `_cognition.ai/*` ext), Restart agent process (`POST .../restart` →
   `restartSession` kills the hosting acp; next op respawns + replays — pooled
   hosts shared by other sessions heal via hostFor's exited-pin check). The
@@ -162,11 +162,11 @@ powershell -File clean-orphans.ps1  :: kill acp processes with dead parents
 - POSTing `/version` against a session locked by another acp returns 500
   (`session_locked`, retried 5x) — expected; the smoke test should target an
   unlocked session (`--id lucky-badger`).
-- Public access: Cloudflare Tunnel `devin-workbench` (id cb705fa8) runs as the
+- Public access: Cloudflare Tunnel `devin-web` (id cb705fa8) runs as the
   `Cloudflared` Windows service (token-managed, survives reboots). Ingress maps
   `devin-local.zalize.com` (+ `devin.zalize.com`) → http://127.0.0.1:7791. Any
-  new public hostname MUST also be added to DEVIN_REMOTE_ALLOWED_HOSTS.
-  NOTE: the workbench has no auth — anyone with the URL has full control.
+  new public hostname MUST also be added to DEVIN_WEB_ALLOWED_HOSTS.
+  NOTE: the web has no auth — anyone with the URL has full control.
   `devin.zalize.com` itself 404s: its DNS is a read-only AAAA→100:: record
   managed by another CF product (undeletable via API key).
 - `session/load` counts as ACTIVITY — it bumps the session's `updatedAt` and
@@ -199,7 +199,7 @@ powershell -File clean-orphans.ps1  :: kill acp processes with dead parents
   dedup by text alone — consecutive identical replies ("收到" twice) are
   legitimate; the smid is what separates an echo from a new turn.
 - `session/list` `updatedAt` may be absent — persist last-seen into
-  `wb.json` meta (`m.updatedAt`); never fall back to `new Date()`.
+  `dw.json` meta (`m.updatedAt`); never fall back to `new Date()`.
 - `snippet()` from a built timeline is O(log); the sidebar uses
   `snippetFromLog` (tail-scan) for the same reason.
 
@@ -221,7 +221,7 @@ powershell -File clean-orphans.ps1  :: kill acp processes with dead parents
   from `Page.startScreencast`; input goes through `Input.dispatch*` with
   client coords normalized (u,v scaled by screencast metadata).
 - Desktop input (real mouse/keyboard) is deliberately NOT exposed — the
-  workbench has no auth, and the tunnel URL would become remote control
+  web has no auth, and the tunnel URL would become remote control
   of the host PC. Both surfaces are admin-tree only; the share tree
   never sees them.
 - Frontend: `web/src/pages/mirror/LocalLive.tsx` (桌面|浏览器 toggle)
@@ -320,7 +320,7 @@ powershell -File clean-orphans.ps1  :: kill acp processes with dead parents
 - **Child sessions = `sub:<parent>:<agentId>` pseudo-ids** — cloud parity:
   a subagent opens as a FULL session page (own timeline+composer+controls),
   nested under the parent in the sidebar tree. `handleSubSession` in
-  localwb.ts serves the whole per-session contract for the `sub:` id
+  localweb.ts serves the whole per-session contract for the `sub:` id
   (detail/timeline/messages/message/control/end/subagents/changes/todos/
   config/files via `cwdFor`→parent cwd). Children populate via
   `GET mirror/session-children?root=<id|sub:id>` (lazy per row) and
@@ -376,10 +376,10 @@ powershell -File clean-orphans.ps1  :: kill acp processes with dead parents
   readSync, and append-mode fds throw EPERM on ftruncateSync, so the
   truncate MUST go through the path API while the fd stays `'a+'`. Writes
   then append behind complete lines only. `fsyncSync` runs at turn
-  boundaries (`wb_turn_end`/`wb_notice`) — per-append fsync would tax the
+  boundaries (`dw_turn_end`/`dw_notice`) — per-append fsync would tax the
   event loop; intra-turn loss is bounded by OS cache and recovery treats
   an unfinished turn the same either way.
-- `DEVIN_REMOTE_NO_AUTORESUME=1` disables the boot open-turns sweep —
+- `DEVIN_WEB_NO_AUTORESUME=1` disables the boot open-turns sweep —
   REQUIRED on second instances sharing the data dir, or each boot re-sends
   "继续" into sessions the primary already resumed (and burns GBs replaying).
   Auto-resume also SKIPS sessions whose disk log exceeds 256MB (a
@@ -444,7 +444,7 @@ migrate, sandbox, setup, uninstall, acp.
 
 ## CLI proxy (frontend ↔ devin.exe)
 
-`POST /api/admin/cli/run {cmd, arg?}` — whitelist table in localwb.ts maps
+`POST /api/admin/cli/run {cmd, arg?}` — whitelist table in localweb.ts maps
 `cmd` → argv; `runCli` spawns `devin` (same binary as the acp pool), 30s cap,
 256KB output cap, no shell (arg is positional-only, can't inject). Wired UI:
 LocalDock "CLI 工具" section (Terminal icon in the sidebar dock header).

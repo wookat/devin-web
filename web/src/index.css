@@ -80,7 +80,7 @@
     scrollbar-width: thin;
     scrollbar-color: transparent transparent;
   }
-  *:hover, *[data-wb-scrolling] { scrollbar-color: rgb(var(--scrollbar-thumb)) transparent; }
+  *:hover, *[data-dw-scrolling] { scrollbar-color: rgb(var(--scrollbar-thumb)) transparent; }
   *::-webkit-scrollbar { width: 8px; height: 8px; }
   *::-webkit-scrollbar-track { background: transparent; }
   *::-webkit-scrollbar-thumb {
@@ -165,7 +165,7 @@ body { @apply bg-background text-foreground antialiased; font-size: 14px; line-h
   opacity: 0;
   transition: opacity 150ms;
 }
-.wb-find-hit {
+.dw-find-hit {
   outline: 2px solid rgb(245 158 11 / 0.8);
   outline-offset: 1px;
   border-radius: 8px;

@@ -10,14 +10,14 @@ and terminals, served locally over the
 [Agent Client Protocol](https://agentclientprotocol.com) (ACP).
 Think `kimi web`, but for Devin — and open source.
 
-[![npm](https://img.shields.io/npm/v/devin-remote?color=cb3837&logo=npm)](https://www.npmjs.com/package/devin-remote)
+[![npm](https://img.shields.io/npm/v/devin-web?color=cb3837&logo=npm)](https://www.npmjs.com/package/devin-web)
 [![license: MIT](https://img.shields.io/badge/license-MIT-blue.svg)](LICENSE)
 [![node >= 20](https://img.shields.io/badge/node-%E2%89%A5%2020-brightgreen?logo=node.js&logoColor=white)](https://nodejs.org)
 
 </div>
 
 ```bash
-npx devin-remote
+npx devin-web
 ```
 
 Then open http://127.0.0.1:7781 — that's it.
@@ -96,8 +96,8 @@ machine, and everything runs against the CLI you already have.
 ## Usage
 
 ```bash
-npx devin-remote            # start on :7781 and open the browser
-npx devin-remote --port 9000 --no-open
+npx devin-web            # start on :7781 and open the browser
+npx devin-web --port 9000 --no-open
 ```
 
 | Flag        | Default     | Description                          |
@@ -107,12 +107,12 @@ npx devin-remote --port 9000 --no-open
 | `--open` / `--no-open` | auto | Open the browser on start   |
 | `--version` |             | Print version                        |
 
-Environment: `PORT`, `DEVIN_REMOTE_HOME` (data dir), and
-`DEVIN_REMOTE_ALLOWED_HOSTS` — comma-separated extra hostnames accepted by
+Environment: `PORT`, `DEVIN_WEB_HOME` (data dir), and
+`DEVIN_WEB_ALLOWED_HOSTS` — comma-separated extra hostnames accepted by
 the CSRF guard (see [Security](#security)).
 
-Data lives in `~/.devin-remote/` (session aliases, settings, usage history,
-uploads). Override with `DEVIN_REMOTE_HOME`.
+Data lives in `~/.devin-web/` (session aliases, settings, usage history,
+uploads). Override with `DEVIN_WEB_HOME`.
 
 ## Security
 
@@ -130,7 +130,7 @@ If you access Devin Remote through a **reverse proxy or tunnel** (nginx,
 Caddy, `tailscale serve`, a MagicDNS name), allow its hostname:
 
 ```bash
-DEVIN_REMOTE_ALLOWED_HOSTS=devin.example.com,machine.tailnet-name.ts.net npx devin-remote
+DEVIN_WEB_ALLOWED_HOSTS=devin.example.com,machine.tailnet-name.ts.net npx devin-web
 ```
 
 Uploads are served with `nosniff` (and a neutering CSP for SVG), the upload
@@ -139,7 +139,7 @@ body is capped at 25 MiB, and file access is confined to the workspace.
 ## How it works
 
 ```
-browser (React SPA) ──REST/WS──> devin-remote server ──stdio JSON-RPC (ACP)──> devin acp ──> Devin
+browser (React SPA) ──REST/WS──> devin-web server ──stdio JSON-RPC (ACP)──> devin acp ──> Devin
 ```
 
 Devin Remote spawns one `devin acp` process per workspace directory and speaks
@@ -152,8 +152,8 @@ relay.
 ## Development
 
 ```bash
-git clone https://github.com/zouhall/devin-remote.git
-cd devin-remote
+git clone https://github.com/zouhall/devin-web.git
+cd devin-web
 npm install
 npm run dev        # server on :7781 (tsx watch) + web on :5173 (vite)
 ```

@@ -1,7 +1,7 @@
 /**
- * Local workbench API smoke test.
+ * Local web API smoke test.
  *
- * Exercises the workbench contract end-to-end against a RUNNING server:
+ * Exercises the web contract end-to-end against a RUNNING server:
  * session list → detail → timeline → config read/write → message send.
  *
  *   node test/api-smoke.mjs [--base http://127.0.0.1:7791] [--id <sessionId>] [--send]

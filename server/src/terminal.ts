@@ -48,7 +48,7 @@ const GIT_BINS = gitBins();
 /**
  * Implements the ACP terminal/* client methods with plain child_process.
  * No native pty dependency — agent commands are non-interactive, so piped
- * stdio is enough and `npx devin-remote` stays build-free.
+ * stdio is enough and `npx devin-web` stays build-free.
  */
 export class TerminalRunner {
   private terminals = new Map<string, Terminal>();
@@ -113,7 +113,7 @@ export class TerminalRunner {
     // A nonexistent command emits 'error' with no 'exit' — without this the
     // server crashes (unhandled 'error') and waitForExit callers hang forever.
     proc.on("error", (err) => {
-      const msg = `[devin-remote] failed to start "${params.command}": ${err.message}\n`;
+      const msg = `[devin-web] failed to start "${params.command}": ${err.message}\n`;
       term.output = (term.output + msg).slice(-term.limit);
       ev.onTerminalOutput(id, term.sessionId, msg);
       settle(-1, null);

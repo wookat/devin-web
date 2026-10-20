@@ -14,9 +14,9 @@ import { WsHub } from "./ws.js";
 import { WebSocketServer } from "ws";
 import { SessionLog } from "./sessionlog.js";
 import { handleApi, type ApiContext } from "./routes.js";
-import { handleLocalWb } from "./localwb.js";
+import { handleLocalWb } from "./localweb.js";
 import { recordTerminal, loadInflight, isReplayEcho, autoResumeInterrupted, sessionHost, markSubagentDead } from "./sessionio.js";
-import { noteUpdate } from "./wbtimeline.js";
+import { noteUpdate } from "./dwtimeline.js";
 import { initLocalBrowser, attachBrowserWs } from "./localbrowser.js";
 import { initScreen } from "./screen.js";
 import type { WsServerEvent } from "./types.js";
@@ -41,13 +41,13 @@ const pkg = JSON.parse(
 ) as { version: string };
 
 if (wantVersion) {
-  console.log(`devin-remote ${pkg.version}`);
+  console.log(`devin-web ${pkg.version}`);
   process.exit(0);
 }
 if (wantHelp) {
-  console.log(`devin-remote — a browser console for the Devin CLI (ACP)
+  console.log(`devin-web — a browser console for the Devin CLI (ACP)
 
-Usage: devin-remote [options]
+Usage: devin-web [options]
 
 Options:
   --port <port>   Port to bind (default 7781, env PORT)
@@ -58,8 +58,8 @@ Options:
   --help          Show this help
 
 Requires: devin CLI on PATH and a completed 'devin auth login'.
-Data:   ~/.devin-remote (override with DEVIN_REMOTE_HOME)
-Env:    DEVIN_REMOTE_ALLOWED_HOSTS — comma-separated extra hostnames allowed
+Data:   ~/.devin-web (override with DEVIN_WEB_HOME)
+Env:    DEVIN_WEB_ALLOWED_HOSTS — comma-separated extra hostnames allowed
         by the CSRF/DNS-rebinding guard (reverse proxies, tailscale serve, …)`);
   process.exit(0);
 }
@@ -70,7 +70,7 @@ Env:    DEVIN_REMOTE_ALLOWED_HOSTS — comma-separated extra hostnames allowed
 // Host check (rebinding): allowlisted names or IP literals only. Origin check
 // (CSRF): must match the request Host — including the port when both sides
 // state one, so an app on another port of the same machine can't drive this
-// one — or be explicitly allowlisted via DEVIN_REMOTE_ALLOWED_HOSTS (for
+// one — or be explicitly allowlisted via DEVIN_WEB_ALLOWED_HOSTS (for
 // Host-rewriting reverse proxies and tunnels).
 
 /** Lowercased {hostname, explicit port} of a bare host, host:port, or origin — null if unparseable. */
@@ -98,7 +98,7 @@ const allowedHostnames = new Set(["localhost", "127.0.0.1", "::1", os.hostname()
 }
 /** User-declared proxy/tunnel names: valid as Host and as a non-matching Origin. */
 const extraAllowedHostnames = new Set<string>();
-for (const extra of (process.env.DEVIN_REMOTE_ALLOWED_HOSTS ?? "").split(",")) {
+for (const extra of (process.env.DEVIN_WEB_ALLOWED_HOSTS ?? "").split(",")) {
   const p = hostParts(extra);
   if (p) {
     allowedHostnames.add(p.host);
@@ -189,7 +189,7 @@ const hub = new WsHub(
   httpServer,
   () => ({
     type: "config",
-    app: { name: "devin-remote", version: pkg.version },
+    app: { name: "devin-web", version: pkg.version },
     settings: store.settings,
   }),
   { verifyOrigin: isAllowedRequest },
@@ -384,7 +384,7 @@ const STATIC_MIME: Record<string, string> = {
 function serveStatic(req: http.IncomingMessage, res: http.ServerResponse, url: URL) {
   if (!webDir) {
     res.writeHead(200, { "content-type": "text/html" }).end(
-      `<h1>devin-remote</h1><p>Web UI not built. Run <code>npm run build</code>, or use <code>npm run dev</code> and open <a href="http://localhost:5173">http://localhost:5173</a>.</p>`,
+      `<h1>devin-web</h1><p>Web UI not built. Run <code>npm run build</code>, or use <code>npm run dev</code> and open <a href="http://localhost:5173">http://localhost:5173</a>.</p>`,
     );
     return;
   }
@@ -431,7 +431,7 @@ httpServer.on("request", (req, res) => {
       if (!isAllowedRequest(req)) {
         res.writeHead(403, { "content-type": "application/json" }).end(
           JSON.stringify({
-            error: "forbidden origin/host — set DEVIN_REMOTE_ALLOWED_HOSTS for reverse proxies and tunnels",
+            error: "forbidden origin/host — set DEVIN_WEB_ALLOWED_HOSTS for reverse proxies and tunnels",
           }),
         );
         return;
@@ -453,7 +453,7 @@ httpServer.on("request", (req, res) => {
 // ---- go --------------------------------------------------------------------
 httpServer.listen(PORT, HOST, async () => {
   const addr = `http://${HOST}:${PORT}`;
-  console.log(`devin-remote ${pkg.version} listening on ${addr}`);
+  console.log(`devin-web ${pkg.version} listening on ${addr}`);
   const check = await devinCheck();
   if (!check.installed) {
     console.warn("⚠  devin CLI not found on PATH — install it first: https://docs.devin.ai/cli");

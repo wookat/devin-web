@@ -13,5 +13,5 @@ echo [3/4] kill orphaned devin acp processes (parent dead only)
 powershell -NoProfile -Command "Get-CimInstance Win32_Process -Filter \"name='devin.exe'\" | Where-Object { $_.CommandLine -match 'acp' -and -not (Get-Process -Id $_.ParentProcessId -ErrorAction SilentlyContinue) } | ForEach-Object { Stop-Process -Id $_.ProcessId -Force }"
 
 echo [4/4] start server
-set DEVIN_REMOTE_ALLOWED_HOSTS=192.168.6.251:7791,devin.zalize.com,devin-local.zalize.com
+set DEVIN_WEB_ALLOWED_HOSTS=192.168.6.251:7791,devin.zalize.com,devin-local.zalize.com
 node dist\server\index.js --host 0.0.0.0 --port 7791

@@ -22,7 +22,7 @@ interface SessionsResp {
 /* Official status → colored text (measured app.devin.ai token values):
    green rgb(0,165,88) · orange rgb(245,142,58) · red rgb(245,59,58) · secondary rgba(25,25,25,.56) */
 /* Real status_enum values only — sessionStatus emits working|blocked; archived
-   comes from wb.json meta. No invented states (ended/finished/crashed don't
+   comes from dw.json meta. No invented states (ended/finished/crashed don't
    exist on local acp session/list). */
 const STATUS_TEXT: Record<string, { label: string; cls: string }> = {
   working: { label: '进行中', cls: 'text-text-green' },

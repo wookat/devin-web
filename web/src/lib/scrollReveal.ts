@@ -7,10 +7,10 @@ export function initScrollReveal() {
     (e) => {
       const el = e.target
       if (!(el instanceof Element)) return
-      el.setAttribute('data-wb-scrolling', '')
+      el.setAttribute('data-dw-scrolling', '')
       const prev = timers.get(el)
       if (prev !== undefined) window.clearTimeout(prev)
-      timers.set(el, window.setTimeout(() => el.removeAttribute('data-wb-scrolling'), 800))
+      timers.set(el, window.setTimeout(() => el.removeAttribute('data-dw-scrolling'), 800))
     },
     { capture: true, passive: true },
   )

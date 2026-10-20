@@ -43,11 +43,11 @@ export interface DashboardData {
 }
 
 export function adminKey(): string {
-  return localStorage.getItem('wb_admin_key') || ''
+  return localStorage.getItem('dw_admin_key') || ''
 }
 
 export function setAdminKey(k: string) {
-  localStorage.setItem('wb_admin_key', k)
+  localStorage.setItem('dw_admin_key', k)
 }
 
 const prefetched = new Map<string, Promise<Response>>()

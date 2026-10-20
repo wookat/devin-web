@@ -258,6 +258,6 @@ function ComputerPanel({ id, items, mt, asleep, onWake, canControl, showLiveDesk
 }
 
 // Official attachment links, the same-origin share proxy form, and local
-// workbench uploads staged via /api/uploads/<id>.
+// web uploads staged via /api/uploads/<id>.
 
 export { type StreamQuality, type ComputerShot, type ComputerSliderGroup, computerSliderGroups, ComputerPanel };

@@ -359,7 +359,7 @@ export default function AdminMirrorPage() {
   const [settingsSub, setSettingsSub] = useState<'none' | 'folder' | 'rename' | 'send'>('none')
   // Desktop parity: composer send shortcut (Settings → "Send messages with").
   const [sendWith, setSendWith] = useState<'enter' | 'ctrlenter'>(() =>
-    (localStorage.getItem('wb-send-with') === 'ctrlenter' ? 'ctrlenter' : 'enter'))
+    (localStorage.getItem('dw-send-with') === 'ctrlenter' ? 'ctrlenter' : 'enter'))
   const [renameDraft, setRenameDraft] = useState('')
   const settingsButtonRef = useRef<HTMLButtonElement>(null)
   const headerMenuAnchorRef = useRef<HTMLButtonElement | null>(null)
@@ -405,7 +405,7 @@ export default function AdminMirrorPage() {
       .catch(() => { if (alive) setCfgReady(true) })
     return () => { alive = false }
   }, [id, isVisitor, cfgTick])
-  // Draft mode: pull agent-level cfg + wb.json lastConfig via composer-meta so
+  // Draft mode: pull agent-level cfg + dw.json lastConfig via composer-meta so
   // the mode/model pills show real values before any session exists (official
   // home shows the same pills on its new-session composer).
   useEffect(() => {
@@ -431,7 +431,7 @@ export default function AdminMirrorPage() {
       .catch(() => {})
   }, [isDraft, isVisitor])
   // Config picks made in draft mode — replayed onto the session right after
-  // creation (the server also applies wb.json lastConfig on its own).
+  // creation (the server also applies dw.json lastConfig on its own).
   const draftPicks = useRef<{ configId: string; value: string }[]>([])
   const chooseLocalOptions = (pairs: { configId: string; value: string }[]) => {
     setModeOpen(false); setModeSub(null); setModeSubPos(null); setSModeOpen(false)
@@ -690,8 +690,8 @@ export default function AdminMirrorPage() {
   const [input, setInput] = useState(() => {
     if (id !== 'new') return ''
     try {
-      const draft = localStorage.getItem('wb2-new-session-draft') || ''
-      localStorage.removeItem('wb2-new-session-draft')
+      const draft = localStorage.getItem('dw-new-session-draft') || ''
+      localStorage.removeItem('dw-new-session-draft')
       return draft
     } catch { return '' }
   })
@@ -699,7 +699,7 @@ export default function AdminMirrorPage() {
   // sessions). localStorage so drafts survive closing the tab/browser —
   // reopening restores the last page AND its composer state. inputForId
   // guards the id-switch render so the old session's text is never written
-  // under the new session's key; the wb2-new-session-draft handoff
+  // under the new session's key; the dw-new-session-draft handoff
   // (cross-page nav) takes priority on 'new'.
   const inputForId = useRef(id)
   useEffect(() => {
@@ -708,18 +708,18 @@ export default function AdminMirrorPage() {
       let draft = ''
       try {
         if (id === 'new') {
-          draft = localStorage.getItem('wb2-new-session-draft') || ''
-          if (draft) localStorage.removeItem('wb2-new-session-draft')
-          else draft = localStorage.getItem('wb2-input-draft:new') || ''
+          draft = localStorage.getItem('dw-new-session-draft') || ''
+          if (draft) localStorage.removeItem('dw-new-session-draft')
+          else draft = localStorage.getItem('dw-input-draft:new') || ''
         } else {
-          draft = localStorage.getItem(`wb2-input-draft:${id}`) || ''
+          draft = localStorage.getItem(`dw-input-draft:${id}`) || ''
         }
       } catch { /* storage unavailable */ }
       setInput(draft)
       return
     }
     try {
-      const k = `wb2-input-draft:${id}`
+      const k = `dw-input-draft:${id}`
       if (input) localStorage.setItem(k, input)
       else localStorage.removeItem(k)
     } catch { /* storage unavailable */ }
@@ -797,7 +797,7 @@ export default function AdminMirrorPage() {
      (default) | 'warning_and_modal'. Only warning_and_modal opens the "Confirm to send
      message" dialog: findings present >=400ms and the exact draft not previously
      confirmed. Mirror reads the mode from localStorage (default warning_only). */
-  const coachMode = localStorage.getItem('wb2-coach-precheck-mode') || 'warning_only'
+  const coachMode = localStorage.getItem('dw-coach-precheck-mode') || 'warning_only'
   const [confirmSendOpen, setConfirmSendOpen] = useState(false)
   const findingsSinceRef = useRef<number | null>(null)
   const confirmedDraftRef = useRef<string | null>(null)
@@ -1346,7 +1346,7 @@ export default function AdminMirrorPage() {
             // Dismissed banners stay down until a NEW interrupted turn
             // (different ts) appears — keyed per session.
             let gone = false
-            try { gone = localStorage.getItem(`wb2-intd:${id}`) === String(r.interrupted.ts) } catch { /* unavailable */ }
+            try { gone = localStorage.getItem(`dw-intd:${id}`) === String(r.interrupted.ts) } catch { /* unavailable */ }
             setInterrupted(gone ? null : r.interrupted)
           } else setInterrupted(null)
           setTlError(r.error)
@@ -1690,8 +1690,8 @@ export default function AdminMirrorPage() {
     const node = scrollRef.current?.querySelector<HTMLElement>(`[data-eid="${CSS.escape(findCur)}"]`)
     if (!node) return
     node.scrollIntoView({ block: 'center' })
-    node.classList.add('wb-find-hit')
-    return () => node.classList.remove('wb-find-hit')
+    node.classList.add('dw-find-hit')
+    return () => node.classList.remove('dw-find-hit')
   }, [findCur])
 
   const workSecs = useMemo(() => (allItems.length ? workSeconds(allItems) : 0), [allItems])
@@ -2084,7 +2084,7 @@ const groups = useMemo(() => groupItems(allItems, sessionWorking), [allItems, se
   }
   const dismissInterrupted = () => {
     if (!interrupted) return
-    try { localStorage.setItem(`wb2-intd:${id}`, String(interrupted.ts)) } catch { /* unavailable */ }
+    try { localStorage.setItem(`dw-intd:${id}`, String(interrupted.ts)) } catch { /* unavailable */ }
     setInterrupted(null)
   }
 
@@ -2408,7 +2408,7 @@ const groups = useMemo(() => groupItems(allItems, sessionWorking), [allItems, se
         onDragLeave={(e) => { if (e.dataTransfer.types.includes('Files')) setDragOver((n) => Math.max(0, n - 1)) }}
         onDrop={(e) => {
           // Workspace-tree file drag → insert an @path mention into the composer.
-          const wbPath = e.dataTransfer.getData('text/x-wb-path')
+          const wbPath = e.dataTransfer.getData('text/x-dw-path')
           if (wbPath) {
             e.preventDefault()
             setInput((cur) => (cur.trim() ? `${cur} @${wbPath} ` : `@${wbPath} `))
@@ -3023,7 +3023,7 @@ const groups = useMemo(() => groupItems(allItems, sessionWorking), [allItems, se
                     ts={g.item.ts}
                     tab={typeof panel === 'string' ? serializeOfficialTab(panel, urlPrs, urlFiles) || undefined : undefined}
                     onStartNewSession={g.item.role === 'user' && !isVisitor ? () => {
-                      try { localStorage.setItem('wb2-new-session-draft', g.item.body || '') } catch { /* quota */ }
+                      try { localStorage.setItem('dw-new-session-draft', g.item.body || '') } catch { /* quota */ }
                       nav('/admin/new')
                     } : undefined}
                     onSideChat={isVisitor ? undefined : () => { setScAnchor({ id: g.item.id, ts: g.item.ts }); openTab('sidechat') }}
@@ -3184,10 +3184,10 @@ const groups = useMemo(() => groupItems(allItems, sessionWorking), [allItems, se
                             if (node) {
                               node.scrollIntoView({ block: 'start' })
                               // Official jump feedback: the landed row is marked once.
-                              // (wb-find-hit is a static outline, not an animation —
+                              // (dw-find-hit is a static outline, not an animation —
                               // clear it on a timer, not animationend.)
-                              node.classList.add('wb-find-hit')
-                              window.setTimeout(() => node!.classList.remove('wb-find-hit'), 1600)
+                              node.classList.add('dw-find-hit')
+                              window.setTimeout(() => node!.classList.remove('dw-find-hit'), 1600)
                             }
                           }}
                           className={cn('flex w-full cursor-pointer items-center gap-2 rounded-[6px] px-2 py-1.5 text-left text-[13px] leading-[18px] hover:bg-accent', it.id === idxActive && 'bg-accent')}
@@ -3454,7 +3454,7 @@ const groups = useMemo(() => groupItems(allItems, sessionWorking), [allItems, se
                        dialog with the draft prefilled. */
                     <Link
                       to="/admin/new"
-                      onClick={() => { try { localStorage.setItem('wb2-new-session-draft', input) } catch { /* quota */ } setFindings([]) }}
+                      onClick={() => { try { localStorage.setItem('dw-new-session-draft', input) } catch { /* quota */ } setFindings([]) }}
                       className="shrink-0 text-[12px] leading-4 text-blue-400 hover:underline"
                     >
                       Start new session
@@ -3528,7 +3528,7 @@ const groups = useMemo(() => groupItems(allItems, sessionWorking), [allItems, se
                             setInput('')
                             setFindings([])
                           } else if (ft === 'unrelated_followup_new_session') {
-                            try { localStorage.setItem('wb2-new-session-draft', input) } catch { /* quota */ }
+                            try { localStorage.setItem('dw-new-session-draft', input) } catch { /* quota */ }
                             setFindings([])
                             nav('/admin/new')
                           } else if (ft === 'use_code_scan') {

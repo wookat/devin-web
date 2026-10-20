@@ -31,7 +31,7 @@ export default function Settings() {
   const { t } = useTranslation()
   const [autoResume, setAutoResume] = useState<boolean | null>(null)
   const [sendWith, setSendWith] = useState<'enter' | 'ctrlenter'>(() =>
-    (localStorage.getItem('wb-send-with') === 'ctrlenter' ? 'ctrlenter' : 'enter'))
+    (localStorage.getItem('dw-send-with') === 'ctrlenter' ? 'ctrlenter' : 'enter'))
   const [theme, setThemeState] = useState<Theme>(getTheme)
   const [accounts, setAccounts] = useState<Account[]>([])
   const [accBusy, setAccBusy] = useState('')
@@ -88,7 +88,7 @@ export default function Settings() {
     void adminFetch('/api/admin/prefs', { method: 'POST', body: JSON.stringify({ autoResume: next }) })
       .catch(() => setAutoResume(!next))
   }
-  const pickSend = (v: 'enter' | 'ctrlenter') => { setSendWith(v); localStorage.setItem('wb-send-with', v) }
+  const pickSend = (v: 'enter' | 'ctrlenter') => { setSendWith(v); localStorage.setItem('dw-send-with', v) }
   const pickTheme = (v: Theme) => { setThemeState(v); setTheme(v) }
 
   // Official row: [icon?] title+desc column | control — min-h-60px, 13px both lines.

@@ -14,7 +14,7 @@ interface ComposerMetaT {
   primary_cwd?: string
   /** Agent-level config so the /admin/new composer shows real mode+model pills. */
   cfg?: LocalCfg
-  /** wb.json lastConfig — the picks a fresh session inherits. */
+  /** dw.json lastConfig — the picks a fresh session inherits. */
   last_config?: Record<string, string>
 }
 

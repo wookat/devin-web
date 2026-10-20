@@ -2,6 +2,7 @@ import { StrictMode, Suspense, lazy, useEffect, type ComponentType } from 'react
 import { createRoot } from 'react-dom/client'
 import { BrowserRouter, Routes, Route, Navigate, useLocation } from 'react-router-dom'
 import './index.css'
+import './lib/migrateKeys' // side-effect: wb* → dw* localStorage rename (runs before i18n)
 import './i18n'
 
 const AdminSessionPage = lazy(() => import('./pages/AdminSession'))
@@ -42,7 +43,7 @@ if (shareMatch && shareTok) {
 // ~300ms fallback throttle even though the chunk arrives in ~40ms.
 type RouteModule = { default: ComponentType }
 
-// Last-page memory: reopening the workbench lands on whatever was open when
+// Last-page memory: reopening the web lands on whatever was open when
 // it closed (session, draft, settings) —底层行为, no toggle. Only '/' is
 // restored from; share links and the /admin/d/ resolver never overwrite it.
 function RouteTracker() {
@@ -50,14 +51,14 @@ function RouteTracker() {
   useEffect(() => {
     const p = loc.pathname + loc.search
     if (p === '/' || p.startsWith('/s/') || p.startsWith('/admin/d/')) return
-    try { localStorage.setItem('wb2-last-route', p) } catch { /* unavailable */ }
+    try { localStorage.setItem('dw-last-route', p) } catch { /* unavailable */ }
   }, [loc.pathname, loc.search])
   return null
 }
 
 function LastOrNew() {
   let last: string | null = null
-  try { last = localStorage.getItem('wb2-last-route') } catch { /* unavailable */ }
+  try { last = localStorage.getItem('dw-last-route') } catch { /* unavailable */ }
   return <Navigate to={last || '/admin/new'} replace />
 }
 

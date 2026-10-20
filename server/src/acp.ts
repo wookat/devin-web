@@ -223,7 +223,7 @@ export class DevinAcp {
               "cognition.ai/clarificationRequested": true,
             },
           },
-          clientInfo: { name: "devin-remote", version: "0.1.0" },
+          clientInfo: { name: "devin-web", version: "0.1.0" },
         }),
         startFailed,
       ]);

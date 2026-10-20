@@ -23,7 +23,7 @@ interface MirrorTreeSession {
   cwd?: string | null
   created_at?: string | null
   /** devin `_meta` lock: some acp holds the session open. Harmless when
-   *  `loaded_here` (this workbench is the holder); otherwise another app. */
+   *  `loaded_here` (this web is the holder); otherwise another app. */
   is_locked?: boolean
   loaded_here?: boolean
   /** sub: rows only — false once the acp registry dropped the agent handle
@@ -41,7 +41,7 @@ interface TreeCachePayload {
 
 function readTreeCache(): TreeCachePayload | null {
   try {
-    const raw = localStorage.getItem('wb2-tree-cache')
+    const raw = localStorage.getItem('dw-tree-cache')
     if (!raw) return null
     const parsed = JSON.parse(raw) as Partial<TreeCachePayload>
     if (!Array.isArray(parsed.sessions)) return null
@@ -59,7 +59,7 @@ function readTreeCache(): TreeCachePayload | null {
 function writeTreeCache(payload: TreeCachePayload): void {
   try {
     const raw = JSON.stringify(payload)
-    if (raw.length <= 2 * 1024 * 1024) localStorage.setItem('wb2-tree-cache', raw)
+    if (raw.length <= 2 * 1024 * 1024) localStorage.setItem('dw-tree-cache', raw)
   } catch { /* quota or private browsing */ }
 }
 

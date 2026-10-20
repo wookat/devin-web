@@ -1,7 +1,7 @@
 /**
  * sessionio — session→acp resolution, history loading, live config,
  * attachments, prompt dispatch, subagents, session listing.
- * Extracted from localwb.ts (mechanical move, behavior unchanged).
+ * Extracted from localweb.ts (mechanical move, behavior unchanged).
  */
 import fs from "node:fs";
 import path from "node:path";
@@ -10,12 +10,12 @@ import type { DevinAcp } from "./acp.js";
 import { uploadPath, MIME } from "./uploads.js";
 import { isRateLimitError, retryAfterSeconds } from "./accounts.js";
 import { catalogInfo } from "./modelcat.js";
-import { loadReg, saveReg, meta, noteLastUsed } from "./wbstore.js";
+import { loadReg, saveReg, meta, noteLastUsed } from "./dwstore.js";
 import {
   noteUpdate, persistTail, buildTimeline, buildTimelineFrom, snippet, tlCache,
   tailSnapshot,
-  type WbItem, type LogEntry,
-} from "./wbtimeline.js";
+  type DwItem, type LogEntry,
+} from "./dwtimeline.js";
 
 // ---------------------------------------------------------------------------
 // session helpers
@@ -542,8 +542,8 @@ function queueFlush(ctx: ApiContext, id: string) {
 // evidence, not silent loss. dispatchPrompt records the outgoing message in
 // <dataDir>/open-turns.json at send time and clears it when the prompt
 // resolves; an entry still present at boot means THIS server died mid-turn.
-// A successful settle also appends a `wb_turn_end` marker to the session log
-// (errors append `wb_notice`), so replayed/restored logs keep a durable
+// A successful settle also appends a `dw_turn_end` marker to the session log
+// (errors append `dw_notice`), so replayed/restored logs keep a durable
 // turn boundary to test the tail against.
 // ---------------------------------------------------------------------------
 
@@ -591,7 +591,7 @@ export function interruptedTurn(ctx: ApiContext, id: string): OpenTurn | null {
   let userAt = -1;
   for (let i = log.length - 1; i >= Math.max(0, log.length - 800); i--) {
     const k = String(log[i].update.sessionUpdate ?? "");
-    if (k === "wb_turn_end" || k === "wb_notice") break; // a settled boundary sits above the last user message
+    if (k === "dw_turn_end" || k === "dw_notice" || k === "wb_turn_end" || k === "wb_notice") break; // settled boundary above the last user message (wb_* = pre-rename logs)
     if (k === "user_message_chunk") { userAt = i; break; }
   }
   if (userAt < 0) return null;
@@ -612,7 +612,7 @@ export function interruptedTurn(ctx: ApiContext, id: string): OpenTurn | null {
   if (userAt === log.length - 1) return { text, ts: log[userAt].ts, attachments: atts, kind }; // prompt died before ANY event
   const sawMarker = log.slice(Math.max(0, userAt - 400), userAt).some((e) => {
     const k = String(e.update.sessionUpdate ?? "");
-    return k === "wb_turn_end" || k === "wb_notice";
+    return k === "dw_turn_end" || k === "dw_notice" || k === "wb_turn_end" || k === "wb_notice";
   });
   if (sawMarker) return { text, ts: log[userAt].ts, attachments: atts, kind };
   // Pre-marker logs: flag only tails a finished turn can't end on.
@@ -631,10 +631,10 @@ export function interruptedTurn(ctx: ApiContext, id: string): OpenTurn | null {
  * at 2 attempts per turn (a resume that itself crashes can't loop). */
 export async function autoResumeInterrupted(ctx: ApiContext) {
   openTurnsLoad(ctx);
-  // DEVIN_REMOTE_NO_AUTORESUME: a second instance sharing the data dir must
+  // DEVIN_WEB_NO_AUTORESUME: a second instance sharing the data dir must
   // not double-drive interrupted turns — each boot would otherwise re-send
   // "继续" into sessions the primary instance already resumed.
-  if (process.env.DEVIN_REMOTE_NO_AUTORESUME || !loadReg(ctx).prefs?.autoResume || !openTurns.size) return;
+  if (process.env.DEVIN_WEB_NO_AUTORESUME || !loadReg(ctx).prefs?.autoResume || !openTurns.size) return;
   // A resume triggers session/load, which replays the FULL transcript back
   // through the update stream — on multi-GB logs that replay alone saturates
   // the loop and balloons the heap for minutes. Gate huge histories to
@@ -724,7 +724,7 @@ async function promptWithRetry<T>(
       }
       const next = ctx.rotate("rate-limit");
       ctx.sessionLog.append(id, {
-        sessionUpdate: "wb_notice",
+        sessionUpdate: "dw_notice",
         notice: next ? `已切换到账号 ${next}，重新发送` : "全部账号限速中",
       });
       noteUpdate(ctx, id);
@@ -799,14 +799,14 @@ function dispatchPrompt(ctx: ApiContext, id: string, text: string, attachments: 
     .then(() => {
       // Durable turn boundary — survives log replay via the tail re-append,
       // so interruptedTurn can tell "finished turn" from "cut turn".
-      ctx.sessionLog.append(id, { sessionUpdate: "wb_turn_end" });
+      ctx.sessionLog.append(id, { sessionUpdate: "dw_turn_end" });
       ctx.hub.broadcast({ type: "prompt_done", sessionId: id, result: null });
       persistTail(ctx, id);
     })
     .catch((err: unknown) => {
       const msg = err instanceof Error ? err.message : String(err);
       ctx.sessionLog.append(id, {
-        sessionUpdate: "wb_notice",
+        sessionUpdate: "dw_notice",
         notice: `错误: ${msg.slice(0, 200)}`,
       });
       noteUpdate(ctx, id);
@@ -822,7 +822,7 @@ function dispatchPrompt(ctx: ApiContext, id: string, text: string, attachments: 
 function sessionStatus(ctx: ApiContext, id: string): { status: string; activity: string } {
   if (inflight.has(id)) return { status: "working", activity: "working" };
   // 'blocked' = "awaiting instructions" with an enabled composer; the
-  // workbench treats 'waiting' as a transient "reverting checkpoint" state.
+  // web treats 'waiting' as a transient "reverting checkpoint" state.
   return { status: "blocked", activity: "idle" };
 }
 
@@ -1030,8 +1030,8 @@ function listSubagents(ctx: ApiContext, id: string, scope?: string, entries?: Lo
  * Disk reads use a substring needle (the agentId appears in every event of
  * its stream) and an mtime cache — a full parse of a 500MB log per poll
  * would OOM the process. */
-const subTlCache = new Map<string, { m: number | null; lastSeq: number; items: WbItem[] }>();
-function subagentTimeline(ctx: ApiContext, id: string, agentId: string): WbItem[] {
+const subTlCache = new Map<string, { m: number | null; lastSeq: number; items: DwItem[] }>();
+function subagentTimeline(ctx: ApiContext, id: string, agentId: string): DwItem[] {
   const key = `${id}${agentId}`;
   const mem = ctx.sessionLog.get(id);
   const forAgent = (e: LogEntry) => {

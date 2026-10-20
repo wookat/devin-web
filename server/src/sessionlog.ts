@@ -162,7 +162,7 @@ export class SessionLog {
           // there (per-append fsync would tax the event loop for nothing:
           // intra-turn loss is bounded by OS cache, and recovery treats an
           // unfinished turn the same either way).
-          if (update.sessionUpdate === "wb_turn_end" || update.sessionUpdate === "wb_notice") fs.fsyncSync(fd);
+          if (update.sessionUpdate === "dw_turn_end" || update.sessionUpdate === "dw_notice") fs.fsyncSync(fd);
         } catch { /* disk is best-effort */ }
       }
       // Sidecar coverage invariant: the derived sidecars cover EXACTLY the

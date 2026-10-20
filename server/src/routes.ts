@@ -106,7 +106,7 @@ export async function handleApi(
     // GET /api/meta
     if (m === "GET" && url.pathname === "/api/meta") {
       return json(res, 200, {
-        app: { name: "devin-remote", version: ctx.appVersion },
+        app: { name: "devin-web", version: ctx.appVersion },
         devin: await ctx.devinCheck(),
         agents: await ctx.agentsCheck(),
         workspaces: ctx.store.workspaces(),
@@ -272,7 +272,7 @@ export async function handleApi(
         const zip = buildSessionZip(ctx.sessionLog, id, {
           cwd: ctx.sessionCwd.get(id) ?? null,
           alias: ctx.store.alias(id) ?? null,
-          app: `devin-remote ${ctx.appVersion}`,
+          app: `devin-web ${ctx.appVersion}`,
         });
         res.writeHead(200, {
           "content-type": "application/zip",

@@ -1,5 +1,5 @@
 /**
- * Tiny shared WebSocket client for the local workbench server (`/ws`).
+ * Tiny shared WebSocket client for the local web server (`/ws`).
  * One connection fanned out to all subscribers; auto-reconnects with backoff.
  * Same-origin only — the server enforces the CSRF/DNS-rebinding origin check.
  */

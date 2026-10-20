@@ -17,7 +17,7 @@ import { fileURLToPath } from "node:url";
 const [repoArg, portArg, dataDirArg] = process.argv.slice(2);
 const repoRoot = repoArg || path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..");
 const port = Number(portArg) || 7791;
-const dataDir = dataDirArg || process.env.DEVIN_REMOTE_HOME || process.env.DEVIN_CONSOLE_HOME || path.join(os.homedir(), ".devin-remote");
+const dataDir = dataDirArg || process.env.DEVIN_WEB_HOME || process.env.DEVIN_REMOTE_HOME || process.env.DEVIN_CONSOLE_HOME || path.join(os.homedir(), ".devin-web");
 const logDir = dataDir || repoRoot;
 const log = (m) => {
   try { fs.appendFileSync(path.join(logDir, "respawn.log"), `${new Date().toISOString()} ${m}\n`); } catch { /* nowhere to report */ }

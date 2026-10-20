@@ -1,4 +1,4 @@
-// inputinject — persistent input-injection helper for the workbench live view.
+// inputinject — persistent input-injection helper for the web live view.
 // Reads one command per line from stdin and injects via SendInput:
 //   m <u> <v>            move pointer to normalized virtual-screen coords
 //   d <l|r|m>            mouse button down
