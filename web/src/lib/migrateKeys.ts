@@ -1,17 +1,10 @@
-// One-time rename of every wb*-prefixed localStorage key to its dw* name —
-// must run before i18n/theme init read their keys, so it is imported FIRST
-// in main.tsx. `wb2-x` → `dw-x`; `wb-*` → `dw-*`; `wb_*` → `dw_*`.
+// One-time cleanup: purge pre-rename wb* localStorage keys. Imported FIRST
+// in main.tsx (before i18n/theme init) so stale keys can't shadow dw* ones.
 try {
-  const moves: [string, string][] = []
+  const dead: string[] = []
   for (let i = 0; i < localStorage.length; i++) {
     const k = localStorage.key(i)
-    if (!k) continue
-    const nk = k.replace(/^wb2-/, 'dw-').replace(/^wb-/, 'dw-').replace(/^wb_/, 'dw_')
-    if (nk !== k) moves.push([k, nk])
+    if (k && /^wb(?=[-_2])/.test(k)) dead.push(k)
   }
-  for (const [from, to] of moves) {
-    const v = localStorage.getItem(from)
-    if (v !== null && localStorage.getItem(to) === null) localStorage.setItem(to, v)
-    localStorage.removeItem(from)
-  }
+  for (const k of dead) localStorage.removeItem(k)
 } catch { /* storage unavailable */ }

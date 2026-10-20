@@ -17,8 +17,9 @@ import { fileURLToPath } from "node:url";
 const [repoArg, portArg, dataDirArg] = process.argv.slice(2);
 const repoRoot = repoArg || path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..");
 const port = Number(portArg) || 7791;
-const dataDir = dataDirArg || process.env.DEVIN_WEB_HOME || process.env.DEVIN_REMOTE_HOME || process.env.DEVIN_CONSOLE_HOME || path.join(os.homedir(), ".devin-web");
+const dataDir = dataDirArg || process.env.DEVIN_WEB_HOME || path.join(os.homedir(), ".devin-web");
 const logDir = dataDir || repoRoot;
+try { fs.mkdirSync(logDir, { recursive: true }); } catch {}
 const log = (m) => {
   try { fs.appendFileSync(path.join(logDir, "respawn.log"), `${new Date().toISOString()} ${m}\n`); } catch { /* nowhere to report */ }
 };
@@ -45,6 +46,20 @@ await new Promise((r) =>
   execFile("powershell", ["-NoProfile", "-Command",
     "Get-CimInstance Win32_Process -Filter \"name='devin.exe'\" | Where-Object { $_.CommandLine -match 'acp' -and -not (Get-Process -Id $_.ParentProcessId -ErrorAction SilentlyContinue) } | ForEach-Object { Stop-Process -Id $_.ProcessId -Force }"],
     { timeout: 20000 }, (e) => { if (e) log(`acp cleanup: ${e.message}`); r(); }));
+
+// Artifact rename at the dead-server gap (only safe place — the old server
+// held locks on these): ~/.devin-remote → ~/.devin-web, wb.json → dw.json.
+try {
+  const oldDir = path.join(os.homedir(), ".devin-remote");
+  if (!process.env.DEVIN_WEB_HOME && fs.existsSync(oldDir) && !fs.existsSync(dataDir)) {
+    fs.renameSync(oldDir, dataDir);
+    log(`data dir renamed .devin-remote -> .devin-web`);
+  }
+} catch (e) { log(`data dir rename failed: ${e.message}`); }
+try {
+  const oldReg = path.join(dataDir, "wb.json"), newReg = path.join(dataDir, "dw.json");
+  if (fs.existsSync(oldReg) && !fs.existsSync(newReg)) fs.renameSync(oldReg, newReg);
+} catch { /* registry will rebuild */ }
 
 // 3. start the fresh server detached; stdout/stderr → server.log (rotated past
 // 4MB) so a startup crash leaves the reason on disk.

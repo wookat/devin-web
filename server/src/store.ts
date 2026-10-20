@@ -31,18 +31,7 @@ export class Store {
   constructor() {
     this.dataDir =
       process.env.DEVIN_WEB_HOME ??
-      process.env.DEVIN_REMOTE_HOME ?? // pre-rename env, still honored
-      process.env.DEVIN_CONSOLE_HOME ??
       path.join(os.homedir(), ".devin-web");
-    // One-time migration: .devin-remote (pre-rename) → .devin-web, and the
-    // older .devin-console below it.
-    for (const legacy of [".devin-remote", ".devin-console"]) {
-      const lp = path.join(os.homedir(), legacy);
-      if (!process.env.DEVIN_WEB_HOME && !process.env.DEVIN_REMOTE_HOME && !fs.existsSync(this.dataDir) && fs.existsSync(lp)) {
-        fs.cpSync(lp, this.dataDir, { recursive: true });
-        break;
-      }
-    }
     this.uploadsDir = path.join(this.dataDir, "uploads");
     this.file = path.join(this.dataDir, "store.json");
     fs.mkdirSync(this.uploadsDir, { recursive: true });

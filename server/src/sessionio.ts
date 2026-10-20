@@ -591,7 +591,7 @@ export function interruptedTurn(ctx: ApiContext, id: string): OpenTurn | null {
   let userAt = -1;
   for (let i = log.length - 1; i >= Math.max(0, log.length - 800); i--) {
     const k = String(log[i].update.sessionUpdate ?? "");
-    if (k === "dw_turn_end" || k === "dw_notice" || k === "wb_turn_end" || k === "wb_notice") break; // settled boundary above the last user message (wb_* = pre-rename logs)
+    if (k === "dw_turn_end" || k === "dw_notice") break; // a settled boundary sits above the last user message
     if (k === "user_message_chunk") { userAt = i; break; }
   }
   if (userAt < 0) return null;
@@ -612,7 +612,7 @@ export function interruptedTurn(ctx: ApiContext, id: string): OpenTurn | null {
   if (userAt === log.length - 1) return { text, ts: log[userAt].ts, attachments: atts, kind }; // prompt died before ANY event
   const sawMarker = log.slice(Math.max(0, userAt - 400), userAt).some((e) => {
     const k = String(e.update.sessionUpdate ?? "");
-    return k === "dw_turn_end" || k === "dw_notice" || k === "wb_turn_end" || k === "wb_notice";
+    return k === "dw_turn_end" || k === "dw_notice";
   });
   if (sawMarker) return { text, ts: log[userAt].ts, attachments: atts, kind };
   // Pre-marker logs: flag only tails a finished turn can't end on.
