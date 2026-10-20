@@ -147,6 +147,8 @@ export default function AdminMirrorPage() {
   itemsRef.current = items
   olderRef.current = older
   cursorRef.current = cursor
+  const treeIdsRef = useRef<Set<string>>(new Set())
+  useEffect(() => { treeIdsRef.current = new Set(tree.map((s) => s.devin_id)) }, [tree])
   // Tabs persist per session like the official client's `session-tabs:<devin_id>`
   // localStorage entry ({tabs:[{type,data}], activeTabId, ...}).
   const tabsSaved = useMemo(() => {
@@ -1169,6 +1171,8 @@ export default function AdminMirrorPage() {
     loadTree()
     return visibleInterval(loadTree, 60_000)
   }, [loadTree, booted, isVisitor])
+  const loadTreeRef = useRef(loadTree)
+  loadTreeRef.current = loadTree
 
   useEffect(() => {
     let alive = true
@@ -1375,6 +1379,7 @@ export default function AdminMirrorPage() {
     // window — resync immediately instead of dropping it and going blind for
     // up to a full poll interval (the "updates take forever" bug).
     let wantGen = 0
+    let treeMissTimer: number | null = null
     const resync = (gen: number) => {
       if (!alive) return
       wantGen = Math.max(wantGen, gen)
@@ -1390,7 +1395,25 @@ export default function AdminMirrorPage() {
       }, 300)
     }
     const offWs = subscribeWs((ev) => {
-      if (!alive || ev.sessionId !== id) return
+      if (!alive) return
+      // Sidebar status pushes — patch the matching tree row in place for ANY
+      // session (this filter otherwise drops every non-current event).
+      if (ev.type === 'session_status' && typeof ev.sessionId === 'string') {
+        const sid = ev.sessionId
+        const st = typeof ev.status === 'string' ? ev.status : 'blocked'
+        setTree((prev) => prev.map((s) =>
+          s.devin_id === sid && s.status_enum !== 'archived'
+            ? { ...s, status_enum: st, activity_status: st === 'working' ? 'working' : 'idle' }
+            : s,
+        ))
+        // Status for a session the tree doesn't list (created by another
+        // client or beyond the loaded page) — one debounced list refresh.
+        if (!treeIdsRef.current.has(sid)) {
+          if (treeMissTimer == null) treeMissTimer = window.setTimeout(() => { treeMissTimer = null; if (alive) loadTreeRef.current() }, 2000)
+        }
+        return
+      }
+      if (ev.sessionId !== id) return
       if (ev.type === 'timeline_delta' && Array.isArray(ev.items)) {
         // Drop deltas whose log generation doesn't match the window's —
         // a snapshot window (gen 0) or a previous rebuild would merge-collide
@@ -1417,6 +1440,7 @@ export default function AdminMirrorPage() {
       graduateTl.current = null
       if (graduateTimer != null) clearTimeout(graduateTimer)
       if (resyncTimer != null) clearTimeout(resyncTimer)
+      if (treeMissTimer != null) clearTimeout(treeMissTimer)
       if (followUp != null) clearTimeout(followUp)
       if (olderPrefetchTimer != null) clearTimeout(olderPrefetchTimer)
       if (olderPrefetch.current?.id === id) olderPrefetch.current = null

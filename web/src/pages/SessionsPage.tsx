@@ -5,6 +5,7 @@ import { createPortal } from 'react-dom'
 import { Bot, Download, FolderInput, Plus, RefreshCw, RotateCcw, Rows3, Settings2, Tag } from 'lucide-react'
 import { OArchive, OBell, OCheck, OChevronDown, OChevronRight, OCollapse, OCompose, OExpand, OPin, OSearch, OX } from '../components/officialIcons'
 import { adminFetch } from '@/lib/api'
+import { subscribeWs } from '@/lib/ws'
 import { cn } from '@/lib/utils'
 import { type MirrorTreeSession } from './mirror/treeCache'
 import { type TreePrefs, TREE_PREFS_KEY, DEFAULT_TREE_PREFS, SessionTree } from './mirror/SessionTree'
@@ -179,7 +180,17 @@ export default function SessionsPage() {
   useEffect(() => {
     if (!loaded.current) { loaded.current = true; void load() }
     const t = setInterval(load, 8000)
-    return () => clearInterval(t)
+    // Live status pushes — patch rows in place; the 8s poll covers the rest.
+    const offWs = subscribeWs((ev) => {
+      if (ev.type !== 'session_status' || typeof ev.sessionId !== 'string') return
+      const sid = ev.sessionId
+      const st = typeof ev.status === 'string' ? ev.status : 'blocked'
+      setRows((prev) => prev.map((s) =>
+        s.devin_id === sid && s.status_enum !== 'archived'
+          ? { ...s, status_enum: st, activity_status: st === 'working' ? 'working' : 'idle' }
+          : s))
+    })
+    return () => { clearInterval(t); offWs() }
   }, [])
 
   const filtered = useMemo(() => {

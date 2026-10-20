@@ -755,6 +755,9 @@ function dispatchPrompt(ctx: ApiContext, id: string, text: string, attachments: 
   });
   noteUpdate(ctx, id);
   inflight.add(id);
+  // Sidebar rows poll /mirror/sessions only every 60s — push the status flip
+  // so other clients' trees turn "working" immediately.
+  ctx.hub.broadcast({ type: "session_status", sessionId: id, status: "working" });
   openTurnsLoad(ctx);
   openTurns.set(id, { text, ts: Date.now(), ...(attachments.length ? { attachments } : {}), resumeCount: openTurns.get(id)?.resumeCount ?? 0 });
   openTurnsSave(ctx);
@@ -810,6 +813,7 @@ function dispatchPrompt(ctx: ApiContext, id: string, text: string, attachments: 
     })
     .finally(() => {
       inflight.delete(id);
+      ctx.hub.broadcast({ type: "session_status", sessionId: id, status: sessionStatus(ctx, id).status });
       if (openTurns.delete(id)) openTurnsSave(ctx);
       queueFlush(ctx, id);
     });
