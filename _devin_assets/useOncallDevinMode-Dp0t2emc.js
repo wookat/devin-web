@@ -1,1 +1,0 @@
-import{n as e}from"./rolldown-runtime-C0FnF6B9.js";import{Ot as t,Pt as n,Tt as r}from"./app-initial-CztpsfZk.js";function i(e){let{items:t,isLoading:i}=n();return{mode:t.some(t=>t.id===r[e]&&t.enabled)?e:`normal`,isLoading:i}}function a(){return i(`ultra`)}function o(){return(o=e((()=>{t()})))()}export{a as n,i as r,o as t};

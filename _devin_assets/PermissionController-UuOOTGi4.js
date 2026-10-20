@@ -1,1 +1,0 @@
-import{n as e}from"./rolldown-runtime-C0FnF6B9.js";import{Ft as t,It as n}from"./ScrollAreaCorner-C-sn5SVv.js";import{Qi as r,qi as i}from"./app-initial-CLR-wE9R.js";function a({permission:e,grantAccess:t,children:i}){let{t:a}=n(),o=r(e)||!!t;return i({disabled:!o,reason:o?void 0:a(`common.availableToAdmins`)})}function o(){return(o=e((()=>{i(),t()})))()}export{o as n,a as t};

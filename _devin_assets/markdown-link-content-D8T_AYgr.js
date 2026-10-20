@@ -1,1 +1,0 @@
-import{n as e}from"./rolldown-runtime-C0FnF6B9.js";function t(e){return!e||e.children.length===0?!1:e.children.every(e=>e.type===`text`?/^\s*$/.test(e.value):e.type===`element`&&n.has(e.tagName))}var n;function r(){return(r=e((()=>{n=new Set([`img`,`picture`,`video`,`source`])})))()}export{t as n,r as t};

@@ -1,1 +1,0 @@
-import{n as e}from"./rolldown-runtime-C0FnF6B9.js";import{it as t,lt as n}from"./app-initial-aLT6vzPW.js";import{Cn as r,kn as i}from"./app-initial-ZdmEGsz_.js";function a(){let e=n()?.sessionId??null;return i()?null:e}function o(){return(o=e((()=>{t(),r()})))()}export{a as n,o as t};

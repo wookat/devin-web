@@ -1,1 +1,0 @@
-import{n as e}from"./rolldown-runtime-C0FnF6B9.js";import{t}from"./jsx-runtime-BdxMnOeJ.js";import{n,t as r}from"./RedirectToAdminPanel-oLAUevwi.js";function i(){return(0,a.jsx)(r,{path:`/admin/event-renderer`})}var a;function o(){return(o=e((()=>{n(),a=t()})))()}o();export{i as component};

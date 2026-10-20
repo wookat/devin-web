@@ -1,1 +1,0 @@
-import{n as e}from"./rolldown-runtime-C0FnF6B9.js";import{n as t,t as n}from"./toDate-0HhV9vjb.js";function r(e,n){let r=t(e)-+t(n);return r<0?-1:r>0?1:r}function i(){return(i=e((()=>{n()})))()}function a(e){return t=>{let n=(e?Math[e]:Math.trunc)(t);return n===0?0:n}}function o(){return(o=e((()=>{})))()}export{i,o as n,r,a as t};

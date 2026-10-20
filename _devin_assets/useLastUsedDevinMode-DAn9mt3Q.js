@@ -1,1 +1,0 @@
-import{n as e}from"./rolldown-runtime-C0FnF6B9.js";import{r as t,t as n}from"./useUserPreference-hRsdhbNo.js";import{d as r,y as i}from"./catalog-DUPkbVwR.js";function a(){let[e,n]=t(r);return[e,n]}function o(){return(o=e((()=>{i(),n()})))()}export{a as n,o as t};

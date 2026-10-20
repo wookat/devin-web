@@ -1,1 +1,0 @@
-import{n as e}from"./rolldown-runtime-C0FnF6B9.js";import{at as t,it as n}from"./app-initial-CjPkusmS.js";function r(e){t(`${e} - cognition design system`)}function i(){return(i=e((()=>{n()})))()}export{r as n,i as t};

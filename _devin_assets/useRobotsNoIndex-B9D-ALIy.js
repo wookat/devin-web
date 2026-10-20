@@ -1,1 +1,0 @@
-import{n as e}from"./rolldown-runtime-C0FnF6B9.js";import{t}from"./react-B3wg_K76.js";function n(){(0,r.useEffect)(function(){let e=document.createElement(`meta`);return e.name=`robots`,e.content=`noindex, nofollow`,document.head.appendChild(e),function(){document.head.removeChild(e)}},[])}var r;function i(){return(i=e((()=>{r=t()})))()}export{n,i as t};

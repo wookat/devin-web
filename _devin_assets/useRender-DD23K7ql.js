@@ -1,1 +1,0 @@
-import{n as e}from"./rolldown-runtime-C0FnF6B9.js";import{fn as t,pn as n}from"./DirectionContext-Di3HRcTL.js";function r(e){return n(e.defaultTagName??`div`,e,e)}function i(){return(i=e((()=>{t()})))()}export{r as n,i as t};

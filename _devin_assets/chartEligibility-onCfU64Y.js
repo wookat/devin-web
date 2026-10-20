@@ -1,1 +1,0 @@
-import{n as e}from"./rolldown-runtime-C0FnF6B9.js";var t,n;function r(){return(r=e((()=>{t=new Set([`pro`,`max`,`pro-trial`,`teams-v2`]),n=e=>!!e?.slug&&t.has(e.slug)&&(e.status===`active`||e.status===`past_due`)})))()}export{n,r as t};

@@ -1,1 +1,0 @@
-import{n as e}from"./rolldown-runtime-C0FnF6B9.js";import{a as t,o as n}from"./link-6OiMDHJY.js";function r(e){return n({from:e.from,shouldThrow:e.shouldThrow,structuralSharing:e.structuralSharing,strict:e.strict,select:t=>{let n=e.strict===!1?t.params:t._strictParams;return e.select?e.select(n):n}})}function i(){return(i=e((()=>{t()})))()}export{r as n,i as t};

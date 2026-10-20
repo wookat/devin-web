@@ -20,3 +20,6 @@ server.log
 _*.txt  
 shot_only.py  
 child-page.png  
+/_*  
+AGENTS_hivetix.md  
+_devin_assets/  

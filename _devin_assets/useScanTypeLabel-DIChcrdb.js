@@ -1,1 +1,0 @@
-import{n as e}from"./rolldown-runtime-C0FnF6B9.js";import{t}from"./react-B3wg_K76.js";import{Ft as n,It as r}from"./ScrollAreaCorner-C-sn5SVv.js";import{F as i,X as a,z as o}from"./app-initial--r5m2x93.js";function s(){let{t:e}=r();return(0,c.useCallback)(t=>{let n=a(t);return n?e(n):i(t)},[e])}var c;function l(){return(l=e((()=>{c=t(),n(),o()})))()}export{s as n,l as t};

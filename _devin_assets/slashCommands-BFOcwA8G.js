@@ -1,1 +1,0 @@
-import{n as e}from"./rolldown-runtime-C0FnF6B9.js";function t(e){return e.map(e=>({type:`slash-command`,command:e.command,displayText:e.displayText,replacementText:e.replacementText,description:e.description,score:1}))}var n;function r(){return(r=e((()=>{n=/^[a-zA-Z][a-zA-Z0-9-]*$/})))()}export{t as n,r,n as t};

@@ -1,1 +1,0 @@
-import{n as e}from"./rolldown-runtime-C0FnF6B9.js";import{n as t,t as n}from"./app-initial-C1_LlZmJ.js";import{a as r,i}from"./app-initial-CeJWf961.js";var a;function o(){return(o=e((()=>{t(),r(),a=n(i,`/settings/environments`)})))()}o();export{a as component};

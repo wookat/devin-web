@@ -1,1 +1,0 @@
-import{n as e}from"./rolldown-runtime-C0FnF6B9.js";import{n as t,t as n}from"./app-initial-C1_LlZmJ.js";import{n as r,r as i}from"./ManagedWebhooksPage-gfcDJSIN.js";var a;function o(){return(o=e((()=>{t(),i(),a=n(r,`/_user/settings/_org/managed-webhooks/`)})))()}o();export{a as component};

@@ -1,1 +1,0 @@
-import{n as e}from"./rolldown-runtime-C0FnF6B9.js";import{t}from"./jsx-runtime-BdxMnOeJ.js";import{n,r}from"./Match-B2okXuPo.js";import{n as i,t as a}from"./Layout-CLl9zbcT.js";function o(){return(0,s.jsx)(a,{children:(0,s.jsx)(n,{})})}var s;function c(){return(c=e((()=>{i(),r(),s=t()})))()}c();export{o as component};
