@@ -1,4 +1,5 @@
 import { useState } from 'react'
+import { useTranslation } from 'react-i18next'
 import { ThumbsUp, ThumbsDown } from 'lucide-react'
 import { Textarea } from '@/components/ui'
 import { cn } from '@/lib/utils'
@@ -11,6 +12,7 @@ function FeedbackDialog({ variant, onClose, onSubmit }: {
   onClose: () => void
   onSubmit: (comment: string, categories: string[]) => Promise<void>
 }) {
+  const { t } = useTranslation()
   const [comment, setComment] = useState('')
   const [cats, setCats] = useState<string[]>([])
   const [busy, setBusy] = useState(false)
@@ -23,7 +25,7 @@ function FeedbackDialog({ variant, onClose, onSubmit }: {
           {negative ? <ThumbsDown size={15} /> : <ThumbsUp size={15} />}
           {negative ? 'Bad response' : 'Good response'}
         </p>
-        <p className="mt-1 text-[13px] leading-[18px] text-muted-foreground">Tell us more to help improve future responses.</p>
+        <p className="mt-1 text-[13px] leading-[18px] text-muted-foreground">{t('dlg.tellMore')}</p>
         {negative && (
           <div className="mt-3 flex flex-wrap gap-1.5">
             {FEEDBACK_CATEGORIES.map((cat) => (

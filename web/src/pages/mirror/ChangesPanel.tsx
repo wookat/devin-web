@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState, type ReactNode } from 'react'
+import { useTranslation } from 'react-i18next'
 import { createPortal } from 'react-dom'
 import { Loader2, ChevronRight, ChevronDown, ChevronUp, Copy, Check, FileText, PanelLeft, PanelRight, FolderTree, X, Expand, ChevronsUpDown, Search } from 'lucide-react'
 import { sessionFetch, fetchFileContents } from '@/lib/viewer'
@@ -89,6 +90,7 @@ function wordSegmentsForDiff(lines: DiffLine[]): Map<number, WordSeg[]> {
 }
 
 function ChangesPanel({ items, step, onClearStep, focus, embedded, sessionId, viewMode = false, fileCardsOnly = false }: { items: TimelineItem[]; step?: TimelineItem | null; onClearStep?: () => void; focus?: { path: string; n: number } | null; embedded?: boolean; sessionId?: string; viewMode?: boolean; fileCardsOnly?: boolean }) {
+  const { t } = useTranslation()
   const [scope, setScope] = useState<'all' | 'lastTurn'>('all')
   const scopeItems = useMemo(() => step ? [step] : items, [items, step])
   const scopedItems = useMemo(() => {
@@ -238,7 +240,7 @@ function ChangesPanel({ items, step, onClearStep, focus, embedded, sessionId, vi
           if (cancelled) return
           setDiffs((prev) => {
             const next = { ...prev }
-            for (const f of batch) next[f.path] = { lines: [{ type: 'same', text: '(读取失败)' }], vis: [true], loading: false }
+            for (const f of batch) next[f.path] = { lines: [{ type: 'same', text: t('chg.readFail') }], vis: [true], loading: false }
             return next
           })
         }
@@ -360,15 +362,15 @@ function ChangesPanel({ items, step, onClearStep, focus, embedded, sessionId, vi
     <div className="flex h-full min-h-0 flex-col">
       {!fileCardsOnly && (
         <div className="flex h-9 shrink-0 items-center gap-2 overflow-hidden border-b border-border pl-1 pr-2">
-          <span className="pl-2 text-[13px] leading-[18px] font-medium">All changes</span>
+          <span className="pl-2 text-[13px] leading-[18px] font-medium">{t('chg.all')}</span>
           <span className="flex items-center gap-1.5 text-[12px] leading-[16px] tabular-nums text-muted-foreground">
             <span>{files.length} {files.length === 1 ? 'file' : 'files'}</span>
             {!viewMode && <><span className="text-text-green">+{tot.add}</span><span className="text-text-red">−{tot.rem}</span></>}
           </span>
         </div>
       )}
-      {step && !embedded && <div className="flex items-center gap-2 px-3 py-1.5 text-[12px] leading-[16px] text-muted-foreground">Changes from this step<button onClick={onClearStep} aria-label="Show all changes" className="ml-auto flex size-5 cursor-pointer items-center justify-center rounded hover:bg-accent hover:text-foreground"><X size={12} /></button></div>}
-      {files.length === 0 ? <div className="mx-2 mb-4 mt-1"><span className="text-[14px] leading-[20px] text-muted-foreground">No changes yet</span></div> : (
+      {step && !embedded && <div className="flex items-center gap-2 px-3 py-1.5 text-[12px] leading-[16px] text-muted-foreground">{t('chg.fromStep')}<button onClick={onClearStep} aria-label={t('chg.showAll')} className="ml-auto flex size-5 cursor-pointer items-center justify-center rounded hover:bg-accent hover:text-foreground"><X size={12} /></button></div>}
+      {files.length === 0 ? <div className="mx-2 mb-4 mt-1"><span className="text-[14px] leading-[20px] text-muted-foreground">{t('chg.none')}</span></div> : (
         <div className="flex flex-col divide-y divide-border">
           {files.map((f) => {
             const diff = diffs[f.path]
@@ -457,13 +459,13 @@ function ChangesPanel({ items, step, onClearStep, focus, embedded, sessionId, vi
           </button>
           <span className="flex items-center gap-1.5 text-[12px] leading-[16px] tabular-nums text-muted-foreground"><span>{files.length} {files.length === 1 ? 'file' : 'files'}</span><span className="text-[rgb(0,165,88)]">+{tot.add}</span><span className="text-[rgb(245,59,58)]">−{tot.rem}</span></span>
           <span className="ml-auto flex items-center gap-1">
-            {treeHidden && <button type="button" aria-label="Show file tree" onClick={() => setTreeHidden(false)} className="flex size-7 shrink-0 cursor-pointer items-center justify-center rounded-[6px] text-muted-foreground hover:bg-tint-secondary hover:text-foreground"><PanelLeft size={18} /></button>}
+            {treeHidden && <button type="button" aria-label={t('chg.showTree')} onClick={() => setTreeHidden(false)} className="flex size-7 shrink-0 cursor-pointer items-center justify-center rounded-[6px] text-muted-foreground hover:bg-tint-secondary hover:text-foreground"><PanelLeft size={18} /></button>}
             {files.length > 0 && <button type="button" onClick={() => setCollapsed(allCollapsed ? new Set() : new Set(files.map((f) => f.path)))} aria-label={allCollapsed ? 'Expand all files' : 'Collapse all files'} className="flex size-7 shrink-0 cursor-pointer items-center justify-center rounded-[6px] text-muted-foreground hover:bg-tint-secondary hover:text-foreground"><ChevronsUpDown size={18} /></button>}
           </span>
         </div>
-        {step && !embedded && <div className="flex items-center gap-2 px-3 py-1.5 text-[12px] leading-[16px] text-muted-foreground">Changes from this step<button onClick={onClearStep} aria-label="Show all changes" className="ml-auto flex size-5 cursor-pointer items-center justify-center rounded hover:bg-accent hover:text-foreground"><X size={12} /></button></div>}
+        {step && !embedded && <div className="flex items-center gap-2 px-3 py-1.5 text-[12px] leading-[16px] text-muted-foreground">{t('chg.fromStep')}<button onClick={onClearStep} aria-label={t('chg.showAll')} className="ml-auto flex size-5 cursor-pointer items-center justify-center rounded hover:bg-accent hover:text-foreground"><X size={12} /></button></div>}
         <div tabIndex={-1} className="min-h-0 min-w-0 flex-1 overflow-y-auto outline-none">
-          {files.length === 0 ? <div className="mx-2 mb-4 mt-1"><span className="text-[14px] leading-[20px] text-muted-foreground">No changes yet</span></div> : files.map((file) => {
+          {files.length === 0 ? <div className="mx-2 mb-4 mt-1"><span className="text-[14px] leading-[20px] text-muted-foreground">{t('chg.none')}</span></div> : files.map((file) => {
             const bodyOpen = !collapsed.has(file.path)
             const name = file.path.split('/').pop() || file.path
             const repoLabel = file.path.match(/\/repos\/([^/]+)/)?.[1]
@@ -472,7 +474,7 @@ function ChangesPanel({ items, step, onClearStep, focus, embedded, sessionId, vi
                 <div role="presentation" onClick={() => toggleFile(file.path)} className="flex h-[42px] cursor-pointer select-none items-center gap-1.5 overflow-x-auto border-b border-border-secondary bg-wash px-2 py-1.5 pr-3 [scrollbar-width:none]">
                   <button type="button" aria-label={bodyOpen ? 'Collapse file' : 'Expand file'} onClick={(event) => { event.stopPropagation(); toggleFile(file.path) }} className="flex size-7 shrink-0 items-center justify-center rounded-[6px] text-muted-foreground hover:bg-tint-secondary hover:text-foreground"><ChevronDown size={18} className={cn(!bodyOpen && '-rotate-90')} /></button>
                   <div className="flex min-w-10 flex-1 items-center gap-1.5 font-sans text-[13px]"><span className="flex min-w-0 items-center gap-1.5"><span className="shrink select-text truncate whitespace-nowrap text-foreground">{name}</span>{repoLabel && <span className="shrink-[1000000] select-text truncate text-muted-foreground">{repoLabel}</span>}</span></div>
-                  <button type="button" aria-label="Copy file path" onClick={(event) => { event.stopPropagation(); navigator.clipboard.writeText(file.path).catch(() => {}) }} className="hidden size-7 shrink-0 items-center justify-center rounded-[6px] text-muted-foreground hover:bg-tint-secondary hover:text-foreground sm:flex"><Copy size={18} /></button>
+                  <button type="button" aria-label={t('chg.copyPath')} onClick={(event) => { event.stopPropagation(); navigator.clipboard.writeText(file.path).catch(() => {}) }} className="hidden size-7 shrink-0 items-center justify-center rounded-[6px] text-muted-foreground hover:bg-tint-secondary hover:text-foreground sm:flex"><Copy size={18} /></button>
                   <div className="hidden shrink-0 gap-0.5 text-[12px] font-normal sm:flex"><span className="text-[rgb(0,165,88)]">+{stats(file).added}</span><span className="text-[rgb(245,59,58)]">−{stats(file).removed}</span></div>
                 </div>
               </div>
@@ -484,9 +486,9 @@ function ChangesPanel({ items, step, onClearStep, focus, embedded, sessionId, vi
       {!treeHidden && <div className="hidden shrink-0 @[640px]/changes:block" style={{ width: 240, maxWidth: '60%', minWidth: 200 }}>
         <div className="flex h-full min-h-0 flex-col overflow-hidden border-l border-border-secondary">
           <div className="flex h-9 shrink-0 items-center gap-1 border-b border-border-secondary px-1">
-            <div className="flex h-7 min-w-0 flex-1 items-center rounded-[6px] border border-border-secondary"><Search size={16} className="ml-2 shrink-0 text-muted-foreground" /><input value={treeQuery} onChange={(event) => setTreeQuery(event.target.value)} placeholder="Search files..." className="h-full min-w-0 flex-1 bg-transparent px-[6px] text-[13px] leading-[16px] outline-none placeholder:text-muted-foreground" /></div>
-            <button type="button" aria-label="View as tree" aria-pressed={treeView} onClick={() => setTreeView((value) => !value)} className="flex size-7 shrink-0 items-center justify-center rounded-[6px] text-muted-foreground hover:text-foreground aria-pressed:bg-tint-secondary aria-pressed:text-foreground"><FolderTree size={16} /></button>
-            <button type="button" aria-label="Hide file tree" onClick={() => setTreeHidden(true)} className="flex size-7 shrink-0 items-center justify-center rounded-[6px] text-muted-foreground hover:bg-tint-secondary hover:text-foreground"><PanelRight size={18} /></button>
+            <div className="flex h-7 min-w-0 flex-1 items-center rounded-[6px] border border-border-secondary"><Search size={16} className="ml-2 shrink-0 text-muted-foreground" /><input value={treeQuery} onChange={(event) => setTreeQuery(event.target.value)} placeholder={t('chg.searchFiles')} className="h-full min-w-0 flex-1 bg-transparent px-[6px] text-[13px] leading-[16px] outline-none placeholder:text-muted-foreground" /></div>
+            <button type="button" aria-label={t('chg.viewTree')} aria-pressed={treeView} onClick={() => setTreeView((value) => !value)} className="flex size-7 shrink-0 items-center justify-center rounded-[6px] text-muted-foreground hover:text-foreground aria-pressed:bg-tint-secondary aria-pressed:text-foreground"><FolderTree size={16} /></button>
+            <button type="button" aria-label={t('chg.hideTree')} onClick={() => setTreeHidden(true)} className="flex size-7 shrink-0 items-center justify-center rounded-[6px] text-muted-foreground hover:bg-tint-secondary hover:text-foreground"><PanelRight size={18} /></button>
           </div>
           <div role="tree" className="min-h-0 flex-1 overflow-y-auto px-1 pt-1">
             {treeView ? treeRows(treeRoot, 1) : flatTreeFiles.map(({ file, level }) => treeRows({ name: '', path: '', folders: new Map(), files: [file] }, level))}
@@ -510,7 +512,7 @@ function ChangesPanel({ items, step, onClearStep, focus, embedded, sessionId, vi
               onClick={() => { setScope('all'); setScopeOpen(false) }}
               className="flex cursor-pointer select-none items-center gap-2 rounded-[6px] px-2 py-1.5 text-[13px] leading-[18px] text-foreground hover:bg-tint-secondary"
             >
-              <span className="mr-auto min-w-0">All changes</span>
+              <span className="mr-auto min-w-0">{t('chg.all')}</span>
               <span className="ml-auto flex items-center justify-center text-muted-foreground">{scope === 'all' && <Check size={16} />}</span>
             </button>
             <button
@@ -522,8 +524,8 @@ function ChangesPanel({ items, step, onClearStep, focus, embedded, sessionId, vi
             >
               <span className="mr-auto min-w-0">
                 <span className="flex flex-col">
-                  <span>Last agent turn</span>
-                  <span className="text-[11px] leading-[14px] text-muted-foreground">Since your last message or PR comment</span>
+                  <span>{t('chg.lastTurn')}</span>
+                  <span className="text-[11px] leading-[14px] text-muted-foreground">{t('chg.since')}</span>
                 </span>
               </span>
               <span className="ml-auto flex items-center justify-center text-muted-foreground">{scope === 'lastTurn' && <Check size={16} />}</span>

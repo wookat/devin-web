@@ -1,4 +1,5 @@
 import { useCallback, useMemo, useState } from 'react'
+import { useTranslation } from 'react-i18next'
 import { ChevronDown, Calendar as CalendarIcon, TriangleAlert } from 'lucide-react'
 import { adminFetch } from '@/lib/api'
 import { viewer } from '@/lib/viewer'
@@ -39,21 +40,22 @@ interface AutomationArgs {
  * definition (Agent type + Instructions) sections.
  */
 function AutomationRequestBody({ args }: { args: AutomationArgs }) {
+  const { t } = useTranslation()
   const trigger = args.triggers?.[0]
   const rrule = trigger?.conditions?.any?.[0]?.all?.find((c) => c.field === 'rrule')?.value
   const action = args.actions?.[0]
   return (
     <div className="flex flex-col gap-2.5">
-      <div className="truncate text-[15px] font-medium">Create automation</div>
+      <div className="truncate text-[15px] font-medium">{t('perm.createAuto')}</div>
       {args.name && (
         <div className="flex flex-col gap-1">
-          <span className="text-[12px] font-medium text-muted-foreground">Name</span>
+          <span className="text-[12px] font-medium text-muted-foreground">{t('perm.name')}</span>
           <span className="text-[13px] font-medium leading-[18px]">{args.name}</span>
         </div>
       )}
       {trigger && (
         <div className="flex flex-col gap-1">
-          <span className="text-[12px] font-medium text-muted-foreground">Trigger</span>
+          <span className="text-[12px] font-medium text-muted-foreground">{t('perm.trigger')}</span>
           <div className="flex flex-col gap-1 rounded-md border border-border bg-background px-2.5 py-2">
             <span className="text-[13px] font-medium capitalize leading-[18px]">{(trigger.event_type || '').replace(':', ': ')}</span>
             {rrule && (
@@ -66,17 +68,17 @@ function AutomationRequestBody({ args }: { args: AutomationArgs }) {
       )}
       {action && (
         <div className="flex flex-col gap-1">
-          <span className="text-[12px] font-medium text-muted-foreground">Agent definition</span>
+          <span className="text-[12px] font-medium text-muted-foreground">{t('perm.agentDef')}</span>
           <div className="flex flex-col gap-2 rounded-md border border-border bg-background px-2.5 py-2">
             <div className="flex flex-col gap-1">
-              <span className="text-[13px] font-medium leading-[18px]">Agent type</span>
+              <span className="text-[13px] font-medium leading-[18px]">{t('perm.agentType')}</span>
               <span className="text-[13px] leading-[18px] text-muted-foreground">
                 {action.type === 'start_session' ? 'Start new session' : action.type}
               </span>
             </div>
             {action.prompt && (
               <div className="flex flex-col gap-1">
-                <span className="text-[13px] font-medium leading-[18px]">Instructions</span>
+                <span className="text-[13px] font-medium leading-[18px]">{t('perm.instructions')}</span>
                 <span className="line-clamp-4 break-words text-[13px] leading-[18px] text-muted-foreground">{action.prompt}</span>
               </div>
             )}
@@ -88,6 +90,7 @@ function AutomationRequestBody({ args }: { args: AutomationArgs }) {
 }
 
 function PermissionCard({ item, sessionId, resolved, onOpenSidebar }: { item: TimelineItem; sessionId: string; resolved?: 'approved' | 'denied'; onOpenSidebar?: () => void }) {
+  const { t } = useTranslation()
   const [busy, setBusy] = useState<PermissionAction | null>(null)
   const [local, setLocal] = useState<'approved' | 'denied' | null>(null)
   const [err, setErr] = useState(false)
@@ -136,6 +139,7 @@ function PermissionCard({ item, sessionId, resolved, onOpenSidebar }: { item: Ti
  * Notifications / Advanced).
  */
 function PermissionSidebarPanel({ item }: { item: TimelineItem }) {
+  const { t } = useTranslation()
   const [advOpen, setAdvOpen] = useState(true)
   const perm = item.permission
   const args = useMemo<AutomationArgs | null>(() => {
@@ -149,21 +153,21 @@ function PermissionSidebarPanel({ item }: { item: TimelineItem }) {
     <div className="flex flex-col gap-4 p-4">
       <div className="flex flex-wrap items-center gap-1.5 text-[14px]">
         <TriangleAlert size={14} className="shrink-0 text-muted-foreground" />
-        <span>Permission request for</span>
+        <span>{t('perm.reqFor')}</span>
         <span className="rounded bg-muted px-[3px] font-mono text-[13px]">{perm?.toolName || 'unknown'}</span>
       </div>
-      {args?.action === 'create' && <div className="text-[13px] text-muted-foreground">Create an automation</div>}
+      {args?.action === 'create' && <div className="text-[13px] text-muted-foreground">{t('perm.createAn')}</div>}
       {args?.name !== undefined && (
         <div className="flex flex-col gap-1">
-          <span className="text-[12px] text-muted-foreground">Name</span>
+          <span className="text-[12px] text-muted-foreground">{t('perm.name')}</span>
           <span className="text-[15px] font-medium">{args.name}</span>
         </div>
       )}
       {trigger && (
         <div className="flex flex-col gap-2">
           <div>
-            <h3 className="text-[14px] font-medium">Triggers</h3>
-            <p className="text-[13px] text-muted-foreground">Run automation when any of these conditions are met</p>
+            <h3 className="text-[14px] font-medium">{t('perm.triggers')}</h3>
+            <p className="text-[13px] text-muted-foreground">{t('perm.triggerDesc')}</p>
           </div>
           <div className="flex items-center gap-2 rounded-lg border border-border px-3 py-3">
             <CalendarIcon size={14} className="shrink-0 text-muted-foreground" />
@@ -174,14 +178,14 @@ function PermissionSidebarPanel({ item }: { item: TimelineItem }) {
       {action && (
         <div className="flex flex-col gap-2">
           <div>
-            <h3 className="text-[14px] font-medium">Agent definition</h3>
-            <p className="text-[13px] text-muted-foreground">Define what happens when triggers are activated</p>
+            <h3 className="text-[14px] font-medium">{t('perm.agentDef')}</h3>
+            <p className="text-[13px] text-muted-foreground">{t('perm.defDesc')}</p>
           </div>
           <div className="flex flex-col gap-3 rounded-lg border border-border px-3 py-3">
             <div className="flex items-center justify-between gap-2">
               <div>
-                <div className="text-[13px] font-medium">Agent type</div>
-                <div className="text-[13px] text-muted-foreground">Decide what the agent should do on new events</div>
+                <div className="text-[13px] font-medium">{t('perm.agentType')}</div>
+                <div className="text-[13px] text-muted-foreground">{t('perm.typeDesc')}</div>
               </div>
               <span className="flex shrink-0 items-center gap-1 rounded-md border border-border px-2.5 py-1 text-[13px] text-muted-foreground">
                 {action.type === 'start_session' ? 'Start new session' : action.type}
@@ -190,8 +194,8 @@ function PermissionSidebarPanel({ item }: { item: TimelineItem }) {
             </div>
             {action.prompt && (
               <div className="flex flex-col gap-1">
-                <div className="text-[13px] font-medium">Instructions</div>
-                <div className="text-[13px] text-muted-foreground">Describe what the agent should do</div>
+                <div className="text-[13px] font-medium">{t('perm.instructions')}</div>
+                <div className="text-[13px] text-muted-foreground">{t('perm.instrDesc')}</div>
                 <div className="max-h-64 overflow-y-auto whitespace-pre-wrap break-words rounded-md bg-muted px-3 py-2 text-[13px] leading-relaxed">{action.prompt}</div>
               </div>
             )}
@@ -199,8 +203,8 @@ function PermissionSidebarPanel({ item }: { item: TimelineItem }) {
         </div>
       )}
       <div>
-        <h3 className="text-[14px] font-medium">Notifications</h3>
-        <p className="text-[13px] text-muted-foreground">Alert when the automation run completes</p>
+        <h3 className="text-[14px] font-medium">{t('perm.notifications')}</h3>
+        <p className="text-[13px] text-muted-foreground">{t('perm.notifDesc')}</p>
       </div>
       <div className="flex flex-col gap-2">
         <button onClick={() => setAdvOpen(!advOpen)} className="flex w-fit cursor-pointer items-center gap-1 text-[14px] font-medium">
@@ -209,8 +213,8 @@ function PermissionSidebarPanel({ item }: { item: TimelineItem }) {
         {advOpen && (
           <div className="flex items-center justify-between gap-2 rounded-lg border border-border px-3 py-3">
             <div>
-              <div className="text-[13px] font-medium">Allow auto-start of child sessions</div>
-              <div className="text-[13px] text-muted-foreground">Sessions can spawn child sessions automatically without your approval</div>
+              <div className="text-[13px] font-medium">{t('perm.autoStart')}</div>
+              <div className="text-[13px] text-muted-foreground">{t('perm.autoStartDesc')}</div>
             </div>
             <span aria-hidden className="relative h-5 w-9 shrink-0 rounded-full bg-muted"><span className="absolute left-0.5 top-0.5 size-4 rounded-full bg-background shadow" /></span>
           </div>

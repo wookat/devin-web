@@ -1,4 +1,5 @@
 import { Fragment, useEffect, useState, type ReactNode } from 'react'
+import { useTranslation } from 'react-i18next'
 import { createPortal } from 'react-dom'
 import { ChevronLeft, Plus, FileText, CircleDot, PanelLeft, ArrowUp, List, Code, Languages, ArrowUpRight, Search, Lightbulb, Laptop, Sparkles, MessageCircle, ShieldOff } from 'lucide-react'
 import { adminFetchSwr, type AdminSession, type PublicMessage } from '@/lib/api'
@@ -19,6 +20,7 @@ function CommandPalette({ sessions, onClose, onTheme, onToggleSidebar }: {
   onTheme: (t: Theme) => void
   onToggleSidebar: () => void
 }) {
+  const { t } = useTranslation()
   const [q, setQ] = useState('')
   const [mode, setMode] = useState<'home' | 'search'>('home')
   const [submenu, setSubmenu] = useState<'none' | 'go' | 'theme'>('none')
@@ -29,7 +31,7 @@ function CommandPalette({ sessions, onClose, onTheme, onToggleSidebar }: {
       label: 'Start session with a prompt…',
       run: () => nav('/admin/new'),
       icon: <DevinMark size={16} />,
-      render: <><span>Start session</span><span className="text-muted-foreground"> with a prompt…</span></> },
+      render: <><span>{t('pal.startSession')}</span><span className="text-muted-foreground"> with a prompt…</span></> },
     { label: 'Search sessions…', run: () => { setMode('search'); setQ('') }, icon: <Search size={16} /> },
     { group: 'Actions', label: 'Go to…', run: () => { setSubmenu('go'); setQ('') }, icon: <ArrowUpRight size={16} /> },
     { group: 'Actions', label: 'Change theme…', run: () => { setSubmenu('theme'); setQ('') }, icon: <Languages size={16} /> },
@@ -61,7 +63,7 @@ function CommandPalette({ sessions, onClose, onTheme, onToggleSidebar }: {
       <div
         role="dialog"
         aria-modal="true"
-        aria-label="Command palette"
+        aria-label={t('pal.aria')}
         className="w-full max-w-[680px] overflow-hidden rounded-[16px] bg-[rgba(255,255,255,0.94)] text-foreground shadow-[0_25px_50px_-12px_rgba(0,0,0,.25)] outline-none backdrop-blur-[8px] md:min-h-[403px] dark:bg-[#1f1f1f]/[.94]"
         onClick={(e) => e.stopPropagation()}
         onKeyDown={(e) => {
@@ -80,7 +82,7 @@ function CommandPalette({ sessions, onClose, onTheme, onToggleSidebar }: {
           submenu === 'none' ? 'flex h-12 items-center gap-2 border-b border-border px-4' : 'flex flex-row items-center gap-2 px-4 py-4',
         )}>
           {submenu !== 'none' && (
-            <button type="button" aria-label="Back" onClick={backToRoot} className="cursor-pointer">
+            <button type="button" aria-label={t('pal.back')} onClick={backToRoot} className="cursor-pointer">
               <ChevronLeft size={22} className="text-muted-foreground" />
             </button>
           )}
@@ -103,7 +105,7 @@ function CommandPalette({ sessions, onClose, onTheme, onToggleSidebar }: {
           />
         </div>
         <div className="max-h-[360px] overflow-y-auto p-2">
-          {filtered.length === 0 && <p className="px-3 py-6 text-[13px] text-muted-foreground">No sessions found</p>}
+          {filtered.length === 0 && <p className="px-3 py-6 text-[13px] text-muted-foreground">{t('pal.noSessions')}</p>}
           {filtered.map((c, i) => (
             <Fragment key={`${c.label}-${i}`}>
               {submenu === 'none' && mode === 'home' && c.group && !filtered[i - 1]?.group && <p className="px-3 pb-1 pt-2 text-[12px] text-muted-foreground">{c.group}</p>}
@@ -130,7 +132,7 @@ function CommandPalette({ sessions, onClose, onTheme, onToggleSidebar }: {
           )}
           {submenu === 'none' && mode === 'search' && (
             <button type="button" onClick={() => { setMode('home'); setQ('') }} className="mt-1 w-full px-3 py-2 text-left text-[12px] text-muted-foreground hover:bg-black/[.06]">
-              esc <span className="float-right">Back</span>
+              esc <span className="float-right">{t('pal.backTxt')}</span>
             </button>
           )}
         </div>

@@ -1,4 +1,5 @@
 import { memo, useEffect, useMemo, useState, type ReactNode } from 'react'
+import { useTranslation } from 'react-i18next'
 import { createPortal } from 'react-dom'
 import { ArrowLeft, Settings2, Copy, RotateCcw, Plus, CircleDot, ArrowUp, Link2, List, Expand, ChevronsUpDown, Folder as FolderIcon, Pencil, Clock, ListFilter, GitPullRequest, Lock } from 'lucide-react'
 import { OArchive, OCheck, OChevronDown, OChevronLeft, OChevronRight, ODots, OPin, OSearch, OX } from '../../components/officialIcons'
@@ -12,6 +13,7 @@ import { type Group } from './composerMeta'
 import { time } from './timelineUtil'
 
 function TreeRow({ s, depth, activeDevinId, folders, onOpen, onPrefetch, onRefresh, archivedView, compact, propHidden }: { s: MirrorTreeSession; depth: number; activeDevinId: string; folders: string[]; onOpen: (s: MirrorTreeSession) => void; onPrefetch?: (s: MirrorTreeSession) => void; onRefresh?: () => void; archivedView?: boolean; compact?: boolean; propHidden?: Record<string, boolean> }) {
+  const { t } = useTranslation()
   const [open, setOpen] = useState(false)
   const [busy, setBusy] = useState(false)
   const [allKids, setAllKids] = useState<MirrorTreeSession[] | null>(null)
@@ -97,8 +99,8 @@ function TreeRow({ s, depth, activeDevinId, folders, onOpen, onPrefetch, onRefre
         </span>
         {s.is_locked && !s.loaded_here && (
           <span
-            aria-label="Locked by another process"
-            title={`占用中 — 该会话正被另一个进程（桌面端/CLI/其他工作台）持有\n加载可能被拒绝`}
+            aria-label={t('tree.lockedAria')}
+            title={t('tree.lockedTip')}
             className="relative z-10 flex size-4 shrink-0 items-center justify-center text-amber-500"
           >
             <Lock size={12} />
@@ -108,7 +110,7 @@ function TreeRow({ s, depth, activeDevinId, folders, onOpen, onPrefetch, onRefre
             second spinner here (compact mode) duplicated it. */}
         {compactPr ? (
           compactPr.pr_url ? (
-            <a href={compactPr.pr_url} target="_blank" rel="noreferrer" aria-label="Open pull request" title="Open pull request" onClick={(e) => e.stopPropagation()} className={cn('relative z-10 flex size-[18px] shrink-0 items-center justify-center rounded-[4px] group-hover/sidebar:invisible group-has-[:focus-visible]/row:invisible', menu !== 'closed' && 'invisible', prColor(compactPr.state, compactPr.draft))}>
+            <a href={compactPr.pr_url} target="_blank" rel="noreferrer" aria-label={t('tree.openPr')} title={t('tree.openPr')} onClick={(e) => e.stopPropagation()} className={cn('relative z-10 flex size-[18px] shrink-0 items-center justify-center rounded-[4px] group-hover/sidebar:invisible group-has-[:focus-visible]/row:invisible', menu !== 'closed' && 'invisible', prColor(compactPr.state, compactPr.draft))}>
               <GitPullRequest size={14} />
             </a>
           ) : (
@@ -123,7 +125,7 @@ function TreeRow({ s, depth, activeDevinId, folders, onOpen, onPrefetch, onRefre
             <span className="flex min-w-0 items-center whitespace-nowrap text-[12px] leading-[16px] text-muted-foreground">
               {s.resumable === false && (
                 <>
-                  <span className="mr-1 shrink-0 rounded bg-muted px-1 text-[10px] leading-[15px]" title="句柄已失效（宿主进程已重启/重放），不能续聊">已失效</span>
+                  <span className="mr-1 shrink-0 rounded bg-muted px-1 text-[10px] leading-[15px]" title={t('tree.invalidTip')}>{t('tree.invalid')}</span>
                 </>
               )}
               <span className="truncate">{[subtitle, subTime].filter(Boolean).join(' · ')}</span>
@@ -157,7 +159,7 @@ function TreeRow({ s, depth, activeDevinId, folders, onOpen, onPrefetch, onRefre
               {showArchivedIcon && (
                 <>
                   <span className="mx-1 text-muted-foreground/60">·</span>
-                  <span aria-label="Archived" title="Archived" className="flex size-4 shrink-0 items-center justify-center text-orange-500"><OArchive size={14} /></span>
+                  <span aria-label={t('menu.archived')} title={t('menu.archived')} className="flex size-4 shrink-0 items-center justify-center text-orange-500"><OArchive size={14} /></span>
                 </>
               )}
               {hasKids && !open && (
@@ -188,8 +190,8 @@ function TreeRow({ s, depth, activeDevinId, folders, onOpen, onPrefetch, onRefre
           </button>
           <button
             data-slot="sidebar-menu-action"
-            aria-label={archivedView ? 'Unarchive' : 'Archive'}
-            title={archivedView ? 'Unarchive' : 'Archive'}
+            aria-label={archivedView ? t('tree.unarchive') : t('menu.archive')}
+            title={archivedView ? t('tree.unarchive') : t('menu.archive')}
             disabled={busy}
             onClick={(e) => { e.stopPropagation(); rowAction('/api/admin/mirror/session-archive', { devin_id: s.devin_id, archive: !archivedView }) }}
             className={actionCls(menu !== 'closed')}
@@ -198,8 +200,8 @@ function TreeRow({ s, depth, activeDevinId, folders, onOpen, onPrefetch, onRefre
           </button>
           <button
             data-slot="sidebar-menu-action"
-            aria-label="More"
-            title="More"
+            aria-label={t('common.more')}
+            title={t('common.more')}
             disabled={busy}
             onClick={(e) => {
               e.stopPropagation()
@@ -239,7 +241,7 @@ function TreeRow({ s, depth, activeDevinId, folders, onOpen, onPrefetch, onRefre
                 <input
                   autoFocus
                   value={draft}
-                  placeholder="Session title"
+                  placeholder={t('tree.sessionTitle')}
                   onChange={(e) => setDraft(e.target.value)}
                   onClick={(e) => e.stopPropagation()}
                   onKeyDown={(e) => {
@@ -257,7 +259,7 @@ function TreeRow({ s, depth, activeDevinId, folders, onOpen, onPrefetch, onRefre
               ) : (
                 <>
                   <button role="menuitem" aria-haspopup="menu" onMouseEnter={(e) => openFolderSub(e)} onClick={(e) => { e.stopPropagation(); openFolderSub(e) }} className="flex w-full cursor-pointer items-center gap-2 rounded px-2 py-1.5 text-[13px] hover:bg-accent">
-                    <FolderIcon size={13} className="text-muted-foreground" /> Folder <OChevronRight size={12} className="ml-auto text-muted-foreground" />
+                    <FolderIcon size={13} className="text-muted-foreground" /> {t('menu.folder')} <OChevronRight size={12} className="ml-auto text-muted-foreground" />
                   </button>
                   <button
                     role="menuitem"
@@ -267,7 +269,7 @@ function TreeRow({ s, depth, activeDevinId, folders, onOpen, onPrefetch, onRefre
                     }}
                     className="flex w-full cursor-pointer items-center gap-2 rounded px-2 py-1.5 text-[13px] hover:bg-accent"
                   >
-                    <Pencil size={13} className="text-muted-foreground" /> Rename
+                    <Pencil size={13} className="text-muted-foreground" /> {t('menu.renameSession')}
                   </button>
                   <button
                     role="menuitem"
@@ -275,7 +277,7 @@ function TreeRow({ s, depth, activeDevinId, folders, onOpen, onPrefetch, onRefre
                     onClick={(e) => { e.stopPropagation(); setMenu('closed'); navigator.clipboard.writeText(`${window.location.origin}${sessionMirrorPath(s.devin_id)}`) }}
                     className="flex w-full cursor-pointer items-center gap-2 rounded px-2 py-1.5 text-[13px] hover:bg-accent"
                   >
-                    <Link2 size={13} className="text-muted-foreground" /> Copy session link
+                    <Link2 size={13} className="text-muted-foreground" /> {t('menu.copyLink')}
                   </button>
                   <button
                     role="menuitem"
@@ -283,7 +285,7 @@ function TreeRow({ s, depth, activeDevinId, folders, onOpen, onPrefetch, onRefre
                     onClick={(e) => { e.stopPropagation(); setMenu('closed'); window.open(sessionMirrorPath(s.devin_id), '_blank', 'noopener') }}
                     className="flex w-full cursor-pointer items-center gap-2 rounded px-2 py-1.5 text-[13px] hover:bg-accent"
                   >
-                    <Expand size={13} className="text-muted-foreground" /> Open in new window
+                    <Expand size={13} className="text-muted-foreground" /> {t('menu.openInNew')}
                   </button>
                 </>
               )}
@@ -309,7 +311,7 @@ function TreeRow({ s, depth, activeDevinId, folders, onOpen, onPrefetch, onRefre
                   <input
                     autoFocus
                     value={draft}
-                    placeholder="Folder name"
+                    placeholder={t('tree.folderName')}
                     onChange={(e) => setDraft(e.target.value)}
                     onClick={(e) => e.stopPropagation()}
                     onKeyDown={(e) => {
@@ -333,11 +335,11 @@ function TreeRow({ s, depth, activeDevinId, folders, onOpen, onPrefetch, onRefre
                     <button role="menuitem" onClick={(e) => {
                       e.stopPropagation(); setDraft(''); setMenu('newfolder')
                     }} className="flex w-full cursor-pointer items-center gap-2 rounded px-2 py-1.5 text-[13px] hover:bg-accent">
-                      <Plus size={13} className="text-muted-foreground" /> New folder
+                      <Plus size={13} className="text-muted-foreground" /> {t('menu.newFolder')}
                     </button>
                     {s.folder && (
                       <button role="menuitem" onClick={(e) => { e.stopPropagation(); setMenu('closed'); rowAction('/api/admin/mirror/session-folder', { devin_id: s.devin_id, folder: null }) }} className="flex w-full cursor-pointer items-center gap-2 rounded px-2 py-1.5 text-[13px] hover:bg-accent">
-                        <OX size={13} className="text-muted-foreground" /> Remove from folder
+                        <OX size={13} className="text-muted-foreground" /> {t('tree.removeFromFolder')}
                       </button>
                     )}
                   </>
@@ -352,7 +354,7 @@ function TreeRow({ s, depth, activeDevinId, folders, onOpen, onPrefetch, onRefre
       {open && !allKids && s.total_children > s.children.length && (
         <div data-slot="sidebar-menu-item" className="group/row relative" style={{ paddingLeft: (depth + 1) * 14 }}>
           <button
-            aria-label={`Show ${s.total_children - s.children.length} more session${s.total_children - s.children.length === 1 ? '' : 's'}`}
+            aria-label={t('tree.showMore', { n: s.total_children - s.children.length })}
             disabled={kidsBusy}
             onClick={() => {
               setKidsBusy(true)
@@ -363,7 +365,7 @@ function TreeRow({ s, depth, activeDevinId, folders, onOpen, onPrefetch, onRefre
             }}
             className="flex h-[30px] w-full items-center rounded-md px-2 text-[13px] text-muted-foreground hover:bg-tint-secondary hover:text-foreground disabled:opacity-50"
           >
-            Load more...
+            {t('tree.loadMore')}
           </button>
         </div>
       )}
@@ -373,6 +375,7 @@ function TreeRow({ s, depth, activeDevinId, folders, onOpen, onPrefetch, onRefre
 
 /** Official-style inline month calendar for the Filter Custom… date range. */
 function MenuCalendar({ title, range, onPick, onReset }: { title: string; range: [string, string]; onPick: (d: string) => void; onReset: () => void }) {
+  const { t } = useTranslation()
   const [month, setMonth] = useState(() => { const n = new Date(); return new Date(Date.UTC(n.getUTCFullYear(), n.getUTCMonth(), 1)) })
   const fmt = (d: Date) => d.toISOString().slice(0, 10)
   const label = (s: string) => s ? new Date(s + 'T00:00:00Z').toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric', timeZone: 'UTC' }) : '—'
@@ -383,15 +386,15 @@ function MenuCalendar({ title, range, onPick, onReset }: { title: string; range:
     <div className="px-2 pb-2" onClick={(e) => e.stopPropagation()}>
       <div className="flex items-center justify-between py-[5px]">
         <span className="text-[12px] font-medium text-muted-foreground">{title}</span>
-        <button role="menuitem" onClick={onReset} className="cursor-pointer text-[12px] font-medium text-primary hover:underline">Reset</button>
+        <button role="menuitem" onClick={onReset} className="cursor-pointer text-[12px] font-medium text-primary hover:underline">{t('common.reset')}</button>
       </div>
       <div className="flex items-center gap-2 pb-1 text-[12px] text-muted-foreground">
         <span>{label(range[0])}</span><span>{label(range[1])}</span>
       </div>
       <div className="flex items-center justify-between py-1">
-        <button aria-label="Previous month" onClick={() => setMonth(new Date(Date.UTC(month.getUTCFullYear(), month.getUTCMonth() - 1, 1)))} className="flex size-6 items-center justify-center rounded-md hover:bg-muted"><OChevronLeft size={13} /></button>
+        <button aria-label={t('tree.prevMonth')} onClick={() => setMonth(new Date(Date.UTC(month.getUTCFullYear(), month.getUTCMonth() - 1, 1)))} className="flex size-6 items-center justify-center rounded-md hover:bg-muted"><OChevronLeft size={13} /></button>
         <span className="text-[13px] font-medium">{month.toLocaleDateString('en-US', { month: 'long', year: 'numeric', timeZone: 'UTC' })}</span>
-        <button aria-label="Next month" onClick={() => setMonth(new Date(Date.UTC(month.getUTCFullYear(), month.getUTCMonth() + 1, 1)))} className="flex size-6 items-center justify-center rounded-md hover:bg-muted"><OChevronRight size={13} /></button>
+        <button aria-label={t('tree.nextMonth')} onClick={() => setMonth(new Date(Date.UTC(month.getUTCFullYear(), month.getUTCMonth() + 1, 1)))} className="flex size-6 items-center justify-center rounded-md hover:bg-muted"><OChevronRight size={13} /></button>
       </div>
       <div className="grid grid-cols-7 text-center text-[12px] text-muted-foreground">{['Su', 'Mo', 'Tu', 'We', 'Th', 'Fr', 'Sa'].map((d) => <span key={d} className="p-px leading-4">{d}</span>)}</div>
       <div className="grid grid-cols-7">
@@ -450,6 +453,7 @@ const filterCount = (p: TreePrefs) => (p.createdBy !== 'self' ? 1 : 0) + (p.tags
 
 /** Official-style session tree: folders, Pinned, Recent, then the optional Archived group. */
 const SessionTree = memo(function SessionTree({ tree, archivedTree, activeDevinId, onOpen, onPrefetch, onRefresh, prefs, onPrefs, folderOrder, folderTotals, onLoadMore, loadingMore }: { tree: MirrorTreeSession[]; archivedTree?: MirrorTreeSession[]; activeDevinId: string; onOpen: (s: MirrorTreeSession) => void; onPrefetch?: (s: MirrorTreeSession) => void; onRefresh?: () => void; prefs: TreePrefs; onPrefs: (p: Partial<TreePrefs>) => void; folderOrder?: string[]; folderTotals?: Record<string, number>; onLoadMore?: () => void; loadingMore?: boolean }) {
+  const { t } = useTranslation()
   const [closed, setClosed] = useState<Record<string, boolean>>(() => {
     try { return JSON.parse(localStorage.getItem('sidebar-collapsed-folders') || '{}') as Record<string, boolean> } catch { return {} }
   })
@@ -473,7 +477,7 @@ const SessionTree = memo(function SessionTree({ tree, archivedTree, activeDevinI
     const projects = new Map<string, MirrorTreeSession[]>()
     if (prefs.groupBy === 'project') {
       for (const s of rest.splice(0)) {
-        const k = s.cwd || '(无目录)'
+        const k = s.cwd || t('tree.noDir')
         if (!projects.has(k)) projects.set(k, [])
         projects.get(k)!.push(s)
       }
@@ -537,7 +541,7 @@ const SessionTree = memo(function SessionTree({ tree, archivedTree, activeDevinI
           <input
             autoFocus
             value={searchQ}
-            placeholder="Search sessions..."
+            placeholder={t('tree.searchSessions')}
             onChange={(e) => setSearchQ(e.target.value)}
             onKeyDown={(e) => { if (e.key === 'Escape') { e.stopPropagation(); setSearchIn(null); setSearchQ('') } }}
             className="h-7 w-full min-w-0 flex-1 rounded-[6px] border border-border bg-transparent px-2 text-[13px] font-normal text-foreground outline-none placeholder:text-muted-foreground"
@@ -560,8 +564,8 @@ const SessionTree = memo(function SessionTree({ tree, archivedTree, activeDevinI
         )}
         {isFolder && !searching && (
           <button
-            aria-label="Search"
-            title="Search"
+            aria-label={t('common.search')}
+            title={t('common.search')}
             onClick={(e) => { e.stopPropagation(); setSearchQ(''); setSearchIn(name) }}
             className="flex size-6 shrink-0 cursor-pointer items-center justify-center rounded-md opacity-0 transition-all hover:text-foreground focus:opacity-100 group-hover/label:opacity-100"
           >
@@ -570,8 +574,8 @@ const SessionTree = memo(function SessionTree({ tree, archivedTree, activeDevinI
         )}
         {isFolder && !searching && (
           <button
-            aria-label="Folder options"
-            title="Folder options"
+            aria-label={t('tree.folderOptions')}
+            title={t('tree.folderOptions')}
             onClick={(e) => {
               e.stopPropagation()
               const r = e.currentTarget.getBoundingClientRect()
@@ -591,10 +595,10 @@ const SessionTree = memo(function SessionTree({ tree, archivedTree, activeDevinI
       </div>
       {!closed[name] && shown.map((s) => <TreeRow key={s.devin_id} s={s} depth={0} activeDevinId={activeDevinId} folders={folderNames} onOpen={onOpen} onPrefetch={onPrefetch} onRefresh={onRefresh} archivedView={archived} compact={prefs.compact} propHidden={prefs.propHidden} />)}
       {!closed[name] && searching && shown.length === 0 && (
-        <div className="px-2 py-1.5 text-[12px] text-muted-foreground">No results found</div>
+        <div className="px-2 py-1.5 text-[12px] text-muted-foreground">{t('common.noResults')}</div>
       )}
       {!closed[name] && archived && !searching && items.length === 0 && (
-        <div className="px-2 py-1.5 text-[12px] text-muted-foreground">No sessions</div>
+        <div className="px-2 py-1.5 text-[12px] text-muted-foreground">{t('tree.noSessions')}</div>
       )}
     </div>
     )
@@ -647,18 +651,18 @@ const SessionTree = memo(function SessionTree({ tree, archivedTree, activeDevinI
   return (
     <div className="px-1.5 py-1">
       <div data-slot="sidebar-label-row" className="group/label sticky top-0 z-20 flex h-8 w-full shrink-0 items-center justify-between gap-px bg-background pl-1 pr-1 text-[12px] font-medium text-muted-foreground">
-        <span data-slot="sidebar-group-label" className="min-w-0 flex-1 truncate pl-1">Sessions</span>
+        <span data-slot="sidebar-group-label" className="min-w-0 flex-1 truncate pl-1">{t('tree.sessions')}</span>
         <button
-          aria-label="Properties"
-          title="Properties"
+          aria-label={t('tree.properties')}
+          title={t('tree.properties')}
           onClick={(e) => openHeaderMenu(e, 'main')}
           className="flex size-6 shrink-0 cursor-pointer items-center justify-center rounded-md opacity-0 transition-all hover:text-foreground focus:opacity-100 group-hover/label:opacity-100"
         >
           <Settings2 size={13} />
         </button>
         <button
-          aria-label="More"
-          title="More"
+          aria-label={t('common.more')}
+          title={t('common.more')}
           onClick={(e) => openHeaderMenu(e, 'more')}
           className="flex size-6 shrink-0 cursor-pointer items-center justify-center rounded-md opacity-0 transition-all hover:text-foreground focus:opacity-100 group-hover/label:opacity-100"
         >
@@ -666,12 +670,12 @@ const SessionTree = memo(function SessionTree({ tree, archivedTree, activeDevinI
         </button>
       </div>
       {(previewOrder ?? folderNames).filter((name) => !prefs.hidden[name]).map((name) => <Section key={name} name={name} items={groups.folders.get(name) ?? []} isFolder />)}
-      {groups.pinned.length > 0 && !prefs.hidden['Pinned'] && <Section name="Pinned" items={groups.pinned} icon={<OPin size={14} />} showCount />}
-      {groups.rest.length > 0 && !prefs.hidden['Recent'] && <Section name="Recent" items={groups.rest} icon={<Clock size={14} />} />}
+      {groups.pinned.length > 0 && !prefs.hidden['Pinned'] && <Section name={t('tree.gPinned')} items={groups.pinned} icon={<OPin size={14} />} showCount />}
+      {groups.rest.length > 0 && !prefs.hidden['Recent'] && <Section name={t('tree.gRecent')} items={groups.rest} icon={<Clock size={14} />} />}
       {[...groups.projects.entries()].map(([cwd, items]) => (
         <Section
           key={`proj:${cwd}`}
-          name={cwd === '(无目录)' ? cwd : (cwd.replace(/[\\/]+$/, '').split(/[\\/]/).pop() || cwd)}
+          name={cwd === t('tree.noDir') ? cwd : (cwd.replace(/[\\/]+$/, '').split(/[\\/]/).pop() || cwd)}
           items={items}
           icon={<FolderIcon size={14} />}
           showCount
@@ -679,7 +683,7 @@ const SessionTree = memo(function SessionTree({ tree, archivedTree, activeDevinI
       ))}
       {onLoadMore && (
         <button
-          aria-label="Load more..."
+          aria-label={t('tree.loadMore')}
           disabled={loadingMore}
           onClick={onLoadMore}
           className="flex h-[30px] w-full cursor-pointer items-center rounded-md px-2 pl-[26px] text-[13px] text-muted-foreground hover:bg-muted hover:text-foreground disabled:opacity-50"
@@ -687,7 +691,7 @@ const SessionTree = memo(function SessionTree({ tree, archivedTree, activeDevinI
           {loadingMore ? 'Loading...' : 'Load more...'}
         </button>
       )}
-      {prefs.showArchived && <Section name="Archived" items={archivedTree ?? []} icon={<OArchive size={14} />} archived />}
+      {prefs.showArchived && <Section name={t('menu.archived')} items={archivedTree ?? []} icon={<OArchive size={14} />} archived />}
       {propsMenu && createPortal(
         <>
           <div className="fixed inset-0 z-40" onClick={(e) => { e.stopPropagation(); setPropsMenu(null) }} />
@@ -702,23 +706,23 @@ const SessionTree = memo(function SessionTree({ tree, archivedTree, activeDevinI
             {panel.mode === 'main' && (
               <>
                 <div className="flex items-center justify-between px-2 py-1">
-                  <span className="text-[12px] text-muted-foreground">Properties</span>
-                  <button role="menuitem" onClick={(e) => { e.stopPropagation(); onPrefs({ ...DEFAULT_TREE_PREFS }); setPropsMenu(null) }} className="cursor-pointer text-[12px] font-medium leading-4 text-primary hover:underline">Reset</button>
+                  <span className="text-[12px] text-muted-foreground">{t('tree.propertiesTxt')}</span>
+                  <button role="menuitem" onClick={(e) => { e.stopPropagation(); onPrefs({ ...DEFAULT_TREE_PREFS }); setPropsMenu(null) }} className="cursor-pointer text-[12px] font-medium leading-4 text-primary hover:underline">{t('common.reset')}</button>
                 </div>
                 <button role="menuitem" aria-haspopup="menu" onMouseEnter={(e) => hoverMenu(e, pi, 'sort')} onClick={(e) => { pushMenu(e, 'sort') }} className={menuItemCls}>
-                  <ChevronsUpDown size={13} className="text-muted-foreground" /> Sort
-                  <span className="ml-auto flex items-center gap-1 text-muted-foreground">{prefs.sort === 'created_at' ? 'Last created' : 'Last updated'} <OChevronRight size={12} /></span>
+                  <ChevronsUpDown size={13} className="text-muted-foreground" /> {t('tree.sort')}
+                  <span className="ml-auto flex items-center gap-1 text-muted-foreground">{prefs.sort === 'created_at' ? t('tree.lastCreated') : t('tree.lastUpdated')} <OChevronRight size={12} /></span>
                 </button>
                 <button role="menuitem" aria-haspopup="menu" onMouseEnter={(e) => hoverMenu(e, pi, 'filter')} onClick={(e) => { pushMenu(e, 'filter') }} className={menuItemCls}>
-                  <ListFilter size={13} className="text-muted-foreground" /> Filter
+                  <ListFilter size={13} className="text-muted-foreground" /> {t('tree.filter')}
                   <span className="ml-auto flex items-center gap-1 text-muted-foreground">{filterCount(prefs) > 0 ? filterCount(prefs) : ''} <OChevronRight size={12} /></span>
                 </button>
                 <button role="menuitem" aria-haspopup="menu" onMouseEnter={(e) => hoverMenu(e, pi, 'group')} onClick={(e) => { pushMenu(e, 'group') }} className={menuItemCls}>
-                  <FolderIcon size={13} className="text-muted-foreground" /> Group
-                  <span className="ml-auto flex items-center gap-1 text-muted-foreground">Folders <OChevronRight size={12} /></span>
+                  <FolderIcon size={13} className="text-muted-foreground" /> {t('tree.group')}
+                  <span className="ml-auto flex items-center gap-1 text-muted-foreground">{t('tree.folders')} <OChevronRight size={12} /></span>
                 </button>
                 <button role="menuitem" aria-haspopup="menu" onMouseEnter={(e) => hoverMenu(e, pi, 'propvis')} onClick={(e) => { pushMenu(e, 'propvis') }} className={menuItemCls}>
-                  <CircleDot size={13} className="text-muted-foreground" /> Property visibility
+                  <CircleDot size={13} className="text-muted-foreground" /> {t('tree.propVis')}
                   <span className="ml-auto flex items-center gap-1 text-muted-foreground">{PROP_NAMES.filter((n) => !prefs.propHidden[n]).length} <OChevronRight size={12} /></span>
                 </button>
                 <button
@@ -728,7 +732,7 @@ const SessionTree = memo(function SessionTree({ tree, archivedTree, activeDevinI
                   onClick={(e) => { e.stopPropagation(); onPrefs({ compact: !prefs.compact }) }}
                   className={menuItemCls}
                 >
-                  <List size={13} className="text-muted-foreground" /> Compact view
+                  <List size={13} className="text-muted-foreground" /> {t('tree.compactView')}
                   <span className={`ml-auto flex h-4 w-7 items-center rounded-full p-0.5 transition-colors ${prefs.compact ? 'justify-end bg-blue-500' : 'bg-muted-foreground/30'}`}><span className="size-3 rounded-full bg-white" /></span>
                 </button>
               </>
@@ -742,7 +746,7 @@ const SessionTree = memo(function SessionTree({ tree, archivedTree, activeDevinI
                 className={menuItemCls}
               >
                 <span className="flex w-4 justify-center">{prefs.sort === k && <OCheck size={13} />}</span>
-                {k === 'updated_at' ? 'Last updated' : 'Last created'}
+                {k === 'updated_at' ? t('tree.lastUpdated') : t('tree.lastCreated')}
               </button>
             ))}
             {panel.mode === 'filter' && (
@@ -753,28 +757,28 @@ const SessionTree = memo(function SessionTree({ tree, archivedTree, activeDevinI
                     autoFocus
                     value={fltSearch}
                     onChange={(e) => setFltSearch(e.target.value)}
-                    placeholder="Search filters"
+                    placeholder={t('tree.searchFilters')}
                     onClick={(e) => e.stopPropagation()}
                     onKeyDown={(e) => { if (e.key === 'Escape') { e.stopPropagation(); setFltSearch(''); popMenu() } }}
                     className="w-full min-w-0 bg-transparent text-[13px] text-foreground outline-none placeholder:text-muted-foreground"
                   />
                 </div>
-                {([['flt_stype', 'Session type'], ['flt_createdby', 'Created by'], ['flt_machine', 'Machine type'], ['flt_auto', 'Automation'], ['flt_status', 'Status'], ['flt_pr', 'Pull requests'], ['flt_tags', 'Tags'], ['flt_archived', 'Archived'], ['flt_created', 'Created time'], ['flt_updated', 'Updated time']] as const).filter(([, label]) => !fltSearch || label.toLowerCase().includes(fltSearch.toLowerCase())).map(([m, label]) =>
+                {(['flt_stype','flt_createdby','flt_machine','flt_auto','flt_status','flt_pr','flt_tags','flt_archived','flt_created','flt_updated'] as const).filter((m) => !fltSearch || t('tree.flt.' + m).toLowerCase().includes(fltSearch.toLowerCase())).map((m) =>
                   m === 'flt_archived' ? (
-                    <div key={m} role="menuitem" aria-disabled="true" className={`${menuItemCls} cursor-default opacity-50`}>Archived</div>
+                    <div key={m} role="menuitem" aria-disabled="true" className={`${menuItemCls} cursor-default opacity-50`}>{t('menu.archivedTxt')}</div>
                   ) : (
                   <button key={m} role="menuitem" aria-haspopup="menu" onMouseEnter={(e) => hoverMenu(e, pi, m)} onClick={(e) => { e.stopPropagation(); setFltSearch(''); pushMenu(e, m) }} className={menuItemCls}>
-                    {label}
+                    {t('tree.flt.' + m)}
                     <span className="ml-auto flex items-center gap-1 text-muted-foreground"><OChevronRight size={12} /></span>
                   </button>
                   ))}
                 {filterCount(prefs) > 0 ? (
                   <button role="menuitem" onClick={(e) => { e.stopPropagation(); onPrefs({ statuses: [], sessionTypes: ['devin', 'ada'], platforms: ['linux', 'windows', 'macos'], automation: ['automations', 'not_automations'], prStates: [], createdRange: '', updatedRange: 'month', createdCustom: ['', ''], updatedCustom: ['', ''], createdBy: 'self', tags: [] }) }} className={menuItemCls}>
-                    <RotateCcw size={13} className="text-muted-foreground" /> Reset to default
+                    <RotateCcw size={13} className="text-muted-foreground" /> {t('tree.resetDefault')}
                   </button>
                 ) : (
                   <div role="menuitem" aria-disabled="true" className={`${menuItemCls} cursor-default opacity-50`}>
-                    <RotateCcw size={13} className="text-muted-foreground" /> Reset to default
+                    <RotateCcw size={13} className="text-muted-foreground" /> {t('tree.resetDefault')}
                   </div>
                 )}
               </>
@@ -782,8 +786,8 @@ const SessionTree = memo(function SessionTree({ tree, archivedTree, activeDevinI
             {panel.mode === 'flt_createdby' && (
               <>
                 <div className="flex items-center justify-between gap-2 px-2">
-                  <div className="py-[5px] text-[12px] font-medium text-muted-foreground">Created by</div>
-                  <button role="menuitem" onClick={(e) => { e.stopPropagation(); onPrefs({ createdBy: 'self' }) }} className="cursor-pointer text-[12px] font-medium text-primary hover:underline">Reset</button>
+                  <div className="py-[5px] text-[12px] font-medium text-muted-foreground">{t('tree.createdBy')}</div>
+                  <button role="menuitem" onClick={(e) => { e.stopPropagation(); onPrefs({ createdBy: 'self' }) }} className="cursor-pointer text-[12px] font-medium text-primary hover:underline">{t('common.reset')}</button>
                 </div>
                 <button role="menuitemcheckbox" aria-checked={prefs.createdBy === 'self'} onClick={(e) => { e.stopPropagation(); onPrefs({ createdBy: prefs.createdBy === 'self' ? 'annotated' : 'self' }) }} className={menuItemCls}>
                   <span className="flex w-4 justify-center">{prefs.createdBy === 'self' && <OCheck size={13} />}</span>
@@ -794,12 +798,12 @@ const SessionTree = memo(function SessionTree({ tree, archivedTree, activeDevinI
             {panel.mode === 'flt_tags' && (
               <>
                 <div className="flex items-center justify-between gap-2 px-2">
-                  <div className="py-[5px] text-[12px] font-medium text-muted-foreground">Tags</div>
-                  <button role="menuitem" onClick={(e) => { e.stopPropagation(); onPrefs({ tags: [] }) }} className="cursor-pointer text-[12px] font-medium text-primary hover:underline">Reset</button>
+                  <div className="py-[5px] text-[12px] font-medium text-muted-foreground">{t('tree.tags')}</div>
+                  <button role="menuitem" onClick={(e) => { e.stopPropagation(); onPrefs({ tags: [] }) }} className="cursor-pointer text-[12px] font-medium text-primary hover:underline">{t('common.reset')}</button>
                 </div>
                 <div className="mb-1 flex items-center gap-2 border-b border-border px-2 pb-1.5">
                   <OSearch size={13} className="shrink-0 text-muted-foreground" />
-                  <input autoFocus value={tagSearch} onChange={(e) => setTagSearch(e.target.value)} placeholder="Search tags" onClick={(e) => e.stopPropagation()} className="w-full min-w-0 bg-transparent text-[13px] text-foreground outline-none placeholder:text-muted-foreground" />
+                  <input autoFocus value={tagSearch} onChange={(e) => setTagSearch(e.target.value)} placeholder={t('tree.searchTags')} onClick={(e) => e.stopPropagation()} className="w-full min-w-0 bg-transparent text-[13px] text-foreground outline-none placeholder:text-muted-foreground" />
                 </div>
                 {orgTags.filter((t) => !tagSearch || t.toLowerCase().includes(tagSearch.toLowerCase())).map((t) => {
                   const on = prefs.tags.includes(t)
@@ -810,7 +814,7 @@ const SessionTree = memo(function SessionTree({ tree, archivedTree, activeDevinI
                     </button>
                   )
                 })}
-                {orgTags.length === 0 && <div className="px-2 py-1.5 text-[13px] text-muted-foreground">No tags</div>}
+                {orgTags.length === 0 && <div className="px-2 py-1.5 text-[13px] text-muted-foreground">{t('tree.noTags')}</div>}
               </>
             )}
             {panel.mode === 'flt_status' && (['running', 'inactive'] as const).map((s) => {
@@ -818,7 +822,7 @@ const SessionTree = memo(function SessionTree({ tree, archivedTree, activeDevinI
               return (
                 <button key={s} role="menuitemcheckbox" aria-checked={on} onClick={(e) => { e.stopPropagation(); onPrefs({ statuses: on ? prefs.statuses.filter((x) => x !== s) : [...prefs.statuses, s] }) }} className={menuItemCls}>
                   <span className="flex w-4 justify-center">{on && <OCheck size={13} />}</span>
-                  {s === 'running' ? 'Running' : 'Inactive'}
+                  {s === 'running' ? t('tree.running') : t('tree.inactive')}
                 </button>
               )
             })}
@@ -845,7 +849,7 @@ const SessionTree = memo(function SessionTree({ tree, archivedTree, activeDevinI
               return (
                 <button key={v} role="menuitemcheckbox" aria-checked={on} onClick={(e) => { e.stopPropagation(); onPrefs({ automation: on ? prefs.automation.filter((x) => x !== v) : [...prefs.automation, v] }) }} className={menuItemCls}>
                   <span className="flex w-4 justify-center">{on && <OCheck size={13} />}</span>
-                  {label}
+                  {t('tree.auto.' + v)}
                 </button>
               )
             })}
@@ -854,7 +858,7 @@ const SessionTree = memo(function SessionTree({ tree, archivedTree, activeDevinI
               return (
                 <button key={v} role="menuitemcheckbox" aria-checked={on} onClick={(e) => { e.stopPropagation(); onPrefs({ prStates: on ? prefs.prStates.filter((x) => x !== v) : [...prefs.prStates, v] }) }} className={menuItemCls}>
                   <span className="flex w-4 justify-center">{on && <OCheck size={13} />}</span>
-                  {label}
+                  {t('tree.pr.' + v)}
                 </button>
               )
             })}
@@ -865,14 +869,14 @@ const SessionTree = memo(function SessionTree({ tree, archivedTree, activeDevinI
               return (
                 <button key={v} role="menuitemcheckbox" aria-checked={on} onClick={(e) => { e.stopPropagation(); onPrefs(created ? { createdRange: on ? '' : v } : { updatedRange: on ? 'month' : v }) }} className={menuItemCls}>
                   <span className="flex w-4 justify-center">{on && <OCheck size={13} />}</span>
-                  {label}
+                  {t('tree.range.' + v)}
                 </button>
               )
             })}
             {(panel.mode === 'flt_created' || panel.mode === 'flt_updated') && (
               <button role="menuitem" onClick={(e) => { e.stopPropagation(); replaceMenu(panel.mode === 'flt_created' ? 'flt_created_cal' : 'flt_updated_cal') }} className={menuItemCls}>
                 <span className="flex w-4 justify-center" />
-                Custom…
+                {t('tree.custom')}
               </button>
             )}
             {(panel.mode === 'flt_created_cal' || panel.mode === 'flt_updated_cal') && (() => {
@@ -895,9 +899,9 @@ const SessionTree = memo(function SessionTree({ tree, archivedTree, activeDevinI
             {panel.mode === 'propvis' && (
               <>
                 <div className="flex items-center justify-between gap-2 px-2">
-                  <div className="py-[5px] text-[12px] font-medium text-muted-foreground">Properties</div>
+                  <div className="py-[5px] text-[12px] font-medium text-muted-foreground">{t('tree.propertiesTxt')}</div>
                   <button role="menuitem" onClick={(e) => { e.stopPropagation(); onPrefs({ propHidden: Object.fromEntries(PROP_NAMES.map((n) => [n, true])) }) }} className="cursor-pointer select-none text-[12px] font-medium text-primary outline-none hover:underline">
-                    Hide all
+                    {t('tree.hideAll')}
                   </button>
                 </div>
                 {PROP_NAMES.map((n) => {
@@ -911,7 +915,7 @@ const SessionTree = memo(function SessionTree({ tree, archivedTree, activeDevinI
                       className={menuItemCls}
                     >
                       <span className="flex w-4 justify-center">{on && <OCheck size={13} />}</span>
-                      {n}
+                      {t('tree.props.' + n)}
                     </button>
                   )
                 })}
@@ -928,7 +932,7 @@ const SessionTree = memo(function SessionTree({ tree, archivedTree, activeDevinI
                     className={menuItemCls}
                   >
                     <span className="flex w-4 justify-center">{(prefs.groupBy ?? 'folders') === gb && <OCheck size={13} />}</span>
-                    <span className="truncate">{gb === 'folders' ? 'Group by Folders' : '按项目目录分组'}</span>
+                    <span className="truncate">{gb === 'folders' ? t('tree.groupFolders') : t('tree.groupProject')}</span>
                   </button>
                 ))}
                 <div role="separator" className="mx-2 my-1 h-px bg-border" />
@@ -947,39 +951,39 @@ const SessionTree = memo(function SessionTree({ tree, archivedTree, activeDevinI
                       className={menuItemCls}
                     >
                       <span className="flex w-4 justify-center">{visible && <OCheck size={13} />}</span>
-                      <span className="truncate">{g}</span>
+                      <span className="truncate">{g === 'Pinned' ? t('tree.gPinned') : g === 'Recent' ? t('tree.gRecent') : g === 'Archived' ? t('menu.archived') : g}</span>
                     </button>
                   )
                 })}
                 <button role="menuitem" onClick={(e) => { e.stopPropagation(); setNewFolderDraft(''); pushMenu(e, 'newfolder') }} className={menuItemCls}>
-                  <Plus size={13} className="text-muted-foreground" /> Create new folder
+                  <Plus size={13} className="text-muted-foreground" /> {t('tree.createFolder')}
                 </button>
               </>
             )}
             {panel.mode === 'more' && (
               <>
                 <button role="menuitem" onClick={(e) => { e.stopPropagation(); setNewFolderDraft(''); pushMenu(e, 'newfolder') }} className={menuItemCls}>
-                  <Plus size={13} className="text-muted-foreground" /> New folder
+                  <Plus size={13} className="text-muted-foreground" /> {t('menu.newFolder')}
                 </button>
                 <button role="menuitem" onMouseEnter={() => trimMenu(pi)} onClick={(e) => { e.stopPropagation(); window.location.href = '/' }} className={menuItemCls}>
-                  <List size={13} className="text-muted-foreground" /> View all sessions
+                  <List size={13} className="text-muted-foreground" /> {t('tree.viewAll')}
                 </button>
                 <button role="menuitem" aria-haspopup="menu" onMouseEnter={(e) => hoverMenu(e, pi, 'moreactions')} onClick={(e) => { pushMenu(e, 'moreactions') }} className={menuItemCls}>
-                  <ODots size={13} className="text-muted-foreground" /> More actions
+                  <ODots size={13} className="text-muted-foreground" /> {t('tree.moreActions')}
                   <span className="ml-auto flex items-center gap-1 text-muted-foreground"><OChevronRight size={12} /></span>
                 </button>
               </>
             )}
             {panel.mode === 'moreactions' && (
-              <div role="menuitem" aria-disabled="true" title="组织级破坏性操作，镜像不接线" className={`${menuItemCls} cursor-default opacity-50`}>
-                <OArchive size={13} className="text-muted-foreground" /> Archive all sessions
+              <div role="menuitem" aria-disabled="true" title={t('tree.orgOp')} className={`${menuItemCls} cursor-default opacity-50`}>
+                <OArchive size={13} className="text-muted-foreground" /> {t('tree.archiveAll')}
               </div>
             )}
             {panel.mode === 'newfolder' && (
               <input
                 autoFocus
                 value={newFolderDraft}
-                placeholder="Folder name"
+                placeholder={t('tree.folderName')}
                 onChange={(e) => setNewFolderDraft(e.target.value)}
                 onClick={(e) => e.stopPropagation()}
                 onKeyDown={(e) => {
@@ -1011,7 +1015,7 @@ const SessionTree = memo(function SessionTree({ tree, archivedTree, activeDevinI
               <input
                 autoFocus
                 value={folderDraft}
-                placeholder="Folder name"
+                placeholder={t('tree.folderName')}
                 onChange={(e) => setFolderDraft(e.target.value)}
                 onClick={(e) => e.stopPropagation()}
                 onKeyDown={(e) => {

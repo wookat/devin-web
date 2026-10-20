@@ -1,4 +1,5 @@
 import { useEffect, useRef, useState } from 'react'
+import { useTranslation } from 'react-i18next'
 import { Boxes } from 'lucide-react'
 
 type LiveDesktopQuality = 'auto' | 'sharp' | 'saver'
@@ -21,6 +22,7 @@ function qualitySettings(quality: LiveDesktopQuality): { qualityLevel: number; c
  * gates who may obtain the link (admin, or visitors on an allowed share tier).
  */
 export default function LiveDesktop({ fetchLink, quality = 'auto', frameless = false }: LiveDesktopProps) {
+  const { t } = useTranslation()
   const host = useRef<HTMLDivElement>(null)
   const rfbRef = useRef<{ disconnect(): void; compressionLevel?: number; qualityLevel?: number } | null>(null)
   const qualityRef = useRef<LiveDesktopQuality>(quality)
@@ -101,7 +103,7 @@ export default function LiveDesktop({ fetchLink, quality = 'auto', frameless = f
             ? <span>Live desktop unavailable ({error})</span>
             : <>
                 <Boxes size={28} className={frameless ? 'text-muted-foreground' : 'text-white/50'} />
-                <span>Reconnecting...</span>
+                <span>{t('cmp.reconnecting')}</span>
               </>}
         </div>
       )}

@@ -2,6 +2,7 @@ import { type TimelineItem } from '@/components/Timeline'
 import { stripRefTags } from '@/components/Markdown'
 import { stripRepoHints } from '@/lib/repos'
 import { extractQuotes, foldQuoteScreenshots, quotePreviewFallback, type QuoteAttachment, type QuoteMeta } from '../../../shared/quotes'
+import i18n from '@/i18n'
 
 // Staged-upload ids are always `{uuid}-{sanitized-name}` — require that shape
 // so prose mentions (`/api/uploads/`, `/api/uploads/*`, `<id>` placeholders)
@@ -54,7 +55,7 @@ function splitAttachments(body: string, quoteMeta?: (QuoteMeta | null)[], preQuo
 function indexPreview(body: string): string {
   const { quotes, text } = extractQuotes(body)
   const line = stripRefTags(text).trim().split('\n')[0].slice(0, 80)
-  return line || quotePreviewFallback(quotes) || '(附件)'
+  return line || quotePreviewFallback(quotes) || i18n.t('att.attachment')
 }
 
 /** Renders an attachment inline as its own panel tab, like the official file tabs. */

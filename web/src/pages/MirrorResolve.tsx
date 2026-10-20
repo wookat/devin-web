@@ -1,4 +1,5 @@
 import { useEffect, useState } from 'react'
+import { useTranslation } from 'react-i18next'
 import { Link, useNavigate, useParams } from 'react-router-dom'
 import { adminFetch } from '@/lib/api'
 
@@ -10,6 +11,7 @@ import { adminFetch } from '@/lib/api'
  * visit) and redirect into the shared mirror page.
  */
 export default function MirrorResolvePage({ kind }: { kind: 'session' | 'review' }) {
+  const { t } = useTranslation()
   const params = useParams()
   const navigate = useNavigate()
   const [err, setErr] = useState<string | null>(null)
@@ -29,7 +31,7 @@ export default function MirrorResolvePage({ kind }: { kind: 'session' | 'review'
     run().catch((e) => {
       if (!alive) return
       const msg = (e as Error).message
-      setErr(msg === 'unauthorized' ? '需要先在首页登录管理员' : msg)
+      setErr(msg === 'unauthorized' ? t('mr.needLogin') : msg)
     })
     return () => { alive = false }
   }, [kind, params, navigate])
@@ -37,13 +39,13 @@ export default function MirrorResolvePage({ kind }: { kind: 'session' | 'review'
     <div className="flex h-screen flex-col items-center justify-center gap-3 bg-background px-6 text-center text-[13px] text-muted-foreground">
       {err ? (
         <>
-          <p className="text-foreground">无法打开镜像页面：{err}</p>
+          <p className="text-foreground">{t('mr.cantOpen')}{err}</p>
           {kind === 'review' && (
             <a href={`https://github.com/${params.owner}/${params.repo}/pull/${params.number}`} target="_blank" rel="noopener noreferrer" className="text-blue-600 hover:underline">
-              在 GitHub 打开该 PR
+              {t('mr.openOnGithub')}
             </a>
           )}
-          <Link to="/" className="text-blue-600 hover:underline">返回会话列表</Link>
+          <Link to="/" className="text-blue-600 hover:underline">{t('mr.backToSessions')}</Link>
         </>
       ) : (
         <div className="h-5 w-5 animate-spin rounded-full border-2 border-muted-foreground/30 border-t-muted-foreground" />

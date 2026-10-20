@@ -1,4 +1,5 @@
 import { useState, type FormEvent, type ReactNode } from 'react'
+import { useTranslation } from 'react-i18next'
 import { ArrowUpRight, Check, Circle, CircleCheck, CircleDashed, EyeOff, GitBranch, GitMerge, GitPullRequest, GitPullRequestClosed, GitPullRequestDraft, ListChecks, MessageSquareText, TriangleAlert, Workflow, X } from 'lucide-react'
 import { type PrInfo, type SessionPr, type TimelineItem, type TodoRow, todoLabel } from '@/components/Timeline'
 import { DevinLogo } from '@/components/DevinMark'
@@ -19,10 +20,11 @@ export function KeyGlyph() {
 
 /** Official quarter-arc spinner (14px) layered over a faint circle for in-progress todos. */
 function QuarterSpinner({ live }: { live: boolean }) {
+  const { t } = useTranslation()
   return (
     <span className="relative mt-0.5 h-3.5 w-3.5 shrink-0">
       <Circle size={14} className="text-muted-foreground opacity-30" />
-      <svg aria-label="In progress" role="img" width={14} height={14} viewBox="0 0 24 24" fill="none" className={cn('absolute inset-0 text-muted-foreground', live && 'motion-safe:animate-spin')}>
+      <svg aria-label={t('scc.inProgress')} role="img" width={14} height={14} viewBox="0 0 24 24" fill="none" className={cn('absolute inset-0 text-muted-foreground', live && 'motion-safe:animate-spin')}>
         <path d="M20.960 11.301 C 20.788 11.379,20.651 11.504,20.573 11.654 C 20.534 11.730,20.502 11.977,20.479 12.377 C 20.440 13.072,20.366 13.574,20.224 14.120 C 19.595 16.538,17.963 18.539,15.740 19.621 C 14.633 20.160,13.668 20.406,12.377 20.479 C 11.717 20.516,11.603 20.550,11.426 20.760 C 11.179 21.054,11.186 21.442,11.443 21.734 C 11.666 21.988,11.783 22.017,12.458 21.986 C 14.551 21.892,16.658 21.098,18.266 19.798 C 18.669 19.472,19.472 18.669,19.798 18.266 C 21.134 16.613,21.964 14.354,21.976 12.333 C 21.980 11.659,21.972 11.632,21.673 11.390 C 21.495 11.246,21.172 11.206,20.960 11.301" fill="currentColor" fillRule="evenodd" />
       </svg>
     </span>
@@ -30,6 +32,7 @@ function QuarterSpinner({ live }: { live: boolean }) {
 }
 
 export function TodoStatusIcon({ status, live }: { status: string; live: boolean }) {
+  const { t } = useTranslation()
   if (status === 'completed') return <CircleCheck size={14} className="mt-0.5 shrink-0 text-[rgb(0,165,88)]" />
   if (status === 'in_progress') return <QuarterSpinner live={live} />
   return <CircleDashed size={14} className="mt-0.5 shrink-0 text-muted-foreground" />
@@ -41,11 +44,12 @@ export function TodoStatusIcon({ status, live }: { status: string; live: boolean
  * `flex items-start gap-2.5` rows: 14px status icon + 13px text.
  */
 export function TodoSteps({ todos }: { todos: TodoRow[] }) {
+  const { t } = useTranslation()
   return (
     <div data-testid="transcript-todo-steps" className="relative flex w-full flex-col overflow-hidden rounded-xl border border-muted bg-card">
       <div className="flex items-center gap-1.5 px-2.5 py-2">
         <ListChecks size={14} className="shrink-0 text-muted-foreground" />
-        <span className="min-w-0 flex-1 truncate text-[12px] leading-[16px] text-muted-foreground">Execution plan</span>
+        <span className="min-w-0 flex-1 truncate text-[12px] leading-[16px] text-muted-foreground">{t('scc.execPlan')}</span>
       </div>
       <div className="flex min-w-0 flex-col gap-1.5 border-t border-muted px-2.5 py-2">
         {todos.map((t, i) => (
@@ -88,6 +92,7 @@ export function StructuredCard({ icon, label, actions, children, testId }: {
   children: ReactNode
   testId?: string
 }) {
+  const { t } = useTranslation()
   return (
     <div data-testid={testId} className="relative mb-5 flex w-full flex-col overflow-hidden rounded-xl border border-border bg-card">
       <div className="flex items-center gap-1.5 px-2.5 py-2">
@@ -142,6 +147,7 @@ export function PermissionRequestCard({ item, resolved, busy, error, onRespond, 
   /** admin-only richer summary (e.g. automation form) replacing the resource summary */
   children?: ReactNode
 }) {
+  const { t } = useTranslation()
   const p = item.permission
   if (!p) return null
   const title = p.title || item.title || `Devin is requesting permission for ${p.toolName || 'unknown'}`
@@ -172,7 +178,7 @@ export function PermissionRequestCard({ item, resolved, busy, error, onRespond, 
             <TriangleAlert size={14} className="shrink-0 text-amber-500" />
             <span className="min-w-0 flex-1 break-words">{title}</span>
             {onOpenSidebar && (
-              <button type="button" onClick={onOpenSidebar} aria-label="Open in sidebar" className="inline-flex size-5 shrink-0 cursor-pointer items-center justify-center rounded-[6px] text-muted-foreground hover:bg-tint-secondary hover:text-foreground">
+              <button type="button" onClick={onOpenSidebar} aria-label={t('scc.openSidebar')} className="inline-flex size-5 shrink-0 cursor-pointer items-center justify-center rounded-[6px] text-muted-foreground hover:bg-tint-secondary hover:text-foreground">
                 <ArrowUpRight size={14} />
               </button>
             )}
@@ -222,7 +228,7 @@ export function PermissionRequestCard({ item, resolved, busy, error, onRespond, 
           <button
             type="button"
             onClick={(e) => { e.stopPropagation(); onOpenSidebar() }}
-            aria-label="Open in sidebar"
+            aria-label={t('scc.openSidebar')}
             className="inline-flex size-5 shrink-0 cursor-pointer items-center justify-center rounded-[6px] text-muted-foreground hover:bg-tint-secondary hover:text-foreground"
           >
             <ArrowUpRight size={14} />
@@ -317,6 +323,7 @@ function PrLink({ href, children }: { href?: string; children: ReactNode }) {
  * server title when a row type has no dedicated wording.
  */
 export function PrRowText({ item }: { item: TimelineItem }) {
+  const { t } = useTranslation()
   const pr = item.pr
   if (!pr) return <>{item.title}</>
   const repoLink = pr.repo ? <PrLink href={pr.repoUrl}>{pr.repo}</PrLink> : null
@@ -324,7 +331,7 @@ export function PrRowText({ item }: { item: TimelineItem }) {
   const prNum = pr.pullNumber !== undefined ? <PrLink href={pr.prUrl}>#{pr.pullNumber}</PrLink> : null
   switch (item.raw_type) {
     case 'git_push':
-      return <>Pushed branch <PrLink href={pr.branchUrl}>{pr.branch}</PrLink>{repoLink && <> to {repoLink}</>}</>
+      return <>{t('scc.pushedBranch')}<PrLink href={pr.branchUrl}>{pr.branch}</PrLink>{repoLink && <> to {repoLink}</>}</>
     case 'git_view_pr':
       return prNum ? <>Viewed pull request {prNum}{inRepo}</> : <>Viewed a PR{inRepo}</>
     case 'git_pr_checks':
@@ -336,7 +343,7 @@ export function PrRowText({ item }: { item: TimelineItem }) {
     case 'git_comment_on_pr':
       return prNum ? <>Commented on PR {prNum}{inRepo}</> : <>Commented on a PR{inRepo}</>
     case 'pr_merge_conflict':
-      return pr.pullNumber === undefined ? <>Merge conflict</> : <>Merge conflict on PR {prNum}{pr.title ? `: ${pr.title}` : ''}</>
+      return pr.pullNumber === undefined ? <>{t('scc.mergeConflict')}</> : <>{t('scc.mergeConflictOn')}PR {prNum}{pr.title ? `: ${pr.title}` : ''}</>
     case 'pr_merged':
       return <>PR {prNum} merged{pr.title ? `: ${pr.title}` : ''}</>
     default:
@@ -351,6 +358,7 @@ export function PrRowText({ item }: { item: TimelineItem }) {
  * The push glyph is a lucide approximation of the official custom icon.
  */
 export function StandaloneGitRow({ item, timestamp }: { item: TimelineItem; timestamp: string }) {
+  const { t } = useTranslation()
   const pr = item.pr
   const href = item.raw_type === 'ack_branch_push' ? pr?.commitUrl : item.raw_type === 'pr_merged' || item.raw_type === 'pr_merge_conflict' ? pr?.prUrl : undefined
   const Row = href ? 'a' : 'div'
@@ -377,10 +385,10 @@ export function StandaloneGitRow({ item, timestamp }: { item: TimelineItem; time
       <span className="min-w-0 flex-1 break-words">
         {item.raw_type === 'ack_branch_push' && pr ? (
           pr.muted
-            ? <>User activity detected on <span className="text-foreground">{pr.branch}</span> by {pr.sender || 'A user'}: handing over ownership until next user message</>
+            ? <>{t('scc.userActivity')}<span className="text-foreground">{pr.branch}</span> by {pr.sender || 'A user'}: handing over ownership until next user message</>
             : pr.forced
               ? <><span className="text-foreground">{pr.branch}</span> was force-pushed ({pr.shortSha})</>
-              : <>New commits pushed to <span className="text-foreground">{pr.branch}</span> ({pr.shortSha})</>
+              : <>{t('scc.newCommits')}<span className="text-foreground">{pr.branch}</span> ({pr.shortSha})</>
         ) : (
           <PrRowText item={item} />
         )}
@@ -399,6 +407,7 @@ export function StandaloneGitRow({ item, timestamp }: { item: TimelineItem; time
  * otherwise (visitors).
  */
 export function PrCreatedCard({ pr, onAnalyze }: { pr: PrInfo; onAnalyze?: () => void }) {
+  const { t } = useTranslation()
   const repoShort = pr.repo ? pr.repo.split('/').pop() : undefined
   const hasCounts = pr.additions !== undefined || pr.deletions !== undefined
   const Title = pr.prUrl ? 'a' : 'div'
@@ -435,11 +444,11 @@ export function PrCreatedCard({ pr, onAnalyze }: { pr: PrInfo; onAnalyze?: () =>
           <span data-testid="pr-review-status" className="contents">
             {onAnalyze ? (
               <button type="button" onClick={onAnalyze} className={cn(analyze, 'cursor-pointer hover:brightness-[.92]')}>
-                <span className="truncate">Analyze</span>
+                <span className="truncate">{t('scc.analyze')}</span>
               </button>
             ) : (
-              <button type="button" title="Devin Review 仅在官方控制台可用" className={cn(analyze, 'cursor-default')}>
-                <span className="truncate">Analyze</span>
+              <button type="button" title={t('scc.reviewOnly')} className={cn(analyze, 'cursor-default')}>
+                <span className="truncate">{t('scc.analyze')}</span>
               </button>
             )}
           </span>
@@ -459,6 +468,7 @@ export function SecretRequestCard({ item, provided, onProvide }: {
   provided: boolean
   onProvide?: (requestId: string, value: string) => Promise<void>
 }) {
+  const { t } = useTranslation()
   const req = item.secretRequest
   const [open, setOpen] = useState(false)
   const [value, setValue] = useState('')
@@ -475,7 +485,7 @@ export function SecretRequestCard({ item, provided, onProvide }: {
       <StructuredCard
         testId="transcript-save-secret"
         icon={<KeyGlyph />}
-        label={<>Save secret: <span className="font-mono font-medium text-foreground">{req.name}</span></>}
+        label={<>{t('scc.saveSecret')}<span className="font-mono font-medium text-foreground">{req.name}</span></>}
       >
         {req.note && <div className="text-[12px] leading-[16px] text-muted-foreground">{req.note}</div>}
         {provided ? (
@@ -484,7 +494,7 @@ export function SecretRequestCard({ item, provided, onProvide }: {
             Secret saved
           </div>
         ) : (
-          <div className="text-[12px] leading-[16px] text-muted-foreground">Save for future Devin sessions.</div>
+          <div className="text-[12px] leading-[16px] text-muted-foreground">{t('scc.saveFuture')}</div>
         )}
       </StructuredCard>
     )
@@ -500,7 +510,7 @@ export function SecretRequestCard({ item, provided, onProvide }: {
       setDone(true)
       setOpen(false)
     } catch (ex) {
-      setErr(ex instanceof Error ? ex.message : '提交失败')
+      setErr(ex instanceof Error ? ex.message : t('scc.submitFail'))
     } finally {
       setValue('')
       setBusy(false)
@@ -511,8 +521,8 @@ export function SecretRequestCard({ item, provided, onProvide }: {
     <StructuredCard
       testId="transcript-secret-request"
       icon={<KeyGlyph />}
-      label={<>Credentials requested: <span className="font-mono font-medium text-foreground">{req.name}</span></>}
-      actions={totp ? <span className="shrink-0 rounded-md border border-border px-1.5 text-[11px] leading-[18px] text-muted-foreground">TOTP / 2FA secret</span> : undefined}
+      label={<>{t('scc.credsReq')}<span className="font-mono font-medium text-foreground">{req.name}</span></>}
+      actions={totp ? <span className="shrink-0 rounded-md border border-border px-1.5 text-[11px] leading-[18px] text-muted-foreground">{t('scc.totp')}</span> : undefined}
     >
       {provided || done ? (
         <div className="flex items-center gap-1.5 text-[13px] leading-[18px] text-green-600">
@@ -548,7 +558,7 @@ export function SecretRequestCard({ item, provided, onProvide }: {
                   className="h-8 w-full rounded-md border border-border bg-background px-2.5 font-mono text-[13px] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/50"
                 />
                 <div className="flex items-center justify-end gap-2">
-                  <button type="button" onClick={() => setOpen(false)} className="h-7 cursor-pointer rounded-md px-2.5 text-[12px] font-medium text-muted-foreground hover:bg-muted">Cancel</button>
+                  <button type="button" onClick={() => setOpen(false)} className="h-7 cursor-pointer rounded-md px-2.5 text-[12px] font-medium text-muted-foreground hover:bg-muted">{t('common.cancel')}</button>
                   <button
                     type="submit"
                     disabled={!value.trim() || busy}
@@ -562,7 +572,7 @@ export function SecretRequestCard({ item, provided, onProvide }: {
           )}
         </>
       ) : (
-        <div className="text-[12px] leading-[16px] text-muted-foreground">等待管理员提供</div>
+        <div className="text-[12px] leading-[16px] text-muted-foreground">{t('scc.waiting')}</div>
       )}
     </StructuredCard>
   )

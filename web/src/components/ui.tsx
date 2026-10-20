@@ -1,6 +1,7 @@
 import * as React from 'react'
 import { createPortal } from 'react-dom'
 import { cn } from '@/lib/utils'
+import i18n from '@/i18n'
 import { cva, type VariantProps } from 'class-variance-authority'
 import { Check, ChevronDown } from 'lucide-react'
 
@@ -176,7 +177,7 @@ export function Dialog({ open, onClose, children, title }: { open: boolean; onCl
 export function StatusDot({ status, className }: { status: string; className?: string }) {
   if (status === 'working') {
     return (
-      <span className={cn('relative inline-flex h-3 w-3', className)} title="工作中">
+      <span className={cn('relative inline-flex h-3 w-3', className)} title={i18n.t('status.working')}>
         <span className="absolute inline-flex h-full w-full rounded-full border-2 border-emerald-500 border-t-transparent animate-spin-slow" />
         <span className="absolute inset-[3px] rounded-full bg-emerald-500/80" />
       </span>
@@ -189,19 +190,19 @@ export function StatusDot({ status, className }: { status: string; className?: s
     : status === 'expired' ? 'bg-slate-300'
     : 'bg-slate-300'
   const label =
-    status === 'waiting' ? '等待输入'
-    : status === 'finished' ? '已结束'
-    : status === 'sleeping' ? '休眠'
-    : status === 'expired' ? '已过期'
-    : '未知'
+    status === 'waiting' ? i18n.t('status.waiting')
+    : status === 'finished' ? i18n.t('status.finished')
+    : status === 'sleeping' ? i18n.t('status.sleepingShort')
+    : status === 'expired' ? i18n.t('status.expired')
+    : i18n.t('status.unknown')
   return <span className={cn('inline-flex h-3 w-3 rounded-full', color, className)} title={label} />
 }
 
 export function statusLabel(status: string): string {
-  return status === 'working' ? '工作中'
-    : status === 'waiting' ? '等待输入'
-    : status === 'finished' ? '已结束'
-    : status === 'sleeping' ? '休眠中'
-    : status === 'expired' ? '已过期'
-    : '未知'
+  return status === 'working' ? i18n.t('status.working')
+    : status === 'waiting' ? i18n.t('status.waiting')
+    : status === 'finished' ? i18n.t('status.finished')
+    : status === 'sleeping' ? i18n.t('status.sleeping')
+    : status === 'expired' ? i18n.t('status.expired')
+    : i18n.t('status.unknown')
 }

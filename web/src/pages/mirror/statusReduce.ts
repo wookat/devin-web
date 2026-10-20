@@ -184,4 +184,44 @@ function actionCls(forceVisible: boolean): string {
 }
 
 
-export { type StatusReducerInput, type ReducedStatus, reduceStatus, mapEnum, actionCls };
+/** Maps statusReduce/server English status strings to i18n keys; unknown strings pass through. */
+const STATUS_KEYS: Record<string, string> = {
+  'Loading history…': 'st.loading',
+  'Devin is awaiting instructions': 'st.awaiting',
+  'Devin is working…': 'st.working',
+  'Checkpoint restored': 'st.restored',
+  'Devin is starting up…': 'st.starting',
+  'Setting up…': 'st.settingUp',
+  'Devin is waking up.': 'st.waking',
+  'Going to sleep …': 'st.sleeping',
+  'Going to sleep…': 'st.sleeping',
+  'Send a message to resume': 'st.resume',
+  'Devin is queued': 'st.queued',
+  'High server load. Devin is waiting for capacity...': 'st.capacity',
+  'Devin crashed': 'st.crashed',
+  'Session is too old to be revived': 'st.tooOld',
+  'Session expired': 'st.expired',
+  'Devin is reverting to a previous checkpoint': 'st.reverting',
+  'Devin is awaiting your response': 'st.awaitResponse',
+  'Session terminated': 'st.terminated',
+  'Devin went to sleep…': 'st.wentSleep',
+  'Wake Devin up?': 'st.wake',
+  'Connecting…': 'menu.connecting',
+  'Waiting for Devin to wake up…': 'st.waitWake',
+  'Typing is disabled during replay': 'st.replayDisabled',
+  'Guide Devin while it works': 'st.guide',
+  'Guide Devin while it works, or press Ctrl ↵ to queue': 'st.guideQueue',
+  'Ask Devin to build features, fix bugs, or work on your code': 'st.ask',
+  'Message Devin…': 'st.message',
+  'Waiting for your response': 'st.waitResponse',
+}
+type TFn = (k: string, o?: Record<string, unknown>) => string
+function stText(t: TFn, s: string): string {
+  if (s.startsWith('Action required:')) return t('st.actionReq', { x: s.slice(16).trim() })
+  const q = s.match(/^High server load\. Devin is waiting for capacity\. Queue Position: (\d+)\.\.\.$/)
+  if (q) return t('st.capacityPos', { n: q[1] })
+  const k = STATUS_KEYS[s]
+  return k ? t(k) : s
+}
+
+export { type StatusReducerInput, type ReducedStatus, reduceStatus, mapEnum, actionCls, stText };

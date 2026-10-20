@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useMemo, useRef, useState, type PointerEvent as ReactPointerEvent } from 'react'
+import { useTranslation } from 'react-i18next'
 import { ArrowLeft, Loader2, ChevronRight, ChevronDown, ChevronLeft, Check, ArrowUp, Expand, Shrink } from 'lucide-react'
 import { screenshotUrl } from '@/lib/viewer'
 import { type TimelineItem } from '@/components/Timeline'
@@ -34,6 +35,7 @@ function computerSliderGroups(shots: ComputerShot[]): ComputerSliderGroup[] {
 }
 
 function ComputerPanel({ id, items, mt, asleep, onWake, canControl, showLiveDesktop }: { id: string; items: TimelineItem[]; mt: string; asleep: boolean; onWake?: () => void; canControl: boolean; showLiveDesktop: boolean }) {
+  const { t } = useTranslation()
   const rootRef = useRef<HTMLDivElement>(null)
   const [full, setFull] = useState(false)
   const [quality, setQuality] = useState<StreamQuality>('auto')
@@ -119,12 +121,12 @@ function ComputerPanel({ id, items, mt, asleep, onWake, canControl, showLiveDesk
         ? <LocalLive />
         : cur && mt
         ? <img loading="lazy" decoding="async" src={screenshotUrl(id, cur.key, mt)} alt="Devin's Computer" className="min-h-0 h-full w-full flex-1 object-contain" />
-        : <div className="flex flex-1 items-center justify-center text-[13px] text-muted-foreground"><Loader2 size={14} className="mr-1.5 animate-spin" /> Connecting to Devin's Computer…</div>}
+        : <div className="flex flex-1 items-center justify-center text-[13px] text-muted-foreground"><Loader2 size={14} className="mr-1.5 animate-spin" /> {t('cmp.connecting')}</div>}
       <div
         ref={sliderRef}
         role="slider"
         tabIndex={0}
-        aria-label="Session timeline"
+        aria-label={t('cp.timeline')}
         aria-orientation="horizontal"
         aria-valuemin={0}
         aria-valuemax={100}
@@ -183,10 +185,10 @@ function ComputerPanel({ id, items, mt, asleep, onWake, canControl, showLiveDesk
         />
       </div>
       <div className="relative my-1 flex w-full items-center gap-2 text-[13px] leading-[18px] text-muted-foreground">
-        <button className="flex size-7 cursor-pointer items-center justify-center rounded-full text-muted-foreground hover:bg-accent disabled:opacity-30" disabled={curIdx <= 0} onClick={() => setIdx(curIdx - 1)} aria-label="Previous frame"><ChevronLeft size={14} /></button>
-        <button className="flex size-7 cursor-pointer items-center justify-center rounded-full text-muted-foreground hover:bg-accent disabled:opacity-30" disabled={curIdx >= shots.length - 1} onClick={() => setIdx(curIdx + 1)} aria-label="Next frame"><ChevronRight size={14} /></button>
+        <button className="flex size-7 cursor-pointer items-center justify-center rounded-full text-muted-foreground hover:bg-accent disabled:opacity-30" disabled={curIdx <= 0} onClick={() => setIdx(curIdx - 1)} aria-label={t('cp.prevFrame')}><ChevronLeft size={14} /></button>
+        <button className="flex size-7 cursor-pointer items-center justify-center rounded-full text-muted-foreground hover:bg-accent disabled:opacity-30" disabled={curIdx >= shots.length - 1} onClick={() => setIdx(curIdx + 1)} aria-label={t('cp.nextFrame')}><ChevronRight size={14} /></button>
         {asleep && onWake ? (
-          <button type="button" onClick={onWake} className="inline-flex h-7 items-center rounded-full border border-black/[0.08] bg-white px-3 text-[13px] font-medium leading-[18px] text-foreground dark:border-white/[0.08] dark:bg-[#1f1f1f]">Wake up to see live</button>
+          <button type="button" onClick={onWake} className="inline-flex h-7 items-center rounded-full border border-black/[0.08] bg-white px-3 text-[13px] font-medium leading-[18px] text-foreground dark:border-white/[0.08] dark:bg-[#1f1f1f]">{t('cp.wake')}</button>
         ) : asleep ? (
           <button
             type="button"
@@ -212,7 +214,7 @@ function ComputerPanel({ id, items, mt, asleep, onWake, canControl, showLiveDesk
             <div ref={qualityRef} className="relative">
               <button
                 type="button"
-                aria-label="Stream quality"
+                aria-label={t('cp.quality')}
                 aria-haspopup="menu"
                 aria-expanded={qOpen}
                 onClick={() => setQOpen((value) => !value)}

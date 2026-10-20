@@ -1,4 +1,5 @@
 import { useEffect, useState } from 'react'
+import { useTranslation } from 'react-i18next'
 import { Loader2, Copy, Check, ArrowUp, Square, Link2, MessageSquarePlus, SquarePen, Brain, Wrench, Reply, ThumbsUp, ThumbsDown, Languages } from 'lucide-react'
 import { adminFetch } from '@/lib/api'
 import { visibleInterval } from '@/lib/poll'
@@ -9,6 +10,7 @@ import { PREFERRED_LANG } from './VoiceButton'
 import { FeedbackDialog } from './dialogs'
 
 function MessageToolbar({ text, eid, ts, tab, onSideChat, onStartNewSession, sessionId, onTranslated }: { text: string; eid: string; ts?: string; tab?: string; onSideChat?: () => void; onStartNewSession?: () => void; sessionId?: string; onTranslated?: (t: string) => void }) {
+  const { t } = useTranslation()
   const [done, setDone] = useState('')
   const [fb, setFb] = useState<'positive' | 'negative' | null>(null)
   const [sent, setSent] = useState<'positive' | 'negative' | null>(null)
@@ -22,26 +24,26 @@ function MessageToolbar({ text, eid, ts, tab, onSideChat, onStartNewSession, ses
   return (
     <div className="absolute -top-5 right-0 z-10 flex h-7 min-w-fit items-center gap-px whitespace-nowrap rounded-[8px] border border-border bg-card p-px opacity-0 shadow-[0_1px_2px_rgba(0,0,0,0.05)] transition-opacity focus-within:opacity-100 group-hover:opacity-100">
       {onStartNewSession && (
-        <button aria-label="Start new session with this prompt" title="Start new session with this prompt" onClick={onStartNewSession} className={btn}>
+        <button aria-label={t('sc.newWithPrompt')} title={t('sc.newWithPrompt')} onClick={onStartNewSession} className={btn}>
           <SquarePen size={16} />
         </button>
       )}
       {sessionId && (
         <>
-          <button aria-label="Good response" title="Good response" onClick={() => setFb('positive')} className={cn(btn, sent && sent !== 'positive' && 'opacity-30', sent === 'positive' && 'text-foreground')}>
+          <button aria-label={t('sc.good')} title={t('sc.good')} onClick={() => setFb('positive')} className={cn(btn, sent && sent !== 'positive' && 'opacity-30', sent === 'positive' && 'text-foreground')}>
             <ThumbsUp size={16} fill={sent === 'positive' ? 'currentColor' : 'none'} />
           </button>
-          <button aria-label="Bad response" title="Bad response" onClick={() => setFb('negative')} className={cn(btn, sent && sent !== 'negative' && 'opacity-30', sent === 'negative' && 'text-foreground')}>
+          <button aria-label={t('sc.bad')} title={t('sc.bad')} onClick={() => setFb('negative')} className={cn(btn, sent && sent !== 'negative' && 'opacity-30', sent === 'negative' && 'text-foreground')}>
             <ThumbsDown size={16} fill={sent === 'negative' ? 'currentColor' : 'none'} />
           </button>
         </>
       )}
-      <button aria-label="Copy" title="Copy" onClick={() => act('copy', text)} className={btn}>
+      <button aria-label={t('sc.copy')} title={t('sc.copy')} onClick={() => act('copy', text)} className={btn}>
         {done === 'copy' ? <Check size={16} /> : <Copy size={16} />}
       </button>
       <button
-        aria-label="Copy link"
-        title="Copy link"
+        aria-label={t('sc.copyLink')}
+        title={t('sc.copyLink')}
         onClick={() => {
           const link = new URL(location.pathname, location.origin)
           const tok = new URLSearchParams(location.search).get('t')
@@ -56,7 +58,7 @@ function MessageToolbar({ text, eid, ts, tab, onSideChat, onStartNewSession, ses
       </button>
       {onTranslated && text.trim() && (
         <button
-          aria-label="Translate"
+          aria-label={t('sc.translate')}
           title={translating ? 'Translating...' : 'Translate'}
           disabled={translating}
           onClick={async () => {
@@ -77,7 +79,7 @@ function MessageToolbar({ text, eid, ts, tab, onSideChat, onStartNewSession, ses
         </button>
       )}
       {onSideChat && (
-        <button aria-label="Side chat" title="Side chat" onClick={onSideChat} className={btn}>
+        <button aria-label={t('sc.sidechat')} title={t('sc.sidechat')} onClick={onSideChat} className={btn}>
           <MessageSquarePlus size={16} />
         </button>
       )}
@@ -126,6 +128,7 @@ interface SidechainThread {
  * `sidechain_request` frame; replies arrive as sidechain subagent events).
  */
 function SidechatPanel({ id, anchor, onStage }: { id: string; anchor: { id: string; ts: string } | null; onStage?: (f: { url: string; name: string; size: number }) => void }) {
+  const { t } = useTranslation()
   const [threads, setThreads] = useState<SidechainThread[]>([])
   const [loaded, setLoaded] = useState(false)
   const [selected, setSelected] = useState<string | null>(anchor?.id ?? null)
@@ -210,7 +213,7 @@ function SidechatPanel({ id, anchor, onStage }: { id: string; anchor: { id: stri
     }
   }
 
-  if (!loaded) return <div className="p-3 text-[13px] text-muted-foreground">Loading…</div>
+  if (!loaded) return <div className="p-3 text-[13px] text-muted-foreground">{t('common.loading')}</div>
 
   return (
     <div className="flex h-full flex-col">

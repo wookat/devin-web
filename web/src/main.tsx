@@ -2,6 +2,7 @@ import { StrictMode, Suspense, lazy, useEffect, type ComponentType } from 'react
 import { createRoot } from 'react-dom/client'
 import { BrowserRouter, Routes, Route, Navigate, useLocation } from 'react-router-dom'
 import './index.css'
+import './i18n'
 
 const AdminSessionPage = lazy(() => import('./pages/AdminSession'))
 const AdminMirrorPage = lazy(() => import('./pages/AdminMirror'))

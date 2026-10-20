@@ -1,4 +1,5 @@
 import { useEffect, useRef, useState } from 'react'
+import { useTranslation } from 'react-i18next'
 import { ArrowLeft, ChevronDown, Folder, FolderOpen } from 'lucide-react'
 import { adminFetch } from '@/lib/api'
 import { cn } from '@/lib/utils'
@@ -21,6 +22,7 @@ export default function DirPicker({ value, onChange, repos, recents, primaryCwd 
   recents: string[]
   primaryCwd?: string
 }) {
+  const { t } = useTranslation()
   const [open, setOpen] = useState(false)
   const [browse, setBrowse] = useState<string | null>(null)
   const [listing, setListing] = useState<DirList | null>(null)
@@ -71,7 +73,7 @@ export default function DirPicker({ value, onChange, repos, recents, primaryCwd 
         title={value || primaryCwd}
       >
         <Folder size={12} className="shrink-0 text-muted-foreground" />
-        <span className="min-w-0 truncate">{value ? base(value) : '默认目录'}</span>
+        <span className="min-w-0 truncate">{value ? base(value) : t('dir.default')}</span>
         <ChevronDown size={12} className="shrink-0 text-muted-foreground" />
       </button>
       {open && (
@@ -88,10 +90,10 @@ export default function DirPicker({ value, onChange, repos, recents, primaryCwd 
             <>
               <button className={itemCls} onClick={() => pick('')}>
                 <Folder size={13} className="shrink-0 text-muted-foreground" />
-                <span className="min-w-0 flex-1 truncate text-left">默认（{primaryCwd || '服务目录'}）</span>
+                <span className="min-w-0 flex-1 truncate text-left">{t('dir.defaultParen', { cwd: primaryCwd || t('dir.serverDir') })}</span>
               </button>
               {lists.recents.length > 0 && (
-                <p className="px-2 pb-0.5 pt-1.5 text-[11px] leading-[16px] text-muted-foreground">最近使用</p>
+                <p className="px-2 pb-0.5 pt-1.5 text-[11px] leading-[16px] text-muted-foreground">{t('dir.recents')}</p>
               )}
               {lists.recents.map((p) => (
                 <button key={p} className={itemCls} onClick={() => pick(p)} title={p}>
@@ -100,7 +102,7 @@ export default function DirPicker({ value, onChange, repos, recents, primaryCwd 
                 </button>
               ))}
               {lists.repos.length > 0 && (
-                <p className="px-2 pb-0.5 pt-1.5 text-[11px] leading-[16px] text-muted-foreground">项目</p>
+                <p className="px-2 pb-0.5 pt-1.5 text-[11px] leading-[16px] text-muted-foreground">{t('dir.projects')}</p>
               )}
               {lists.repos.map((r) => (
                 <button key={r.org} className={itemCls} onClick={() => pick(r.org)} title={r.org}>
@@ -111,14 +113,14 @@ export default function DirPicker({ value, onChange, repos, recents, primaryCwd 
               <div className="my-1 h-px bg-border" />
               <button className={itemCls} onClick={() => setBrowse(value || primaryCwd || 'roots')}>
                 <FolderOpen size={13} className="shrink-0 text-muted-foreground" />
-                <span className="flex-1 text-left">浏览文件夹…</span>
+                <span className="flex-1 text-left">{t('dir.browse')}</span>
               </button>
             </>
           ) : (
             <>
               <div className="flex items-center gap-1 px-1 pb-1">
                 <button
-                  aria-label="Back"
+                  aria-label={t('dir.back')}
                   onClick={() => setBrowse(null)}
                   className="flex size-6 shrink-0 cursor-pointer items-center justify-center rounded-md text-muted-foreground hover:bg-accent hover:text-foreground"
                 >
@@ -128,7 +130,7 @@ export default function DirPicker({ value, onChange, repos, recents, primaryCwd 
                   value={pathInput}
                   onChange={(e) => setPathInput(e.target.value)}
                   onKeyDown={(e) => { if (e.key === 'Enter' && pathInput.trim()) setBrowse(pathInput.trim()) }}
-                  placeholder="输入或粘贴路径…"
+                  placeholder={t('dir.pathPh')}
                   spellCheck={false}
                   className="h-7 min-w-0 flex-1 rounded-md bg-transparent px-2 text-[12px] leading-[16px] outline-none placeholder:text-muted-foreground focus:bg-accent"
                 />
@@ -146,9 +148,9 @@ export default function DirPicker({ value, onChange, repos, recents, primaryCwd 
                     <span className="min-w-0 flex-1 truncate text-left">{d.name}</span>
                   </button>
                 ))}
-                {err && <p className="px-2 py-1.5 text-[12px] leading-[16px] text-red-500">目录不可读</p>}
+                {err && <p className="px-2 py-1.5 text-[12px] leading-[16px] text-red-500">{t('dir.unreadable')}</p>}
                 {!err && listing && !listing.dirs.length && (
-                  <p className="px-2 py-1.5 text-[12px] leading-[16px] text-muted-foreground">没有子目录</p>
+                  <p className="px-2 py-1.5 text-[12px] leading-[16px] text-muted-foreground">{t('dir.noSub')}</p>
                 )}
               </div>
               <div className="mt-1 flex items-center justify-between gap-2 border-t border-border px-2 py-1.5">
@@ -158,7 +160,7 @@ export default function DirPicker({ value, onChange, repos, recents, primaryCwd 
                   onClick={() => listing?.cwd && pick(listing.cwd)}
                   className="shrink-0 cursor-pointer rounded-md bg-primary px-2 py-1 text-[12px] leading-[16px] text-primary-foreground hover:opacity-90 disabled:opacity-40"
                 >
-                  使用此目录
+                  {t('dir.use')}
                 </button>
               </div>
             </>

@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useRef, useState, type FormEvent } from 'react'
+import { useTranslation } from 'react-i18next'
 import { Expand, Shrink, Monitor, Globe, Loader2, Power, ArrowRight, Eye } from 'lucide-react'
 import { cn } from '@/lib/utils'
 
@@ -24,6 +25,7 @@ const modsOf = (e: { altKey: boolean; ctrlKey: boolean; metaKey: boolean; shiftK
   (e.altKey ? 1 : 0) | (e.ctrlKey ? 2 : 0) | (e.metaKey ? 4 : 0) | (e.shiftKey ? 8 : 0)
 
 function LocalBrowser() {
+  const { t } = useTranslation()
   const [running, setRunning] = useState<boolean | null>(null)
   const [exeOk, setExeOk] = useState(true)
   const [frame, setFrame] = useState('')
@@ -103,14 +105,14 @@ function LocalBrowser() {
           value={url}
           onChange={(e) => setUrl(e.target.value)}
           disabled={!running}
-          placeholder="输入网址，回车访问"
+          placeholder={t('live.urlPh')}
           className="h-8 min-w-0 flex-1 rounded-lg border border-border bg-background px-3 text-[13px] outline-none placeholder:text-muted-foreground/60 disabled:opacity-50"
         />
         <button type="submit" disabled={!running} className="flex h-8 items-center gap-1 rounded-lg border border-border px-3 text-[13px] text-muted-foreground hover:bg-accent hover:text-foreground disabled:opacity-40">
-          <ArrowRight size={14} />访问
+          <ArrowRight size={14} />{t('live.go')}
         </button>
         {running && (
-          <button type="button" onClick={() => send({ t: 'close' })} title="关闭浏览器" className="flex h-8 items-center gap-1 rounded-lg border border-border px-3 text-[13px] text-muted-foreground hover:bg-accent hover:text-foreground">
+          <button type="button" onClick={() => send({ t: 'close' })} title={t('live.closeBrowser')} className="flex h-8 items-center gap-1 rounded-lg border border-border px-3 text-[13px] text-muted-foreground hover:bg-accent hover:text-foreground">
             <Power size={13} />
           </button>
         )}
@@ -181,7 +183,7 @@ function LocalBrowser() {
         )}
         {running === null && (
           <div className="absolute inset-0 flex items-center justify-center gap-2 text-[13px] text-white/60">
-            <Loader2 size={14} className="animate-spin" /> 连接中…
+            <Loader2 size={14} className="animate-spin" /> {t('live.connecting')}
           </div>
         )}
         {running === false && (
@@ -193,14 +195,14 @@ function LocalBrowser() {
                   onClick={() => send({ t: 'open', url: url.trim() || 'about:blank' })}
                   className="h-9 rounded-lg bg-foreground px-4 text-[13px] font-medium text-background hover:opacity-90"
                 >
-                  启动浏览器
+                  {t('live.launch')}
                 </button>
                 <span className="max-w-[320px] text-[12px] leading-[18px] text-muted-foreground">
-                  会在本机打开一个专属 Edge/Chrome 窗口（独立 profile），这里可实时看到页面并远程操作
+                  {t('live.launchDesc')}
                 </span>
               </>
             ) : (
-              <span className="text-[13px] text-muted-foreground">未找到 Edge / Chrome，无法启动</span>
+              <span className="text-[13px] text-muted-foreground">{t('live.noBrowser')}</span>
             )}
             {err && <span className="text-[12px] text-red-500">{err}</span>}
           </div>
@@ -211,6 +213,7 @@ function LocalBrowser() {
 }
 
 function LocalDesktop() {
+  const { t } = useTranslation()
   const imgRef = useRef<HTMLImageElement>(null)
   const inputRef = useRef<HTMLTextAreaElement>(null)
   const lastClickAt = useRef(0)
@@ -322,19 +325,20 @@ function LocalDesktop() {
       )}
       <button
         onClick={() => setControl(!control)}
-        title={control ? '暂停控制（只观看）' : '接管控制'}
+        title={control ? t('live.pauseCtl') : t('live.takeCtl')}
         className={cn(
           'absolute right-2 top-2 z-20 flex h-7 cursor-pointer items-center gap-1 rounded-md border px-2 text-[12px]',
           control ? 'border-border bg-card/90 text-foreground' : 'border-border bg-card/90 text-muted-foreground',
         )}
       >
-        {control ? <><Eye size={12} />控制中</> : <><Eye size={12} />只观看</>}
+        {control ? <><Eye size={12} />{t('live.controlling')}</> : <><Eye size={12} />{t('live.watchOnly')}</>}
       </button>
     </div>
   )
 }
 
 export function LocalLive() {
+  const { t } = useTranslation()
   const [mode, setMode] = useState<'desktop' | 'browser'>('desktop')
   const [full, setFull] = useState(false)
   const rootRef = useRef<HTMLDivElement>(null)
@@ -348,7 +352,7 @@ export function LocalLive() {
   return (
     <div ref={rootRef} className="flex h-full flex-col gap-2 bg-background p-3">
       <div className="flex items-center gap-1 self-start rounded-lg border border-border bg-muted/40 p-0.5">
-        {([['desktop', '桌面', Monitor], ['browser', '浏览器', Globe]] as const).map(([k, label, Icon]) => (
+        {([['desktop', t('live.desktop'), Monitor], ['browser', t('live.browser'), Globe]] as const).map(([k, label, Icon]) => (
           <button
             key={k}
             onClick={() => setMode(k)}
@@ -361,11 +365,11 @@ export function LocalLive() {
           </button>
         ))}
         <span className="ml-2 hidden items-center gap-1 pr-2 text-[12px] text-muted-foreground sm:flex">
-          {mode === 'desktop' ? <><Eye size={12} />本机屏幕 · 只读</> : '专属浏览器 · 可交互'}
+          {mode === 'desktop' ? <><Eye size={12} />{t('live.desktopRo')}</> : t('live.browserInter')}
         </span>
         <button
           onClick={() => (full ? void document.exitFullscreen() : void rootRef.current?.requestFullscreen())}
-          aria-label={full ? '退出全屏' : '全屏'}
+          aria-label={full ? t('live.exitFull') : t('live.full')}
           className="ml-1 flex size-7 shrink-0 cursor-pointer items-center justify-center rounded-md text-muted-foreground hover:bg-accent hover:text-foreground"
         >
           {full ? <Shrink size={13} /> : <Expand size={13} />}

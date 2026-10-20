@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
+import { useTranslation } from 'react-i18next'
 import { RefreshCw, Folder as FolderIcon, FileCode, FileText, FileSpreadsheet, FileImage, FileVideo, FileAudio, FileArchive, FileWarning, Save, ZoomIn, ZoomOut, Maximize, Crop as CropIcon, Square, Type, Undo2 } from 'lucide-react'
 import { adminFetch } from '@/lib/api'
 import CodeView from '@/components/CodeView'
@@ -7,6 +8,7 @@ import { OChevronDown, OChevronRight, OSearch, OX } from '@/components/officialI
 import { cn } from '@/lib/utils'
 
 function EditorPanel({ id }: { id: string }) {
+  const { t } = useTranslation()
   const [link, setLink] = useState<string | null>(null)
   const [err, setErr] = useState<string | null>(null)
 
@@ -23,7 +25,7 @@ function EditorPanel({ id }: { id: string }) {
   }, [id])
 
   if (err) return <div className="p-3 text-[13px] text-red-500">{err}</div>
-  if (!link) return <div className="p-3 text-[13px] text-muted-foreground">Loading editor…</div>
+  if (!link) return <div className="p-3 text-[13px] text-muted-foreground">{t('ws.loadingEditor')}</div>
   return <iframe src={link} title="Editor" className="h-full w-full border-0" allow="clipboard-read; clipboard-write" />
 }
 
@@ -60,8 +62,8 @@ function gitCls(s?: string) {
   if (s === 'D') return 'text-red-500'
   return 'text-blue-500'
 }
-function gitTitle(s?: string) {
-  return ({ M: '已修改', U: '未跟踪', A: '已暂存', D: '已删除', R: '已重命名', C: '已复制' } as Record<string, string>)[s ?? ''] ?? s
+function gitTitle(t: (k: string) => string, s?: string) {
+  return ({ M: t('ws.gitM'), U: t('ws.gitU'), A: t('ws.gitA'), D: t('ws.gitD'), R: t('ws.gitR'), C: t('ws.gitC') } as Record<string, string>)[s ?? ''] ?? s
 }
 
 function TypeIcon({ path, dir, size = 14, className }: { path: string; dir?: boolean; size?: number; className?: string }) {
@@ -115,6 +117,7 @@ function CtxMenu({ pos, items, onClose }: { pos: MenuPos; items: (CtxItem | null
 }
 
 function WorkspacePanel({ id }: { id: string }) {
+  const { t } = useTranslation()
   const saved = mem.get(id)
   const [tabs, setTabs] = useState<string[]>(saved?.tabs ?? [])
   const [active, setActive] = useState<string | null>(saved?.active ?? null)
@@ -202,10 +205,10 @@ function WorkspacePanel({ id }: { id: string }) {
     try {
       r = await adminFetch<{ ok?: boolean; error?: string }>(`/api/admin/session/${id}/file-ops`, { method: 'POST', body: JSON.stringify({ op: o, path, to }) })
     } catch (e) {
-      window.alert(`操作失败: ${(e as Error).message}`)
+      window.alert(`${t('ws.opFail')}${(e as Error).message}`)
       return (e as Error).message
     }
-    if (r.error) { window.alert(`操作失败: ${r.error}`); return r.error }
+    if (r.error) { window.alert(`${t('ws.opFail')}${r.error}`); return r.error }
     // refresh affected dirs
     const ps = new Set([parentOf(path), to ? parentOf(to) : '', to ?? ''])
     for (const p of ps) if (p === '' || dirs[p]) void loadDir(p, true)
@@ -227,9 +230,9 @@ function WorkspacePanel({ id }: { id: string }) {
         void openFile(p, true)
         return null
       }
-      window.alert(`保存失败: ${r.error}`)
+      window.alert(`${t('ws.saveFail')}${r.error}`)
       return r.error
-    } catch (e) { window.alert(`保存失败: ${(e as Error).message}`); return (e as Error).message }
+    } catch (e) { window.alert(`${t('ws.saveFail')}${(e as Error).message}`); return (e as Error).message }
   }, [id, openFile])
 
   const saveBinary = useCallback(async (p: string, buf: ArrayBuffer | Blob) => {
@@ -239,9 +242,9 @@ function WorkspacePanel({ id }: { id: string }) {
       const bytes = new Uint8Array(b)
       for (let i = 0; i < bytes.length; i += 8192) bin += String.fromCharCode(...bytes.subarray(i, i + 8192))
       const r = await adminFetch<{ ok?: boolean; error?: string }>(`/api/admin/session/${id}/file-write`, { method: 'POST', body: JSON.stringify({ path: p, base64: btoa(bin) }) })
-      if (r.error) window.alert(`保存失败: ${r.error}`)
+      if (r.error) window.alert(`${t('ws.saveFail')}${r.error}`)
       return r.error ?? null
-    } catch (e) { window.alert(`保存失败: ${(e as Error).message}`); return (e as Error).message }
+    } catch (e) { window.alert(`${t('ws.saveFail')}${(e as Error).message}`); return (e as Error).message }
   }, [id])
 
   /* -------- tree -------- */
@@ -307,12 +310,12 @@ function WorkspacePanel({ id }: { id: string }) {
             />
           ) : <span className={cn('min-w-0 flex-1 truncate', gitCls(gitMap[n.path]))}>{n.entry.name}</span>}
           {!n.entry.dir && gitMap[n.path] && (
-            <span className={cn('ml-1 shrink-0 text-[10px] font-medium', gitCls(gitMap[n.path]))} title={gitTitle(gitMap[n.path])}>{gitMap[n.path]}</span>
+            <span className={cn('ml-1 shrink-0 text-[10px] font-medium', gitCls(gitMap[n.path]))} title={gitTitle(t, gitMap[n.path])}>{gitMap[n.path]}</span>
           )}
         </div>
         {n.entry.dir && isOpen && (
           <div>
-            {dirs[n.path] === 'loading' && <div className="py-0.5 text-[12px] text-muted-foreground" style={{ paddingLeft: 6 + (depth + 1) * 14 }}>Loading…</div>}
+            {dirs[n.path] === 'loading' && <div className="py-0.5 text-[12px] text-muted-foreground" style={{ paddingLeft: 6 + (depth + 1) * 14 }}>{t('common.loading')}</div>}
             {kids.map((k) => renderNode(k, depth + 1))}
           </div>
         )}
@@ -323,16 +326,16 @@ function WorkspacePanel({ id }: { id: string }) {
   const nodeMenuItems = (n: Node | null): (CtxItem | null)[] => {
     const dirPath = n ? (n.entry.dir ? n.path : parentOf(n.path)) : ''
     return [
-      { label: '新建文件', onClick: () => { const v = window.prompt('文件名', 'new-file.txt'); if (v) void op('newfile', dirPath ? `${dirPath}/${v}` : v).then(() => open(dirPath ? `${dirPath}/${v}` : v)) } },
-      { label: '新建文件夹', onClick: () => { const v = window.prompt('文件夹名', 'new-folder'); if (v) void op('mkdir', dirPath ? `${dirPath}/${v}` : v) } },
+      { label: t('ws.newFile'), onClick: () => { const v = window.prompt(t('ws.fileName'), 'new-file.txt'); if (v) void op('newfile', dirPath ? `${dirPath}/${v}` : v).then(() => open(dirPath ? `${dirPath}/${v}` : v)) } },
+      { label: t('ws.newFolder'), onClick: () => { const v = window.prompt(t('ws.folderName'), 'new-folder'); if (v) void op('mkdir', dirPath ? `${dirPath}/${v}` : v) } },
       n ? { sep: true, label: '' } : null,
-      n ? { label: '重命名', onClick: () => setRenaming(n.path) } : null,
-      n ? { label: '复制', onClick: () => { const v = window.prompt('复制到', `${n.path}.copy`); if (v) void op('copy', n.path, v) } } : null,
-      n ? { label: '删除', danger: true, onClick: () => { if (window.confirm(`删除 ${n.entry.name}?`)) void op('delete', n.path) } } : null,
+      n ? { label: t('ws.rename'), onClick: () => setRenaming(n.path) } : null,
+      n ? { label: t('ws.copy'), onClick: () => { const v = window.prompt(t('ws.copyTo'), `${n.path}.copy`); if (v) void op('copy', n.path, v) } } : null,
+      n ? { label: t('ws.delete'), danger: true, onClick: () => { if (window.confirm(`${t('ws.delConfirm')}${n.entry.name}?`)) void op('delete', n.path) } } : null,
       n ? { sep: true, label: '' } : null,
-      n ? { label: '复制路径', onClick: () => void navigator.clipboard.writeText(cwd ? `${cwd}/${n.path}` : n.path) } : null,
-      n ? { label: '复制相对路径', onClick: () => void navigator.clipboard.writeText(n.path) } : null,
-      n ? { label: '复制文件名', onClick: () => void navigator.clipboard.writeText(n.entry.name) } : null,
+      n ? { label: t('ws.copyPath'), onClick: () => void navigator.clipboard.writeText(cwd ? `${cwd}/${n.path}` : n.path) } : null,
+      n ? { label: t('ws.copyRelPath'), onClick: () => void navigator.clipboard.writeText(n.path) } : null,
+      n ? { label: t('ws.copyName'), onClick: () => void navigator.clipboard.writeText(n.entry.name) } : null,
     ]
   }
 
@@ -387,14 +390,14 @@ function WorkspacePanel({ id }: { id: string }) {
                 <span className={cn('relative flex size-4 items-center justify-center', isActive && 'hidden')}>
                   <TypeIcon path={p} size={13} />
                   <span
-                    role="button" aria-label="Close"
+                    role="button" aria-label={t('common.close')}
                     className="absolute inset-0 hidden items-center justify-center rounded-[3px] bg-transparent group-hover:flex hover:bg-border/60"
                     onClick={(e) => { e.stopPropagation(); closeTab(p) }}
                   ><OX size={11} /></span>
                 </span>
                 {isActive && (
                   <span
-                    role="button" aria-label="Close"
+                    role="button" aria-label={t('common.close')}
                     className="flex size-4 items-center justify-center rounded-[3px] hover:bg-border/60"
                     onClick={(e) => { e.stopPropagation(); closeTab(p) }}
                   >{dirty(p) ? <span className="size-2 rounded-full bg-amber-500" /> : <OX size={12} />}</span>
@@ -417,7 +420,7 @@ function WorkspacePanel({ id }: { id: string }) {
                 >{seg}</button>
               </span>
             ))}
-            {dirty(active) && <span className="ml-1 text-amber-600">● 未保存</span>}
+            {dirty(active) && <span className="ml-1 text-amber-600">● {t('ws.unsaved')}</span>}
           </div>
         )}
         <div className="min-h-0 flex-1 overflow-auto bg-background">
@@ -438,7 +441,7 @@ function WorkspacePanel({ id }: { id: string }) {
           ) : (
             <div className="flex h-full flex-col items-center justify-center gap-2 text-muted-foreground">
               <FileCode size={28} className="opacity-40" />
-              <div className="text-[13px]">Select a file to open</div>
+              <div className="text-[13px]">{t('ws.selectFile')}</div>
             </div>
           )}
         </div>
@@ -446,8 +449,8 @@ function WorkspacePanel({ id }: { id: string }) {
       {/* right: REPOS tree */}
       <div className="flex w-[240px] shrink-0 flex-col border-l border-border bg-card">
         <div className="flex h-[36px] shrink-0 items-center justify-between border-b border-border px-2.5">
-          <span className="text-[11px] font-medium tracking-wide text-muted-foreground">REPOS</span>
-          <button className="flex size-6 cursor-pointer items-center justify-center rounded-[4px] text-muted-foreground hover:bg-tint-secondary" aria-label="Refresh" title="Refresh"
+          <span className="text-[11px] font-medium tracking-wide text-muted-foreground">{t('ws.repos')}</span>
+          <button className="flex size-6 cursor-pointer items-center justify-center rounded-[4px] text-muted-foreground hover:bg-tint-secondary" aria-label={t('common.refresh')} title={t('common.refresh')}
             onClick={() => { setDirs({}); void loadDir('', true) }}><RefreshCw size={12} /></button>
         </div>
         <div className="shrink-0 border-b border-border p-2">
@@ -456,7 +459,7 @@ function WorkspacePanel({ id }: { id: string }) {
             <input
               value={filter}
               onChange={(e) => setFilter(e.target.value)}
-              placeholder="Filter files"
+              placeholder={t('ws.filterFiles')}
               className="min-w-0 flex-1 bg-transparent text-[12px] outline-none placeholder:text-muted-foreground"
             />
           </div>
@@ -476,8 +479,8 @@ function WorkspacePanel({ id }: { id: string }) {
             <TypeIcon path="" dir size={14} />
             <span className="min-w-0 flex-1 truncate">{cwd ? cwd.replace(/[\\/]+$/, '').split(/[\\/]/).pop() : 'workspace'}</span>
           </div>
-          {dirs[''] === 'loading' && <div className="px-2 py-1 text-[12px] text-muted-foreground">Loading…</div>}
-          {dirs[''] === 'error' && <div className="px-2 py-1 text-[12px] text-red-500">Failed to load</div>}
+          {dirs[''] === 'loading' && <div className="px-2 py-1 text-[12px] text-muted-foreground">{t('common.loading')}</div>}
+          {dirs[''] === 'error' && <div className="px-2 py-1 text-[12px] text-red-500">{t('ws.loadFail')}</div>}
           {dirs[''] !== 'loading' && dirs[''] !== 'error' && dirs[''] && buildNodes('').map((n) => renderNode(n, 0))}
         </div>
       </div>
@@ -496,6 +499,7 @@ function Viewer({ id, path, file, rawUrl, draft, onDraft, onDiscard, onSaveText,
   onSaveBinary: (p: string, buf: ArrayBuffer | Blob) => Promise<string | null>
   onRetry: () => void
 }) {
+  const { t } = useTranslation()
   const k = kindOf(path)
   const e = ext(path)
   const src = rawUrl(path)
@@ -514,7 +518,7 @@ function Viewer({ id, path, file, rawUrl, draft, onDraft, onDiscard, onSaveText,
   if (k === 'xlsx') return <XlsxView src={src} name={path} onSave={(buf) => onSaveBinary(path, buf)} />
 
   if (!file || (!file.text && !file.error && !file.binary && !file.tooLarge)) {
-    return <div className="p-3 text-[13px] text-muted-foreground">Loading…</div>
+    return <div className="p-3 text-[13px] text-muted-foreground">{t('common.loading')}</div>
   }
   if (file.error) return <ErrBox msg={file.error} onRetry={onRetry} />
   if (file.tooLarge) return <Fallback path={path} src={src} msg="File too large to preview (over 2 MB)" />
@@ -531,22 +535,24 @@ function Viewer({ id, path, file, rawUrl, draft, onDraft, onDiscard, onSaveText,
 }
 
 function ErrBox({ msg, onRetry }: { msg: string; onRetry: () => void }) {
+  const { t } = useTranslation()
   return (
     <div className="flex h-full flex-col items-center justify-center gap-2 p-4">
       <FileWarning size={24} className="text-red-500" />
       <div className="text-[13px] text-red-500">{msg}</div>
-      <button onClick={onRetry} className="rounded-[6px] border border-border px-2.5 py-1 text-[12px] hover:bg-tint-secondary">Retry</button>
+      <button onClick={onRetry} className="rounded-[6px] border border-border px-2.5 py-1 text-[12px] hover:bg-tint-secondary">{t('common.retry')}</button>
     </div>
   )
 }
 
 function Fallback({ path, src, msg }: { path: string; src: string; msg: string }) {
+  const { t } = useTranslation()
   return (
     <div className="flex h-full flex-col items-center justify-center gap-2 p-4 text-muted-foreground">
       <TypeIcon path={path} size={28} />
       <div className="text-[13px] font-medium text-foreground">{base(path)}</div>
       <div className="text-[12px]">{msg}</div>
-      <a href={src} download className="mt-1 rounded-[6px] border border-border px-3 py-1.5 text-[12px] text-foreground hover:bg-tint-secondary">Download</a>
+      <a href={src} download className="mt-1 rounded-[6px] border border-border px-3 py-1.5 text-[12px] text-foreground hover:bg-tint-secondary">{t('common.download')}</a>
     </div>
   )
 }
@@ -556,6 +562,7 @@ function EditBar({ mode, setMode, modes, dirty, saving, onSave, onDiscard }: {
   mode: string; setMode: (m: string) => void; modes: string[]
   dirty: boolean; saving: boolean; onSave: () => void; onDiscard: () => void
 }) {
+  const { t } = useTranslation()
   return (
     <div className="flex h-8 shrink-0 items-center gap-0.5 border-b border-border px-2">
       <div className="flex items-center gap-0.5">
@@ -565,11 +572,11 @@ function EditBar({ mode, setMode, modes, dirty, saving, onSave, onDiscard }: {
         ))}
       </div>
       <div className="ml-auto flex items-center gap-1.5">
-        {dirty && <span className="text-[11px] text-amber-600">未保存</span>}
-        {dirty && <button onClick={onDiscard} className="h-6 cursor-pointer rounded-[5px] px-2 text-[12px] text-muted-foreground hover:bg-tint-secondary hover:text-foreground">还原</button>}
+        {dirty && <span className="text-[11px] text-amber-600">{t('ws.unsaved')}</span>}
+        {dirty && <button onClick={onDiscard} className="h-6 cursor-pointer rounded-[5px] px-2 text-[12px] text-muted-foreground hover:bg-tint-secondary hover:text-foreground">{t('ws.discard')}</button>}
         <button onClick={onSave} disabled={!dirty || saving}
           className={cn('flex h-6 cursor-pointer items-center gap-1 rounded-[5px] px-2 text-[12px]', dirty ? 'bg-accent-primary text-white hover:opacity-90' : 'text-muted-foreground opacity-50')}>
-          <Save size={12} /> {saving ? '保存中…' : '保存'}
+          <Save size={12} /> {saving ? t('ws.saving') : t('common.save')}
         </button>
       </div>
     </div>
@@ -596,6 +603,7 @@ function useSaver(dirty: boolean, onSave: () => void) {
 function PlainEditor({ text, savedText, name, onChange, onSave, onDiscard, preview }: {
   text: string; savedText: string; name: string; onChange: (t: string) => void; onSave: () => void; onDiscard: () => void; preview?: React.ReactNode
 }) {
+  const { t } = useTranslation()
   const gutRef = useRef<HTMLDivElement>(null)
   const [mode, setMode] = useState(preview ? 'Preview' : 'Edit')
   const dirty = text !== savedText
@@ -628,6 +636,7 @@ function PlainEditor({ text, savedText, name, onChange, onSave, onDiscard, previ
 function MdView({ text, savedText, name, onChange, onSave, onDiscard }: {
   text: string; savedText: string; name: string; onChange: (t: string) => void; onSave: () => void; onDiscard: () => void
 }) {
+  const { t } = useTranslation()
   return <PlainEditor text={text} savedText={savedText} name={name} onChange={onChange} onSave={onSave} onDiscard={onDiscard}
     preview={<div className="mx-auto max-w-[760px] p-4"><Markdown text={text} /></div>} />
 }
@@ -636,6 +645,7 @@ function MdView({ text, savedText, name, onChange, onSave, onDiscard }: {
 function HtmlView({ text, savedText, name, onChange, onSave, onDiscard }: {
   text: string; savedText: string; name: string; onChange: (t: string) => void; onSave: () => void; onDiscard: () => void
 }) {
+  const { t } = useTranslation()
   return <PlainEditor text={text} savedText={savedText} name={name} onChange={onChange} onSave={onSave} onDiscard={onDiscard}
     preview={<iframe title={name} sandbox="allow-scripts allow-same-origin" srcDoc={text} className="h-full w-full border-0 bg-white" />} />
 }
@@ -644,6 +654,7 @@ function HtmlView({ text, savedText, name, onChange, onSave, onDiscard }: {
 function CsvView({ text, savedText, onChange, onSave, onDiscard }: {
   text: string; savedText: string; onChange: (t: string) => void; onSave: () => void; onDiscard: () => void
 }) {
+  const { t } = useTranslation()
   const rows = useMemo(() => {
     const out: string[][] = []
     let cur: string[] = [], cell = '', qq = false
@@ -699,6 +710,7 @@ function CsvView({ text, savedText, onChange, onSave, onDiscard }: {
 
 /* XLSX: editable cells + sheet tabs → write back binary */
 function XlsxView({ src, name, onSave }: { src: string; name: string; onSave: (buf: ArrayBuffer) => Promise<string | null> }) {
+  const { t } = useTranslation()
   const [wb, setWb] = useState<{ book: import('xlsx').WorkBook; sheets: string[]; data: Record<string, unknown[][]> } | null>(null)
   const [sheet, setSheet] = useState(0)
   const [err, setErr] = useState<string | null>(null)
@@ -735,7 +747,7 @@ function XlsxView({ src, name, onSave }: { src: string; name: string; onSave: (b
     return () => window.removeEventListener('keydown', h, true)
   }, [doSave])
   if (err) return <Fallback path={name} src={src} msg={`Spreadsheet preview failed: ${err}`} />
-  if (!wb) return <div className="p-3 text-[13px] text-muted-foreground">Loading spreadsheet…</div>
+  if (!wb) return <div className="p-3 text-[13px] text-muted-foreground">{t('ws.loadingSheet')}</div>
   const cur = wb.sheets[Math.min(sheet, wb.sheets.length - 1)]
   const rows = wb.data[cur] ?? []
   const setCell = (r: number, c: number, v: string) => {
@@ -753,10 +765,10 @@ function XlsxView({ src, name, onSave }: { src: string; name: string; onSave: (b
             className={cn('h-7 cursor-pointer rounded-t-[5px] border border-b-0 border-border px-2.5 text-[12px]', i === sheet ? 'bg-background font-medium text-foreground' : 'bg-card text-muted-foreground hover:text-foreground')}>{s}</button>
         ))}
         <div className="ml-auto flex h-full items-center gap-1.5 pb-1">
-          {dirty && <span className="text-[11px] text-amber-600">未保存</span>}
+          {dirty && <span className="text-[11px] text-amber-600">{t('ws.unsaved')}</span>}
           <button onClick={doSave} disabled={!dirty || saving}
             className={cn('flex h-6 cursor-pointer items-center gap-1 rounded-[5px] px-2 text-[12px]', dirty ? 'bg-accent-primary text-white' : 'text-muted-foreground opacity-50')}>
-            <Save size={12} /> {saving ? '保存中…' : '保存'}
+            <Save size={12} /> {saving ? t('ws.saving') : t('common.save')}
           </button>
         </div>
       </div>
@@ -782,6 +794,7 @@ function XlsxView({ src, name, onSave }: { src: string; name: string; onSave: (b
 
 /* DOCX → mammoth HTML (read-only) */
 function DocxView({ src, name }: { src: string; name: string }) {
+  const { t } = useTranslation()
   const [html, setHtml] = useState<string | null>(null)
   const [err, setErr] = useState<string | null>(null)
   useEffect(() => {
@@ -798,7 +811,7 @@ function DocxView({ src, name }: { src: string; name: string }) {
     return () => { dead = true }
   }, [src])
   if (err) return <Fallback path={name} src={src} msg={`DOCX preview failed: ${err}`} />
-  if (html == null) return <div className="p-3 text-[13px] text-muted-foreground">Loading document…</div>
+  if (html == null) return <div className="p-3 text-[13px] text-muted-foreground">{t('ws.loadingDoc')}</div>
   return (
     <div className="mx-auto max-w-[760px] p-6">
       <style>{`.docx-view h1,.docx-view h2,.docx-view h3{font-weight:600;margin:.8em 0 .4em}.docx-view h1{font-size:20px}.docx-view h2{font-size:17px}.docx-view h3{font-size:15px}.docx-view p{margin:.5em 0;font-size:13px;line-height:1.6}.docx-view table{border-collapse:collapse;margin:.6em 0}.docx-view td,.docx-view th{border:1px solid var(--color-border);padding:3px 8px;font-size:12px}.docx-view ul,.docx-view ol{padding-left:1.4em}.docx-view img{max-width:100%}`}</style>
@@ -809,6 +822,7 @@ function DocxView({ src, name }: { src: string; name: string }) {
 
 /* Image viewer/editor: zoom, pan, crop, red-rect annotate, text annotate, save */
 function ImageEditor({ src, name, onSave }: { src: string; name: string; onSave: (blob: Blob) => Promise<string | null> }) {
+  const { t } = useTranslation()
   const [img, setImg] = useState<HTMLImageElement | null>(null)
   const [zoom, setZoom] = useState(1)
   const [pan, setPan] = useState({ x: 0, y: 0 })
@@ -882,7 +896,7 @@ function ImageEditor({ src, name, onSave }: { src: string; name: string; onSave:
     if (tool === 'crop' || tool === 'rect') { const p = toImg(e.clientX, e.clientY); setDragging({ sx: p.x, sy: p.y, ex: p.x, ey: p.y }) }
     else if (tool === 'text') {
       const p = toImg(e.clientX, e.clientY)
-      const v = window.prompt('标注文字', '')
+      const v = window.prompt(t('ws.annotText'), '')
       if (v) setTexts((t) => [...t, { x: p.x, y: p.y, t: v }])
     } else setPanning({ sx: e.clientX, sy: e.clientY, px: pan.x, py: pan.y })
   }
@@ -904,31 +918,31 @@ function ImageEditor({ src, name, onSave }: { src: string; name: string; onSave:
     <div className="flex h-full flex-col items-center justify-center gap-2 p-4 text-muted-foreground">
       <FileWarning size={24} className="text-red-500" />
       <div className="text-[13px] text-red-500">{err}</div>
-      <button onClick={() => setNonce((n) => n + 1)} className="rounded-[6px] border border-border px-2.5 py-1 text-[12px] text-foreground hover:bg-tint-secondary">Retry</button>
+      <button onClick={() => setNonce((n) => n + 1)} className="rounded-[6px] border border-border px-2.5 py-1 text-[12px] text-foreground hover:bg-tint-secondary">{t('common.retry')}</button>
     </div>
   )
-  if (!img) return <div className="p-3 text-[13px] text-muted-foreground">Loading image…</div>
+  if (!img) return <div className="p-3 text-[13px] text-muted-foreground">{t('ws.loadingImg')}</div>
   const sel = dragging ? normRect(dragging) : null
   return (
     <div className="flex h-full min-h-0 flex-col">
       <div className="flex h-8 shrink-0 items-center gap-0.5 border-b border-border px-2">
-        <button title="缩小" className="flex size-6 cursor-pointer items-center justify-center rounded-[4px] text-muted-foreground hover:bg-tint-secondary" onClick={() => setZoom((z) => Math.max(0.05, z / 1.25))}><ZoomOut size={13} /></button>
+        <button title={t('ws.zoomOut')} className="flex size-6 cursor-pointer items-center justify-center rounded-[4px] text-muted-foreground hover:bg-tint-secondary" onClick={() => setZoom((z) => Math.max(0.05, z / 1.25))}><ZoomOut size={13} /></button>
         <span className="w-12 text-center text-[11px] text-muted-foreground">{Math.round(zoom * 100)}%</span>
-        <button title="放大" className="flex size-6 cursor-pointer items-center justify-center rounded-[4px] text-muted-foreground hover:bg-tint-secondary" onClick={() => setZoom((z) => Math.min(16, z * 1.25))}><ZoomIn size={13} /></button>
-        <button title="适应窗口" className="flex size-6 cursor-pointer items-center justify-center rounded-[4px] text-muted-foreground hover:bg-tint-secondary" onClick={() => { setZoom(1); setPan({ x: 0, y: 0 }) }}><Maximize size={13} /></button>
+        <button title={t('ws.zoomIn')} className="flex size-6 cursor-pointer items-center justify-center rounded-[4px] text-muted-foreground hover:bg-tint-secondary" onClick={() => setZoom((z) => Math.min(16, z * 1.25))}><ZoomIn size={13} /></button>
+        <button title={t('ws.fit')} className="flex size-6 cursor-pointer items-center justify-center rounded-[4px] text-muted-foreground hover:bg-tint-secondary" onClick={() => { setZoom(1); setPan({ x: 0, y: 0 }) }}><Maximize size={13} /></button>
         <span className="mx-1 h-4 w-px bg-border" />
-        {([['crop', '裁剪', CropIcon], ['rect', '红框', Square], ['text', '文字', Type]] as const).map(([k, l, IconC]) => (
+        {([['crop', t('ws.crop'), CropIcon], ['rect', t('ws.rect'), Square], ['text', t('ws.text'), Type]] as const).map(([k, l, IconC]) => (
           <button key={k} title={l} onClick={() => setTool((t) => (t === k ? 'none' : k))}
             className={cn('flex h-6 cursor-pointer items-center gap-1 rounded-[4px] px-1.5 text-[12px]', tool === k ? 'bg-tint-secondary font-medium text-foreground' : 'text-muted-foreground hover:text-foreground')}>
             <IconC size={13} />{l}
           </button>
         ))}
-        {dirty && <button title="清除标注" className="flex h-6 cursor-pointer items-center gap-1 rounded-[4px] px-1.5 text-[12px] text-muted-foreground hover:text-foreground" onClick={() => { setRects([]); setTexts([]) }}><Undo2 size={13} />清除标注</button>}
+        {dirty && <button title={t('ws.clearAnnot')} className="flex h-6 cursor-pointer items-center gap-1 rounded-[4px] px-1.5 text-[12px] text-muted-foreground hover:text-foreground" onClick={() => { setRects([]); setTexts([]) }}><Undo2 size={13} />{t('ws.clearAnnotText')}</button>}
         <div className="ml-auto flex items-center gap-1.5">
-          <a href={src} download className="h-6 cursor-pointer rounded-[5px] px-2 text-[12px] leading-6 text-muted-foreground hover:bg-tint-secondary hover:text-foreground">下载</a>
+          <a href={src} download className="h-6 cursor-pointer rounded-[5px] px-2 text-[12px] leading-6 text-muted-foreground hover:bg-tint-secondary hover:text-foreground">{t('common.download')}</a>
           <button onClick={() => void doSave()} disabled={saving}
             className={cn('flex h-6 cursor-pointer items-center gap-1 rounded-[5px] px-2 text-[12px]', dirty ? 'bg-accent-primary text-white' : 'text-muted-foreground opacity-60')}>
-            <Save size={12} /> {saving ? '保存中…' : '保存'}
+            <Save size={12} /> {saving ? t('ws.saving') : t('common.save')}
           </button>
         </div>
       </div>

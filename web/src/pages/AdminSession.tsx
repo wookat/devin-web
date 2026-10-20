@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useState } from 'react'
+import { useTranslation } from 'react-i18next'
 import { Link, useParams } from 'react-router-dom'
 import { ArrowLeft, Send, RotateCcw, Archive, ArchiveRestore, Copy, Check, Loader2, LayoutDashboard, MessageSquare, Activity } from 'lucide-react'
 import { adminFetch, type PublicMessage, type DashboardData } from '@/lib/api'
@@ -27,6 +28,7 @@ interface Detail {
 }
 
 export default function AdminSessionPage() {
+  const { t } = useTranslation()
   const { id = '' } = useParams()
   const [detail, setDetail] = useState<Detail | null>(null)
   const [error, setError] = useState('')
@@ -92,7 +94,7 @@ export default function AdminSessionPage() {
   }
 
   async function resetToken() {
-    if (!confirm('重置分享链接？旧链接将立即失效。')) return
+    if (!confirm(t('as.resetConfirm'))) return
     await adminFetch(`/api/admin/session/${id}/reset-token`, { method: 'POST', body: JSON.stringify({}) })
     load()
   }
@@ -143,36 +145,36 @@ export default function AdminSessionPage() {
             <p className="text-[11px] text-muted-foreground truncate">{s.devin_session_id} · {statusLabel(s.status)}</p>
           </div>
           <div className="flex rounded-lg bg-muted p-0.5">
-            <button onClick={() => setTab('chat')} className={cn('rounded-md px-2.5 py-1.5 cursor-pointer', tab === 'chat' ? 'bg-card shadow-sm' : 'text-muted-foreground')} aria-label="对话">
+            <button onClick={() => setTab('chat')} className={cn('rounded-md px-2.5 py-1.5 cursor-pointer', tab === 'chat' ? 'bg-card shadow-sm' : 'text-muted-foreground')} aria-label={t('as.chat')}>
               <MessageSquare size={15} />
             </button>
-            <button onClick={() => setTab('dashboard')} className={cn('rounded-md px-2.5 py-1.5 cursor-pointer', tab === 'dashboard' ? 'bg-card shadow-sm' : 'text-muted-foreground')} aria-label="看板">
+            <button onClick={() => setTab('dashboard')} className={cn('rounded-md px-2.5 py-1.5 cursor-pointer', tab === 'dashboard' ? 'bg-card shadow-sm' : 'text-muted-foreground')} aria-label={t('as.dashboard')}>
               <LayoutDashboard size={15} />
             </button>
-            <button onClick={() => setTab('timeline')} className={cn('rounded-md px-2.5 py-1.5 cursor-pointer', tab === 'timeline' ? 'bg-card shadow-sm' : 'text-muted-foreground')} aria-label="镜像">
+            <button onClick={() => setTab('timeline')} className={cn('rounded-md px-2.5 py-1.5 cursor-pointer', tab === 'timeline' ? 'bg-card shadow-sm' : 'text-muted-foreground')} aria-label={t('as.mirror')}>
               <Activity size={15} />
             </button>
           </div>
         </div>
         <div className="flex items-center gap-2 mt-2.5 flex-wrap">
           <Button variant="outline" size="sm" onClick={copyShare}>
-            {copied ? <Check size={12} /> : <Copy size={12} />} 分享链接
+            {copied ? <Check size={12} /> : <Copy size={12} />} {t('as.shareLink')}
           </Button>
           <Combo
             value={s.permission}
             onPick={(v) => setPermission(v)}
             options={[
-              { v: 'detailed', l: '详细时间线' },
-              { v: 'full', l: '可聊+传文件' },
-              { v: 'chat', l: '仅可聊' },
-              { v: 'readonly', l: '只读' },
+              { v: 'detailed', l: t('as.detailed') },
+              { v: 'full', l: t('as.full') },
+              { v: 'chat', l: t('as.chatOnly') },
+              { v: 'readonly', l: t('as.readonly') },
             ]}
           />
-          <Button variant="outline" size="sm" onClick={resetToken}><RotateCcw size={12} /> 重置链接</Button>
+          <Button variant="outline" size="sm" onClick={resetToken}><RotateCcw size={12} /> {t('common.reset')}链接</Button>
           <Button variant="outline" size="sm" onClick={toggleArchive}>
-            {s.archived ? <><ArchiveRestore size={12} /> 恢复</> : <><Archive size={12} /> 归档</>}
+            {s.archived ? <><ArchiveRestore size={12} /> {t('as.restore')}</> : <><Archive size={12} /> {t('menu.archive')}</>}
           </Button>
-          <Link to={`/admin/${id}`} className="text-xs text-primary underline">返回会话页</Link>
+          <Link to={`/admin/${id}`} className="text-xs text-primary underline">{t('as.back')}</Link>
           {s.pull_request?.url && (
             <a href={s.pull_request.url} target="_blank" rel="noopener noreferrer" className="text-xs text-primary underline">PR</a>
           )}
@@ -187,7 +189,7 @@ export default function AdminSessionPage() {
           <div className="space-y-3">
             <Dashboard data={dashboard.data} updatedAt={dashboard.updatedAt} />
             <Card className="p-3 text-[11px] text-muted-foreground break-all">
-              看板推送接口（发给子会话用）：POST {location.origin}{detail.dashboard_url}
+              {t('as.dashPush')}{location.origin}{detail.dashboard_url}
             </Card>
           </div>
         )}
@@ -203,7 +205,7 @@ export default function AdminSessionPage() {
           <Textarea
             rows={1}
             className="max-h-32 min-h-9 py-2"
-            placeholder="以管理员身份代答…"
+            placeholder={t('as.adminPh')}
             value={input}
             onChange={(e) => setInput(e.target.value)}
             onKeyDown={(e) => {
@@ -213,7 +215,7 @@ export default function AdminSessionPage() {
               }
             }}
           />
-          <Button size="icon" onClick={send} disabled={sending || !input.trim()} aria-label="发送">
+          <Button size="icon" onClick={send} disabled={sending || !input.trim()} aria-label={t('common.send')}>
             {sending ? <Loader2 size={16} className="animate-spin" /> : <Send size={16} />}
           </Button>
         </div>

@@ -1,4 +1,5 @@
 import { useEffect, useMemo, useState } from 'react'
+import { useTranslation } from 'react-i18next'
 import { Loader2, ChevronDown, Copy, Check, Link2, Code2, Search, Download } from 'lucide-react'
 import { type PublicMessage } from '@/lib/api'
 import { attachmentUrl } from '@/lib/viewer'
@@ -25,6 +26,7 @@ function BotMark() {
 /** Official participant header (sampled 2026-08-31): baseline row of
  *  14px/500 name + 12px secondary clock, gap 5px, with the avatar in the left gutter. */
 function ParticipantHeader({ kind, name, ts }: { kind: 'devin' | 'user'; name?: string; ts: string }) {
+  const { t } = useTranslation()
   const displayName = kind === 'devin' ? 'Devin' : name || 'User'
   const isBot = kind === 'user' && /\bbot\b$/i.test(displayName)
   let h = 0
@@ -54,6 +56,7 @@ function ParticipantHeader({ kind, name, ts }: { kind: 'devin' | 'user'; name?: 
 
 
 function FileViewerPanel({ href: href0, name, initialRaw, versions }: { href: string; name: string; initialRaw?: boolean; versions?: { href: string; ts: string }[] }) {
+  const { t } = useTranslation()
   const [ver, setVer] = useState(-1)
   const [verOpen, setVerOpen] = useState(false)
   const vlist = versions && versions.length > 1 ? versions : null
@@ -76,7 +79,7 @@ function FileViewerPanel({ href: href0, name, initialRaw, versions }: { href: st
     if (isImg) return <div className="flex h-full items-center justify-center p-4"><img loading="lazy" decoding="async" src={href} alt={name} className="max-h-full max-w-full object-contain" /></div>
     if (isVideo) return <div className="flex h-full items-center justify-center p-4"><video src={href} controls className="max-h-full max-w-full" /></div>
     if (isPdf) return <iframe src={href} title={name} className="h-full w-full" />
-    if (err) return <p className="p-4 text-xs text-muted-foreground">无法加载 {name}</p>
+    if (err) return <p className="p-4 text-xs text-muted-foreground">{t('vp.cantLoad', { name })}</p>
     if (text === null) return <div className="flex items-center gap-1.5 p-4 text-[13px] text-muted-foreground"><Loader2 size={14} className="animate-spin" /> Loading…</div>
     return isMd && !raw
       ? <div className="p-4"><Markdown text={text} /></div>
@@ -130,19 +133,19 @@ function FileViewerPanel({ href: href0, name, initialRaw, versions }: { href: st
             </button>
           )}
           {!isPdf && !isImg && !isVideo && (
-            <button aria-label="Copy content" title="Copy content" disabled={text === null} onClick={() => { if (text !== null) { navigator.clipboard.writeText(text); flash('content') } }} className={abtn}>
+            <button aria-label={t('vp.copyContent')} title={t('vp.copyContent')} disabled={text === null} onClick={() => { if (text !== null) { navigator.clipboard.writeText(text); flash('content') } }} className={abtn}>
               {done === 'content' ? <Check size={16} /> : <Copy size={16} />}
             </button>
           )}
           <button
-            aria-label="Copy link"
-            title="Copy link"
+            aria-label={t('vp.copyLink')}
+            title={t('vp.copyLink')}
             onClick={() => { navigator.clipboard.writeText(new URL(href, location.origin).toString()); flash('link') }}
             className={abtn}
           >
             {done === 'link' ? <Check size={16} /> : <Link2 size={16} />}
           </button>
-          <a aria-label="Download" title="Download" href={href} download={name} className={abtn}>
+          <a aria-label={t('vp.download')} title={t('vp.download')} href={href} download={name} className={abtn}>
             <Download size={16} />
           </a>
         </div>
@@ -153,6 +156,7 @@ function FileViewerPanel({ href: href0, name, initialRaw, versions }: { href: st
 }
 
 function AttachmentsPanel({ messages, sessionId, mt, onOpenTab }: { messages: PublicMessage[]; sessionId: string; mt: string; onOpenTab?: (href: string, name: string) => void }) {
+  const { t } = useTranslation()
   const files = useMemo(() => {
     const seen = new Set<string>()
     const out: { url: string; name: string; ts: string; role: string }[] = []
@@ -167,7 +171,7 @@ function AttachmentsPanel({ messages, sessionId, mt, onOpenTab }: { messages: Pu
   }, [messages])
   const [q, setQ] = useState('')
   const shown = q ? files.filter((f) => f.name.toLowerCase().includes(q.toLowerCase())) : files
-  if (!files.length) return <p className="p-4 text-xs text-muted-foreground">No files yet.</p>
+  if (!files.length) return <p className="p-4 text-xs text-muted-foreground">{t('vp.noFiles')}</p>
   return (
     <div className="space-y-3 p-3">
       <div className="flex items-center gap-1.5 rounded-lg border border-border px-2.5 py-1.5">
@@ -175,14 +179,14 @@ function AttachmentsPanel({ messages, sessionId, mt, onOpenTab }: { messages: Pu
         <input
           value={q}
           onChange={(e) => setQ(e.target.value)}
-          placeholder="Search"
+          placeholder={t('vp.search')}
           className="w-full bg-transparent text-[13px] leading-[18px] outline-none placeholder:text-muted-foreground"
         />
       </div>
-      {!shown.length && <p className="px-1 text-xs text-muted-foreground">No results found</p>}
+      {!shown.length && <p className="px-1 text-xs text-muted-foreground">{t('common.noResults')}</p>}
       {shown.map((f) => (
         <div key={f.url}>
-          <p className="mb-1 text-[10px] text-muted-foreground">{f.role === 'user' ? '用户' : 'Devin'} · {time(f.ts)}</p>
+          <p className="mb-1 text-[10px] text-muted-foreground">{f.role === 'user' ? t('vp.roleUser') : 'Devin'} · {time(f.ts)}</p>
           <AttachmentCard name={f.name} href={attachmentUrl(sessionId, f.url, mt)} ts={f.ts} onOpenTab={onOpenTab} />
         </div>
       ))}
@@ -228,6 +232,7 @@ function fmtStart(ts: string): string {
  * Duration, Start) below.
  */
 function ShellPanel({ items }: { items: TimelineItem[] }) {
+  const { t } = useTranslation()
   const cmds = useMemo(() => {
     const list: ShellCmd[] = []
     const byPid = new Map<string, ShellCmd>()
@@ -270,7 +275,7 @@ function ShellPanel({ items }: { items: TimelineItem[] }) {
     () => cmds.filter((c) => !q || c.cmd.toLowerCase().includes(q.toLowerCase())).slice(-200),
     [cmds, q],
   )
-  if (!cmds.length) return <div className="flex h-full items-center justify-center"><span className="text-[13px] leading-[18px] text-muted-foreground">Devin hasn't run any commands yet</span></div>
+  if (!cmds.length) return <div className="flex h-full items-center justify-center"><span className="text-[13px] leading-[18px] text-muted-foreground">{t('vp.noCmds')}</span></div>
   return (
     <div className="flex h-full flex-col">
       <div className="flex shrink-0 items-center gap-1 overflow-x-auto px-2 py-1">
@@ -309,13 +314,13 @@ function ShellPanel({ items }: { items: TimelineItem[] }) {
                 <input
                   value={q}
                   onChange={(e) => setQ(e.target.value)}
-                  placeholder="Search Command History"
+                  placeholder={t('vp.searchCmds')}
                   className="h-7 min-w-0 flex-1 bg-transparent text-[14px] leading-[20px] outline-none placeholder:text-muted-foreground"
                 />
               </div>
             </div>
-            <div className="ml-1 flex items-center text-start opacity-60">Duration</div>
-            <div className="ml-1 flex items-center text-start opacity-60">Start</div>
+            <div className="ml-1 flex items-center text-start opacity-60">{t('vp.duration')}</div>
+            <div className="ml-1 flex items-center text-start opacity-60">{t('vp.start')}</div>
           </div>
         </div>
         <div className="min-h-0 flex-1 overflow-y-auto py-0.5">
@@ -350,7 +355,7 @@ function ShellPanel({ items }: { items: TimelineItem[] }) {
               <div className="overflow-hidden whitespace-nowrap pl-1 opacity-75" title={new Date(c.ts).toLocaleString()}>{fmtStart(c.ts)}</div>
             </div>
           ))}
-          {!filtered.length && <p className="p-3 text-[12px] text-muted-foreground">No results found</p>}
+          {!filtered.length && <p className="p-3 text-[12px] text-muted-foreground">{t('common.noResults')}</p>}
         </div>
       </div>
     </div>

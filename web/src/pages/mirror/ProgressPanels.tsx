@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useMemo, useRef, useState, type PointerEvent as ReactPointerEvent } from 'react'
+import { useTranslation } from 'react-i18next'
 import { ArrowLeft, ChevronRight, ChevronLeft, Copy, RefreshCw, ArrowUp, Terminal, List, MessageSquare, Wrench, Pencil, FileCode2 } from 'lucide-react'
 import { sessionFetch, screenshotUrl } from '@/lib/viewer'
 import { type TimelineItem, heading, fileRows } from '@/components/Timeline'
@@ -123,6 +124,7 @@ function WorklogPanel({ id, items, mt, onGoLive, onWake, jumpTo, finished, canLi
   canLive: boolean
   asleep: boolean
 }) {
+  const { t } = useTranslation()
   const steps = useMemo<ProgressStep[]>(() => {
     const doneByProcess = new Map<string, TimelineItem[]>()
     for (const item of items) {
@@ -268,7 +270,7 @@ function WorklogPanel({ id, items, mt, onGoLive, onWake, jumpTo, finished, canLi
   const command = title?.kind === 'shell' ? heading(title) : ''
   const fullCommand = title?.kind === 'shell' ? (title.body || command) : ''
   const hasWork = useMemo(() => items.some((it) => it.worklog === 'output'), [items])
-  if (!hasWork || !steps.length) return <div className="flex h-full w-full items-center justify-center p-4 text-[13px] text-muted-foreground">Devin hasn't done any work yet...</div>
+  if (!hasWork || !steps.length) return <div className="flex h-full w-full items-center justify-center p-4 text-[13px] text-muted-foreground">{t('pp.noWork')}</div>
   return (
     <div className="flex h-full min-h-0 flex-col overflow-hidden p-3">
       <div className="mx-1 mb-3 mt-1 shrink-0">
@@ -278,18 +280,18 @@ function WorklogPanel({ id, items, mt, onGoLive, onWake, jumpTo, finished, canLi
             title.mcp.list ? (
               <><List size={16} className="mr-1 inline" /><span>{title.title || 'Listed available MCP tools'}</span></>
             ) : (
-              <><Wrench size={16} className="mr-1 inline" /><span>Called </span><span className="rounded bg-tint-secondary px-[3px] font-mono text-[13px] text-foreground">{title.mcp.toolName || 'tool'}</span><span> on </span><span className="rounded bg-tint-secondary px-[3px] font-mono text-[13px] text-foreground">{title.mcp.displayName || (title.mcp.server ? `${title.mcp.server} MCP server` : 'MCP server')}</span></>
+              <><Wrench size={16} className="mr-1 inline" /><span>{t('pp.called')}</span><span className="rounded bg-tint-secondary px-[3px] font-mono text-[13px] text-foreground">{title.mcp.toolName || 'tool'}</span><span> on </span><span className="rounded bg-tint-secondary px-[3px] font-mono text-[13px] text-foreground">{title.mcp.displayName || (title.mcp.server ? `${title.mcp.server} MCP server` : 'MCP server')}</span></>
             )
           ) : title.kind === 'shell' ? (
-            <><Terminal size={16} className="mr-1 inline" /><span>Executed </span><span className="rounded bg-tint-secondary px-[3px] font-mono text-[13px] text-foreground [overflow-wrap:anywhere]">{command}</span></>
+            <><Terminal size={16} className="mr-1 inline" /><span>{t('pp.executed')}</span><span className="rounded bg-tint-secondary px-[3px] font-mono text-[13px] text-foreground [overflow-wrap:anywhere]">{command}</span></>
           ) : title.kind === 'edit' ? (
-            <><Pencil size={16} className="mr-1 inline" />{fileRows(title.fileUpdates || []).length === 1 ? <><span>Edited </span><span className="rounded bg-tint-secondary px-[3px] font-mono text-[13px] text-foreground">{fileRows(title.fileUpdates || [])[0].filePath.split('/').pop() || fileRows(title.fileUpdates || [])[0].filePath}</span></> : <span>{heading(title)}</span>}</>
+            <><Pencil size={16} className="mr-1 inline" />{fileRows(title.fileUpdates || []).length === 1 ? <><span>{t('pp.edited')}</span><span className="rounded bg-tint-secondary px-[3px] font-mono text-[13px] text-foreground">{fileRows(title.fileUpdates || [])[0].filePath.split('/').pop() || fileRows(title.fileUpdates || [])[0].filePath}</span></> : <span>{heading(title)}</span>}</>
           ) : title.kind === 'read' ? (
             <><FileCode2 size={16} className="mr-1 inline" /><span>{heading(title)}</span></>
           ) : title.kind === 'message' && title.role === 'user' ? (
-            <><MessageSquare size={16} className="mr-1 inline" /><span>You said</span></>
+            <><MessageSquare size={16} className="mr-1 inline" /><span>{t('pp.youSaid')}</span></>
           ) : heading(title)}
-          {command && <button type="button" aria-label="Copy command" title="Copy command" onClick={() => void navigator.clipboard.writeText(fullCommand)} className="absolute right-0 top-0 z-10 flex size-6 cursor-pointer items-center justify-center rounded text-muted-foreground opacity-0 hover:bg-accent hover:text-foreground focus-within:opacity-100 group-hover/app-title:opacity-100"><Copy size={14} /></button>}
+          {command && <button type="button" aria-label={t('pp.copyCmd')} title={t('pp.copyCmd')} onClick={() => void navigator.clipboard.writeText(fullCommand)} className="absolute right-0 top-0 z-10 flex size-6 cursor-pointer items-center justify-center rounded text-muted-foreground opacity-0 hover:bg-accent hover:text-foreground focus-within:opacity-100 group-hover/app-title:opacity-100"><Copy size={14} /></button>}
         </div>
       </div>
       <div className="-mx-2 flex min-h-0 flex-1 flex-col overflow-y-auto px-3">
@@ -307,15 +309,15 @@ function WorklogPanel({ id, items, mt, onGoLive, onWake, jumpTo, finished, canLi
           (() => {
             const key = title.screenshotKeys?.[title.screenshotKeys.length - 1]
             if (!key) return null
-            if (broken[key]) return <div className="flex min-h-0 flex-1 items-center justify-center"><div className="flex flex-col items-center gap-2 p-4 text-center"><span className="text-[14px] text-muted-foreground">Couldn't load image</span><button type="button" onClick={() => setBroken((previous) => { const next = { ...previous }; delete next[key]; return next })} className="flex cursor-pointer items-center gap-1 text-[14px] text-blue-600 hover:underline dark:text-blue-400"><RefreshCw size={14} />Retry</button></div></div>
-            return <div className="flex min-h-0 flex-1 items-center justify-center overflow-hidden"><img loading="lazy" decoding="async" src={screenshotUrl(id, key, mt)} className="h-full w-full rounded-sm object-contain" alt="Browser screenshot" onError={() => setBroken((previous) => ({ ...previous, [key]: true }))} /></div>
+            if (broken[key]) return <div className="flex min-h-0 flex-1 items-center justify-center"><div className="flex flex-col items-center gap-2 p-4 text-center"><span className="text-[14px] text-muted-foreground">{t('pp.imgFail')}</span><button type="button" onClick={() => setBroken((previous) => { const next = { ...previous }; delete next[key]; return next })} className="flex cursor-pointer items-center gap-1 text-[14px] text-blue-600 hover:underline dark:text-blue-400"><RefreshCw size={14} />{t('common.retry')}</button></div></div>
+            return <div className="flex min-h-0 flex-1 items-center justify-center overflow-hidden"><img loading="lazy" decoding="async" src={screenshotUrl(id, key, mt)} className="h-full w-full rounded-sm object-contain" alt={t('pp.shotAlt')} onError={() => setBroken((previous) => ({ ...previous, [key]: true }))} /></div>
           })()
         ) : title.body && title.kind !== 'thought' ? (
           <div className="flex flex-1 flex-col gap-2 overflow-hidden p-4"><div className="whitespace-pre-wrap text-[14px] text-muted-foreground">{title.body}</div></div>
         ) : null}
       </div>
       <div className="mx-1 mb-2 flex flex-col items-center">
-        <div ref={sliderRef} role="slider" tabIndex={0} aria-label="Session timeline" aria-orientation="horizontal" aria-valuemin={Math.round(timeline.firstNavigablePosition)} aria-valuemax={100} aria-valuenow={Math.round(currentPosition)} aria-valuetext={atEnd ? 'Live' : headerClock(title.ts)} className="relative z-10 my-1 h-[10px] w-full cursor-pointer select-none self-stretch rounded-[4px] focus:outline-none" onPointerDown={onPointerDown} onKeyDown={(event) => { if (event.key === 'ArrowRight' || event.key === 'ArrowDown') { event.preventDefault(); goNext() } else if (event.key === 'ArrowLeft' || event.key === 'ArrowUp') { event.preventDefault(); goPrevious() } }} onMouseEnter={() => sliderRef.current?.focus()}>
+        <div ref={sliderRef} role="slider" tabIndex={0} aria-label={t('pp.timeline')} aria-orientation="horizontal" aria-valuemin={Math.round(timeline.firstNavigablePosition)} aria-valuemax={100} aria-valuenow={Math.round(currentPosition)} aria-valuetext={atEnd ? 'Live' : headerClock(title.ts)} className="relative z-10 my-1 h-[10px] w-full cursor-pointer select-none self-stretch rounded-[4px] focus:outline-none" onPointerDown={onPointerDown} onKeyDown={(event) => { if (event.key === 'ArrowRight' || event.key === 'ArrowDown') { event.preventDefault(); goNext() } else if (event.key === 'ArrowLeft' || event.key === 'ArrowUp') { event.preventDefault(); goPrevious() } }} onMouseEnter={() => sliderRef.current?.focus()}>
           {timeline.groups.map((group, index) => {
             const width = group.end - group.start
             const fill = currentPosition >= group.end ? 100 : currentPosition > group.start ? ((currentPosition - group.start) / width) * 100 : 0
@@ -327,8 +329,8 @@ function WorklogPanel({ id, items, mt, onGoLive, onWake, jumpTo, finished, canLi
         </div>
         <div className="relative my-1 flex w-full items-center gap-2">
           <div className="flex items-center gap-1">
-            <button type="button" aria-label="Previous step" onClick={goPrevious} disabled={currentIndex <= 0} className="flex size-7 cursor-pointer items-center justify-center rounded-full text-muted-foreground hover:bg-accent hover:text-foreground disabled:opacity-30"><ChevronLeft size={14} /></button>
-            <button type="button" aria-label="Next step" onClick={goNext} className="flex size-7 cursor-pointer items-center justify-center rounded-full text-muted-foreground hover:bg-accent hover:text-foreground"><ChevronRight size={14} /></button>
+            <button type="button" aria-label={t('pp.prevStep')} onClick={goPrevious} disabled={currentIndex <= 0} className="flex size-7 cursor-pointer items-center justify-center rounded-full text-muted-foreground hover:bg-accent hover:text-foreground disabled:opacity-30"><ChevronLeft size={14} /></button>
+            <button type="button" aria-label={t('pp.nextStep')} onClick={goNext} className="flex size-7 cursor-pointer items-center justify-center rounded-full text-muted-foreground hover:bg-accent hover:text-foreground"><ChevronRight size={14} /></button>
           </div>
           <button
             type="button"
@@ -373,6 +375,7 @@ function McpSkeleton() {
 }
 
 function McpDetail({ item }: { item: TimelineItem }) {
+  const { t } = useTranslation()
   const mcp = item.mcp
   if (!mcp) return null
   const codeClass = 'min-w-0 max-h-48 overflow-auto whitespace-pre-wrap break-words rounded bg-tint-secondary p-3 font-mono text-[12px] leading-[16px]'
@@ -381,18 +384,18 @@ function McpDetail({ item }: { item: TimelineItem }) {
       {!mcp.list && (
         <>
           <div>
-            <div className="mb-2 text-[12px] font-medium text-muted-foreground">Input</div>
+            <div className="mb-2 text-[12px] font-medium text-muted-foreground">{t('pp.input')}</div>
             <pre className={codeClass}>{mcpCode(mcp.input) || '{}'}</pre>
           </div>
           <div>
-            <div className="mb-2 text-[12px] font-medium text-muted-foreground">Output</div>
+            <div className="mb-2 text-[12px] font-medium text-muted-foreground">{t('pp.output')}</div>
             {mcp.pending ? <McpSkeleton /> : <pre className={codeClass}>{mcpCode(mcp.output)}</pre>}
           </div>
         </>
       )}
       {mcp.list && (
         <div>
-          <div className="mb-2 text-[12px] font-medium text-muted-foreground">Output</div>
+          <div className="mb-2 text-[12px] font-medium text-muted-foreground">{t('pp.output')}</div>
           {mcp.pending ? <McpSkeleton /> : <pre className={codeClass}>{mcpCode(mcp.output || item.body)}</pre>}
         </div>
       )}
@@ -401,6 +404,7 @@ function McpDetail({ item }: { item: TimelineItem }) {
 }
 
 function ProgressPanel({ items, id, status }: { items: TimelineItem[]; id: string; status: string }) {
+  const { t } = useTranslation()
   const latest = useMemo(() => [...items].reverse().find((it) => it.kind === 'todo'), [items])
   // Official Tasks panel data source: session detail latest_todo_contents —
   // covers sessions whose todo events fall outside the loaded event window.
@@ -439,7 +443,7 @@ function ProgressPanel({ items, id, status }: { items: TimelineItem[]; id: strin
     return elapsed >= 0 && elapsed < 3_600_000 ? `${fmtDur(Math.floor(elapsed / 1000))} ago` : clock(new Date(ts).toISOString())
   }, [now])
   const live = status === 'working' || status === 'resumed' || status === 'restored'
-  if (!todos.length) return <div className="p-4 text-[13px] leading-[18px]">No task list for this session yet.</div>
+  if (!todos.length) return <div className="p-4 text-[13px] leading-[18px]">{t('pp.noTodos')}</div>
   const done = todos.filter((t) => t.status === 'completed').length
   return (
     <div className="flex flex-col gap-1.5 px-2 pb-4">

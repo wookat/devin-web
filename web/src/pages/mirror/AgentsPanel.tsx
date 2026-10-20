@@ -1,4 +1,5 @@
 import { useEffect, useState } from 'react'
+import { useTranslation } from 'react-i18next'
 import { Loader2, ChevronRight, ChevronDown, Copy, Check, XCircle, CircleCheck, Circle, Code2, Bot, BookOpen, CircleDashed, ChevronsUpDown } from 'lucide-react'
 import { adminFetch } from '@/lib/api'
 import { Combo } from '@/components/ui'
@@ -80,6 +81,7 @@ interface ParentInfo {
 
 /** Official Agents panel "Parent" card: parent session + its task list. */
 function ParentCard({ devinId, onOpen }: { devinId: string; onOpen?: (devinId: string, title: string) => void }) {
+  const { t } = useTranslation()
   const [parent, setParent] = useState<ParentInfo | null>(null)
   const [open, setOpen] = useState(true)
   useEffect(() => {
@@ -95,8 +97,8 @@ function ParentCard({ devinId, onOpen }: { devinId: string; onOpen?: (devinId: s
   return (
     <div className="flex flex-col gap-2 rounded-xl border border-border bg-card px-3.5 py-3">
       <div className="flex items-center gap-2">
-        <span className="text-[12px] leading-[16px] font-medium text-muted-foreground">Parent</span>
-        {working && <span className="rounded-md bg-blue-500/10 px-1.5 py-0.5 text-[11px] font-medium text-blue-600 dark:text-blue-400">Working</span>}
+        <span className="text-[12px] leading-[16px] font-medium text-muted-foreground">{t('ag.parent')}</span>
+        {working && <span className="rounded-md bg-blue-500/10 px-1.5 py-0.5 text-[11px] font-medium text-blue-600 dark:text-blue-400">{t('ag.working')}</span>}
         <button
           onClick={() => onOpen?.(parent.devin_id, parent.title)}
           className="ml-auto shrink-0 cursor-pointer rounded-md px-1.5 py-0.5 text-[12px] leading-[16px] text-muted-foreground hover:bg-accent hover:text-foreground"
@@ -144,6 +146,7 @@ function AgentsPanel({ runs, selected, onSelect, agentEvents, devinId, onOpenSes
   devinId: string
   onOpenSession?: (devinId: string, title: string) => void
 }) {
+  const { t } = useTranslation()
   const runId = selected ?? runs[runs.length - 1]?.runId ?? null
   const [detail, setDetail] = useState<WfRunDetail | null>(null)
   const [err, setErr] = useState<string | null>(null)
@@ -166,8 +169,8 @@ function AgentsPanel({ runs, selected, onSelect, agentEvents, devinId, onOpenSes
         {devinId && <ParentCard devinId={devinId} onOpen={onOpenSession} />}
         <div className="flex flex-1 flex-col items-center justify-center gap-1 p-6 text-center">
           <Bot size={18} className="text-muted-foreground" />
-          <p className="text-[13px] leading-[18px] font-medium">No agents yet</p>
-          <p className="text-[12px] leading-[16px] text-muted-foreground">Agent calls made by this workflow run will appear here.</p>
+          <p className="text-[13px] leading-[18px] font-medium">{t('ag.none')}</p>
+          <p className="text-[12px] leading-[16px] text-muted-foreground">{t('ag.noneDesc')}</p>
         </div>
       </div>
     )
@@ -208,8 +211,8 @@ function AgentsPanel({ runs, selected, onSelect, agentEvents, devinId, onOpenSes
       {runs.length > 1 && (
         <Combo value={runId ?? ''} onPick={onSelect} options={runs.map((r) => ({ v: r.runId, l: r.name || r.runId }))} />
       )}
-      {loading && !detail && <p className="text-[13px] text-muted-foreground">Loading…</p>}
-      {err && <p className="text-[12px] text-red-600">读取失败：{err}</p>}
+      {loading && !detail && <p className="text-[13px] text-muted-foreground">{t('common.loading')}</p>}
+      {err && <p className="text-[12px] text-red-600">{t('ag.readFail')}{err}</p>}
       {(detail || title) && (
         <div className="flex flex-col gap-1">
           <div className="flex items-center gap-3">
@@ -217,12 +220,12 @@ function AgentsPanel({ runs, selected, onSelect, agentEvents, devinId, onOpenSes
               {title ? `Workflow: ${title}` : 'Workflow run'}
             </h1>
             <div className="ml-auto flex items-center gap-1">
-              {failed && <span className="shrink-0 rounded-md bg-red-500/10 px-1.5 py-0.5 text-[12px] font-medium text-red-600">Failed</span>}
+              {failed && <span className="shrink-0 rounded-md bg-red-500/10 px-1.5 py-0.5 text-[12px] font-medium text-red-600">{t('ag.failed')}</span>}
               <a
                 href="https://docs.devin.ai/work-with-devin/dynamic-workflows"
                 target="_blank"
                 rel="noopener noreferrer"
-                aria-label="View workflow documentation"
+                aria-label={t('ag.wfDoc')}
                 className="inline-flex size-6 shrink-0 items-center justify-center rounded-[6px] bg-transparent text-muted-foreground hover:bg-accent hover:text-foreground"
               >
                 <BookOpen size={16} />
@@ -248,7 +251,7 @@ function AgentsPanel({ runs, selected, onSelect, agentEvents, devinId, onOpenSes
           </div>
           <div
             role="progressbar"
-            aria-label="Run progress"
+            aria-label={t('ag.runProg')}
             aria-valuemin={0}
             aria-valuemax={totalSlots}
             aria-valuenow={settled}
@@ -262,7 +265,7 @@ function AgentsPanel({ runs, selected, onSelect, agentEvents, devinId, onOpenSes
       )}
       {contents?.description && (
         <div className="flex flex-col gap-1">
-          <h2 className="text-[15px] font-medium leading-[20px]">Overview</h2>
+          <h2 className="text-[15px] font-medium leading-[20px]">{t('ag.overview')}</h2>
           <p className="text-[13px] leading-[18px] text-muted-foreground">{contents.description}</p>
         </div>
       )}
@@ -270,7 +273,7 @@ function AgentsPanel({ runs, selected, onSelect, agentEvents, devinId, onOpenSes
         <details className="flex flex-col overflow-hidden rounded-xl border border-border">
           <summary className="flex w-full cursor-pointer items-center gap-2 bg-card p-3 text-[13px] leading-[18px]">
             <Code2 size={13} className="text-muted-foreground" />
-            <span className="text-[13px] font-medium">Script</span>
+            <span className="text-[13px] font-medium">{t('ag.script')}</span>
             <button
               onClick={(e) => {
                 e.preventDefault()
@@ -289,14 +292,14 @@ function AgentsPanel({ runs, selected, onSelect, agentEvents, devinId, onOpenSes
       )}
       {detail && agents.length === 0 && (
         <div className="flex flex-col items-center rounded-xl border border-border px-3 py-6 text-center">
-          <p className="text-[13px] leading-[18px] font-medium">No agent results yet</p>
-          <p className="text-[12px] leading-[16px] text-muted-foreground">Agent calls made by this workflow run will appear here.</p>
+          <p className="text-[13px] leading-[18px] font-medium">{t('ag.noResults')}</p>
+          <p className="text-[12px] leading-[16px] text-muted-foreground">{t('ag.noneDesc')}</p>
         </div>
       )}
       {agents.length > 0 && (
         <div className="mt-2 flex flex-col gap-4">
           <div className="flex flex-wrap items-baseline gap-x-3 gap-y-1">
-            <h2 className="text-[15px] font-medium leading-[20px]">Phases</h2>
+            <h2 className="text-[15px] font-medium leading-[20px]">{t('ag.phases')}</h2>
           </div>
           <div className="flex flex-col gap-4">
             {phases.map((phase) => {
@@ -359,7 +362,7 @@ function AgentsPanel({ runs, selected, onSelect, agentEvents, devinId, onOpenSes
                                 onClick={(e) => e.stopPropagation()}
                                 className="relative z-10 inline-flex h-[24px] flex-shrink-0 select-none items-center justify-center gap-[3px] overflow-hidden whitespace-nowrap rounded-[6px] border border-border bg-card px-[8px] text-[12px] font-medium hover:bg-accent"
                               >
-                                <span className="truncate">View session</span>
+                                <span className="truncate">{t('ag.viewSession')}</span>
                               </a>
                             )}
                             <span className="flex-shrink-0 text-muted-foreground/60">
@@ -371,7 +374,7 @@ function AgentsPanel({ runs, selected, onSelect, agentEvents, devinId, onOpenSes
                             {a.output && (
                               <pre className="max-h-40 overflow-auto whitespace-pre-wrap break-words rounded-md bg-muted px-2 py-1.5 font-mono text-[11px] leading-relaxed">{a.output}</pre>
                             )}
-                            {!a.output && !a.error && <p className="px-1 text-[12px] text-muted-foreground">No output yet</p>}
+                            {!a.output && !a.error && <p className="px-1 text-[12px] text-muted-foreground">{t('ag.noOutput')}</p>}
                           </div>
                         </details>
                       )

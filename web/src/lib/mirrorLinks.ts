@@ -1,5 +1,6 @@
 import { parseOfficialLink, adminMirrorPath, reviewToGithub, VISITOR_OFFICIAL_HREF, VISITOR_SESSION_HREF } from '../../shared/officialLinks'
 import { isVisitor } from './viewer'
+import i18n from '@/i18n'
 
 export type MirrorHref =
   | { kind: 'internal'; to: string }
@@ -13,15 +14,15 @@ export type MirrorHref =
  */
 export function mirrorHref(href: string | undefined): MirrorHref {
   if (!href) return { kind: 'inert', title: '' }
-  if (href === VISITOR_SESSION_HREF) return { kind: 'inert', title: '其他 Devin 会话' }
-  if (href === VISITOR_OFFICIAL_HREF) return { kind: 'inert', title: 'Devin 控制台' }
+  if (href === VISITOR_SESSION_HREF) return { kind: 'inert', title: i18n.t('ml.otherSession') }
+  if (href === VISITOR_OFFICIAL_HREF) return { kind: 'inert', title: i18n.t('ml.console') }
   const link = parseOfficialLink(href)
   if (!link || link.kind === 'attachment' || link.kind === 'docs') return { kind: 'external', href }
   if (isVisitor()) {
-    return link.kind === 'review' ? { kind: 'external', href: reviewToGithub(link) } : { kind: 'inert', title: 'Devin 控制台' }
+    return link.kind === 'review' ? { kind: 'external', href: reviewToGithub(link) } : { kind: 'inert', title: i18n.t('ml.console') }
   }
   const to = adminMirrorPath(link)
-  return to ? { kind: 'internal', to } : { kind: 'inert', title: '镜像未提供该官方页面' }
+  return to ? { kind: 'internal', to } : { kind: 'inert', title: i18n.t('ml.pageMissing') }
 }
 
 /** Admin mirror route for an upstream `devin-<hex>` (or bare hex) session id. */

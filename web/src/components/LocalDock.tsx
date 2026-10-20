@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useState } from 'react'
+import { useTranslation } from 'react-i18next'
 import { ChevronDown, ChevronUp, Copy, ExternalLink, Plus, RefreshCw, Repeat, Settings2, SquareTerminal, Trash2, X } from 'lucide-react'
 import { Link } from 'react-router-dom'
 import { adminFetch } from '@/lib/api'
@@ -58,10 +59,11 @@ function pct(p: number | null | undefined): string {
 }
 
 function QuotaBar({ label, value }: { label: string; value: number | null | undefined }) {
+  const { t } = useTranslation()
   const v = value ?? null
   const color = v == null ? 'bg-muted-foreground/30' : v > 40 ? 'bg-emerald-500' : v > 10 ? 'bg-amber-500' : 'bg-red-500'
   return (
-    <div className="flex items-center gap-1.5" title={`${label}剩余 ${pct(v)}`}>
+    <div className="flex items-center gap-1.5" title={`${label}${t('dock.pctLeft', { p: pct(v) })}`}>
       <span className="w-7 shrink-0 text-[10px] text-muted-foreground">{label}</span>
       <div className="h-1 min-w-0 flex-1 overflow-hidden rounded-full bg-muted">
         <div className={`h-full rounded-full ${color}`} style={{ width: `${Math.max(0, Math.min(100, v ?? 0))}%` }} />
@@ -98,6 +100,7 @@ const CLI_CMDS: { cmd: string; label: string; arg?: string; write?: boolean; des
 ]
 
 export default function LocalDock() {
+  const { t } = useTranslation()
   const [expanded, setExpanded] = useState(false)
   const [cliOpen, setCliOpen] = useState(false)
   const [cliArg, setCliArg] = useState('')
@@ -167,7 +170,7 @@ export default function LocalDock() {
   }
 
   const remove = async (name: string) => {
-    if (!window.confirm(`移除账号 ${name}？（只从轮换列表删除，不登出）`)) return
+    if (!window.confirm(`${t('dock.confirmRemove', { name })}`)) return
     try {
       await adminFetch(`/api/accounts/${encodeURIComponent(name)}`, { method: 'DELETE' })
       pollAccounts()
@@ -231,11 +234,11 @@ export default function LocalDock() {
 
   const runCli = async (cmd: string, arg?: string, write?: boolean) => {
     if (cliBusy) return
-    if (write && !window.confirm(`执行 devin ${cmd}？这是写操作。`)) return
+    if (write && !window.confirm(`${t('dock.confirmWrite', { cmd })}`)) return
     setCliBusy(cmd); setCliOut(null)
     try {
       const r = await adminFetch<CliResult>('/api/admin/cli/run', { method: 'POST', body: JSON.stringify({ cmd, arg }) })
-      setCliOut(r.ok ? (r.output || '(无输出)') : `exit ${r.code} — ${r.error || r.output || '失败'}`)
+      setCliOut(r.ok ? (r.output || t('dock.noOutput')) : `exit ${r.code} — ${r.error || r.output || '失败'}`)
     } catch (e) { setCliOut((e as Error).message) } finally { setCliBusy(null) }
   }
 
@@ -251,48 +254,48 @@ export default function LocalDock() {
       <div className="flex items-center gap-1.5 px-3 py-1.5">
         <span
           className={`inline-block size-2 shrink-0 rounded-full ${curCooling ? 'bg-amber-500' : cur ? 'bg-emerald-500' : 'bg-muted-foreground'}`}
-          title={curCooling ? '当前账号冷却中' : cur ? '账号健康' : '无可用账号'}
+          title={curCooling ? t('dock.curCooling') : cur ? t('dock.healthy') : t('dock.none')}
         />
         <span className="min-w-0 flex-1 truncate" title={curRow?.info?.email ?? cur ?? undefined}>
-          {curRow?.info?.email ?? cur ?? '无账号'}
+          {curRow?.info?.email ?? cur ?? t('dock.noAccount')}
           {curRow?.info?.plan && <span className="ml-1 text-[10px] text-muted-foreground">{curRow.info.plan}</span>}
-          {coolingCount > 0 && <span className="ml-1 text-[10px] text-amber-600">{coolingCount} 冷却</span>}
+          {coolingCount > 0 && <span className="ml-1 text-[10px] text-amber-600">{coolingCount} {t('dock.coolingN')}</span>}
         </span>
         <button
           className="flex cursor-pointer items-center gap-1 rounded px-1.5 py-0.5 text-[11px] text-muted-foreground hover:bg-accent hover:text-foreground disabled:opacity-40"
           disabled={busy}
           onClick={() => void rotate()}
-          title="切换到下一个健康账号"
+          title={t('dock.rotateTip')}
         >
-          <Repeat size={11} /> 轮换
+          <Repeat size={11} /> {t('dock.rotate')}
         </button>
         <button
           className="flex cursor-pointer items-center gap-1 rounded px-1.5 py-0.5 text-[11px] text-muted-foreground hover:bg-accent hover:text-foreground"
           onClick={() => { setAdding((v) => !v); setExpanded(true) }}
-          title="添加账号"
+          title={t('dock.addTip')}
         >
-          <Plus size={11} /> 添加
+          <Plus size={11} /> {t('dock.add')}
         </button>
         <Link
           to="/settings"
           className="flex size-5 items-center justify-center rounded text-muted-foreground hover:bg-accent hover:text-foreground"
-          aria-label="首选项"
-          title="首选项"
+          aria-label={t('dock.prefs')}
+          title={t('dock.prefs')}
         >
           <Settings2 size={12} />
         </Link>
         <button
           className={`flex size-5 cursor-pointer items-center justify-center rounded hover:bg-accent ${cliOpen ? 'text-foreground' : 'text-muted-foreground'}`}
-          aria-label="CLI 工具"
-          title="Devin CLI 工具（version/doctor/models/plugins…）"
+          aria-label={t('dock.cliTools')}
+          title={t('dock.cliTitle')}
           onClick={() => { setCliOpen((v) => !v); if (!cliOpen) setExpanded(true) }}
         >
           <SquareTerminal size={12} />
         </button>
         <button
           className="flex size-5 cursor-pointer items-center justify-center rounded text-muted-foreground hover:bg-accent hover:text-foreground"
-          aria-label={expanded ? '收起账号列表' : '展开账号列表'}
-          title={expanded ? '收起账号列表' : '展开账号列表'}
+          aria-label={expanded ? t('dock.collapse') : t('dock.expand')}
+          title={expanded ? t('dock.collapse') : t('dock.expand')}
           onClick={() => setExpanded((v) => !v)}
         >
           {expanded ? <ChevronDown size={12} /> : <ChevronUp size={12} />}
@@ -303,7 +306,7 @@ export default function LocalDock() {
         <div className="border-t border-border/50 px-3 py-1.5">
           {!cur && rows.length > 0 && (
             <div className="mb-1.5 rounded bg-amber-500/10 px-2 py-1 text-[11px] text-amber-600">
-              所有账号都在冷却{recovery ? `，最早 ${recovery} 后恢复` : ''}
+              {t('dock.allCooling')}{recovery ? `${t('dock.earliest', { t: recovery })}` : ''}
             </div>
           )}
           <ul className="max-h-48 space-y-1.5 overflow-y-auto">
@@ -318,41 +321,41 @@ export default function LocalDock() {
                     <span className="min-w-0 flex-1 truncate font-medium" title={info?.email ?? a.name}>
                       {info?.email ?? a.name}
                     </span>
-                    {isCur && <span className="rounded bg-emerald-500/15 px-1 text-[10px] text-emerald-600">当前</span>}
+                    {isCur && <span className="rounded bg-emerald-500/15 px-1 text-[10px] text-emerald-600">{t('set.currentBadge')}</span>}
                     {info?.plan && <span className="rounded bg-muted px-1 text-[10px] text-muted-foreground">{info.plan}</span>}
                     {left ? (
                       <>
-                        <span className="shrink-0 text-[10px] text-amber-600">冷却 {left}</span>
+                        <span className="shrink-0 text-[10px] text-amber-600">{t('dock.coolingLeft', { t: left })}</span>
                         <button
                           className="cursor-pointer text-[10px] text-muted-foreground underline hover:text-foreground"
-                          title="清除冷却标记（确认账号健康时手动清除）"
+                          title={t('dock.clearCooling')}
                           onClick={() => void clearCooldown(a.name)}
                         >
-                          清除
+                          {t('dock.clear')}
                         </button>
                       </>
                     ) : (
                       !isCur && (
                         <button
                           className="cursor-pointer text-[10px] text-muted-foreground underline hover:text-foreground disabled:opacity-40"
-                          title={`切换到 ${a.name}`}
+                          title={`${t('dock.switchTo', { name: a.name })}`}
                           disabled={busy}
                           onClick={() => void rotate(a.name)}
                         >
-                          切换
+                          {t('dock.switch')}
                         </button>
                       )
                     )}
                     <button
                       className="cursor-pointer text-muted-foreground hover:text-foreground"
-                      title="刷新额度"
+                      title={t('dock.refreshQuota')}
                       onClick={() => void refreshQuota(a.name)}
                     >
                       <RefreshCw size={10} />
                     </button>
                     <button
                       className="cursor-pointer text-muted-foreground hover:text-red-500"
-                      title="移除账号"
+                      title={t('dock.removeAcc')}
                       onClick={() => void remove(a.name)}
                     >
                       <Trash2 size={10} />
@@ -360,21 +363,21 @@ export default function LocalDock() {
                   </div>
                   {info ? (
                     <div className="mt-1 space-y-0.5 pl-3">
-                      <QuotaBar label="日" value={info.dailyQuotaRemainingPercent} />
-                      <QuotaBar label="周" value={info.weeklyQuotaRemainingPercent} />
+                      <QuotaBar label={t('dock.day')} value={info.dailyQuotaRemainingPercent} />
+                      <QuotaBar label={t('dock.week')} value={info.weeklyQuotaRemainingPercent} />
                       {(info.overageBalanceUsd != null && Math.abs(info.overageBalanceUsd) >= 0.01) && (
                         <div className="text-[10px] text-muted-foreground">
-                          {info.overageBalanceUsd < 0 ? '信用余额' : '透支余额'} ${Math.abs(info.overageBalanceUsd).toFixed(2)}
+                          {info.overageBalanceUsd < 0 ? t('dock.credit') : t('dock.overage')} ${Math.abs(info.overageBalanceUsd).toFixed(2)}
                         </div>
                       )}
                     </div>
                   ) : (
-                    <div className="mt-0.5 pl-3 text-[10px] text-muted-foreground">额度读取中…</div>
+                    <div className="mt-0.5 pl-3 text-[10px] text-muted-foreground">{t('dock.quotaLoading')}</div>
                   )}
                 </li>
               )
             })}
-            {!rows.length && <li className="text-muted-foreground">无账号（检查 accounts.toml）</li>}
+            {!rows.length && <li className="text-muted-foreground">{t('dock.noAccounts')}</li>}
           </ul>
 
           {err && <div className="mt-1.5 rounded bg-red-500/10 px-2 py-1 text-[11px] text-red-600">{err}</div>}
@@ -387,13 +390,13 @@ export default function LocalDock() {
                     className={`cursor-pointer rounded px-1.5 py-0.5 ${mode === 'browser' ? 'bg-accent text-foreground' : 'text-muted-foreground'}`}
                     onClick={() => setMode('browser')}
                   >
-                    浏览器登录
+                    {t('dock.browserLogin')}
                   </button>
                   <button
                     className={`cursor-pointer rounded px-1.5 py-0.5 ${mode === 'token' ? 'bg-accent text-foreground' : 'text-muted-foreground'}`}
                     onClick={() => setMode('token')}
                   >
-                    粘贴 Token
+                    {t('dock.pasteToken')}
                   </button>
                 </div>
                 <button className="cursor-pointer text-muted-foreground hover:text-foreground" onClick={() => setAdding(false)}>
@@ -407,7 +410,7 @@ export default function LocalDock() {
                       className="flex w-full cursor-pointer items-center justify-center gap-1 rounded bg-primary px-2 py-1 text-[11px] text-primary-foreground hover:opacity-90"
                       onClick={() => void startLogin()}
                     >
-                      <ExternalLink size={11} /> 生成登录链接
+                      <ExternalLink size={11} /> {t('dock.genLink')}
                     </button>
                   ) : (
                     <>
@@ -418,11 +421,11 @@ export default function LocalDock() {
                           target="_blank"
                           rel="noreferrer"
                         >
-                          <ExternalLink size={9} className="shrink-0" /> 已在浏览器打开登录页
+                          <ExternalLink size={9} className="shrink-0" /> {t('dock.opened')}
                         </a>
                         <button
                           className="cursor-pointer rounded p-0.5 text-muted-foreground hover:text-foreground"
-                          title="复制链接"
+                          title={t('dock.copyLink')}
                           onClick={() => void navigator.clipboard.writeText(pkceUrl)}
                         >
                           <Copy size={10} />
@@ -430,7 +433,7 @@ export default function LocalDock() {
                       </div>
                       <input
                         className="w-full rounded border border-border bg-background px-1.5 py-1 text-[11px] outline-none focus:border-primary"
-                        placeholder="粘贴浏览器返回的授权码"
+                        placeholder={t('dock.authCodePh')}
                         value={code}
                         onChange={(e) => setCode(e.target.value)}
                       />
@@ -439,7 +442,7 @@ export default function LocalDock() {
                         disabled={busy || !code.trim()}
                         onClick={() => void finishLogin()}
                       >
-                        完成登录
+                        {t('dock.finishLogin')}
                       </button>
                     </>
                   )}
@@ -448,7 +451,7 @@ export default function LocalDock() {
                 <div className="space-y-1.5">
                   <input
                     className="w-full rounded border border-border bg-background px-1.5 py-1 text-[11px] outline-none focus:border-primary"
-                    placeholder="账号名（如邮箱）"
+                    placeholder={t('dock.accNamePh')}
                     value={tokName}
                     onChange={(e) => setTokName(e.target.value)}
                   />
@@ -464,7 +467,7 @@ export default function LocalDock() {
                     disabled={busy || !tokName.trim() || !tokKey.trim()}
                     onClick={() => void addToken()}
                   >
-                    添加账号
+                    {t('dock.addAccount')}
                   </button>
                 </div>
               )}
@@ -474,15 +477,15 @@ export default function LocalDock() {
               <button
                 className="flex cursor-pointer items-center gap-1 rounded px-1 text-[10px] text-muted-foreground hover:text-foreground"
                 onClick={() => void refreshQuota()}
-                title="刷新所有账号额度"
+                title={t('dock.refreshAll')}
               >
-                <RefreshCw size={10} /> 刷新额度
+                <RefreshCw size={10} /> {t('dock.refreshBtn')}
               </button>
               <button
                 className="flex cursor-pointer items-center gap-1 rounded px-1 text-[10px] text-muted-foreground hover:text-foreground"
                 onClick={() => setAdding(true)}
               >
-                <Plus size={10} /> 添加账号
+                <Plus size={10} /> {t('dock.addAccount')}
               </button>
             </div>
           )}
@@ -491,7 +494,7 @@ export default function LocalDock() {
               <div className="mb-1.5 text-[11px] font-medium text-muted-foreground">Devin CLI · devin.exe</div>
               <input
                 className="mb-1.5 w-full rounded border border-border bg-background px-1.5 py-1 text-[11px] outline-none focus:border-primary"
-                placeholder="参数（show/info/remove/install/update 类命令用）"
+                placeholder={t('dock.argPh')}
                 value={cliArg}
                 onChange={(e) => setCliArg(e.target.value)}
               />
@@ -500,7 +503,7 @@ export default function LocalDock() {
                   <button
                     key={c.cmd}
                     disabled={!!cliBusy || (!!c.arg && !cliArg.trim())}
-                    title={c.desc + (c.arg ? `（需要参数: ${c.arg}）` : '') + (c.write ? ' · 写操作' : '')}
+                    title={t('dock.cmd.' + c.cmd, { defaultValue: c.desc }) + (c.arg ? `${t('dock.needsArg', { a: c.arg })}` : '') + (c.write ? t('dock.writeOp') : '')}
                     onClick={() => void runCli(c.cmd, c.arg ? cliArg.trim() : undefined, c.write)}
                     className={`cursor-pointer rounded border px-1.5 py-0.5 text-[10px] disabled:opacity-40 ${c.write ? 'border-amber-500/40 text-amber-600 hover:bg-amber-500/10' : 'border-border hover:bg-accent'}`}
                   >
@@ -513,17 +516,17 @@ export default function LocalDock() {
               )}
               {/* cloud ssh / port forward — devin ssh|forward via /ws/term run= */}
               <div className="mt-2 border-t border-border/50 pt-2">
-                <div className="mb-1.5 text-[11px] font-medium text-muted-foreground">云端会话 · ssh / 端口转发</div>
+                <div className="mb-1.5 text-[11px] font-medium text-muted-foreground">{t('dock.cloudSsh')} / 端口转发</div>
                 <input
                   className="mb-1 w-full rounded border border-border bg-background px-1.5 py-1 text-[11px] outline-none focus:border-primary"
-                  placeholder="云端 session id 或 URL"
+                  placeholder={t('dock.sidPh')}
                   value={sshTarget}
                   onChange={(e) => setSshTarget(e.target.value)}
                 />
                 <div className="mb-1 flex items-center gap-1">
                   <input
                     className="min-w-0 flex-1 rounded border border-border bg-background px-1.5 py-1 text-[11px] outline-none focus:border-primary"
-                    placeholder="端口 如 3000 或 8080:3000（forward 用）"
+                    placeholder={t('dock.portPh')}
                     value={fwdPorts}
                     onChange={(e) => setFwdPorts(e.target.value)}
                   />
@@ -542,9 +545,9 @@ export default function LocalDock() {
                   <div className="relative h-44 overflow-hidden rounded border border-border">
                     <button
                       onClick={() => setRemoteRun(null)}
-                      title="断开（进程随连接关闭被 kill）"
+                      title={t('dock.disconnect')}
                       className="absolute right-1 top-1 z-10 rounded bg-white/10 px-1.5 py-0.5 text-[10px] text-neutral-300 hover:bg-white/20"
-                    >断开</button>
+                    >{t('dock.disconnectBtn')}</button>
                     <TermPanel id="" run={remoteRun} />
                   </div>
                 )}

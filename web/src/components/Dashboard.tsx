@@ -1,11 +1,13 @@
 import type { DashboardData, Widget } from '@/lib/api'
+import { useTranslation } from 'react-i18next'
 import { Card } from './ui'
 import { timeAgo } from '@/lib/utils'
 
 function Chart({ w }: { w: Extract<Widget, { type: 'chart' }> }) {
+  const { t } = useTranslation()
   const W = 560, H = 200, PAD = 30
   const all = w.series.flatMap((s) => s.points)
-  if (all.length === 0) return <div className="text-sm text-muted-foreground">暂无数据</div>
+  if (all.length === 0) return <div className="text-sm text-muted-foreground">{t('db.noData')}</div>
   const xs = all.map((p) => p[0]), ys = all.map((p) => p[1])
   const xmin = Math.min(...xs), xmax = Math.max(...xs)
   const ymin = Math.min(...ys, 0), ymax = Math.max(...ys)
@@ -89,21 +91,22 @@ function WidgetCard({ w }: { w: Widget }) {
 }
 
 export default function Dashboard({ data, updatedAt }: { data: DashboardData | null; updatedAt?: string }) {
+  const { t } = useTranslation()
   if (!data || !data.widgets?.length) {
     return (
       <div className="flex flex-col items-center justify-center py-16 text-muted-foreground">
         <div className="text-4xl mb-3">📊</div>
-        <p className="text-sm">看板暂无内容</p>
-        <p className="text-xs mt-1">AI 推送数据后将自动显示（每 3 秒刷新）</p>
+        <p className="text-sm">{t('db.empty')}</p>
+        <p className="text-xs mt-1">{t('db.autoShow')}</p>
       </div>
     )
   }
   return (
     <div>
       <div className="flex items-baseline justify-between mb-3">
-        <h2 className="text-base font-semibold">{data.title || '看板'}</h2>
+        <h2 className="text-base font-semibold">{data.title || t('db.title')}</h2>
         <span className="text-xs text-muted-foreground">
-          {data.updated || (updatedAt ? `更新于 ${timeAgo(updatedAt)}` : '')}
+          {data.updated || (updatedAt ? `${t('db.updatedAt')}${timeAgo(updatedAt)}` : '')}
         </span>
       </div>
       <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">

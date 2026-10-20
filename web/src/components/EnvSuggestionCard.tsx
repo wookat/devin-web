@@ -1,4 +1,5 @@
 import { useState, type ReactNode } from 'react'
+import { useTranslation, Trans } from 'react-i18next'
 import { ArrowUpRight, ChevronDown, ChevronRight, CircleCheck, Lightbulb, Loader2 } from 'lucide-react'
 import type { TimelineItem } from '@/components/Timeline'
 import { cn } from '@/lib/utils'
@@ -20,6 +21,7 @@ export default function EnvSuggestionCard({ item, supersededBy, onApprove, appro
   /** Origin for "View in settings" / "View build" (admin only). */
   settingsBase?: string
 }) {
+  const { t } = useTranslation()
   const es = item.envSuggestion
   const [open, setOpen] = useState(false)
   const [yamlOpen, setYamlOpen] = useState(false)
@@ -69,7 +71,7 @@ export default function EnvSuggestionCard({ item, supersededBy, onApprove, appro
     )
   } else if (accepted) {
     footer = (
-      <Footer text={settingsUrl ? <a href={settingsUrl} target="_blank" rel="noopener noreferrer" className="text-blue-600 hover:underline" onClick={(e) => e.stopPropagation()}>View in settings</a> : undefined}>
+      <Footer text={settingsUrl ? <a href={settingsUrl} target="_blank" rel="noopener noreferrer" className="text-blue-600 hover:underline" onClick={(e) => e.stopPropagation()}>{t('env.viewInSettings')}</a> : undefined}>
         {buildUrl ? (
           <a href={buildUrl} target="_blank" rel="noopener noreferrer" className={secondary} onClick={(e) => e.stopPropagation()}>
             <CircleCheck size={14} className="text-green-600" />View build
@@ -85,9 +87,9 @@ export default function EnvSuggestionCard({ item, supersededBy, onApprove, appro
     footer = (
       <Footer text={<span className="text-red-500">{err.error}</span>}>
         {settingsUrl ? (
-          <a href={settingsUrl} target="_blank" rel="noopener noreferrer" className={secondary} onClick={(e) => e.stopPropagation()}>View settings</a>
+          <a href={settingsUrl} target="_blank" rel="noopener noreferrer" className={secondary} onClick={(e) => e.stopPropagation()}>{t('env.viewSettings')}</a>
         ) : (
-          <button type="button" disabled className={secondary}>View settings</button>
+          <button type="button" disabled className={secondary}>{t('env.viewSettings')}</button>
         )}
       </Footer>
     )
@@ -97,7 +99,7 @@ export default function EnvSuggestionCard({ item, supersededBy, onApprove, appro
         <div className="flex w-full flex-col gap-1.5">
           <span className="text-[12px] text-red-500">{err.error}</span>
           <div className="flex items-center gap-2">
-            <button type="button" disabled={!onApprove} onClick={(e) => { e.stopPropagation(); onApprove?.() }} className={cn(secondary, onApprove && 'cursor-pointer')}>Retry</button>
+            <button type="button" disabled={!onApprove} onClick={(e) => { e.stopPropagation(); onApprove?.() }} className={cn(secondary, onApprove && 'cursor-pointer')}>{t('common.retry')}</button>
           </div>
         </div>
       </div>
@@ -126,9 +128,9 @@ export default function EnvSuggestionCard({ item, supersededBy, onApprove, appro
   } else {
     const can = !!onApprove && (!!es?.contentsKey || git)
     footer = (
-      <Footer wrap text={approveState === 'error' ? <span className="text-red-500">Failed to approve — try again.</span> : git ? `Open a PR to update ${es?.filePath ?? ''} in the repo` : 'Save this for faster results in future sessions'}>
+      <Footer wrap text={approveState === 'error' ? <span className="text-red-500">{t('env.approveFail')}</span> : git ? t('env.openPrUpdate', { p: es?.filePath ?? '' }) : t('env.saveFaster')}>
         <button type="button" disabled={!can} onClick={(e) => { e.stopPropagation(); if (can) onApprove?.() }} className={cn(primary, can && 'cursor-pointer')}>
-          {git ? 'Create PR' : 'Approve'}
+          {git ? t('env.createPr') : t('env.approve')}
         </button>
       </Footer>
     )
@@ -144,17 +146,17 @@ export default function EnvSuggestionCard({ item, supersededBy, onApprove, appro
           <Lightbulb size={14} className="shrink-0 text-muted-foreground" />
           <span className="truncate">
             {accepted && prUrl ? (
-              <>Blueprint PR created for <span className="font-medium text-foreground">{name}</span></>
+              <Trans i18nKey="env.prCreatedFor" values={{ name }} components={{ b: <span className="font-medium text-foreground" /> }} />
             ) : accepted ? (
-              <><span className="font-medium text-foreground">{name}</span> {org ? 'environment is set up' : 'repository is set up'}</>
+              <><span className="font-medium text-foreground">{name}</span> {org ? t('env.isSetup') : t('env.repoSetup')}</>
             ) : (
-              <>Suggested <span className="font-medium text-foreground">{name}</span> setup</>
+              <Trans i18nKey="env.suggestedSetup" values={{ name }} components={{ b: <span className="font-medium text-foreground" /> }} />
             )}
           </span>
           {outdated && (
             <span className="ml-auto flex shrink-0 items-center gap-1.5">
-              <span className="rounded-full bg-orange-500/15 px-2 py-0.5 text-[11px] font-medium text-orange-600 dark:text-orange-400">Outdated</span>
-              <button type="button" aria-expanded={open} aria-label={open ? 'Collapse' : 'Expand'} className="flex items-center" onClick={(e) => { e.stopPropagation(); setOpen(!open) }}>
+              <span className="rounded-full bg-orange-500/15 px-2 py-0.5 text-[11px] font-medium text-orange-600 dark:text-orange-400">{t('env.outdated')}</span>
+              <button type="button" aria-expanded={open} aria-label={open ? t('common.collapse') : t('common.expand')} className="flex items-center" onClick={(e) => { e.stopPropagation(); setOpen(!open) }}>
                 <ChevronRight size={14} className={cn('text-muted-foreground transition-transform', open && 'rotate-90')} />
               </button>
             </span>
@@ -184,7 +186,7 @@ export default function EnvSuggestionCard({ item, supersededBy, onApprove, appro
                 {lines.length > 8 && (
                   <div className="flex justify-center border-t border-border bg-card py-1">
                     <button type="button" aria-expanded={yamlOpen} onClick={(e) => { e.stopPropagation(); setYamlOpen(!yamlOpen) }} className="inline-flex cursor-pointer items-center gap-1 rounded-full border border-border px-2.5 py-0.5 text-[12px] hover:bg-accent">
-                      {yamlOpen ? 'Collapse' : 'Expand'} <ChevronDown size={13} className={cn(yamlOpen && 'rotate-180')} />
+                      {yamlOpen ? t('common.collapse') : t('common.expand')} <ChevronDown size={13} className={cn(yamlOpen && 'rotate-180')} />
                     </button>
                   </div>
                 )}

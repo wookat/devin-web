@@ -1,4 +1,5 @@
 import { cloneElement, useEffect, useMemo, useRef, useState } from 'react'
+import { useTranslation } from 'react-i18next'
 import { Loader2, ChevronDown, ChevronUp, Settings2, Copy, Check, Plus, XCircle, CheckCircle2, Circle, Link2, Expand, MessageSquare, Bug as BugIcon, Reply, Code, CircleDashed, ChevronsUpDown, ArrowUpRight, MoreHorizontal, Trash2, Pencil, GitPullRequest, Flag, SmilePlus, FileCode2 } from 'lucide-react'
 import { adminFetch } from '@/lib/api'
 import Markdown from '@/components/Markdown'
@@ -32,6 +33,7 @@ function rangeLength(range: [number, number] | null): number {
 }
 
 function PrInlineComposer({ f, line, onAddComment, onClose }: { f: PrDiffFileT; line: number; onAddComment: NonNullable<Parameters<typeof PrDiffFile>[0]['onAddComment']>; onClose: () => void }) {
+  const { t } = useTranslation()
   const [text, setText] = useState('')
   const [busy, setBusy] = useState(false)
   const [error, setError] = useState('')
@@ -52,16 +54,16 @@ function PrInlineComposer({ f, line, onAddComment, onClose }: { f: PrDiffFileT; 
   }
   return (
     <div className="col-span-2 m-2 min-w-0 overflow-hidden rounded-[10px] border border-border bg-popover font-sans text-[13px] shadow-md">
-      <div className="flex items-center gap-2 border-b border-border px-3 py-2"><span className="font-medium">New comment</span><span className="rounded-[4px] bg-muted px-1 text-[11px] text-muted-foreground">R{line}</span></div>
+      <div className="flex items-center gap-2 border-b border-border px-3 py-2"><span className="font-medium">{t('pr.newComment')}</span><span className="rounded-[4px] bg-muted px-1 text-[11px] text-muted-foreground">R{line}</span></div>
       <div className="p-2">
-        <textarea autoFocus value={text} onChange={(e) => setText(e.target.value)} placeholder="Leave a comment..." rows={3} className="w-full resize-y rounded-md border border-border bg-background px-2 py-1.5 outline-none focus:border-ring" />
+        <textarea autoFocus value={text} onChange={(e) => setText(e.target.value)} placeholder={t('pr.commentPh')} rows={3} className="w-full resize-y rounded-md border border-border bg-background px-2 py-1.5 outline-none focus:border-ring" />
         {error && <p className="mt-1 text-[12px] text-red-500">{error}</p>}
         <div className="mt-1.5 flex items-center justify-end gap-2">
-          <button onClick={onClose} className="h-7 cursor-pointer rounded-md px-2.5 text-muted-foreground hover:bg-accent hover:text-foreground">Cancel</button>
+          <button onClick={onClose} className="h-7 cursor-pointer rounded-md px-2.5 text-muted-foreground hover:bg-accent hover:text-foreground">{t('common.cancel')}</button>
           <div className="relative flex">
-            <button disabled={busy || !text.trim()} onClick={() => void submit(true)} className="h-7 cursor-pointer rounded-l-md bg-primary px-2.5 text-primary-foreground disabled:cursor-default disabled:opacity-50">Start a review</button>
-            <button aria-label="More send options" aria-haspopup="menu" aria-expanded={menuOpen} onClick={() => setMenuOpen((v) => !v)} className="flex h-7 cursor-pointer items-center rounded-r-md border-l border-primary-foreground/20 bg-primary px-1 text-primary-foreground"><ChevronDown size={12} /></button>
-            {menuOpen && <div role="menu" className="absolute right-0 top-8 z-40 min-w-[140px] rounded-[10px] border border-border bg-popover p-1"><button role="menuitem" onClick={() => { setMenuOpen(false); void submit(false) }} className="flex h-[30px] w-full cursor-pointer items-center rounded-[6px] px-2 text-[13px] hover:bg-accent">Comment</button></div>}
+            <button disabled={busy || !text.trim()} onClick={() => void submit(true)} className="h-7 cursor-pointer rounded-l-md bg-primary px-2.5 text-primary-foreground disabled:cursor-default disabled:opacity-50">{t('pr.startReview')}</button>
+            <button aria-label={t('pr.moreSend')} aria-haspopup="menu" aria-expanded={menuOpen} onClick={() => setMenuOpen((v) => !v)} className="flex h-7 cursor-pointer items-center rounded-r-md border-l border-primary-foreground/20 bg-primary px-1 text-primary-foreground"><ChevronDown size={12} /></button>
+            {menuOpen && <div role="menu" className="absolute right-0 top-8 z-40 min-w-[140px] rounded-[10px] border border-border bg-popover p-1"><button role="menuitem" onClick={() => { setMenuOpen(false); void submit(false) }} className="flex h-[30px] w-full cursor-pointer items-center rounded-[6px] px-2 text-[13px] hover:bg-accent">{t('pr.comment')}</button></div>}
           </div>
         </div>
       </div>
@@ -82,6 +84,7 @@ function toggleViewedStore(key: string, path: string, on: boolean) {
 
 /** Section header "Mark all as viewed" progress ring (official n/m + circle). */
 function PrSectionViewedProgress({ files, viewedKey }: { files: string[]; viewedKey: string }) {
+  const { t } = useTranslation()
   const [, setTick] = useState(0)
   useEffect(() => {
     const h = (e: Event) => { if ((e as CustomEvent).detail === viewedKey) setTick((t) => t + 1) }
@@ -94,7 +97,7 @@ function PrSectionViewedProgress({ files, viewedKey }: { files: string[]; viewed
   return (
     <button
       type="button"
-      aria-label="Mark all as viewed"
+      aria-label={t('pr.markAllViewed')}
       onClick={() => { const all = done < files.length; for (const f of files) toggleViewedStore(viewedKey, f, all) }}
       className="flex shrink-0 cursor-pointer items-center gap-1.5 rounded-md p-1 hover:bg-accent"
     >
@@ -134,6 +137,7 @@ function WordDiffLine({ segs, kind }: { segs: WordSeg[]; kind: 'del' | 'add' }) 
 
 /** One file's diff in the PR Changes sub-tab (official job-result hunk shape). */
 function PrDiffFile({ f, rawBase, viewedKey, threadLines, onGoToThread, bugsAt, onAddComment, diffOpts }: { f: PrDiffFileT; rawBase?: string; viewedKey?: string; threadLines?: Map<number, number>; onGoToThread?: () => void; bugsAt?: Map<number, PrBugItemT[]>; onAddComment?: (filePath: string, line: number, body: string, startReview: boolean, hunkRanges: [number, number][], otherSide?: number | null) => Promise<string | null>; diffOpts?: DiffOptsT }) {
+  const { t } = useTranslation()
   const [open, setOpen] = useState(true)
   const [openBugs, setOpenBugs] = useState<Set<number>>(new Set())
   const [composerLine, setComposerLine] = useState(0)
@@ -207,7 +211,7 @@ function PrDiffFile({ f, rawBase, viewedKey, threadLines, onGoToThread, bugsAt, 
           <ChevronDown size={18} className={cn('shrink-0 transition-transform', !bodyOpen && '-rotate-90')} />
         </button>
         <span className="min-w-0 flex-1 truncate font-sans text-[13px]" title={f.file_path}>{f.old_file_path && f.old_file_path !== f.file_path ? `${f.old_file_path} → ` : ''}{f.file_path}</span>
-        <button aria-label="Copy file path" title="Copy file path" onClick={() => { void navigator.clipboard.writeText(f.file_path) }} className="flex size-7 shrink-0 cursor-pointer items-center justify-center rounded-[6px] text-muted-foreground hover:bg-accent hover:text-foreground">
+        <button aria-label={t('pr.copyPath')} title={t('pr.copyPath')} onClick={() => { void navigator.clipboard.writeText(f.file_path) }} className="flex size-7 shrink-0 cursor-pointer items-center justify-center rounded-[6px] text-muted-foreground hover:bg-accent hover:text-foreground">
           <Copy size={18} />
         </button>
         <span className="flex shrink-0 gap-0.5 text-[12px]">
@@ -220,7 +224,7 @@ function PrDiffFile({ f, rawBase, viewedKey, threadLines, onGoToThread, bugsAt, 
             role="checkbox"
             tabIndex={0}
             aria-checked={viewed}
-            aria-label="Mark as viewed"
+            aria-label={t('pr.markViewed')}
             onClick={toggleViewed}
             onKeyDown={(e) => { if (e.key === ' ' || e.key === 'Enter') { e.preventDefault(); toggleViewed() } }}
             className={cn('flex size-4 shrink-0 items-center justify-center rounded-[4px] border', viewed ? 'border-0 bg-primary text-primary-foreground' : 'border-border')}
@@ -231,8 +235,8 @@ function PrDiffFile({ f, rawBase, viewedKey, threadLines, onGoToThread, bugsAt, 
         </label>
         {isMd && (
           <button
-            aria-label="View rendered markdown diff"
-            title="View rendered markdown diff"
+            aria-label={t('pr.mdDiff')}
+            title={t('pr.mdDiff')}
             onClick={() => setRendered((r) => !r)}
             className={cn('flex size-6 shrink-0 cursor-pointer items-center justify-center rounded-md', rendered ? 'bg-accent text-foreground' : 'text-muted-foreground hover:text-foreground')}
           >
@@ -242,7 +246,7 @@ function PrDiffFile({ f, rawBase, viewedKey, threadLines, onGoToThread, bugsAt, 
         {rawBase && f.change_type !== 'removed' && (
           <div className="relative">
             <button
-              aria-label="More actions"
+              aria-label={t('pr.moreActions')}
               aria-haspopup="menu"
               aria-expanded={moreOpen}
               onClick={() => setMoreOpen((v) => !v)}
@@ -326,9 +330,9 @@ function PrDiffFile({ f, rawBase, viewedKey, threadLines, onGoToThread, bugsAt, 
                 <div className="grid grid-cols-[min-content_1fr] font-mono text-[11px] leading-[18px] sm:text-[12px] sm:leading-[20px]">
                 <span style={{ width: `${gutterCh}ch` }} className={cn('flex shrink-0 select-none items-start justify-end border-r border-border pl-[2ch] pr-[1ch] text-[11px] text-muted-foreground', rowBg)}>{row.kind === 'del' ? row.oldNo : row.newNo ?? ''}</span>
                 <span className={cn('group relative flex min-w-0 whitespace-break-spaces break-all px-2 [overflow-wrap:anywhere] text-foreground', rowBg, threadCount && !diffOpts?.hideHl && 'bg-amber-400/20')}>
-                  {onAddComment && lineNo ? <button aria-label="Add a comment" onClick={() => { setComposerLine(lineNo); setComposerText(''); setComposerErr('') }} className="absolute -left-1.5 z-10 hidden size-4 cursor-pointer items-center justify-center rounded-[4px] bg-blue-500 text-white group-hover:flex"><Plus size={12} /></button> : null}
+                  {onAddComment && lineNo ? <button aria-label={t('pr.addComment')} onClick={() => { setComposerLine(lineNo); setComposerText(''); setComposerErr('') }} className="absolute -left-1.5 z-10 hidden size-4 cursor-pointer items-center justify-center rounded-[4px] bg-blue-500 text-white group-hover:flex"><Plus size={12} /></button> : null}
                   <span className="min-w-0 flex-1">{row.segs ? <WordDiffLine segs={row.segs} kind={row.kind === 'del' ? 'del' : 'add'} /> : row.text}</span>
-                  {threadCount ? <button aria-label="Go to inline comment" onClick={onGoToThread} className="mr-1 flex shrink-0 cursor-pointer items-center gap-0.5 self-center rounded-[4px] px-1 text-[10px] text-amber-600 hover:bg-amber-500/20 dark:text-amber-400"><MessageSquare size={11} />{threadCount}</button> : null}
+                  {threadCount ? <button aria-label={t('pr.gotoComment')} onClick={onGoToThread} className="mr-1 flex shrink-0 cursor-pointer items-center gap-0.5 self-center rounded-[4px] px-1 text-[10px] text-amber-600 hover:bg-amber-500/20 dark:text-amber-400"><MessageSquare size={11} />{threadCount}</button> : null}
                   {lineNo && bugItems ? <button aria-label={openBugs.has(lineNo) ? 'Collapse comment' : 'Expand comment'} aria-expanded={openBugs.has(lineNo)} onClick={() => setOpenBugs((current) => { const next = new Set(current); if (next.has(lineNo)) next.delete(lineNo); else next.add(lineNo); return next })} className="mr-1 flex size-6 shrink-0 cursor-pointer items-center justify-center self-center rounded-[6px] border border-border bg-background hover:bg-accent"><BugIcon size={13} className="text-red-500" /></button> : null}
                 </span>
                 </div>
@@ -382,7 +386,7 @@ function PrDiffFile({ f, rawBase, viewedKey, threadLines, onGoToThread, bugsAt, 
                       <span className={cn('group relative flex min-w-0', hasR ? cn('bg-tint-green', tc && !diffOpts?.hideHl && 'bg-amber-400/20') : '')} style={hasR ? undefined : stripe}>
                         {onAddComment && rn ? (
                           <button
-                            aria-label="Add a comment"
+                            aria-label={t('pr.addComment')}
                             onClick={() => { setComposerLine(rn); setComposerText(''); setComposerErr('') }}
                             className="absolute -left-0.5 z-10 hidden size-4 cursor-pointer items-center justify-center rounded-[4px] bg-blue-500 text-white group-hover:flex"
                           >
@@ -392,7 +396,7 @@ function PrDiffFile({ f, rawBase, viewedKey, threadLines, onGoToThread, bugsAt, 
                         <span className="min-w-0 flex-1 whitespace-break-spaces break-all px-2 text-foreground">{hasR ? (wdR ? <WordDiffLine segs={wdR} kind="add" /> : after[j]) : ''}</span>
                         {tc ? (
                           <button
-                            aria-label="Go to inline comment"
+                            aria-label={t('pr.gotoComment')}
                             onClick={onGoToThread}
                             className="mr-1 flex shrink-0 cursor-pointer items-center gap-0.5 self-center rounded-[4px] px-1 text-[10px] text-amber-600 hover:bg-amber-500/20 dark:text-amber-400"
                           >
@@ -433,7 +437,7 @@ function PrDiffFile({ f, rawBase, viewedKey, threadLines, onGoToThread, bugsAt, 
               <div key={`a${j}`} className={cn('group relative grid grid-cols-[min-content_1fr] font-mono text-[11px] leading-[18px] sm:text-[12px] sm:leading-[20px]', tc && !diffOpts?.hideHl && 'bg-amber-400/20')}>
                 {onAddComment && lineNo ? (
                   <button
-                    aria-label="Add a comment"
+                    aria-label={t('pr.addComment')}
                     onClick={() => { setComposerLine(lineNo); setComposerText(''); setComposerErr('') }}
                     className="absolute -left-0.5 z-10 hidden size-4 cursor-pointer items-center justify-center rounded-[4px] bg-blue-500 text-white group-hover:flex"
                   >
@@ -444,7 +448,7 @@ function PrDiffFile({ f, rawBase, viewedKey, threadLines, onGoToThread, bugsAt, 
                 <span className="min-w-0 whitespace-break-spaces break-all bg-tint-green px-2 [overflow-wrap:anywhere] text-foreground">{segsA ? <WordDiffLine segs={segsA} kind="add" /> : ln}</span>
                 {tc ? (
                   <button
-                    aria-label="Go to inline comment"
+                    aria-label={t('pr.gotoComment')}
                     onClick={onGoToThread}
                     className="mr-1 flex shrink-0 cursor-pointer items-center gap-0.5 self-center rounded-[4px] px-1 text-[10px] text-amber-600 hover:bg-amber-500/20 dark:text-amber-400"
                   >
@@ -467,7 +471,7 @@ function PrDiffFile({ f, rawBase, viewedKey, threadLines, onGoToThread, bugsAt, 
           {h.after_content != null && h.after_lines && composerLine >= h.after_lines[0] && composerLine < h.after_lines[0] + h.after_content.split('\n').length && (
             <div className="m-2 min-w-0 overflow-hidden rounded-[10px] border border-border bg-popover font-sans text-[13px] shadow-md">
               <div className="flex items-center gap-2 border-b border-border px-3 py-2">
-                <span className="font-medium">New comment</span>
+                <span className="font-medium">{t('pr.newComment')}</span>
                 <span className="rounded-[4px] bg-muted px-1 text-[11px] text-muted-foreground">R{composerLine}</span>
               </div>
               <div className="p-2">
@@ -475,13 +479,13 @@ function PrDiffFile({ f, rawBase, viewedKey, threadLines, onGoToThread, bugsAt, 
                   autoFocus
                   value={composerText}
                   onChange={(e) => setComposerText(e.target.value)}
-                  placeholder="Leave a comment..."
+                  placeholder={t('pr.commentPh')}
                   rows={3}
                   className="w-full resize-y rounded-md border border-border bg-background px-2 py-1.5 outline-none focus:border-ring"
                 />
                 {composerErr && <p className="mt-1 text-[12px] text-red-500">{composerErr}</p>}
                 <div className="mt-1.5 flex items-center justify-end gap-2">
-                  <button onClick={() => { setComposerLine(0); setComposerText('') }} className="h-7 cursor-pointer rounded-md px-2.5 text-muted-foreground hover:bg-accent hover:text-foreground">Cancel</button>
+                  <button onClick={() => { setComposerLine(0); setComposerText('') }} className="h-7 cursor-pointer rounded-md px-2.5 text-muted-foreground hover:bg-accent hover:text-foreground">{t('common.cancel')}</button>
                   <div className="relative flex">
                     <button
                       disabled={composerBusy || !composerText.trim()}
@@ -491,7 +495,7 @@ function PrDiffFile({ f, rawBase, viewedKey, threadLines, onGoToThread, bugsAt, 
                       Start a review
                     </button>
                     <button
-                      aria-label="More send options"
+                      aria-label={t('pr.moreSend')}
                       aria-haspopup="menu"
                       aria-expanded={composerMenu}
                       onClick={() => setComposerMenu((v) => !v)}
@@ -541,6 +545,7 @@ function PrDiffFile({ f, rawBase, viewedKey, threadLines, onGoToThread, bugsAt, 
 }
 
 function PrAnalysisPromo({ prUrl, analyzing, error, onRun }: { prUrl: string; analyzing: boolean; error: string | null; onRun: () => void }) {
+  const { t } = useTranslation()
   const [dismissed, setDismissed] = useState(() => {
     try { return localStorage.getItem(`pr-analysis-promo-dismissed:${prUrl}`) === '1' } catch { return false }
   })
@@ -559,7 +564,7 @@ function PrAnalysisPromo({ prUrl, analyzing, error, onRun }: { prUrl: string; an
             <div className="mt-2 h-2 w-5/6 rounded bg-[#fca5a5]" />
             <div className="mt-2 h-2 w-2/3 rounded bg-tint-primary" />
           </div>
-          <span className="text-center text-[13px] font-medium">Smart diffs</span>
+          <span className="text-center text-[13px] font-medium">{t('pr.smartDiffs')}</span>
         </div>
         <div className="flex flex-1 flex-col items-center gap-2">
           <div className="h-[110px] w-full max-w-[160px] rounded-[6px] border border-border bg-tint-secondary p-3">
@@ -568,17 +573,17 @@ function PrAnalysisPromo({ prUrl, analyzing, error, onRun }: { prUrl: string; an
             <div className="mt-2 h-2 w-5/6 rounded bg-tint-primary" />
             <div className="mt-2 h-2 w-2/3 rounded bg-[#86efac]" />
           </div>
-          <span className="text-center text-[13px] font-medium">Bug detection</span>
+          <span className="text-center text-[13px] font-medium">{t('pr.bugDetect')}</span>
         </div>
       </div>
       <p className="max-w-[640px] text-center text-[13px] text-muted-foreground">
-        Your <span className="text-[rgba(13,133,185,0.85)] dark:text-blue-400">review settings</span> didn't auto-trigger Devin's AI analysis for this commit. Run it manually to organize diffs, detect moved code, and flag potential bugs.
+        Your <span className="text-[rgba(13,133,185,0.85)] dark:text-blue-400">{t('pr.reviewSettings')}</span> didn't auto-trigger Devin's AI analysis for this commit. Run it manually to organize diffs, detect moved code, and flag potential bugs.
       </p>
       <button disabled={analyzing} onClick={onRun} className={cn('h-8 w-full max-w-[640px] rounded-[6px] text-[13px] font-medium text-white', analyzing ? 'cursor-not-allowed bg-[#3b82f6]/50' : 'cursor-pointer bg-[#3b82f6] hover:bg-[#2563eb]')}>
         {analyzing ? 'Launching…' : "Run Devin's AI analysis"}
       </button>
       {error && <span className="text-[12px] text-red-500">Failed: {error}</span>}
-      <button onClick={dismiss} className="cursor-pointer text-[13px] text-muted-foreground hover:text-foreground">Dismiss</button>
+      <button onClick={dismiss} className="cursor-pointer text-[13px] text-muted-foreground hover:text-foreground">{t('common.dismiss')}</button>
     </div>
   )
 }
@@ -610,12 +615,13 @@ const REACTION_SET: readonly (readonly [string, string, string])[] = [
  * input filtering the 8 GitHub reactions by name, click to add.
  */
 function ReactionPicker({ onPick }: { onPick: (content: string) => void }) {
+  const { t } = useTranslation()
   const [open, setOpen] = useState(false)
   const [q, setQ] = useState('')
   const shown = REACTION_SET.filter(([content, , label]) => !q.trim() || label.toLowerCase().includes(q.trim().toLowerCase()) || content.includes(q.trim().toLowerCase()))
   return (
     <span className="relative">
-      <button aria-label="Add reaction" aria-haspopup="dialog" aria-expanded={open} onClick={() => { setOpen((v) => !v); setQ('') }} className="flex size-6 cursor-pointer items-center justify-center rounded-full border border-border text-muted-foreground hover:bg-accent hover:text-foreground">
+      <button aria-label={t('pr.addReaction')} aria-haspopup="dialog" aria-expanded={open} onClick={() => { setOpen((v) => !v); setQ('') }} className="flex size-6 cursor-pointer items-center justify-center rounded-full border border-border text-muted-foreground hover:bg-accent hover:text-foreground">
         <SmilePlus size={13} />
       </button>
       {open && (
@@ -643,6 +649,7 @@ function ReactionPicker({ onPick }: { onPick: (content: string) => void }) {
  * Copy link copies the session URL + #comment-<id>; Delete has no confirm dialog.
  */
 function CommentActions({ comment, canWrite, onEdit, onDelete }: { comment: { id: string; body: string; url?: string }; canWrite: boolean; onEdit: () => void; onDelete: () => void }) {
+  const { t } = useTranslation()
   const [open, setOpen] = useState(false)
   const ref = useRef<HTMLDivElement>(null)
   useEffect(() => {
@@ -654,16 +661,16 @@ function CommentActions({ comment, canWrite, onEdit, onDelete }: { comment: { id
   const item = 'flex w-full cursor-pointer items-center gap-2 px-2.5 py-1.5 text-left text-[13px] hover:bg-accent'
   return (
     <div ref={ref} className="relative ml-auto">
-      <button aria-label="More actions" onClick={() => setOpen((v) => !v)} className="cursor-pointer rounded-md p-1 text-muted-foreground opacity-0 hover:bg-accent hover:text-foreground group-hover:opacity-100 aria-expanded:opacity-100" aria-expanded={open}>
+      <button aria-label={t('pr.moreActions')} onClick={() => setOpen((v) => !v)} className="cursor-pointer rounded-md p-1 text-muted-foreground opacity-0 hover:bg-accent hover:text-foreground group-hover:opacity-100 aria-expanded:opacity-100" aria-expanded={open}>
         <MoreHorizontal size={14} />
       </button>
       {open && (
         <div role="menu" className="absolute right-0 top-6 z-20 min-w-[180px] overflow-hidden rounded-[10px] border border-border bg-popover py-1 shadow-lg">
-          {canWrite && <button role="menuitem" className={item} onClick={() => { setOpen(false); onEdit() }}><Pencil size={13} /> Edit</button>}
-          <button role="menuitem" className={item} onClick={() => { void navigator.clipboard.writeText(`${location.origin}${location.pathname}#comment-${comment.id}`); setOpen(false) }}><Link2 size={13} /> Copy link</button>
-          <button role="menuitem" className={item} onClick={() => { void navigator.clipboard.writeText(comment.body); setOpen(false) }}><Copy size={13} /> Copy message</button>
-          {comment.url && <a role="menuitem" href={comment.url} target="_blank" rel="noreferrer" className={item} onClick={() => setOpen(false)}><ArrowUpRight size={13} /> Open in GitHub</a>}
-          {canWrite && <button role="menuitem" className={cn(item, 'text-red-500 hover:text-red-500')} onClick={() => { setOpen(false); onDelete() }}><Trash2 size={13} /> Delete</button>}
+          {canWrite && <button role="menuitem" className={item} onClick={() => { setOpen(false); onEdit() }}><Pencil size={13} /> {t('common.edit')}</button>}
+          <button role="menuitem" className={item} onClick={() => { void navigator.clipboard.writeText(`${location.origin}${location.pathname}#comment-${comment.id}`); setOpen(false) }}><Link2 size={13} /> {t('common.copyLink')}</button>
+          <button role="menuitem" className={item} onClick={() => { void navigator.clipboard.writeText(comment.body); setOpen(false) }}><Copy size={13} /> {t('common.copyMsg')}</button>
+          {comment.url && <a role="menuitem" href={comment.url} target="_blank" rel="noreferrer" className={item} onClick={() => setOpen(false)}><ArrowUpRight size={13} /> {t('common.openGithub')}</a>}
+          {canWrite && <button role="menuitem" className={cn(item, 'text-red-500 hover:text-red-500')} onClick={() => { setOpen(false); onDelete() }}><Trash2 size={13} /> {t('common.delete')}</button>}
         </div>
       )}
     </div>
@@ -673,12 +680,13 @@ function CommentActions({ comment, canWrite, onEdit, onDelete }: { comment: { id
 /** Official Edit editor semantics (first-hand capture): inline editor prefilled
  * with the raw body, Cancel/Save footer; Save PATCHes gh/review-comments. */
 function CommentEditor({ value, onChange, busy, err, onCancel, onSave }: { value: string; onChange: (v: string) => void; busy: boolean; err: string; onCancel: () => void; onSave: () => void }) {
+  const { t } = useTranslation()
   return (
     <div className="rounded-md border border-border">
       <textarea autoFocus value={value} onChange={(e) => onChange(e.target.value)} className="min-h-24 w-full resize-y rounded-md bg-background p-2.5 font-mono text-[12px] focus:outline-none" />
       <div className="flex items-center justify-end gap-2 border-t border-border px-2 py-1.5">
         {err && <span className="mr-auto text-[12px] text-red-500">Failed: {err}</span>}
-        <button onClick={onCancel} className="cursor-pointer rounded-md px-2.5 py-1 text-[12px] text-muted-foreground hover:bg-accent">Cancel</button>
+        <button onClick={onCancel} className="cursor-pointer rounded-md px-2.5 py-1 text-[12px] text-muted-foreground hover:bg-accent">{t('common.cancel')}</button>
         <button disabled={busy || !value.trim()} onClick={onSave} className={cn('rounded-md px-2.5 py-1 text-[12px] font-medium text-white', busy || !value.trim() ? 'cursor-not-allowed bg-blue-500/50' : 'cursor-pointer bg-blue-500 hover:bg-blue-600')}>{busy ? 'Saving…' : 'Save'}</button>
       </div>
     </div>
@@ -686,6 +694,7 @@ function CommentEditor({ value, onChange, busy, err, onCancel, onSave }: { value
 }
 
 function ReactionRow({ commentId, reactions, reacting, onToggle }: { commentId: string; reactions?: { content: string; count: number; viewer_reacted: boolean }[]; reacting: string; onToggle: (commentId: string, content: string, has: boolean) => void }) {
+  const { t } = useTranslation()
   const quick = ['+1', 'eyes', 'confused']
   const extra = REACTION_SET.filter(([content]) => !quick.includes(content) && (reactions?.find((x) => x.content === content)?.count ?? 0) > 0)
   const items = [...REACTION_SET.filter(([content]) => quick.includes(content)), ...extra]
@@ -713,6 +722,7 @@ function ReactionRow({ commentId, reactions, reacting, onToggle }: { commentId: 
  * pr-review endpoints (info | merge-status | checks).
  */
 function PrPanel({ id, prUrl }: { id: string; prUrl: string }) {
+  const { t } = useTranslation()
   const [data, setData] = useState<{ info: PrInfo | null; merge_status: Record<string, unknown> | null; checks: { checks?: { name: string; status?: string; conclusion?: string; description?: string; details_url?: string; is_required?: boolean }[] } | null; comments?: { id: string; body: string; login: string; avatar_url: string; is_bot: boolean; created_at: string; reactions?: { content: string; count: number; viewer_reacted: boolean }[]; url?: string }[]; threads?: { id: string; path: string; line: number; is_resolved: boolean; is_outdated: boolean; comments: { id: string; body: string; login: string; avatar_url: string; is_bot: boolean; created_at: string; reactions?: { content: string; count: number; viewer_reacted: boolean }[]; url?: string; pending?: boolean }[] }[]; commits?: { sha: string; headline: string; author: string; committed_at: string }[]; head_sha?: string; assignees?: { login: string; avatar_url: string }[]; requested_reviewers?: { login: string; avatar_url: string }[]; labels?: { name: string; color: string }[]; author?: { login: string; avatar_url: string; is_bot: boolean } | null } | null>(null)
   const [err, setErr] = useState<string | null>(null)
   const [sub, setSub] = useState<'changes' | 'bugs' | 'description' | 'discussion' | 'commits'>('changes')
@@ -904,7 +914,7 @@ function PrPanel({ id, prUrl }: { id: string; prUrl: string }) {
     }
   }
   if (err) return <div className="p-3 text-[13px] text-muted-foreground">PR data unavailable: {err}</div>
-  if (!data) return <div className="p-3 text-[13px] text-muted-foreground">Loading PR…</div>
+  if (!data) return <div className="p-3 text-[13px] text-muted-foreground">{t('pr.loading')}</div>
   const info = data.info
   const pill = prStateLabel(info, data.merge_status)
   const repoPath = prUrl.replace('https://', '').replace(/\/(pull|merge_requests|pull-requests)\/\d+$/, '').replace(/^(github\.com|gitlab\.com|bitbucket\.org)\//, '')
@@ -935,11 +945,11 @@ function PrPanel({ id, prUrl }: { id: string; prUrl: string }) {
           </button>
           {commentOpen && (
             <div className="absolute right-0 top-full z-30 mt-1 w-80 rounded-lg border border-border bg-background p-3 shadow-lg">
-              <textarea value={cmtText} onChange={(e) => setCmtText(e.target.value)} placeholder="Write a comment" className="min-h-24 w-full resize-none rounded-md border border-border bg-background p-2 text-[13px] placeholder:text-muted-foreground" />
-              {pill.label === 'Merged' && <p className="mt-2 text-[12px] text-muted-foreground">This pull request has been merged. You can still leave comments.</p>}
+              <textarea value={cmtText} onChange={(e) => setCmtText(e.target.value)} placeholder={t('pr.writeComment')} className="min-h-24 w-full resize-none rounded-md border border-border bg-background p-2 text-[13px] placeholder:text-muted-foreground" />
+              {pill.label === 'Merged' && <p className="mt-2 text-[12px] text-muted-foreground">{t('pr.mergedNote')}</p>}
               {postErr && <p className="mt-1 text-[12px] text-red-500">Failed: {postErr}</p>}
               <div className="mt-2 flex justify-end gap-2">
-                <button onClick={() => setCommentOpen(false)} className="cursor-pointer rounded-md border border-border px-3 py-1 text-[13px] hover:bg-accent">Cancel</button>
+                <button onClick={() => setCommentOpen(false)} className="cursor-pointer rounded-md border border-border px-3 py-1 text-[13px] hover:bg-accent">{t('common.cancel')}</button>
                 <button disabled={!cmtText.trim() || posting} onClick={() => void postComment(cmtText, () => { setCmtText(''); setCommentOpen(false) })} className={cn('rounded-md px-3 py-1 text-[13px] font-medium text-white', !cmtText.trim() || posting ? 'cursor-not-allowed bg-blue-500/50' : 'cursor-pointer bg-blue-500 hover:bg-blue-600')}>{posting ? 'Submitting…' : 'Submit'}</button>
               </div>
             </div>
@@ -959,8 +969,8 @@ function PrPanel({ id, prUrl }: { id: string; prUrl: string }) {
             <span className="text-muted-foreground">←</span>
             <span className="max-w-56 truncate rounded bg-muted px-1.5 py-0.5 font-mono">{info.head_branch}</span>
             <button
-              aria-label="Copy branch name"
-              title="Copy branch name"
+              aria-label={t('pr.copyBranch')}
+              title={t('pr.copyBranch')}
               onClick={() => { void navigator.clipboard.writeText(info.head_branch || ''); setCopiedBr(true); setTimeout(() => setCopiedBr(false), 1200) }}
               className="flex size-5 cursor-pointer items-center justify-center rounded text-muted-foreground hover:bg-accent hover:text-foreground"
             >
@@ -1008,7 +1018,7 @@ function PrPanel({ id, prUrl }: { id: string; prUrl: string }) {
                           {ck.details_url && /^https:\/\//.test(ck.details_url) ? (
                             <a href={ck.details_url} target="_blank" rel="noreferrer" className="min-w-0 truncate hover:underline">{ck.name}</a>
                           ) : <span className="min-w-0 truncate">{ck.name}</span>}
-                          {ck.is_required && <span className="rounded border border-border px-1 text-[10px] text-muted-foreground">Required</span>}
+                          {ck.is_required && <span className="rounded border border-border px-1 text-[10px] text-muted-foreground">{t('pr.required')}</span>}
                           {ck.description && <span className="min-w-0 truncate text-muted-foreground">{ck.description}</span>}
                         </li>
                       ))}
@@ -1029,12 +1039,12 @@ function PrPanel({ id, prUrl }: { id: string; prUrl: string }) {
               </div>
             ))}
             <div>
-              <div className="mb-1 text-[13px] font-medium">Labels</div>
+              <div className="mb-1 text-[13px] font-medium">{t('pr.labels')}</div>
               {data.labels?.length ? (
                 <div className="flex flex-wrap gap-1">
                   {data.labels.map((l) => <span key={l.name} className="rounded-full border border-border px-2 py-0.5 text-[12px]" style={l.color ? { borderColor: `#${l.color}`, color: `#${l.color}` } : undefined}>{l.name}</span>)}
                 </div>
-              ) : <div className="text-[13px] text-muted-foreground">No labels assigned</div>}
+              ) : <div className="text-[13px] text-muted-foreground">{t('pr.noLabels')}</div>}
             </div>
           </div>
         )}
@@ -1065,7 +1075,7 @@ function PrPanel({ id, prUrl }: { id: string; prUrl: string }) {
         <span className="flex-1" />
         <div className="relative">
           <button
-            aria-label="Diff settings"
+            aria-label={t('pr.diffSettings')}
             aria-haspopup="menu"
             aria-expanded={diffMenu}
             onClick={() => setDiffMenu((v) => !v)}
@@ -1077,7 +1087,7 @@ function PrPanel({ id, prUrl }: { id: string; prUrl: string }) {
             <>
               <div className="fixed inset-0 z-30" onClick={() => setDiffMenu(false)} />
               <div role="menu" className="absolute right-0 top-7 z-40 min-w-[220px] rounded-[10px] border border-border bg-popover p-1 shadow-lg">
-                <div role="presentation" className="px-2 py-[5px] text-[12px] font-medium text-muted-foreground">Diff view</div>
+                <div role="presentation" className="px-2 py-[5px] text-[12px] font-medium text-muted-foreground">{t('pr.diffView')}</div>
                 {([['Split view', true], ['Unified view', false]] as const).map(([label, val]) => (
                   <button
                     key={label}
@@ -1099,7 +1109,7 @@ function PrPanel({ id, prUrl }: { id: string; prUrl: string }) {
                   <span className="flex size-4 items-center justify-center">{diffOpts.hideWs && <Check size={13} />}</span>
                   Hide whitespace
                 </button>
-                <div role="presentation" className="px-2 py-[5px] text-[12px] font-medium text-muted-foreground">Comments</div>
+                <div role="presentation" className="px-2 py-[5px] text-[12px] font-medium text-muted-foreground">{t('pr.comments')}</div>
                 <button
                   role="menuitemcheckbox"
                   aria-checked={diffOpts.hideHl}
@@ -1116,7 +1126,7 @@ function PrPanel({ id, prUrl }: { id: string; prUrl: string }) {
       </div>
       <div id="pr-tabpanel" role="tabpanel" tabIndex={0} aria-labelledby={`pr-tab-${sub}`} className="px-2 pb-2">
       {sub === 'changes' ? (
-        !diff ? <p className="text-[13px] text-muted-foreground">Loading changes…</p>
+        !diff ? <p className="text-[13px] text-muted-foreground">{t('pr.loadingChanges')}</p>
         : diff.files?.length ? (() => {
             const repoBase = prUrl.replace(/\/pull\/\d+.*$/, '')
             const rawBase = data.head_sha ? `${repoBase}/blob/${data.head_sha}/` : undefined
@@ -1148,7 +1158,7 @@ function PrPanel({ id, prUrl }: { id: string; prUrl: string }) {
             if (!grouped.length) return <>{promo}<div className="flex flex-col gap-2">{diff.files.map(renderFile)}</div></>
             if (grouped.length === 1 && /^changes$/i.test(grouped[0].title.trim())) {
               const files = grouped[0].files.map((p) => byPath.get(p)).filter((f): f is PrDiffFileT => !!f)
-              return <>{promo}<div className="px-4 py-3 text-[15px] font-medium">Changes</div><div className="flex flex-col gap-2">{files.map(renderFile)}</div></>
+              return <>{promo}<div className="px-4 py-3 text-[15px] font-medium">{t('pr.changes')}</div><div className="flex flex-col gap-2">{files.map(renderFile)}</div></>
             }
             let n = 0
             return (
@@ -1181,12 +1191,12 @@ function PrPanel({ id, prUrl }: { id: string; prUrl: string }) {
           })()
         : <p className="text-[13px] text-muted-foreground">{diff.error ? `Changes unavailable: ${diff.error}` : 'No changes.'}</p>
       ) : sub === 'bugs' ? (
-        !bugs ? <p className="text-[13px] text-muted-foreground">Loading analysis…</p>
+        !bugs ? <p className="text-[13px] text-muted-foreground">{t('pr.loadingAnalysis')}</p>
         : bugs.error || !bugs.data ? <p className="text-[13px] text-muted-foreground">Bugs unavailable: {bugs.error || 'unknown'}</p>
         : diff != null && diff.analysis_status !== 'completed' ? (
           <PrAnalysisPromo prUrl={prUrl} analyzing={analyzing} error={analyzeErr} onRun={() => void runAnalysis()} />
         ) : bugs.data.status === 'running' ? (
-          <div className="flex items-center gap-2 rounded-lg border border-border px-4 py-6 text-[13px] text-muted-foreground"><Loader2 size={14} className="animate-spin" /> PR analysis in progress</div>
+          <div className="flex items-center gap-2 rounded-lg border border-border px-4 py-6 text-[13px] text-muted-foreground"><Loader2 size={14} className="animate-spin" /> {t('pr.analyzing')}</div>
         ) : bugs.data.status === 'completed' ? (
           <div className="flex flex-col gap-3">
             {[
@@ -1212,7 +1222,7 @@ function PrPanel({ id, prUrl }: { id: string; prUrl: string }) {
                 </div>
               </div>
             ))}
-            {!bugs.data.security_findings.length && !bugs.data.bugs.length && !bugs.data.flags.length && <p className="text-[13px] text-muted-foreground">No bugs found.</p>}
+            {!bugs.data.security_findings.length && !bugs.data.bugs.length && !bugs.data.flags.length && <p className="text-[13px] text-muted-foreground">{t('pr.noBugs')}</p>}
           </div>
         ) : <PrAnalysisPromo prUrl={prUrl} analyzing={analyzing} error={analyzeErr} onRun={() => void runAnalysis()} />
       ) : sub === 'discussion' ? (
@@ -1240,8 +1250,8 @@ function PrPanel({ id, prUrl }: { id: string; prUrl: string }) {
                 <Code size={14} className="shrink-0 text-muted-foreground" />
                 <span className="truncate text-[12px] font-medium text-muted-foreground">{it.th.path.split('/').pop()}</span>
                 <span className="ml-auto flex items-center gap-1.5 text-[12px] text-muted-foreground">
-                  {it.th.is_resolved && <span>· Resolved</span>}
-                  {it.th.is_outdated && <span>Outdated</span>}
+                  {it.th.is_resolved && <span>{t('pr.resolved')}</span>}
+                  {it.th.is_outdated && <span>{t('pr.outdated')}</span>}
                   L{it.th.line}
                   {it.th.is_resolved && <ChevronDown size={12} className={cn('transition-transform', expandedThreads[it.th.id] && 'rotate-180')} />}
                 </span>
@@ -1253,7 +1263,7 @@ function PrPanel({ id, prUrl }: { id: string; prUrl: string }) {
                       {cm.avatar_url && <img loading="lazy" decoding="async" src={cm.avatar_url} alt="" className="size-5 rounded-full" />}
                       <span className="font-medium">{cm.login}</span>
                       <span className="text-muted-foreground">{cm.created_at ? new Date(cm.created_at).toLocaleString() : ''}</span>
-                      {cm.pending && <span className="rounded bg-orange-500/15 px-1.5 py-0.5 text-[11px] font-medium text-orange-500">Pending</span>}
+                      {cm.pending && <span className="rounded bg-orange-500/15 px-1.5 py-0.5 text-[11px] font-medium text-orange-500">{t('pr.pending')}</span>}
                       {cm.id && <CommentActions comment={cm} canWrite={cm.id.startsWith('PRRC_')} onEdit={() => { setEditingComment(cm.id); setEditText(cm.body); setEditErr('') }} onDelete={() => void deleteComment(cm.id)} />}
                     </div>
                     {editingComment === cm.id ? (
@@ -1265,8 +1275,8 @@ function PrPanel({ id, prUrl }: { id: string; prUrl: string }) {
                 {(pendingReplies[it.th.id] || []).filter((pr2) => !it.th.comments.some((c) => c.id === pr2.id)).map((pr2, j) => (
                   <div key={`p${j}`} className="group">
                     <div className="mb-1 flex items-center gap-2 text-[12px]">
-                      <span className="font-medium">You</span>
-                      <span className="rounded bg-orange-500/15 px-1.5 py-0.5 text-[11px] font-medium text-orange-500">Pending</span>
+                      <span className="font-medium">{t('pr.you')}</span>
+                      <span className="rounded bg-orange-500/15 px-1.5 py-0.5 text-[11px] font-medium text-orange-500">{t('pr.pending')}</span>
                       {pr2.id && (
                         <button
                           onClick={() => { void deleteComment(pr2.id); setPendingReplies((m) => ({ ...m, [it.th.id]: (m[it.th.id] || []).filter((x) => x !== pr2) })) }}
@@ -1291,7 +1301,7 @@ function PrPanel({ id, prUrl }: { id: string; prUrl: string }) {
                     />
                     <div className="flex items-center justify-end gap-2 border-t border-border px-2 py-1.5">
                       {replyErr && <span className="mr-auto text-[12px] text-red-500">Failed: {replyErr}</span>}
-                      <button onClick={() => { setReplyThread(''); setReplyText(''); setReplyErr('') }} className="cursor-pointer rounded-md px-2.5 py-1 text-[12px] text-muted-foreground hover:bg-accent">Cancel</button>
+                      <button onClick={() => { setReplyThread(''); setReplyText(''); setReplyErr('') }} className="cursor-pointer rounded-md px-2.5 py-1 text-[12px] text-muted-foreground hover:bg-accent">{t('common.cancel')}</button>
                       <button
                         disabled={replying || !replyText.trim()}
                         onClick={() => void submitReply(it.th.id, true)}
@@ -1330,9 +1340,9 @@ function PrPanel({ id, prUrl }: { id: string; prUrl: string }) {
                 )}
               </div>}
             </div>
-          )) : <p className="text-[13px] text-muted-foreground">No comments yet.</p>}
+          )) : <p className="text-[13px] text-muted-foreground">{t('pr.noComments')}</p>}
           <div className="rounded-lg border border-border">
-            <textarea value={discText} onChange={(e) => setDiscText(e.target.value)} placeholder="Add a comment..." className="min-h-16 w-full resize-none rounded-lg bg-background p-3 text-[13px] placeholder:text-muted-foreground focus:outline-none" />
+            <textarea value={discText} onChange={(e) => setDiscText(e.target.value)} placeholder={t('pr.addCommentPh')} className="min-h-16 w-full resize-none rounded-lg bg-background p-3 text-[13px] placeholder:text-muted-foreground focus:outline-none" />
             {(discText.trim() || postErr) && (
               <div className="flex items-center justify-end gap-2 border-t border-border px-2 py-1.5">
                 {postErr && <span className="mr-auto text-[12px] text-red-500">Failed: {postErr}</span>}
@@ -1348,7 +1358,7 @@ function PrPanel({ id, prUrl }: { id: string; prUrl: string }) {
               <div key={cm.sha} className="rounded-lg border border-border px-3 py-2.5">
                 <div className="text-[13px] font-medium">{cm.headline}</div>
                 <div className="mt-1 flex flex-wrap items-center gap-1.5 text-[12px] text-muted-foreground">
-                  {cm.sha === data.head_sha && <span className="font-medium text-emerald-600 dark:text-emerald-400">Current</span>}
+                  {cm.sha === data.head_sha && <span className="font-medium text-emerald-600 dark:text-emerald-400">{t('pr.current')}</span>}
                   {cm.committed_at && <span>• {relTime(cm.committed_at)}</span>}
                   {cm.author && <span>• {cm.author}</span>}
                   <span className="rounded bg-muted px-1.5 py-0.5 font-mono">{cm.sha.slice(0, 7)}</span>
@@ -1357,9 +1367,9 @@ function PrPanel({ id, prUrl }: { id: string; prUrl: string }) {
               </div>
             ))}
           </div>
-        ) : <p className="text-[13px] text-muted-foreground">No commits.</p>
+        ) : <p className="text-[13px] text-muted-foreground">{t('pr.noCommits')}</p>
       ) : (
-        info?.body ? <div className="text-[13px]"><Markdown text={info.body} /></div> : <p className="text-[13px] text-muted-foreground">No description.</p>
+        info?.body ? <div className="text-[13px]"><Markdown text={info.body} /></div> : <p className="text-[13px] text-muted-foreground">{t('pr.noDesc')}</p>
       )}
       </div>
     </div>

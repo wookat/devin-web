@@ -1,4 +1,6 @@
 import { Brain, Terminal, CheckCircle2, XCircle, Activity, Monitor, ListTodo, MessageSquare, MessageCircleQuestion, Info, FilePen, Eye, GitBranch, Search, Workflow, Bot, ShieldQuestion, Flag, Lightbulb, KeyRound, Globe, AlertTriangle, AlertCircle, File } from 'lucide-react'
+import { useTranslation } from 'react-i18next'
+import i18n from '@/i18n'
 import { cn } from '@/lib/utils'
 import type { QuoteAttachment, QuoteMeta } from '../../shared/quotes'
 
@@ -439,6 +441,7 @@ export function ScriptedChildren({ item, time }: { item: TimelineItem; time: (ts
 
 /** Expanded body of an official subagent row: one line per aggregated action with its time. */
 export function SubagentActions({ run, time }: { run: NonNullable<TimelineItem['subagent']>; time: (ts: string) => string }) {
+  const { t } = useTranslation()
   return (
     <ol className="mt-1 max-h-[300px] overflow-y-auto rounded-[10px] border border-border bg-card py-1 text-[12px] leading-[18px] text-muted-foreground">
       {(run.actions ?? []).map((a, i) => (
@@ -447,7 +450,7 @@ export function SubagentActions({ run, time }: { run: NonNullable<TimelineItem['
           {a.ts && <span className="shrink-0 tabular-nums text-[11px] text-muted-foreground/70">{time(a.ts)}</span>}
         </li>
       ))}
-      {run.truncated && <li className="px-2.5 py-0.5 text-[11px] text-muted-foreground/70">Earlier actions omitted</li>}
+      {run.truncated && <li className="px-2.5 py-0.5 text-[11px] text-muted-foreground/70">{t('ti.earlier')}</li>}
       {(run.actions?.length ?? 0) === 0 && <li className="px-2.5 py-0.5 text-[11px] text-muted-foreground/70">{run.finished ? 'Finished' : 'Running…'}</li>}
     </ol>
   )
@@ -644,9 +647,9 @@ export function heading(item: TimelineItem): string {
     case 'search':
       return item.title || 'Searched'
     case 'question':
-      return item.questions?.[0]?.question || 'Devin 提问'
+      return item.questions?.[0]?.question || i18n.t('ti.question')
     case 'answer':
-      return item.answers?.join('、') || item.body || '已作答'
+      return item.answers?.join('、') || item.body || i18n.t('ti.answered')
     case 'workflow':
       return item.workflow?.status === 'running'
         ? (item.workflow.resumed ? 'Resuming workflow' : 'Running workflow')
@@ -665,14 +668,15 @@ export function heading(item: TimelineItem): string {
 }
 
 export default function Timeline({ items, error }: { items: TimelineItem[]; error?: string | null }) {
+  const { t } = useTranslation()
   if (error === 'mirror_not_configured') {
-    return <p className="text-xs text-muted-foreground">会话镜像未配置（缺少 Devin Web 令牌）。</p>
+    return <p className="text-xs text-muted-foreground">{t('ti.noMirror')}</p>
   }
   if (error === 'token_expired') {
-    return <p className="text-xs text-amber-600">会话镜像令牌已失效，需要重新配置后才能显示官方时间线。</p>
+    return <p className="text-xs text-amber-600">{t('ti.tokenExpired')}</p>
   }
-  if (error) return <p className="text-xs text-red-600">镜像读取失败：{error}</p>
-  if (!items.length) return <p className="text-xs text-muted-foreground">暂无事件。</p>
+  if (error) return <p className="text-xs text-red-600">{t('ti.mirrorFail')}{error}</p>
+  if (!items.length) return <p className="text-xs text-muted-foreground">{t('ti.noEvents')}</p>
 
   return (
     <ol className="space-y-2.5">

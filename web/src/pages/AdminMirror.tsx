@@ -3,6 +3,7 @@
  * Extracted modules live in ./mirror/ (components, panels, tree, utils).
  */
 import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState, type KeyboardEvent as ReactKeyboardEvent } from 'react'
+import { useTranslation } from 'react-i18next'
 import { createPortal } from 'react-dom'
 import { Link, useLocation, useNavigate, useParams } from 'react-router-dom'
 import { ArrowLeft, Loader2, ChevronRight, ChevronDown, ChevronUp, Settings2, Copy, Check, RotateCcw, Archive, ArchiveRestore, Plus, FileText, Circle, ArrowUp, ArrowUpRight, Square, Link2, X, Expand, Code, Workflow as WorkflowIcon, BookOpen, UploadCloud, Folder as FolderIcon, Pencil, Clock, Lightbulb, Info, Laptop, FolderOpen, Image as ImageIcon, Share2, RefreshCw, AlertTriangle, Rows3 } from 'lucide-react'
@@ -38,7 +39,7 @@ import { readTreeCache, type MirrorTreeSession, type TreeCachePayload, writeTree
 import { prefetchSession, visitorTabs, type SessionDetail, tlSnapshots, messagesFromItems, type LocalCfg, type LocalCfgOption, EFFORT_SUFFIX_RE, modeOfVersion, speedOfVersion, type ShareMeta, defaultTabs, CommandPalette, TimelineSkeleton, LOCAL_MODE_ICONS, VERSION_LABEL, versionOf } from './mirror/pageBits'
 import { type PanelKey, PANELS, findItemText, parseOfficialTab, serializeOfficialTab, useUrlParamSync, ADD_TAB_ORDER, prNumber, type PanelIcon } from './mirror/panelTabs'
 import { type TimelinePage, preview, mergeItems, groupItems, time, rowClock, clock, COACH_RECOMMENDATIONS, COACH_ACTIONS } from './mirror/timelineUtil'
-import { reduceStatus } from './mirror/statusReduce'
+import { reduceStatus, stText } from './mirror/statusReduce'
 import { type ComposerMetaT, type SuggestItem, AT_CATEGORIES, QUEUE_DASHED_SVG, QUEUE_DRAG_SVG, QUEUE_PLACEHOLDER } from './mirror/composerMeta'
 import { type TreePrefs, TREE_PREFS_KEY, DEFAULT_TREE_PREFS, buildFilterQ, SessionTree } from './mirror/SessionTree'
 import DirPicker from './mirror/DirPicker'
@@ -60,6 +61,7 @@ import { ResourcesPanel, SubagentsPanel } from './mirror/ResourcePanels'
 let lastSeenLocalCfg: LocalCfg | null = null
 
 export default function AdminMirrorPage() {
+  const { t } = useTranslation()
   const { id = '' } = useParams()
   const routerLoc = useLocation()
   // Same component for both viewers: /admin/:id is the administrator, /s/:shareId?t=… a visitor
@@ -1844,13 +1846,13 @@ const groups = useMemo(() => groupItems(allItems, sessionWorking), [allItems, se
   }, [allItems])
 
   const provideSecret = useCallback(async (requestId: string, value: string) => {
-    if (!caps.canProvideSecret) throw new Error('无权限')
+    if (!caps.canProvideSecret) throw new Error(t('visitor.noPermission'))
     const r = await adminFetch<{ ok: boolean; error?: string | null }>(`/api/admin/session/${id}/secret-response`, {
       method: 'POST',
       body: JSON.stringify({ request_id: requestId, value }),
     })
-    if (!r.ok) throw new Error(r.error === 'request_not_found' ? '该请求已不存在' : r.error === 'no_ack' ? '上游未确认，请稍后重试' : '提交失败')
-  }, [id, caps.canProvideSecret])
+    if (!r.ok) throw new Error(r.error === 'request_not_found' ? t('visitor.requestGone') : r.error === 'no_ack' ? t('visitor.upstreamUnconfirmed') : t('common.failed'))
+  }, [id, caps.canProvideSecret, t])
 
   // Workflow run aggregation (official: agents grouped by run_id, latest status per result_id).
   const wf = useMemo(() => {
@@ -1883,7 +1885,7 @@ const groups = useMemo(() => groupItems(allItems, sessionWorking), [allItems, se
   async function send(preset?: string) {
     let text = (preset ?? input).trim()
     if (statusState.inputDisabled || (!text && !(preset === undefined && staged.length)) || sending) return
-    if (!caps.canSendMessage) { setSendErr('当前分享档位不允许发言'); return }
+    if (!caps.canSendMessage) { setSendErr(t('visitor.chatForbidden')); return }
     if (
       preset === undefined &&
       coachMode === 'warning_and_modal' &&
@@ -1903,7 +1905,7 @@ const groups = useMemo(() => groupItems(allItems, sessionWorking), [allItems, se
     // Free text typed while an option question is pending answers the
     // question with other_text (official composer semantics).
     if (preset === undefined && pending) {
-      if (!caps.canAnswerQuestion) { setSendErr('当前分享档位不允许回答'); return }
+      if (!caps.canAnswerQuestion) { setSendErr(t('visitor.answerForbidden')); return }
       setSending(true)
       setSendErr(null)
       try {
@@ -1946,7 +1948,7 @@ const groups = useMemo(() => groupItems(allItems, sessionWorking), [allItems, se
         setInput(''); setStaged([])
         nav(`/admin/${r.id}`, { replace: true })
       } catch (e) {
-        setSendErr(e instanceof Error && e.message ? e.message : '创建会话失败')
+        setSendErr(e instanceof Error && e.message ? e.message : t('menu.createFailed'))
       } finally { setSending(false) }
       return
     }
@@ -2020,7 +2022,7 @@ const groups = useMemo(() => groupItems(allItems, sessionWorking), [allItems, se
         method: 'POST',
         body: JSON.stringify(it.kind === 'resend'
           ? { message: it.text, attachments: it.attachments ?? [] }
-          : { message: '继续', attachments: [] }),
+          : { message: t('common.continue'), attachments: [] }),
       })
       await reloadTl.current?.()
     } catch (e) {
@@ -2040,12 +2042,12 @@ const groups = useMemo(() => groupItems(allItems, sessionWorking), [allItems, se
   const subDead = isSub && detail?.session.subagent?.resumable === false
   const respawnSub = async () => {
     if (sending) return
-    const msg = input.trim() || '请继续处理之前的任务'
+    const msg = input.trim() || t('panel.continueTask')
     setSending(true)
     try {
       await sessionFetch('/message', { method: 'POST', body: JSON.stringify({ message: msg, respawn: true }) })
       setInput('')
-      setControlMsg('已让主会话派出继任子代理 — 新子会话会出现在侧栏')
+      setControlMsg(t('menu.successorSent'))
     } catch (e) {
       setSendErr(e instanceof Error && e.message ? e.message : 'Failed to send message. Try again.')
     } finally { setSending(false) }
@@ -2066,7 +2068,7 @@ const groups = useMemo(() => groupItems(allItems, sessionWorking), [allItems, se
 
   async function answerQuestion(answers: string[][]) {
     if (!pending || sending) return
-    if (!caps.canAnswerQuestion) { setSendErr('当前分享档位不允许回答'); return }
+    if (!caps.canAnswerQuestion) { setSendErr(t('visitor.answerForbidden')); return }
     setSending(true)
     setSendErr(null)
     try {
@@ -2134,7 +2136,7 @@ const groups = useMemo(() => groupItems(allItems, sessionWorking), [allItems, se
   // DOWN, then for it to come back UP, then reload. Covers both restart
   // (~4s) and redeploy (~1-3min) without duration guesses.
   function waitForRestart() {
-    setControlMsg('等待服务停止…')
+    setControlMsg(t('menu.restartingWait'))
     const t0 = Date.now()
     let sawDown = false
     const tick = async () => {
@@ -2142,15 +2144,15 @@ const groups = useMemo(() => groupItems(allItems, sessionWorking), [allItems, se
       try { up = (await fetch('/api/accounts', { cache: 'no-store' })).ok } catch { /* down */ }
       if (!up) sawDown = true
       if (sawDown && up) { location.reload(); return }
-      if (sawDown) setControlMsg('服务重启中，恢复后自动刷新…')
+      if (sawDown) setControlMsg(t('menu.restartingBack'))
       if (Date.now() - t0 < 6 * 60 * 1000) setTimeout(tick, 1500)
-      else setControlMsg('重启超时——请检查服务后手动刷新')
+      else setControlMsg(t('menu.restartTimeout'))
     }
     setTimeout(tick, 1000)
   }
 
   async function upload(file: File) {
-    if (isDraft) { setSendErr('发出第一条消息后即可传附件'); return }
+    if (isDraft) { setSendErr(t('composer.attachAfterFirst')); return }
     if (!caps.canUpload) return
     const preview = URL.createObjectURL(file)
     pendingPreviewRef.current.push({ url: '', name: file.name, size: file.size, preview })
@@ -2227,8 +2229,8 @@ const groups = useMemo(() => groupItems(allItems, sessionWorking), [allItems, se
                 onClick={() => setOrgMenu((v) => !v)}
                 className="flex h-[30px] max-w-[200px] cursor-pointer items-center gap-1.5 rounded-[6px] pl-1.5 pr-2 text-[13px] font-medium text-foreground hover:bg-tint-secondary"
               >
-                <span className="flex size-4 shrink-0 items-center justify-center rounded-[4px] bg-foreground text-[9px] font-semibold text-background">本</span>
-                <span className="truncate">本地 Devin</span>
+                <span className="flex size-4 shrink-0 items-center justify-center rounded-[4px] bg-foreground text-[9px] font-semibold text-background">{t('menu.appInitial')}</span>
+                <span className="truncate">{t('menu.appName')}</span>
                 <ChevronDown size={12} className="shrink-0 text-muted-foreground" />
               </button>
               {orgMenu && (
@@ -2237,16 +2239,16 @@ const groups = useMemo(() => groupItems(allItems, sessionWorking), [allItems, se
                   <div role="menu" className="absolute left-0 top-9 z-30 w-[220px] overflow-hidden rounded-[10px] bg-card/95 p-1 shadow-lg ring-1 ring-border backdrop-blur-[8px]">
                     <button role="menuitem" onClick={() => { setOrgMenu(false); nav('/settings') }}
                       className="flex w-full cursor-pointer select-none items-center gap-2 rounded-[6px] px-2 py-1.5 text-left text-[13px] leading-[18px] text-foreground outline-none hover:bg-tint-secondary">
-                      <Settings2 size={14} className="text-muted-foreground" /> 首选项…
+                      <Settings2 size={14} className="text-muted-foreground" /> {t('menu.preferences')}
                     </button>
                     <div role="separator" className="mx-2 h-[9px] bg-border bg-clip-content py-1" />
-                    <button role="menuitem" onClick={async () => { setOrgMenu(false); if (!confirm('重启服务？server 将自动重生，页面稍后自动刷新。')) return; await adminFetch('/api/admin/restart', { method: 'POST', body: JSON.stringify({}) }).catch(() => null); waitForRestart() }}
+                    <button role="menuitem" onClick={async () => { setOrgMenu(false); if (!confirm(t('menu.restartServiceConfirm'))) return; await adminFetch('/api/admin/restart', { method: 'POST', body: JSON.stringify({}) }).catch(() => null); waitForRestart() }}
                       className="flex w-full cursor-pointer select-none items-center gap-2 rounded-[6px] px-2 py-1.5 text-left text-[13px] leading-[18px] text-foreground outline-none hover:bg-tint-secondary">
-                      <RotateCcw size={14} className="text-muted-foreground" /> 重启服务
+                      <RotateCcw size={14} className="text-muted-foreground" /> {t('menu.restartService')}
                     </button>
-                    <button role="menuitem" onClick={async () => { setOrgMenu(false); if (!confirm('重新构建并重启？构建约 1-3 分钟。')) return; await adminFetch('/api/admin/redeploy', { method: 'POST', body: JSON.stringify({}) }).catch(() => null); waitForRestart() }}
+                    <button role="menuitem" onClick={async () => { setOrgMenu(false); if (!confirm(t('menu.redeployConfirm'))) return; await adminFetch('/api/admin/redeploy', { method: 'POST', body: JSON.stringify({}) }).catch(() => null); waitForRestart() }}
                       className="flex w-full cursor-pointer select-none items-center gap-2 rounded-[6px] px-2 py-1.5 text-left text-[13px] leading-[18px] text-foreground outline-none hover:bg-tint-secondary">
-                      <RefreshCw size={14} className="text-muted-foreground" /> 重新构建并重启
+                      <RefreshCw size={14} className="text-muted-foreground" /> {t('menu.redeploy')}
                     </button>
                   </div>
                 </>
@@ -2275,8 +2277,8 @@ const groups = useMemo(() => groupItems(allItems, sessionWorking), [allItems, se
               <>
                 <div className="fixed inset-0 z-20" onClick={() => setNotifOpen(false)} />
                 <div className="absolute left-0 right-0 top-10 z-30 mx-2 overflow-hidden rounded-[10px] bg-card/95 p-1 shadow-lg ring-1 ring-border backdrop-blur-[8px]">
-                  <div className="px-2 pb-1 pt-2 text-[12px] font-medium text-muted-foreground">未读会话</div>
-                  {unreadSessions.length === 0 && <div className="px-2 pb-2 pt-1 text-[13px] text-muted-foreground">暂无未读</div>}
+                  <div className="px-2 pb-1 pt-2 text-[12px] font-medium text-muted-foreground">{t('menu.unreadSessions')}</div>
+                  {unreadSessions.length === 0 && <div className="px-2 pb-2 pt-1 text-[13px] text-muted-foreground">{t('menu.noUnread')}</div>}
                   {unreadSessions.slice(0, 8).map((s) => (
                     <button
                       key={s.devin_id}
@@ -2308,14 +2310,14 @@ const groups = useMemo(() => groupItems(allItems, sessionWorking), [allItems, se
               className={cn('mb-px flex h-[30px] items-center gap-2 rounded-[6px] px-2 text-[13px] leading-[18px] text-foreground hover:bg-tint-secondary', isDraft && 'bg-tint-secondary font-medium')}
             >
               <OCompose size={14} className="shrink-0 text-muted-foreground" />
-              <span className="min-w-0 flex-1 truncate">新会话</span>
+              <span className="min-w-0 flex-1 truncate">{t('menu.newSession')}</span>
             </Link>
             <Link
               to="/admin/sessions"
               className="mb-px flex h-[30px] items-center gap-2 rounded-[6px] px-2 text-[13px] leading-[18px] text-foreground hover:bg-tint-secondary"
             >
               <Rows3 size={14} className="shrink-0 text-muted-foreground" />
-              <span className="min-w-0 flex-1 truncate">会话管理</span>
+              <span className="min-w-0 flex-1 truncate">{t('menu.manageSessions')}</span>
             </Link>
           </nav>
           <div className="min-h-0 flex-1 overflow-y-auto py-1">
@@ -2392,7 +2394,7 @@ const groups = useMemo(() => groupItems(allItems, sessionWorking), [allItems, se
               <span className="max-w-[160px] truncate max-md:max-w-[80px]">{detail.session.parent_title ?? 'Parent'}</span>
             </button>
           )}
-          <h1 className="min-w-0 flex-1 truncate text-[13px] leading-[18px] max-md:min-w-[120px]">{isDraft ? '新会话' : current?.title || current?.devin_title || detail?.session.title || '会话镜像'}</h1>
+          <h1 className="min-w-0 flex-1 truncate text-[13px] leading-[18px] max-md:min-w-[120px]">{isDraft ? t('menu.newSession') : current?.title || current?.devin_title || detail?.session.title || t('menu.sessionMirror')}</h1>
           {headerPrs.length > 0 && (!isVisitor || caps.showChanges) && (
             <div className="relative min-w-0 shrink-0">
               <button
@@ -2564,7 +2566,7 @@ const groups = useMemo(() => groupItems(allItems, sessionWorking), [allItems, se
                           <X size={13} className="text-muted-foreground" /> Remove from folder
                         </button>
                       )}
-                      {folderOrder.length === 0 && <p className="px-2 py-1.5 text-[12px] text-muted-foreground">No folders</p>}
+                      {folderOrder.length === 0 && <p className="px-2 py-1.5 text-[12px] text-muted-foreground">{t('tree.noFolders')}</p>}
                     </div>,
                     document.body,
                   )}
@@ -2586,7 +2588,7 @@ const groups = useMemo(() => groupItems(allItems, sessionWorking), [allItems, se
                   }}
                   className={settingsRowCls}
                 >
-                  {detail.session.archived ? <><OArchive size={14} className="text-muted-foreground" /> Unarchive</> : <><OArchive size={14} className="text-muted-foreground" /> Archive</>}
+                  {detail.session.archived ? <><OArchive size={14} className="text-muted-foreground" /> {t('sp.unarchive')}</> : <><OArchive size={14} className="text-muted-foreground" /> {t('sp.archive')}</>}
                 </button>}
                 <div className={settingsSeparatorCls} />
                 <button
@@ -2606,14 +2608,14 @@ const groups = useMemo(() => groupItems(allItems, sessionWorking), [allItems, se
                   role="menuitem"
                   onClick={async () => {
                     setSettingsOpen(false); setSettingsSub('none')
-                    if (!confirm('分享到 Devin 云端？会话内容将上传到 Cognition 并生成公开链接。')) return
+                    if (!confirm(t('menu.shareToCloudConfirm'))) return
                     const r = await adminFetch<{ ok: boolean; url?: string; error?: string }>(`/api/admin/session/${id}/share`, { method: 'POST', body: JSON.stringify({}) }).catch(() => null)
-                    if (r?.ok && r.url) { navigator.clipboard.writeText(r.url); setControlMsg(`已分享: ${r.url}`) }
+                    if (r?.ok && r.url) { navigator.clipboard.writeText(r.url); setControlMsg(t('menu.sharedOk', { url: r.url })) }
                     else setControlMsg(r?.error || 'Share failed')
                   }}
                   className={settingsRowCls}
                 >
-                  <Share2 size={13} className="text-muted-foreground" /> Share to Devin cloud
+                  <Share2 size={13} className="text-muted-foreground" /> {t('menu.shareToCloud')}
                 </button>}
                 {/* Desktop "Open in new window" — each session can live in its
                     own browser window. */}
@@ -2623,10 +2625,10 @@ const groups = useMemo(() => groupItems(allItems, sessionWorking), [allItems, se
                   onClick={() => { setSettingsOpen(false); setSettingsSub('none'); window.open(`${window.location.origin}/admin/${id}`, '_blank', 'noopener') }}
                   className={settingsRowCls}
                 >
-                  <ArrowUpRight size={13} className="text-muted-foreground" /> Open in new window
+                  <ArrowUpRight size={13} className="text-muted-foreground" /> {t('menu.openNewWindow')}
                 </button>
                 {!isSub && <div className="mt-1 border-t border-border px-2 pb-1 pt-2">
-                  <p className="mb-1 text-[12px] text-muted-foreground">访客权限</p>
+                  <p className="mb-1 text-[12px] text-muted-foreground">{t('visitor.permission')}</p>
                   <Combo
                     className="w-full"
                     value={detail.session.permission}
@@ -2635,10 +2637,10 @@ const groups = useMemo(() => groupItems(allItems, sessionWorking), [allItems, se
                       reloadDetail()
                     }}
                     options={[
-                      { v: 'detailed', l: '详细时间线（可聊+传文件+事件详情）' },
-                      { v: 'full', l: '可聊 + 传文件' },
-                      { v: 'chat', l: '仅可聊' },
-                      { v: 'readonly', l: '只读' },
+                      { v: 'detailed', l: t('visitor.permDetailed') },
+                      { v: 'full', l: t('visitor.permChatFile') },
+                      { v: 'chat', l: t('visitor.permChat') },
+                      { v: 'readonly', l: t('visitor.permReadonly') },
                     ]}
                   />
                 </div>}
@@ -2668,13 +2670,13 @@ const groups = useMemo(() => groupItems(allItems, sessionWorking), [allItems, se
                   role="menuitem"
                   onClick={async () => {
                     setSettingsOpen(false); setSettingsSub('none')
-                    if (!confirm('Restart agent process？承载此会话的 devin acp 进程将被终止，下次操作自动重放历史。')) return
+                    if (!confirm(t('menu.restartAgentConfirm'))) return
                     const r = await adminFetch<{ ok: boolean }>(`/api/admin/session/${id}/restart`, { method: 'POST', body: JSON.stringify({}) }).catch(() => null)
-                    setControlMsg(r?.ok ? 'Agent process restarting — history replays on next action' : 'Restart failed')
+                    setControlMsg(r?.ok ? t('menu.agentRestarting') : t('menu.agentRestartFailed'))
                   }}
                   className={settingsRowCls}
                 >
-                  <RotateCcw size={13} className="text-muted-foreground" /> Restart agent process
+                  <RotateCcw size={13} className="text-muted-foreground" /> {t('menu.restartAgent')}
                 </button>
                   </>
                 )}
@@ -2684,21 +2686,21 @@ const groups = useMemo(() => groupItems(allItems, sessionWorking), [allItems, se
                   role="menuitem"
                   onClick={async () => {
                     setSettingsOpen(false); setSettingsSub('none')
-                    if (!confirm(isSub ? 'End subagent？子智能体将被取消（转录保留）。' : 'End session？会话将被标记为结束（历史保留，桌面端同款操作）。')) return
+                    if (!confirm(isSub ? t('menu.endSubagentConfirm') : t('menu.endSessionConfirm'))) return
                     const r = await adminFetch<{ ok: boolean; error: string }>(`/api/admin/session/${id}/end`, { method: 'POST', body: JSON.stringify({}) }).catch(() => null)
-                    setControlMsg(r?.ok ? (isSub ? 'Subagent cancelled' : 'Session end dispatched') : r?.error || 'End failed')
+                    setControlMsg(r?.ok ? (isSub ? t('menu.subagentCancelled') : t('menu.sessionEndSent')) : r?.error || t('menu.endFailed'))
                     reloadDetail()
                   }}
                   className={settingsRowCls}
                 >
-                  <Square size={13} className="text-muted-foreground" /> {isSub ? 'End subagent' : 'End session'}
+                  <Square size={13} className="text-muted-foreground" /> {isSub ? t('menu.endSubagent') : t('menu.endSession')}
                 </button>
                 <div className={settingsSeparatorCls} />
                 <div className="px-2 pb-1 pt-1.5 text-[12px] leading-[18px] text-muted-foreground">
-                  <div className="flex justify-between"><span>User messages:</span><span className="text-foreground">{userMsgCount}</span></div>
-                  {detail.session.platform && <div className="flex justify-between"><span>Platform:</span><span className="text-foreground">{detail.session.platform}</span></div>}
-                  {detail.session.subagent && <div className="flex justify-between"><span>Subagent:</span><span className="text-foreground">{[detail.session.subagent.profile, detail.session.subagent.model].filter(Boolean).join(' · ') || detail.session.subagent.agentId}</span></div>}
-                  {detail.dashboard_url && <p className="break-all pt-1 text-[11px] leading-[15px]">看板推送接口：POST {window.location.origin}{detail.dashboard_url}</p>}
+                  <div className="flex justify-between"><span>{t('am.userMsgs')}</span><span className="text-foreground">{userMsgCount}</span></div>
+                  {detail.session.platform && <div className="flex justify-between"><span>{t('am.platform')}</span><span className="text-foreground">{detail.session.platform}</span></div>}
+                  {detail.session.subagent && <div className="flex justify-between"><span>{t('am.subagent')}</span><span className="text-foreground">{[detail.session.subagent.profile, detail.session.subagent.model].filter(Boolean).join(' · ') || detail.session.subagent.agentId}</span></div>}
+                  {detail.dashboard_url && <p className="break-all pt-1 text-[11px] leading-[15px]">{t('tabs.dashboardPush')}：POST {window.location.origin}{detail.dashboard_url}</p>}
                 </div>
                 </div>
               </div>
@@ -2724,12 +2726,12 @@ const groups = useMemo(() => groupItems(allItems, sessionWorking), [allItems, se
           // mt-auto here + mb-auto on the footer split free space equally.
           <div className="mx-auto mt-auto flex w-full max-w-[648px] flex-col items-center gap-2 px-6 text-center">
             <DevinMark size={48} className="text-foreground/15" />
-            <p className="mt-2 text-[17px] font-medium leading-[26px] text-foreground">新会话</p>
+            <p className="mt-2 text-[17px] font-medium leading-[26px] text-foreground">{t('menu.newSession')}</p>
             <p className="text-[13px] leading-[18px] text-muted-foreground">
-              输入第一条消息即创建会话{draftFolder ? `，归入「${draftFolder}」` : ''}
+              {t('menu.draftHint')}{draftFolder ? t('menu.draftHintFolder', { folder: draftFolder }) : ''}
             </p>
             <div className="mt-3 flex items-center gap-2 text-[12px] leading-[16px] text-muted-foreground">
-              工作目录
+              {t('tree.workDir')}
               <DirPicker
                 value={draftCwd}
                 onChange={setDraftCwd}
@@ -2792,9 +2794,9 @@ const groups = useMemo(() => groupItems(allItems, sessionWorking), [allItems, se
             </div>
           )}
 
-          {loaded && tlError === 'mirror_not_configured' && <p className="text-xs text-muted-foreground">会话镜像未配置（缺少 Devin Web 令牌）。</p>}
-          {loaded && tlError === 'token_expired' && <p className="text-xs text-amber-600">镜像令牌已失效，需重新配置。</p>}
-          {loaded && tlError && tlError !== 'mirror_not_configured' && tlError !== 'token_expired' && <p className="text-xs text-red-600">镜像读取失败：{tlError}</p>}
+          {loaded && tlError === 'mirror_not_configured' && <p className="text-xs text-muted-foreground">{t('menu.mirrorNotConfigured')}</p>}
+          {loaded && tlError === 'token_expired' && <p className="text-xs text-amber-600">{t('menu.mirrorTokenExpired')}</p>}
+          {loaded && tlError && tlError !== 'mirror_not_configured' && tlError !== 'token_expired' && <p className="text-xs text-red-600">{t('menu.mirrorReadFailed', { err: tlError })}</p>}
           <div className="mx-auto max-w-[648px]"><div>
             {loaded && cursor && (
               <div className="mb-4" aria-hidden>
@@ -2917,9 +2919,9 @@ const groups = useMemo(() => groupItems(allItems, sessionWorking), [allItems, se
                             </div>
                           ) : (translations[g.item.id] || g.item.translation) ? (
                             <div className="space-y-2">
-                              <p className="text-[12px] leading-[16px] text-muted-foreground">Original:</p>
+                              <p className="text-[12px] leading-[16px] text-muted-foreground">{t('am.original')}</p>
                               <Markdown text={text} rewriteUrl={(u) => attachmentUrl(id, u, mediaTok)} onFileRef={onFileRef} />
-                              <p className="text-[12px] leading-[16px] text-muted-foreground">Translation:</p>
+                              <p className="text-[12px] leading-[16px] text-muted-foreground">{t('am.translation')}</p>
                               <Markdown text={translations[g.item.id] || g.item.translation || ''} rewriteUrl={(u) => attachmentUrl(id, u, mediaTok)} onFileRef={onFileRef} />
                             </div>
                           ) : (
@@ -2993,12 +2995,12 @@ const groups = useMemo(() => groupItems(allItems, sessionWorking), [allItems, se
             ) : ['initializing', 'resume_requested', 'resume_requested_frontend', 'suspend_requested', 'suspend_requested_frontend', 'paused', 'stopped', 'queued', 'waiting'].includes(statusState.enum) ? (
               <div className="mb-2 mt-5 flex items-start gap-[6px] text-muted-foreground">
                 {statusState.persona === 'thinking' ? <ThinkingPersona /> : statusState.persona === 'sleep' ? <WakePersona /> : <span className="mt-1 size-2 shrink-0 rounded-full bg-orange-500" />}
-                <span className="min-h-[17px] text-[13px] leading-[18px]">{statusState.tailText}</span>
+                <span className="min-h-[17px] text-[13px] leading-[18px]">{stText(t, statusState.tailText)}</span>
               </div>
             ) : statusState.enum === 'blocked' ? (
               <div className="my-4 flex items-center gap-2 text-[13px] leading-[18px] text-muted-foreground">
                 <AwaitingInstructionsGlyph className="size-4 shrink-0 text-orange-500" />
-                {statusState.tailText}
+                {stText(t, statusState.tailText)}
               </div>
             ) : ['working', 'resumed', 'restored'].includes(statusState.enum) ? (
               // Official working-status row (DOM sampled 2026-08-31): 17px animated Devin
@@ -3007,7 +3009,7 @@ const groups = useMemo(() => groupItems(allItems, sessionWorking), [allItems, se
                 <div className="flex items-start gap-[6px]">
                   <ThinkingPersona />
                   <span className="min-h-[17px] text-[13px] leading-[18px]">
-                    {statusState.tailText}
+                    {stText(t, statusState.tailText)}
                   </span>
                 </div>
               </div>
@@ -3022,17 +3024,17 @@ const groups = useMemo(() => groupItems(allItems, sessionWorking), [allItems, se
                 <WakePersona />
                 <span className="grid min-h-[17px] overflow-hidden text-[13px] leading-[18px]">
                   <span className="col-start-1 row-start-1 duration-200 group-hover:-translate-y-full motion-safe:transition-transform">Devin went to sleep</span>
-                  <span className="col-start-1 row-start-1 translate-y-full duration-200 group-hover:translate-y-0 motion-safe:transition-transform">{controlling ? 'Connecting…' : statusState.wakeText}</span>
+                  <span className="col-start-1 row-start-1 translate-y-full duration-200 group-hover:translate-y-0 motion-safe:transition-transform">{controlling ? t('menu.connecting') : stText(t, statusState.wakeText)}</span>
                 </span>
               </button>
             ) : statusState.isSleeping && !isVisitor && !statusState.wakeable ? (
               <div className="mb-2 mt-5 flex items-start gap-[6px] text-muted-foreground">
                 <WakePersona />
                 <div className="flex flex-col">
-                  <span className="min-h-[17px] text-[13px] leading-[18px]">{statusState.shortMessage}</span>
+                  <span className="min-h-[17px] text-[13px] leading-[18px]">{stText(t, statusState.shortMessage)}</span>
                   {statusState.enum === 'crashed' && detail?.session.auto_recover ? (
                     <span className="text-[12px] leading-[16px] text-muted-foreground">
-                      已自动发送「继续」尝试恢复 ({detail.session.auto_recover.attempts}/3)
+                      {t('menu.autoResumed', { n: detail.session.auto_recover.attempts })}
                     </span>
                   ) : null}
                 </div>
@@ -3170,7 +3172,7 @@ const groups = useMemo(() => groupItems(allItems, sessionWorking), [allItems, se
                         }}
                         className="flex w-full cursor-pointer items-center gap-2 rounded-[6px] px-2 py-1.5 text-left text-[13px] leading-[18px] hover:bg-accent"
                       >
-                        <span className="min-w-0 flex-1 truncate pl-6 text-muted-foreground">Scroll to bottom</span>
+                        <span className="min-w-0 flex-1 truncate pl-6 text-muted-foreground">{t('am.scrollBottom')}</span>
                       </button>
                     </div>
                   </div>
@@ -3327,7 +3329,7 @@ const groups = useMemo(() => groupItems(allItems, sessionWorking), [allItems, se
                               : findings[0].finding_type === 'unrelated_followup_new_session'
                                 ? 'This task looks unrelated to the current session'
                                 : findings[0].finding_type === 'use_code_scan'
-                                  ? 'This looks codebase-wide — a Code Scan may fit better'
+                                  ? t('menu.codeScanFit')
                                   : findings[0].explanation}
                     </span>
                     <button type="button" aria-label="Show finding details" title={findings[0].explanation} className="flex shrink-0 cursor-default items-center opacity-70">
@@ -3403,7 +3405,7 @@ const groups = useMemo(() => groupItems(allItems, sessionWorking), [allItems, se
                       }}
                       className={cn('shrink-0 text-[12px] leading-4 text-blue-400', scanState === 'busy' || scanState === 'sent' ? 'cursor-default opacity-60' : 'cursor-pointer hover:underline')}
                     >
-                      {scanState === 'busy' ? 'Starting…' : scanState === 'sent' ? 'Scan requested' : scanState === 'error' ? 'Retry Code Scan' : 'Start a Code Scan'}
+                      {scanState === 'busy' ? t('menu.starting') : scanState === 'sent' ? t('menu.scanSent') : scanState === 'error' ? t('menu.retryScan') : t('menu.startScan')}
                     </button>
                   ) : null}
                 </div>
@@ -3415,7 +3417,7 @@ const groups = useMemo(() => groupItems(allItems, sessionWorking), [allItems, se
                  first finding's recommendation. Back cancels; Send confirms once per draft. */
               <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 p-4" onClick={() => setConfirmSendOpen(false)}>
                 <div role="dialog" className="w-full max-w-sm rounded-xl border border-border bg-background p-4 shadow-lg" onClick={(e) => e.stopPropagation()}>
-                  <p className="text-[14px] font-medium leading-[20px]">Confirm to send message</p>
+                  <p className="text-[14px] font-medium leading-[20px]">{t('am.confirmSend')}</p>
                   <p className="mt-2 text-[13px] leading-[18px] text-muted-foreground">
                     {findings[0] ? COACH_RECOMMENDATIONS[findings[0].finding_type] || findings[0].explanation || '' : ''}
                   </p>
@@ -3522,7 +3524,7 @@ const groups = useMemo(() => groupItems(allItems, sessionWorking), [allItems, se
               ref={editorRef}
               className="bg-transparent"
               disabled={statusState.inputDisabled || sending}
-              placeholder={pending ? 'Respond directly to Devin\u2019s question or ask something else' : statusState.placeholder}
+              placeholder={pending ? t('composer.respondPending') : stText(t, statusState.placeholder)}
               placeholderNode={!pending && statusState.enum === 'working' && !isVisitor ? QUEUE_PLACEHOLDER : undefined}
               value={input}
               onChange={setInput}
@@ -3792,7 +3794,7 @@ const groups = useMemo(() => groupItems(allItems, sessionWorking), [allItems, se
                                 >
                                   {effortOpts.length > 0 && (
                                     <>
-                                      <div className="px-2 py-[5px] text-[11px] font-medium uppercase tracking-wide text-muted-foreground">Reasoning Effort</div>
+                                      <div className="px-2 py-[5px] text-[11px] font-medium uppercase tracking-wide text-muted-foreground">{t('am.reasoningEffort')}</div>
                                       {effortOpts.map((lvl) => (
                                         <button
                                           key={lvl.value}
@@ -3815,7 +3817,7 @@ const groups = useMemo(() => groupItems(allItems, sessionWorking), [allItems, se
                                   {sibOpts.length > 0 && (
                                     <>
                                       {effortOpts.length > 0 && <div role="separator" className="mx-2 my-1 h-px bg-border" />}
-                                      <div className="px-2 py-[5px] text-[11px] font-medium uppercase tracking-wide text-muted-foreground">Variants</div>
+                                      <div className="px-2 py-[5px] text-[11px] font-medium uppercase tracking-wide text-muted-foreground">{t('am.variants')}</div>
                                       {[row.base, ...sibOpts].map((v) => (
                                         <button
                                           key={v.value}
@@ -3835,7 +3837,7 @@ const groups = useMemo(() => groupItems(allItems, sessionWorking), [allItems, se
                                   {showSpeed && (
                                     <>
                                       {(effortOpts.length > 0 || sibOpts.length > 0) && <div role="separator" className="mx-2 my-1 h-px bg-border" />}
-                                      <div className="px-2 py-[5px] text-[11px] font-medium uppercase tracking-wide text-muted-foreground">Speed</div>
+                                      <div className="px-2 py-[5px] text-[11px] font-medium uppercase tracking-wide text-muted-foreground">{t('am.speed')}</div>
                                       {speedGroup!.options!.map((sp) => (
                                         <button
                                           key={sp.value}
@@ -3962,7 +3964,7 @@ const groups = useMemo(() => groupItems(allItems, sessionWorking), [allItems, se
                         })}
                       </>
                     ) : !cfgReady ? (
-                      <div className="flex h-[30px] items-center px-3 text-[13px] text-muted-foreground">Loading…</div>
+                      <div className="flex h-[30px] items-center px-3 text-[13px] text-muted-foreground">{t('common.loading')}</div>
                     ) : (
                     <>
                     {/* Official mode menu: Fusion switch row, capability choices, and
@@ -3977,11 +3979,11 @@ const groups = useMemo(() => groupItems(allItems, sessionWorking), [allItems, se
                       <span className={cn('inline-flex h-4 w-[26px] shrink-0 items-center rounded-full border border-border px-px transition-colors', pillVersion.startsWith('devin-auto') ? 'justify-end bg-foreground' : 'justify-start bg-muted')}>
                         <span className="block size-3.5 rounded-full border-[0.5px] border-border bg-white shadow-sm" />
                       </span>
-                      <span className="flex flex-1 items-center gap-1">Fusion <span className="cursor-pointer text-[13px] text-blue-500">Preview</span></span>
+                      <span className="flex flex-1 items-center gap-1">Fusion <span className="cursor-pointer text-[13px] text-blue-500">{t('am.preview')}</span></span>
                     </button>
                     <div role="separator" className="mx-2 my-1 h-px bg-border" />
                     <div className="flex items-center gap-1.5 px-2 py-[5px] pl-[34px]">
-                      <span className="flex-1 text-[12px] font-medium text-muted-foreground">Capability</span>
+                      <span className="flex-1 text-[12px] font-medium text-muted-foreground">{t('am.capability')}</span>
                       <OfficialGlyph svg={MODE_INFO_ICON} className="text-muted-foreground" />
                     </div>
                     {['Ultra', 'Normal', 'Lite', 'SWE-1.7'].map((m) => {
@@ -4037,7 +4039,7 @@ const groups = useMemo(() => groupItems(allItems, sessionWorking), [allItems, se
                 return (
                   <span
                     className="ml-1 inline-flex shrink-0 cursor-default items-center gap-1 rounded-full px-1.5 py-0.5 text-[11px] tabular-nums text-muted-foreground"
-                    title={`上下文 ${cu.used!.toLocaleString()} / ${cu.size!.toLocaleString()} tokens（${pctUse}%）\n输入 ${cu.inputTokens?.toLocaleString() ?? '—'} · 输出 ${cu.outputTokens?.toLocaleString() ?? '—'} · 缓存命中 ${cu.cachedReadTokens?.toLocaleString() ?? '—'}`}
+                    title={t('visitor.contextTip', { used: cu.used!.toLocaleString(), size: cu.size!.toLocaleString(), pct: pctUse, input: cu.inputTokens?.toLocaleString() ?? '—', output: cu.outputTokens?.toLocaleString() ?? '—', cached: cu.cachedReadTokens?.toLocaleString() ?? '—' })}
                   >
                     <span className="inline-block h-1.5 w-8 overflow-hidden rounded-full bg-muted">
                       <span
@@ -4104,7 +4106,7 @@ const groups = useMemo(() => groupItems(allItems, sessionWorking), [allItems, se
                           }}
                           className="flex w-full cursor-pointer select-none items-center gap-2 rounded-[6px] px-2 py-1.5 text-[13px] outline-none hover:bg-tint-secondary"
                         >
-                          Add to queue
+                          {t('composer.addToQueue')}
                           <span className="ml-auto text-[11px] text-muted-foreground">Ctrl ⏎</span>
                         </button>
                       </div>
@@ -4114,28 +4116,28 @@ const groups = useMemo(() => groupItems(allItems, sessionWorking), [allItems, se
               </div>
             </div>
             </>) : (
-              <p className="flex min-h-7 items-center px-1 text-[13px] leading-[18px] text-muted-foreground">只读分享，仅可查看会话</p>
+              <p className="flex min-h-7 items-center px-1 text-[13px] leading-[18px] text-muted-foreground">{t('menu.readonlyBanner')}</p>
             )}
             {controlMsg && <div className="px-1 pt-1 text-[12px] leading-[16px] text-muted-foreground">{controlMsg}</div>}
             {interrupted && (
               <div className="flex items-center gap-2 px-1 pt-1 text-[12px] leading-[16px] text-amber-600 dark:text-amber-400">
                 <AlertTriangle size={13} className="shrink-0" />
-                <span className="min-w-0 truncate" title={interrupted.text}>上一轮回复被中断（服务重启/进程终止）— 上下文已保留：{interrupted.text.slice(0, 80)}</span>
-                <button onClick={() => void resumeInterrupted()} className="shrink-0 cursor-pointer underline hover:opacity-80">{interrupted.kind === 'resend' ? '重新发送' : '继续'}</button>
-                <button onClick={dismissInterrupted} className="shrink-0 cursor-pointer underline hover:opacity-80">忽略</button>
+                <span className="min-w-0 truncate" title={interrupted.text}>{t('composer.resumeTurn')} {interrupted.text.slice(0, 80)}</span>
+                <button onClick={() => void resumeInterrupted()} className="shrink-0 cursor-pointer underline hover:opacity-80">{interrupted.kind === 'resend' ? t('common.resend') : t('common.continue')}</button>
+                <button onClick={dismissInterrupted} className="shrink-0 cursor-pointer underline hover:opacity-80">{t('composer.resumeDismiss')}</button>
               </div>
             )}
             {subDead && (
               <div className="flex items-center gap-2 px-1 pt-1 text-[12px] leading-[16px] text-muted-foreground">
                 <AlertTriangle size={13} className="shrink-0" />
-                <span className="min-w-0 truncate">子代理句柄已失效（宿主进程已重启/重放）— 不能续聊</span>
-                <button onClick={() => void respawnSub()} className="shrink-0 cursor-pointer underline hover:opacity-80">派生新子代理继续</button>
+                <span className="min-w-0 truncate">{t('tree.handleDead')}</span>
+                <button onClick={() => void respawnSub()} className="shrink-0 cursor-pointer underline hover:opacity-80">{t('menu.spawnSuccessor')}</button>
               </div>
             )}
             {sendErr && (
               <div className="flex items-center gap-2 px-1 pt-1 text-[12px] leading-[16px] text-red-500">
                 <span className="min-w-0 truncate">{sendErr}</span>
-                <button onClick={() => void send()} className="shrink-0 cursor-pointer underline hover:text-red-400">Retry</button>
+                <button onClick={() => void send()} className="shrink-0 cursor-pointer underline hover:text-red-400">{t('common.retry')}</button>
               </div>
             )}
           </BeardBand>
@@ -4152,8 +4154,8 @@ const groups = useMemo(() => groupItems(allItems, sessionWorking), [allItems, se
                   <div className="flex min-w-0 flex-auto items-center gap-1.5">
                     <Lightbulb size={15} className="shrink-0 text-muted-foreground" />
                     <span className="line-clamp-1 text-start text-[13px] leading-4">
-                      <span className="sm:hidden">Environment changes suggested</span>
-                      <span className="hidden sm:inline">Devin suggested environment changes for your review</span>
+                      <span className="sm:hidden">{t('am.envSuggested')}</span>
+                      <span className="hidden sm:inline">{t('am.envSuggestedLong')}</span>
                     </span>
                   </div>
                   <div className="flex shrink-0 items-center gap-3">
@@ -4170,7 +4172,7 @@ const groups = useMemo(() => groupItems(allItems, sessionWorking), [allItems, se
                     <button
                       type="button"
                       disabled={!sug.envSuggestion?.contentsKey || envSaveState === 'sending' || envSaveState === 'done'}
-                      title={sug.envSuggestion?.contentsKey ? undefined : '该事件无 contents key'}
+                      title={sug.envSuggestion?.contentsKey ? undefined : t('panel.eventNoContents')}
                       onClick={() => {
                         const es = sug.envSuggestion
                         if (!es?.contentsKey || envSaveState === 'sending' || envSaveState === 'done') return
@@ -4182,7 +4184,7 @@ const groups = useMemo(() => groupItems(allItems, sessionWorking), [allItems, se
                       }}
                       className={cn('min-w-0 truncate text-[13px] font-medium', envSaveState === 'error' ? 'text-red-500' : 'text-blue-500', sug.envSuggestion?.contentsKey && envSaveState === 'idle' ? 'cursor-pointer hover:text-blue-500/80' : envSaveState !== 'error' && 'opacity-50')}
                     >
-                      <span>{envSaveState === 'sending' ? 'Saving…' : envSaveState === 'done' ? 'Saved' : envSaveState === 'error' ? 'Retry save' : <>Save<span className="hidden sm:inline"> to environment</span></>}</span>
+                      <span>{envSaveState === 'sending' ? t('common.saving') : envSaveState === 'done' ? t('menu.savedEnv') : envSaveState === 'error' ? t('menu.retrySaveEnv') : <>{t('common.save')}<span className="hidden sm:inline"> {t('menu.saveToEnvSuffix')}</span></>}</span>
                     </button>
                   </div>
                 </div>
@@ -4270,7 +4272,8 @@ const groups = useMemo(() => groupItems(allItems, sessionWorking), [allItems, se
                 return displayed.map((dk) => {
                   if (!dk.startsWith('file:') && !dk.startsWith('pr:')) {
                     const key = dk as PanelKey
-                    const { label, Icon } = PANELS[key]
+                    const { Icon } = PANELS[key]
+                    const label = t('panels.' + key)
                     const isActive = panel === key
                     return (
                       <div {...tabProps(key, () => closeTab(key))} key={key}>
@@ -4355,7 +4358,7 @@ const groups = useMemo(() => groupItems(allItems, sessionWorking), [allItems, se
                   />
                   {ADD_TAB_ORDER
                     .filter((k) => k !== 'files' && (!isVisitor || visitorTabs(caps, allItems).includes(k)))
-                    .filter((k) => !addQ || PANELS[k].label.toLowerCase().includes(addQ.toLowerCase()))
+                    .filter((k) => !addQ || t('panels.' + k).toLowerCase().includes(addQ.toLowerCase()))
                     .map((k) => (
                     <button
                       key={k}
@@ -4364,7 +4367,7 @@ const groups = useMemo(() => groupItems(allItems, sessionWorking), [allItems, se
                       className="flex w-full cursor-pointer items-center gap-2 rounded-md px-2 py-1.5 text-left hover:bg-accent"
                     >
                       {(() => { const { MenuIcon } = PANELS[k]; return <MenuIcon size={16} className="shrink-0 text-muted-foreground" /> })()}
-                      <span className="min-w-0 truncate text-[13px] leading-[18px]">{PANELS[k].label}</span>
+                      <span className="min-w-0 truncate text-[13px] leading-[18px]">{t('panels.' + k)}</span>
                     </button>
                   ))}
                   {(!isVisitor || visitorTabs(caps, allItems).includes('files')) && (!addQ || 'attachments'.includes(addQ.toLowerCase())) && (
@@ -4377,7 +4380,7 @@ const groups = useMemo(() => groupItems(allItems, sessionWorking), [allItems, se
                         className="flex w-full cursor-pointer items-center gap-2 rounded-md px-2 py-1.5 text-left hover:bg-accent"
                       >
                         <PanelAttachmentsIcon size={16} className="shrink-0 text-muted-foreground" />
-                        <span className="min-w-0 flex-1 truncate text-[13px] leading-[18px]">Attachments</span>
+                        <span className="min-w-0 flex-1 truncate text-[13px] leading-[18px]">{t('panels.attachments.label')}</span>
                         <ChevronRight size={12} className="shrink-0 text-muted-foreground" />
                       </button>
                       {addSub && addSubPos && attachFiles.length > 0 && createPortal(
@@ -4417,7 +4420,7 @@ const groups = useMemo(() => groupItems(allItems, sessionWorking), [allItems, se
                         className="flex w-full cursor-pointer items-center gap-2 rounded-md px-2 py-1.5 text-left hover:bg-accent"
                       >
                         <PanelPullRequestIcon size={16} className="shrink-0 text-muted-foreground" />
-                        <span className="min-w-0 flex-1 truncate text-[13px] leading-[18px]">Pull requests</span>
+                        <span className="min-w-0 flex-1 truncate text-[13px] leading-[18px]">{t('panels.prs.label')}</span>
                         <ChevronRight size={12} className="shrink-0 text-muted-foreground" />
                       </button>
                       {addPrSub && addSubPos && createPortal(
@@ -4524,12 +4527,12 @@ const groups = useMemo(() => groupItems(allItems, sessionWorking), [allItems, se
             const computerAsleep = !woke && !(woke || ['working', 'running', 'resumed', 'restored', 'initializing', 'resume_requested', 'resume_requested_frontend'].includes(statusState.enum))
             const newestPr = [...panelPrs].sort((a, b) => Number(b.number ?? prNumber(b) ?? 0) - Number(a.number ?? prNumber(a) ?? 0))[0]
             const landingRows: { key: string; label: string; description: string; MenuIcon: PanelIcon; disabled?: boolean; onClick: () => void }[] = [
-              { key: 'computer', label: 'Computer', description: "Watch and control Devin's Computer", MenuIcon: PANELS.computer.MenuIcon, onClick: () => openTab('computer') },
-              { key: 'editor', label: 'Editor', description: computerAsleep ? 'Wake up Devin to use the IDE' : "Full control of Devin's machine", MenuIcon: PANELS.editor.MenuIcon, disabled: computerAsleep, onClick: () => openTab('editor') },
-              { key: 'changes', label: 'Changes', description: "See Devin's file edits", MenuIcon: PANELS.changes.MenuIcon, onClick: () => openTab('changes') },
-              { key: 'worklog', label: 'Progress', description: "Understand Devin's history and actions", MenuIcon: PANELS.worklog.MenuIcon, onClick: () => openTab('worklog') },
-              { key: 'agents', label: 'Agents', description: "Manage this session's child sessions", MenuIcon: PANELS.agents.MenuIcon, onClick: () => openTab('agents') },
-              { key: 'sidechat', label: 'Side chat', description: 'Ask questions without interrupting main agent', MenuIcon: PANELS.sidechat.MenuIcon, onClick: () => openTab('sidechat') },
+              { key: 'computer', label: t('panels.computer'), description: t('panels.computer_d'), MenuIcon: PANELS.computer.MenuIcon, onClick: () => openTab('computer') },
+              { key: 'editor', label: t('panels.editor'), description: computerAsleep ? t('panels.editorWake') : t('panels.editor_d'), MenuIcon: PANELS.editor.MenuIcon, disabled: computerAsleep, onClick: () => openTab('editor') },
+              { key: 'changes', label: t('panels.changes'), description: t('panels.changes_d'), MenuIcon: PANELS.changes.MenuIcon, onClick: () => openTab('changes') },
+              { key: 'worklog', label: t('panels.worklog'), description: t('panels.worklog_d'), MenuIcon: PANELS.worklog.MenuIcon, onClick: () => openTab('worklog') },
+              { key: 'agents', label: t('panels.agents'), description: t('panels.agents_d'), MenuIcon: PANELS.agents.MenuIcon, onClick: () => openTab('agents') },
+              { key: 'sidechat', label: t('panels.sidechat'), description: t('panels.sidechat_d'), MenuIcon: PANELS.sidechat.MenuIcon, onClick: () => openTab('sidechat') },
               ...(newestPr ? [{ key: 'pull-requests', label: 'Pull requests', description: 'View proposed code changes', MenuIcon: PanelPullRequestIcon, onClick: () => openPr(newestPr.pr_url) }] : []),
             ]
             const showLanding = !isVisitor && displayedPanelKeys.length === 0

@@ -1,3 +1,5 @@
+import i18n from '@/i18n'
+
 export interface WordSeg {
   text: string
   changed: boolean
@@ -98,7 +100,7 @@ export function lineDiffFull(oldText: string, newText: string): DiffLine[] {
   const n = a.length
   const m = b.length
   if (n * m > 4_000_000) {
-    return [{ type: 'same', text: '(文件过大，跳过 diff)' }]
+    return [{ type: 'same', text: i18n.t('diff.tooLarge') }]
   }
   const dp: Uint32Array[] = []
   for (let i = 0; i <= n; i++) dp.push(new Uint32Array(m + 1))

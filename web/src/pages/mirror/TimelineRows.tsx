@@ -1,4 +1,5 @@
 import { memo, useCallback, useEffect, useRef, useState, type ReactNode, type KeyboardEvent as ReactKeyboardEvent } from 'react'
+import { useTranslation } from 'react-i18next'
 import { Loader2, ChevronRight, ChevronDown, SquareTerminal, Bot, CircleDashed, ArrowUpRight, Clock, Flag } from 'lucide-react'
 import { adminFetch } from '@/lib/api'
 import { viewer, screenshotUrl } from '@/lib/viewer'
@@ -12,6 +13,7 @@ import { editStats, time, rowClock, preview, FullTerminal } from './timelineUtil
 import { LiveOutputTail } from './ResourcePanels'
 
 const EventRow = memo(function EventRow({ item, sessionId, mt, onStepChanges, onOpenProgress, onOpenSubagent, live, envSupersededBy, tempOpen, selected, standalone }: { item: TimelineItem; sessionId: string; mt: string; onStepChanges?: (item: TimelineItem) => void; onOpenProgress?: (item: TimelineItem) => void; onOpenSubagent?: (agentId: string) => void; live?: boolean; envSupersededBy?: string; tempOpen?: boolean; selected?: boolean; standalone?: boolean }) {
+  const { t } = useTranslation()
   const shots = item.screenshotKeys || []
   const [liveDismissed, setLiveDismissed] = useState(false)
   const hasBody = (!!item.body || !!item.output) && item.kind !== 'todo' && !(item.kind === 'shell_done' && item.terminal)
@@ -64,14 +66,14 @@ const EventRow = memo(function EventRow({ item, sessionId, mt, onStepChanges, on
             <button key={i} type="button" title={time(item.ts)} onClick={openState} data-testid="transcript-worklog-row" className={cn(rowCls, shots.length ? 'cursor-pointer hover:text-foreground' : 'cursor-default')}>
               <span className="min-w-0 flex-1 break-words">{a}</span>
               {i === 0 && shots.length > 0 && (
-                <span role="button" tabIndex={0} aria-label="Show screenshots" aria-expanded={open} onClick={(e) => { e.stopPropagation(); setOpen(!open) }} onKeyDown={(e) => { if (e.key === 'Enter') { e.stopPropagation(); setOpen(!open) } }} className="mt-px flex h-4 w-4 shrink-0 cursor-pointer items-center justify-center">
+                <span role="button" tabIndex={0} aria-label={t('tl.showShots')} aria-expanded={open} onClick={(e) => { e.stopPropagation(); setOpen(!open) }} onKeyDown={(e) => { if (e.key === 'Enter') { e.stopPropagation(); setOpen(!open) } }} className="mt-px flex h-4 w-4 shrink-0 cursor-pointer items-center justify-center">
                   <ChevronRight size={16} className={cn('shrink-0 text-muted-foreground/60 transition-transform duration-200 ease-out group-hover:text-foreground', open && 'rotate-90')} />
                 </span>
               )}
             </button>
           ))}
           {open && mt && shots.map((k) => (
-            <LightboxImage key={k} src={screenshotUrl(sessionId, k, mt)} alt="截图" className="mt-1.5 max-h-64 rounded-md border border-border" />
+            <LightboxImage key={k} src={screenshotUrl(sessionId, k, mt)} alt={t('tl.shotAlt')} className="mt-1.5 max-h-64 rounded-md border border-border" />
           ))}
         </div>
         {!standalone && (
@@ -113,7 +115,7 @@ const EventRow = memo(function EventRow({ item, sessionId, mt, onStepChanges, on
                 )}
               </span>
               {onOpenProgress && (
-                <span role="button" tabIndex={0} title="View in Progress" aria-label="View in Progress" onClick={(e) => { e.stopPropagation(); onOpenProgress(item) }} onKeyDown={(e) => { if (e.key === 'Enter') { e.stopPropagation(); onOpenProgress(item) } }} className="shrink-0 cursor-pointer rounded p-0.5 opacity-0 hover:bg-accent group-hover:opacity-100 focus-visible:opacity-100">
+                <span role="button" tabIndex={0} title={t('tl.viewProgress')} aria-label={t('tl.viewProgress')} onClick={(e) => { e.stopPropagation(); onOpenProgress(item) }} onKeyDown={(e) => { if (e.key === 'Enter') { e.stopPropagation(); onOpenProgress(item) } }} className="shrink-0 cursor-pointer rounded p-0.5 opacity-0 hover:bg-accent group-hover:opacity-100 focus-visible:opacity-100">
                   <CircleDashed size={11} className="text-muted-foreground" />
                 </span>
               )}
@@ -201,10 +203,10 @@ const EventRow = memo(function EventRow({ item, sessionId, mt, onStepChanges, on
         {fixState !== 'sent' && viewer().role === 'admin' && <div role="presentation" className="mt-0.5 flex w-fit items-center">
           <button type="button" disabled={afState === 'sending' || afState === 'done'} onClick={enableAutoFix} className={cn(splitBtn, 'rounded-l-[6px]', afState !== 'sending' && afState !== 'done' && 'cursor-pointer hover:bg-accent')}>{afState === 'sending' ? 'Enabling…' : afState === 'done' ? 'Auto-fix enabled' : 'Enable auto-fix'}</button>
           <div className="relative">
-            <button type="button" aria-label="More actions" aria-expanded={fixMenu} onClick={() => setFixMenu((v) => !v)} className={cn(splitBtn, 'cursor-pointer rounded-r-[6px] border-l-0 px-1.5 hover:bg-accent')}><ChevronDown size={16} /></button>
+            <button type="button" aria-label={t('tl.moreActions')} aria-expanded={fixMenu} onClick={() => setFixMenu((v) => !v)} className={cn(splitBtn, 'cursor-pointer rounded-r-[6px] border-l-0 px-1.5 hover:bg-accent')}><ChevronDown size={16} /></button>
             {fixMenu && (
               <div role="menu" className="absolute left-0 top-8 z-20 min-w-[180px] overflow-hidden rounded-[10px] border border-border bg-popover py-1 shadow-lg">
-                <button role="menuitem" disabled={!canFix || fixState === 'sending'} onClick={retrigger} title={canFix ? undefined : '该事件无关联 PR'} className={cn('flex w-full items-center gap-2 px-2.5 py-1.5 text-left text-[13px]', canFix && fixState !== 'sending' ? 'cursor-pointer hover:bg-accent' : 'opacity-50')}>{fixState === 'sending' ? 'Fixing…' : 'Fix for this PR only'}</button>
+                <button role="menuitem" disabled={!canFix || fixState === 'sending'} onClick={retrigger} title={canFix ? undefined : t('tl.noLinkedPr')} className={cn('flex w-full items-center gap-2 px-2.5 py-1.5 text-left text-[13px]', canFix && fixState !== 'sending' ? 'cursor-pointer hover:bg-accent' : 'opacity-50')}>{fixState === 'sending' ? 'Fixing…' : 'Fix for this PR only'}</button>
               </div>
             )}
           </div>
@@ -235,8 +237,8 @@ const EventRow = memo(function EventRow({ item, sessionId, mt, onStepChanges, on
           {sub.isBackground && <span className="shrink-0 rounded-full bg-muted px-1.5 py-0.5 text-[10px] text-muted-foreground">bg</span>}
           {sub.finished
             ? sub.failed
-              ? <span className="shrink-0 text-[11px] text-red-500">failed</span>
-              : <span className="shrink-0 text-[11px] text-emerald-600 dark:text-emerald-400">done</span>
+              ? <span className="shrink-0 text-[11px] text-red-500">{t('tl.failed')}</span>
+              : <span className="shrink-0 text-[11px] text-emerald-600 dark:text-emerald-400">{t('tl.done')}</span>
             : <Loader2 size={13} className="shrink-0 animate-spin text-muted-foreground" />}
           <ChevronRight size={14} className="shrink-0 text-muted-foreground" />
         </button>
@@ -271,7 +273,7 @@ const EventRow = memo(function EventRow({ item, sessionId, mt, onStepChanges, on
             // 3 lines; the running command gets a shine sweep.
             <span className={cn('min-w-0 flex-1 whitespace-pre-wrap [display:-webkit-box] [-webkit-box-orient:vertical] [-webkit-line-clamp:3] overflow-hidden', live && !open && 'wg-shine')}>
               {heading(item)}
-              {live && <span className="sr-only">In progress</span>}
+              {live && <span className="sr-only">{t('tl.inProgress')}</span>}
             </span>
           ) : item.kind === 'read' ? (
             <span className="min-w-0 select-none break-words">
@@ -293,7 +295,7 @@ const EventRow = memo(function EventRow({ item, sessionId, mt, onStepChanges, on
             <span
               role="button"
               tabIndex={0}
-              title="View changes from this step"
+              title={t('tl.viewStepChanges')}
               aria-label={`View changes from this step (+${stats.added} −${stats.removed})`}
               onClick={(e) => { e.stopPropagation(); if (onOpenProgress) onOpenProgress(item); else onStepChanges?.(item) }}
               onKeyDown={(e) => { if (e.key === 'Enter') { e.stopPropagation(); if (onOpenProgress) onOpenProgress(item); else onStepChanges?.(item) } }}
@@ -307,8 +309,8 @@ const EventRow = memo(function EventRow({ item, sessionId, mt, onStepChanges, on
             <span
               role="button"
               tabIndex={0}
-              title="View in Progress"
-              aria-label="View in Progress"
+              title={t('tl.viewProgress')}
+              aria-label={t('tl.viewProgress')}
               onClick={(e) => { e.stopPropagation(); onOpenProgress(item) }}
               onKeyDown={(e) => { if (e.key === 'Enter') { e.stopPropagation(); onOpenProgress(item) } }}
               className="shrink-0 cursor-pointer rounded p-0.5 opacity-0 hover:bg-accent group-hover:opacity-100 focus-visible:opacity-100"
@@ -380,7 +382,7 @@ const EventRow = memo(function EventRow({ item, sessionId, mt, onStepChanges, on
           <LightboxImage
             key={k}
             src={screenshotUrl(sessionId, k, mt)}
-            alt="截图"
+            alt={t('tl.shotAlt')}
             className="mt-1.5 max-h-64 rounded-md border border-border"
           />
         ))}
@@ -461,6 +463,7 @@ function WgScrollBody({ children, live, itemCount }: { children: ReactNode; live
 }
 
 const WorkGroup = memo(function WorkGroup({ items, seconds, sessionId, mt, defaultOpen, live, onStepChanges, onOpenProgress, tailThoughtId, selectedId }: { items: TimelineItem[]; seconds: number; sessionId: string; mt: string; defaultOpen: boolean; live?: boolean; onStepChanges?: (item: TimelineItem) => void; onOpenProgress?: (item: TimelineItem) => void; tailThoughtId?: string; selectedId?: string }) {
+  const { t } = useTranslation()
   const [open, setOpen] = useState(defaultOpen)
   let added = 0
   let removed = 0
@@ -501,7 +504,7 @@ const WorkGroup = memo(function WorkGroup({ items, seconds, sessionId, mt, defau
           {(added > 0 || removed > 0) && (
             <button
               type="button"
-              title="View changes from this step"
+              title={t('tl.viewStepChanges')}
               aria-label={`View changes from this step (+${added} −${removed})`}
               onClick={(e) => {
                 e.stopPropagation()

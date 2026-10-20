@@ -1,4 +1,5 @@
 import { useEffect, useRef, useState, type ReactNode } from 'react'
+import { useTranslation } from 'react-i18next'
 import { useNavigate } from 'react-router-dom'
 import { Loader2, ChevronRight, ChevronDown, List, Bot } from 'lucide-react'
 import { adminFetch } from '@/lib/api'
@@ -40,6 +41,7 @@ function ResSection({ title, count, children }: { title: string; count?: number 
 }
 
 function ResourcesPanel({ id }: { id: string }) {
+  const { t } = useTranslation()
   const [r, setR] = useState<SessionResources | null>(null)
   const [err, setErr] = useState<string | null>(null)
   useEffect(() => {
@@ -51,28 +53,28 @@ function ResourcesPanel({ id }: { id: string }) {
     return () => { alive = false }
   }, [id])
   if (err) return <p className="p-4 text-[12px] text-muted-foreground">{err}</p>
-  if (!r) return <div className="flex items-center gap-2 p-4 text-[12px] text-muted-foreground"><Loader2 className="h-3.5 w-3.5 animate-spin" />Loading agent resources…</div>
+  if (!r) return <div className="flex items-center gap-2 p-4 text-[12px] text-muted-foreground"><Loader2 className="h-3.5 w-3.5 animate-spin" />{t('res.loading')}</div>
   const empty = 'text-[12px] text-muted-foreground'
   return (
     <div className="min-h-0 flex-1 overflow-y-auto">
-      <ResSection title="Rules" count={r.rules?.length ?? 0}>
-        {!r.rules?.length ? <p className={empty}>No rules configured.</p> : r.rules.map((x, i) => (
+      <ResSection title={t('res.rules')} count={r.rules?.length ?? 0}>
+        {!r.rules?.length ? <p className={empty}>{t('res.noRules')}</p> : r.rules.map((x, i) => (
           <div key={i} className="mb-2 rounded-md border border-border bg-card p-2">
             <div className="mb-1 text-[11px] font-medium text-muted-foreground">{x.source || x.path || `rule ${i + 1}`}</div>
             {x.content && <pre className="max-h-32 overflow-auto whitespace-pre-wrap text-[11px] leading-snug">{x.content}</pre>}
           </div>
         ))}
       </ResSection>
-      <ResSection title="Skills" count={r.skills?.length ?? 0}>
-        {!r.skills?.length ? <p className={empty}>No skills installed.</p> : r.skills.map((x, i) => (
+      <ResSection title={t('res.skills')} count={r.skills?.length ?? 0}>
+        {!r.skills?.length ? <p className={empty}>{t('res.noSkills')}</p> : r.skills.map((x, i) => (
           <div key={i} className="mb-1.5 rounded-md border border-border bg-card px-2 py-1.5">
             <div className="text-[12px] font-medium">{x.name || x.path}</div>
             {x.description && <div className="mt-0.5 line-clamp-2 text-[11px] text-muted-foreground">{x.description}</div>}
           </div>
         ))}
       </ResSection>
-      <ResSection title="Subagent profiles" count={r.subagentProfiles?.length ?? 0}>
-        {!r.subagentProfiles?.length ? <p className={empty}>No spawnable subagent profiles.</p> : r.subagentProfiles.map((x, i) => (
+      <ResSection title={t('res.subProfiles')} count={r.subagentProfiles?.length ?? 0}>
+        {!r.subagentProfiles?.length ? <p className={empty}>{t('res.noSub')}</p> : r.subagentProfiles.map((x, i) => (
           <div key={i} className="mb-1.5 rounded-md border border-border bg-card px-2 py-1.5">
             <div className="flex items-center gap-2 text-[12px] font-medium"><Bot className="h-3.5 w-3.5 text-muted-foreground" />{x.name}</div>
             {x.description && <div className="mt-0.5 line-clamp-2 text-[11px] text-muted-foreground">{x.description}</div>}
@@ -80,8 +82,8 @@ function ResourcesPanel({ id }: { id: string }) {
           </div>
         ))}
       </ResSection>
-      <ResSection title="Plans" count={r.plans?.length ?? 0}>
-        {!r.plans?.length ? <p className={empty}>No saved plans.</p> : r.plans.map((x, i) => (
+      <ResSection title={t('res.plans')} count={r.plans?.length ?? 0}>
+        {!r.plans?.length ? <p className={empty}>{t('res.noPlans')}</p> : r.plans.map((x, i) => (
           <div key={i} className="mb-1.5 flex items-center gap-2 rounded-md border border-border bg-card px-2 py-1.5 text-[12px]">
             <List className="h-3.5 w-3.5 shrink-0 text-muted-foreground" />
             <span className="truncate">{x.title || x.path}</span>
@@ -89,8 +91,8 @@ function ResourcesPanel({ id }: { id: string }) {
           </div>
         ))}
       </ResSection>
-      <ResSection title="Hooks" count={r.hooks?.length ?? 0}>
-        {!r.hooks?.length ? <p className={empty}>No hooks configured.</p> : r.hooks.map((x, i) => (
+      <ResSection title={t('res.hooks')} count={r.hooks?.length ?? 0}>
+        {!r.hooks?.length ? <p className={empty}>{t('res.noHooks')}</p> : r.hooks.map((x, i) => (
           <div key={i} className="mb-1.5 rounded-md border border-border bg-card px-2 py-1.5 text-[11px]">
             <div className="font-medium">{x.event}</div>
             {x.command && <div className="mt-0.5 truncate font-mono text-muted-foreground">{x.command}</div>}
@@ -98,7 +100,7 @@ function ResourcesPanel({ id }: { id: string }) {
         ))}
       </ResSection>
       {r.config && (
-        <ResSection title="Agent config">
+        <ResSection title={t('res.agentCfg')}>
           <pre className="max-h-64 overflow-auto rounded-md border border-border bg-card p-2 text-[10px] leading-snug">{JSON.stringify(r.config, null, 2)}</pre>
         </ResSection>
       )}
@@ -131,6 +133,7 @@ const EXT_METHODS = [
 ]
 
 function ExtConsole({ id }: { id: string }) {
+  const { t } = useTranslation()
   const [method, setMethod] = useState('_cognition.ai/')
   const [params, setParams] = useState('')
   const [load, setLoad] = useState(false)
@@ -140,34 +143,34 @@ function ExtConsole({ id }: { id: string }) {
     const m = method.trim()
     if (!m || busy) return
     let p: Record<string, unknown> = {}
-    try { p = params.trim() ? JSON.parse(params) : {} } catch { setOut('params 不是合法 JSON'); return }
+    try { p = params.trim() ? JSON.parse(params) : {} } catch { setOut(t('res.badParams')); return }
     if (!('sessionId' in p)) p = { sessionId: id, ...p }
     setBusy(true); setOut(null)
     try {
       const r = await adminFetch<{ ok: boolean; result?: unknown; error?: string }>(`/api/admin/session/${id}/ext`, {
         method: 'POST', body: JSON.stringify({ method: m, params: p, load: load ? 1 : undefined }),
       })
-      setOut(r.ok ? JSON.stringify(r.result ?? {}, null, 2) : `错误: ${r.error}`)
-    } catch (e) { setOut(`请求失败: ${(e as Error).message}`) } finally { setBusy(false) }
+      setOut(r.ok ? JSON.stringify(r.result ?? {}, null, 2) : `${t('res.errPrefix')}${r.error}`)
+    } catch (e) { setOut(`${t('res.reqFail')}${(e as Error).message}`) } finally { setBusy(false) }
   }
   return (
     <div className="border-b border-border px-3 py-2">
-      <div className="mb-2 text-[12px] font-medium text-muted-foreground">ACP console · 直接调用 agent 扩展方法</div>
+      <div className="mb-2 text-[12px] font-medium text-muted-foreground">{t('res.consoleDesc')}</div>
       <input list="ext-methods" value={method} onChange={(e) => setMethod(e.target.value)}
         placeholder="_cognition.ai/…"
         className="mb-1.5 w-full rounded-md border border-border bg-card px-2 py-1.5 font-mono text-[11px] outline-none focus:border-foreground/30" />
       <datalist id="ext-methods">{EXT_METHODS.map((m) => <option key={m} value={m} />)}</datalist>
       <textarea value={params} onChange={(e) => setParams(e.target.value)} rows={2}
-        placeholder='params JSON（自动注入 sessionId），例如 {"cwd":"D:/…"}'
+        placeholder={t('res.paramsPh')}
         className="mb-1.5 w-full resize-y rounded-md border border-border bg-card px-2 py-1.5 font-mono text-[11px] outline-none focus:border-foreground/30" />
       <div className="flex items-center gap-2">
         <label className="flex items-center gap-1 text-[11px] text-muted-foreground">
           <input type="checkbox" checked={load} onChange={(e) => setLoad(e.target.checked)} />
-          先 session/load
+          {t('res.loadFirst')}
         </label>
         <button onClick={() => void send()} disabled={busy}
           className="ml-auto rounded-md border border-border bg-card px-3 py-1 text-[11px] hover:bg-tint-secondary disabled:opacity-50">
-          {busy ? '…' : '调用'}
+          {busy ? '…' : t('res.call')}
         </button>
       </div>
       {out !== null && <pre className="mt-2 max-h-48 overflow-auto rounded-md border border-border bg-card p-2 text-[10px] leading-snug">{out}</pre>}
@@ -182,6 +185,7 @@ function ExtConsole({ id }: { id: string }) {
  * agent's nested children (spawned inside its stream).
  */
 function SubagentsPanel({ id }: { id: string }) {
+  const { t } = useTranslation()
   const nav = useNavigate()
   const [agents, setAgents] = useState<LocalSubagent[]>([])
   useEffect(() => {
@@ -199,14 +203,14 @@ function SubagentsPanel({ id }: { id: string }) {
     <div className="flex min-h-0 flex-1 flex-col">
       <div className="border-b border-border px-3 py-2 text-[12px] font-medium text-muted-foreground">Subagents{agents.length ? ` · ${agents.length}` : ''}</div>
       <div className="flex-1 overflow-y-auto p-2">
-        {!agents.length && <p className="px-2 py-6 text-center text-[12px] text-muted-foreground">No subagents in this session yet.</p>}
+        {!agents.length && <p className="px-2 py-6 text-center text-[12px] text-muted-foreground">{t('res.noSubs')}</p>}
         {agents.map((a) => (
           <button key={a.agentId} onClick={() => nav(`/admin/sub:${root}:${a.agentId}`)} className="mb-1 flex w-full items-center gap-2.5 rounded-lg border border-border bg-card px-3 py-2.5 text-left hover:bg-tint-secondary">
             <span className={cn('size-2 shrink-0 rounded-full', a.resumable === false ? 'bg-muted-foreground/40' : a.status === 'running' ? 'bg-amber-500 animate-pulse' : a.status === 'failed' ? 'bg-red-500' : 'bg-emerald-500')} />
             <span className="min-w-0 flex-1">
               <span className="flex min-w-0 items-center gap-1.5 truncate text-[13px] font-medium leading-[18px]">
                 <span className={cn('truncate', a.resumable === false && 'text-muted-foreground')}>{a.title || a.agentId}</span>
-                {a.resumable === false && <span className="shrink-0 rounded bg-muted px-1 text-[10px] leading-[15px] text-muted-foreground" title="宿主进程已重启/重放，句柄不在注册表">已失效</span>}
+                {a.resumable === false && <span className="shrink-0 rounded bg-muted px-1 text-[10px] leading-[15px] text-muted-foreground" title={t('res.handleGone')}>{t('res.handleGoneBadge')}</span>}
               </span>
               <span className="block truncate text-[11px] leading-[15px] text-muted-foreground">{[a.profile, a.model].filter(Boolean).join(' · ')}{a.isBackground ? ' · bg' : ''}{a.lastText ? ` — ${a.lastText}` : a.summary ? ` — ${a.summary}` : ''}</span>
             </span>

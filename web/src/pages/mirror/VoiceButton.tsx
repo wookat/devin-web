@@ -1,4 +1,5 @@
 import { useEffect, useRef, useState } from 'react'
+import { useTranslation } from 'react-i18next'
 import { Loader2, Mic } from 'lucide-react'
 import { adminFetch } from '@/lib/api'
 import { time } from './timelineUtil'
@@ -91,6 +92,7 @@ function OfficialStopIcon() {
 }
 
 function VoiceButton({ onText, onRecordingChange, disabled }: { onText: (t: string) => void; onRecordingChange?: (rec: boolean) => void; disabled?: boolean }) {
+  const { t } = useTranslation()
   const [recording, setRecording] = useState(false)
   const [busy, setBusy] = useState(false)
   const [micError, setMicError] = useState(false)
@@ -181,8 +183,8 @@ function VoiceButton({ onText, onRecordingChange, disabled }: { onText: (t: stri
           <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="#ef4444" strokeWidth="2" className="mt-0.5 shrink-0" aria-hidden="true">
             <circle cx="12" cy="12" r="10" /><line x1="12" y1="8" x2="12" y2="12" /><line x1="12" y1="16" x2="12.01" y2="16" />
           </svg>
-          <span className="flex-1">Could not access microphone. Please check your browser permissions.</span>
-          <button aria-label="Close" className="shrink-0 text-muted-foreground hover:text-foreground" onClick={() => setMicError(false)}>
+          <span className="flex-1">{t('vb.micFail')}</span>
+          <button aria-label={t('common.close')} className="shrink-0 text-muted-foreground hover:text-foreground" onClick={() => setMicError(false)}>
             ×
           </button>
         </div>
@@ -190,8 +192,8 @@ function VoiceButton({ onText, onRecordingChange, disabled }: { onText: (t: stri
       <button
         onClick={() => (recording ? stop() : void start())}
         disabled={disabled || busy}
-        aria-label="Record voice prompt"
-        title="Record voice prompt"
+        aria-label={t('vb.record')}
+        title={t('vb.record')}
         className="flex size-7 cursor-pointer items-center justify-center rounded-full text-muted-foreground hover:bg-accent hover:text-foreground disabled:opacity-50"
       >
         {busy ? <Loader2 size={18} className="animate-spin" /> : <Mic size={18} />}
@@ -207,8 +209,8 @@ function VoiceButton({ onText, onRecordingChange, disabled }: { onText: (t: stri
           <Waveform volumeRef={volumeRef} />
           <button
             onClick={stop}
-            aria-label="Send voice message"
-            title="Send voice message"
+            aria-label={t('vb.send')}
+            title={t('vb.send')}
             className="inline-flex size-7 shrink-0 select-none items-center justify-center rounded-full border border-black/[0.08] bg-[#363636] text-white hover:brightness-[.92] disabled:opacity-50 [&_svg]:size-[18px]"
           >
             <OfficialStopIcon />
