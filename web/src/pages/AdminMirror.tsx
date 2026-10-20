@@ -2023,7 +2023,7 @@ const groups = useMemo(() => groupItems(allItems, sessionWorking), [allItems, se
         }
       }
       graduateTl.current?.() // sending is interaction — start the real load now
-      await sessionFetch('/message', {
+      const res = await sessionFetch<{ ok: boolean; queued?: string }>('/message', {
         method: 'POST',
         body: JSON.stringify({
           message: text,
@@ -2035,6 +2035,13 @@ const groups = useMemo(() => groupItems(allItems, sessionWorking), [allItems, se
       messageSent = true
       revokePreviews(draft.staged)
       pendingPreviewRef.current = []
+      if (res?.queued) {
+        // Auto-queued mid-turn: it lands in the queue band, not the timeline —
+        // drop the local echo and reflect the queue immediately.
+        setQueued((q) => [...q, { id: res.queued!, text }])
+        setItems((prev) => prev.filter((it) => it.id !== echo.id))
+        return
+      }
       await reloadTl.current?.()
       setItems((prev) => {
         const real = prev.some((it) => it.id !== echo.id && it.kind === 'message' && it.role === 'user' && (it.body || '').trim() === (echo.body || '').trim() && it.ts >= new Date(Date.parse(echo.ts) - 120_000).toISOString())

@@ -424,8 +424,7 @@ async function handleSubSession(
     if (!peek) void ensureLoaded(ctx, parent);
     const items = subagentTimeline(ctx, parent, aid);
     json(res, 200, {
-      items, next_cursor: null, error: null, queue: [],
-      activity: statusOf(info()) === "working" ? { text: "working" } : null,
+      items, next_cursor: null, error: null, queue: queueList(parent),
     });
     return true;
   }
@@ -1176,7 +1175,7 @@ export async function handleLocalWb(ctx: ApiContext, req: IncomingMessage, res: 
             // Peek pages can't back-page: snapshot indexes don't line up with
             // the live log, so older history needs a real (loading) fetch.
             next_cursor: !loading && !peek && start > 0 ? String(start) : null,
-            error: null, queue: [],
+            error: null, queue: queueList(id),
             // `reset` tells clients the log was rebuilt (replay / disk
             // re-seed): merge must be replaced wholesale or stale-window
             // items linger next to their seq-id twins.
