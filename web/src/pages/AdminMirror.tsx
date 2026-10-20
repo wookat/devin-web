@@ -1300,7 +1300,7 @@ export default function AdminMirrorPage() {
     }
     graduateTl.current = graduateNow
     const graduateTimer = peek ? window.setTimeout(graduateNow, 8000) : null
-    const load = (fresh = false, retried = false) => {
+    const load = (fresh = false, retryN = 0) => {
       captureAnchor()
       return sessionFetchSwr<TimelinePage>(`/timeline?limit=300${peek ? '&peek=1' : ''}${first ? '&boot=1' : fresh ? '&fresh=1' : ''}`)
         .then(({ data: r, stale }) => {
@@ -1356,16 +1356,17 @@ export default function AdminMirrorPage() {
         })
         .catch((e) => {
           if (!alive) return
-          // One silent retry before counting — a single failure is usually a
-          // stale pooled socket or a sub-second blip, not a real outage. Only
-          // two counted (i.e. retried-and-still-failing) hits raise the banner.
-          if (!retried) {
-            window.setTimeout(() => { if (alive) void load(false, true) }, 1200)
+          // Two silent retries before counting — a restart's exit→listen dead
+          // window (~2-6s) plus a stale pooled socket should never surface the
+          // banner. Only ~10s+ of sustained failure raises it.
+          if (retryN < 2) {
+            window.setTimeout(() => { if (alive) void load(false, retryN + 1) }, 1200 * (retryN + 1))
             return
           }
           setTlError((e as Error).message)
           setLoaded(true)
           failCount.current += 1
+          console.warn(`[timeline] fetch failed (${failCount.current}/2):`, e)
           if (failCount.current >= 2) setConnLost(true)
         })
     }
