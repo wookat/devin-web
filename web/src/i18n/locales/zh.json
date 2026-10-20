@@ -614,7 +614,8 @@
     "delConfirm": "删除 ",
     "clearAnnotText": "清除标注",
     "showTree": "显示文件树",
-    "hideTree": "收起文件树"
+    "hideTree": "收起文件树",
+    "binary": "二进制文件，不支持预览"
   },
   "vp": {
     "cantLoad": "无法加载 {name}",
@@ -1103,5 +1104,8 @@
   "cmp": {
     "connecting": "正在连接 Devin 的电脑…",
     "reconnecting": "重新连接中…"
+  },
+  "draft": {
+    "pickFile": "点击左侧文件查看内容"
   }
 }

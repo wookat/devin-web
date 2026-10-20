@@ -44,6 +44,7 @@ import { reduceStatus, stText } from './mirror/statusReduce'
 import { type ComposerMetaT, type SuggestItem, AT_CATEGORIES, QUEUE_DASHED_SVG, QUEUE_DRAG_SVG, QUEUE_PLACEHOLDER } from './mirror/composerMeta'
 import { type TreePrefs, TREE_PREFS_KEY, DEFAULT_TREE_PREFS, buildFilterQ, SessionTree } from './mirror/SessionTree'
 import DirPicker from './mirror/DirPicker'
+import CodeView from '@/components/CodeView'
 import { type WfAgentEventState, AgentsPanel } from './mirror/AgentsPanel'
 import { SessionSettingsGlyph, HeaderMenuPortal, AwaitingInstructionsGlyph, ApiOriginGlyph, OfficialGlyph } from './mirror/glyphs'
 import { PermissionCard, PermissionSidebarPanel } from './mirror/Permission'
@@ -838,11 +839,13 @@ export default function AdminMirrorPage() {
   const [indexedPaths, setIndexedPaths] = useState<string[] | null>(null)
   useEffect(() => setIndexedPaths(null), [id])
   useEffect(() => {
-    if (atCat !== 'files' || indexedPaths || isVisitor || isDraft) return
-    void adminFetch<{ paths: string[] }>(`/api/admin/mirror/indexed-paths?session=${encodeURIComponent(id)}`)
+    if (atCat !== 'files' || indexedPaths || isVisitor) return
+    void adminFetch<{ paths: string[] }>(`/api/admin/mirror/indexed-paths?${isDraft ? `cwd=${encodeURIComponent(draftCwd || '')}` : `session=${encodeURIComponent(id)}`}`)
       .then((r) => setIndexedPaths(r.paths || []))
       .catch(() => setIndexedPaths([]))
-  }, [atCat, indexedPaths, isVisitor, isDraft, id])
+  }, [atCat, indexedPaths, isVisitor, isDraft, id, draftCwd])
+  // Draft cwd change → re-index for the new workspace.
+  useEffect(() => { if (isDraft) setIndexedPaths(null) }, [isDraft, draftCwd])
   const editorRef = useRef<ComposerEditorHandle>(null)
   const [bandH, setBandH] = useState(0)
 
@@ -1980,7 +1983,7 @@ const groups = useMemo(() => groupItems(allItems, sessionWorking), [allItems, se
         const task = text.startsWith('/queue ') ? text.slice(7).trim() : text
         const r = await adminFetch<{ ok: boolean; id?: string; error?: string }>('/api/admin/sessions/new', {
           method: 'POST',
-          body: JSON.stringify({ task, folder: draftFolder || undefined, cwd: draftCwd || undefined }),
+          body: JSON.stringify({ task, folder: draftFolder || undefined, cwd: draftCwd || undefined, attachments: staged.map((f) => ({ url: f.url, name: f.name, size: f.size })) }),
         })
         if (!r.ok || !r.id) throw new Error(r.error || 'create failed')
         for (const pick of draftPicks.current) {
@@ -2201,7 +2204,6 @@ const groups = useMemo(() => groupItems(allItems, sessionWorking), [allItems, se
   }
 
   async function upload(file: File) {
-    if (isDraft) { setSendErr(t('composer.attachAfterFirst')); return }
     if (!caps.canUpload) return
     const preview = URL.createObjectURL(file)
     pendingPreviewRef.current.push({ url: '', name: file.name, size: file.size, preview })
@@ -2209,7 +2211,9 @@ const groups = useMemo(() => groupItems(allItems, sessionWorking), [allItems, se
     uploadsInFlight.current += 1
     try {
       const upName = file.name || `upload.${(file.type.split(';')[0].split('/')[1] || 'bin')}`
-      const r = await sessionFetch<{ ok: boolean; url?: string; name?: string; size?: number; error?: string }>(`/upload-stage?filename=${encodeURIComponent(upName)}`, { method: 'POST', body: file })
+      const r = isDraft
+        ? await adminFetch<{ ok: boolean; url?: string; name?: string; size?: number; error?: string }>(`/api/admin/upload-stage?filename=${encodeURIComponent(upName)}`, { method: 'POST', body: file })
+        : await sessionFetch<{ ok: boolean; url?: string; name?: string; size?: number; error?: string }>(`/upload-stage?filename=${encodeURIComponent(upName)}`, { method: 'POST', body: file })
       if (!r.ok || !r.url || !r.name || typeof r.size !== 'number') throw new Error(r.error || 'upload failed')
       clearPendingPreview(preview)
       setStaged((prev) => {
@@ -2800,6 +2804,7 @@ const groups = useMemo(() => groupItems(allItems, sessionWorking), [allItems, se
                 primaryCwd={composerMeta?.primary_cwd}
               />
             </div>
+            {draftCwd && <DraftExplorer root={draftCwd} />}
           </div>
         )}
         <div className={cn('relative flex min-h-0 flex-1 flex-col', isDraft && 'hidden')}>
@@ -4633,6 +4638,64 @@ const groups = useMemo(() => groupItems(allItems, sessionWorking), [allItems, se
           })()}
         </aside>
       )}
+    </div>
+  )
+}
+
+/* Draft-page project explorer — browse the picked workspace before the
+ * session exists (fs/list + fs/file; read-only CodeView preview). */
+function DraftExplorer({ root }: { root: string }) {
+  const { t } = useTranslation()
+  const [dirs, setDirs] = useState<Record<string, { name: string; dir: boolean }[] | 'loading'>>({})
+  const [open, setOpen] = useState<Record<string, boolean>>({})
+  const [file, setFile] = useState<{ path: string; text: string | null; binary?: boolean } | null>(null)
+  const load = (p: string) => {
+    setDirs((m) => ({ ...m, [p]: 'loading' }))
+    void adminFetch<{ entries: { name: string; dir: boolean }[] }>(`/api/admin/fs/list?path=${encodeURIComponent(p)}`)
+      .then((d) => setDirs((m) => ({ ...m, [p]: d.entries })))
+      .catch(() => setDirs((m) => ({ ...m, [p]: [] })))
+  }
+  useEffect(() => { setDirs({}); setOpen({}); setFile(null); load(root) }, [root]) // eslint-disable-line react-hooks/exhaustive-deps
+  const renderDir = (p: string, depth: number): React.ReactNode => {
+    const es = dirs[p]
+    if (!es || es === 'loading') return null
+    return es.map((e) => {
+      const fp = `${p.replace(/[\\/]+$/, '')}\\${e.name}`
+      const isOpen = !!open[fp]
+      return (
+        <div key={fp}>
+          <button
+            className="flex w-full cursor-pointer items-center gap-1.5 rounded px-1.5 py-[3px] text-left text-[12px] hover:bg-tint-secondary"
+            style={{ paddingLeft: 6 + depth * 14 }}
+            onClick={() => {
+              if (e.dir) { setOpen((m) => ({ ...m, [fp]: !m[fp] })); if (!dirs[fp]) load(fp) }
+              else {
+                void adminFetch<{ text: string | null; binary: boolean }>(`/api/admin/fs/file?path=${encodeURIComponent(fp)}`)
+                  .then((d) => setFile({ path: fp, ...d })).catch(() => {})
+              }
+            }}
+          >
+            {e.dir ? (isOpen ? <ChevronDown size={12} className="shrink-0 text-muted-foreground" /> : <ChevronRight size={12} className="shrink-0 text-muted-foreground" />) : <span className="w-3 shrink-0" />}
+            <span className="min-w-0 flex-1 truncate">{e.name}</span>
+          </button>
+          {e.dir && isOpen && renderDir(fp, depth + 1)}
+        </div>
+      )
+    })
+  }
+  return (
+    <div className="mt-3 flex h-[300px] w-full max-w-[720px] overflow-hidden rounded-[10px] border border-border bg-card text-left">
+      <div className="w-[240px] shrink-0 overflow-auto border-r border-border p-1.5">
+        <div className="px-1.5 pb-1 text-[11px] font-medium text-muted-foreground">{root.replace(/[\\/]+$/, '').split(/[\\/]/).pop()}</div>
+        {renderDir(root, 0)}
+      </div>
+      <div className="min-w-0 flex-1 overflow-auto bg-background">
+        {file
+          ? file.binary || file.text === null
+            ? <p className="p-4 text-[12px] text-muted-foreground">{t('ws.binary')}</p>
+            : <CodeView text={file.text} name={file.path} />
+          : <p className="p-4 text-[12px] text-muted-foreground">{t('draft.pickFile')}</p>}
+      </div>
     </div>
   )
 }

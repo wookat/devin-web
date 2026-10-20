@@ -819,7 +819,8 @@ export async function handleLocalWb(ctx: ApiContext, req: IncomingMessage, res: 
         // @file mention source: index the session's workspace files. Bounded
         // BFS — heavy dirs skipped — cached briefly per workspace.
         const sid = url.searchParams.get("session") ?? "";
-        const cwd = (sid && ctx.sessionCwd.get(parseSubId(sid)?.parent ?? sid)) || ctx.primaryCwd;
+        const cwdParam = url.searchParams.get("cwd");
+        const cwd = (cwdParam && path.resolve(cwdParam)) || (sid && ctx.sessionCwd.get(parseSubId(sid)?.parent ?? sid)) || ctx.primaryCwd;
         const paths = indexWorkspace(cwd);
         json(res, 200, { paths });
         return true;
@@ -889,8 +890,41 @@ export async function handleLocalWb(ctx: ApiContext, req: IncomingMessage, res: 
             else await acp.setConfigOption(s.sessionId, cfgId, val);
           } catch { /* group may not exist on this profile */ }
         }
-        if (task) dispatchPrompt(ctx, s.sessionId, task);
+        const atts = Array.isArray(body.attachments) ? body.attachments : [];
+        if (task || atts.length) dispatchPrompt(ctx, s.sessionId, task || " ", atts);
         json(res, 200, { ok: true, id: s.sessionId, devin_session_id: s.sessionId });
+        return true;
+      }
+
+      // Session-less staging for the /admin/new draft composer — same raw-body
+      // contract as the session-scoped upload-stage.
+      if (p === "/api/admin/upload-stage" && m === "POST") {
+        json(res, 200, await stageUpload(req, ctx.store, url.searchParams.get("filename")));
+        return true;
+      }
+
+      // Draft-page project browser: list dirs+files / read text, same shape as
+      // the session workspace endpoints but rooted anywhere the picker reached.
+      if (p === "/api/admin/fs/list" && m === "GET") {
+        const target = path.resolve(url.searchParams.get("path") || ctx.primaryCwd);
+        try {
+          const entries = fs.readdirSync(target, { withFileTypes: true })
+            .filter((e) => !e.name.startsWith(".git") && e.name !== "node_modules")
+            .map((e) => ({ name: e.name, dir: e.isDirectory() }))
+            .sort((a, b) => Number(b.dir) - Number(a.dir) || a.name.localeCompare(b.name))
+            .slice(0, 2000);
+          json(res, 200, { cwd: target, entries });
+        } catch { json(res, 400, { error: "bad_path" }); }
+        return true;
+      }
+      if (p === "/api/admin/fs/file" && m === "GET") {
+        const target = path.resolve(url.searchParams.get("path") || "");
+        try {
+          const buf = fs.readFileSync(target);
+          if (buf.length > 2 * 1024 * 1024) { json(res, 413, { error: "too large" }); return true; }
+          const bin = /[\x00-\x08]/.test(buf.subarray(0, 512).toString("binary"));
+          json(res, 200, { text: bin ? null : buf.toString("utf8"), binary: bin });
+        } catch { json(res, 404, { error: "not found" }); }
         return true;
       }
 

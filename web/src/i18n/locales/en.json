@@ -614,7 +614,8 @@
     "delConfirm": "Delete ",
     "clearAnnotText": "Clear annotations",
     "showTree": "Show file tree",
-    "hideTree": "Collapse file tree"
+    "hideTree": "Collapse file tree",
+    "binary": "Binary file — no preview"
   },
   "vp": {
     "cantLoad": "Cannot load {name}",
@@ -1103,5 +1104,8 @@
   "cmp": {
     "connecting": "Connecting to Devin's Computer…",
     "reconnecting": "Reconnecting..."
+  },
+  "draft": {
+    "pickFile": "Pick a file to preview"
   }
 }
