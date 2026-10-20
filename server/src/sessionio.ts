@@ -490,7 +490,15 @@ const inflight = new Set<string>();
 // drops queued drafts, same as the desktop's session-bound queue).
 // ---------------------------------------------------------------------------
 
-export interface QueuedMsg { id: string; text: string }
+export interface QueuedMsg {
+  id: string;
+  text: string;
+  attachments?: { url: string; name?: string; mime?: string; size?: number }[];
+  /** Subagent relay context — queueing must not silently retarget the
+   * message to the main chain. */
+  subagentId?: string;
+  respawnRow?: { title: string; task: string; profile: string };
+}
 const promptQueues = new Map<string, QueuedMsg[]>();
 let queueSeq = 0;
 
@@ -499,8 +507,8 @@ export function queueList(id: string): QueuedMsg[] {
 }
 
 /** Enqueue a message; callers GET the list back for the queue band. */
-export function queueAdd(ctx: ApiContext, id: string, text: string): QueuedMsg {
-  const m: QueuedMsg = { id: `q${(++queueSeq).toString(36)}${Date.now().toString(36)}`, text };
+export function queueAdd(ctx: ApiContext, id: string, text: string, attachments: QueuedMsg["attachments"] = [], extra?: Pick<QueuedMsg, "subagentId" | "respawnRow">): QueuedMsg {
+  const m: QueuedMsg = { id: `q${(++queueSeq).toString(36)}${Date.now().toString(36)}`, text, ...(attachments?.length ? { attachments } : {}), ...extra };
   const q = promptQueues.get(id) ?? [];
   q.push(m);
   promptQueues.set(id, q);
@@ -526,7 +534,7 @@ function queueFlush(ctx: ApiContext, id: string) {
   const next = q?.shift();
   if (!next) return;
   if (q && !q.length) promptQueues.delete(id);
-  dispatchPrompt(ctx, id, next.text, []);
+  dispatchPrompt(ctx, id, next.text, next.attachments ?? [], next.subagentId, next.respawnRow);
 }
 
 // ---------------------------------------------------------------------------

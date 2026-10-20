@@ -29,7 +29,7 @@ import {
   sessionConfig, recordTerminal, inflight, resolveUpload, dispatchPrompt,
   sessionStatus, interruptedTurn, listSubagents, subagentTimeline, subPingActive, listLocalSessions,
   snippetFromLog, responseCfg, terminalBuf, cloudVersionToModel,
-  queueList, queueAdd, queueRemove,
+  queueList, queueAdd, queueRemove, queueFlush,
   type ListedSession, type SessionConfig, type SubagentInfo, type ConfigOption,
 } from "./sessionio.js";
 
@@ -270,6 +270,16 @@ const sessionSubs: Record<string, (ctx: ApiContext, id: string, req: IncomingMes
       ? body.attachments as { url: string; name?: string; mime?: string; size?: number }[]
       : [];
     if (!text && !attachments.length) { json(res, 400, { error: "empty message" }); return; }
+    // Official parity: a prompt sent while a turn is in flight goes onto the
+    // queue — it flushes FIFO from dispatchPrompt's settle path. Concurrent
+    // session/prompt calls race the acp (errors or lost turns), so never
+    // dispatch on top of an in-flight turn.
+    if (inflight.has(id) || queueList(id).length) {
+      const m2 = queueAdd(ctx, id, text, attachments);
+      if (!inflight.has(id)) queueFlush(ctx, id); // idle + stale queue → keep FIFO moving
+      json(res, 200, { ok: true, queued: m2.id });
+      return;
+    }
     dispatchPrompt(ctx, id, text, attachments);
     json(res, 200, { ok: true });
   },
@@ -430,23 +440,25 @@ async function handleSubSession(
     const a = info();
     // respawn:1 spawns a SUCCESSOR carrying the dead agent's context —
     // allowed precisely because the handle is gone (normal resume can't work).
-    if (body.respawn) {
-      dispatchPrompt(ctx, parent, text, [], aid, {
-        title: a?.title ?? "Subagent successor",
-        task: a?.task ?? "",
-        profile: a?.profile ?? "",
-      });
-      json(res, 200, { ok: true, respawned: true });
-      return true;
-    }
+    const row = body.respawn ? {
+      title: a?.title ?? "Subagent successor",
+      task: a?.task ?? "",
+      profile: a?.profile ?? "",
+    } : undefined;
     // A dead handle can't be resumed — refuse here rather than burn a lead
-    // turn that only comes back "doesn't exist in my current session".
-    if (!a || a.resumable === false) {
+    // turn that only comes back "doesn't exist in my current session". (respawn
+    // is exempt: spawning a successor is allowed precisely when it's gone.)
+    if (!body.respawn && (!a || a.resumable === false)) {
       json(res, 409, { error: "该子代理句柄已失效（宿主进程已重启/重放），不能续聊 — 可派生新子代理继续", dead: true });
       return true;
     }
-    dispatchPrompt(ctx, parent, text, [], aid);
-    json(res, 200, { ok: true });
+    if (inflight.has(parent)) {
+      const m2 = queueAdd(ctx, parent, text, [], { subagentId: aid, ...(row ? { respawnRow: row } : {}) });
+      json(res, 200, { ok: true, queued: m2.id });
+      return true;
+    }
+    dispatchPrompt(ctx, parent, text, [], aid, row);
+    json(res, 200, { ok: true, ...(row ? { respawned: true } : {}) });
     return true;
   }
 
