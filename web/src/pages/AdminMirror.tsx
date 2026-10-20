@@ -33,7 +33,7 @@ import ThinkingPersona from '@/components/ThinkingPersona'
 import UserAttachments, { IMAGE_RE } from '@/components/UserAttachments'
 import { extractRepos } from '@/lib/repos'
 import { type QuoteAttachment } from '../../shared/quotes'
-import { cn } from '@/lib/utils'
+import { cn, fmtTime } from '@/lib/utils'
 import { ATTACH_MENU_ICONS, MODE_INFO_ICON, MODE_CHECK_ICON, MENU_CHEVRON_ICON } from '@/lib/officialMenuIcons'
 import { PanelAddTabIcon, PanelAttachmentsIcon, PanelCloseTabIcon, PanelFullWidthIcon, PanelHideTabsIcon, PanelPullRequestIcon } from '@/components/panelTabIcons'
 import { readTreeCache, type MirrorTreeSession, type TreeCachePayload, writeTreeCache } from './mirror/treeCache'
@@ -3162,9 +3162,16 @@ const groups = useMemo(() => groupItems(allItems, sessionWorking), [allItems, se
                                 if (node) break
                               }
                             }
-                            node?.scrollIntoView({ block: 'start' })
+                            if (node) {
+                              node.scrollIntoView({ block: 'start' })
+                              // Official jump feedback: the landed row flashes once.
+                              node.classList.remove('wb-find-hit')
+                              void (node as HTMLElement).offsetWidth
+                              node.classList.add('wb-find-hit')
+                              node.addEventListener('animationend', () => node.classList.remove('wb-find-hit'), { once: true })
+                            }
                           }}
-                          className="flex w-full cursor-pointer items-center gap-2 rounded-[6px] px-2 py-1.5 text-left text-[13px] leading-[18px] hover:bg-accent"
+                          className={cn('flex w-full cursor-pointer items-center gap-2 rounded-[6px] px-2 py-1.5 text-left text-[13px] leading-[18px] hover:bg-accent', it.id === idxActive && 'bg-accent')}
                         >
                           {it.kind === 'git' ? (
                             (() => {
@@ -3195,6 +3202,7 @@ const groups = useMemo(() => groupItems(allItems, sessionWorking), [allItems, se
                               ) : (
                                 <span className="min-w-0 flex-1 truncate pl-6">{indexPreview(it.body || '')}</span>
                               )}
+                              <span className="ml-auto shrink-0 pl-2 text-[11px] text-muted-foreground">{fmtTime(it.ts)}</span>
                             </>
                           )}
                         </button>
