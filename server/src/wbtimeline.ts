@@ -189,32 +189,31 @@ function shellOutputPaths(cmd: string): string[] {
   const re = /"([^"]*)"|'([^']*)'|(\S+)/g;
   let m: RegExpExecArray | null;
   while ((m = re.exec(cmd))) tokens.push(m[1] ?? m[2] ?? m[3]);
-  const looksLikePath = (s: string) =>
-    !!s && !/^[&|<>-]/.test(s) && !/^(nul|\/dev\/null|stderr|stdout|console)$/i.test(s)
-      && !/[*?]|^\$|^%/.test(s) && /\.[A-Za-z0-9]{1,10}$|[\\/]/.test(s);
+  const looksLikePath = (s0: string) => {
+    // Strip shell punctuation that rides along inside PS -Command strings:
+    // quotes, parens, brackets, commas, semicolons.
+    const s = s0.replace(/^["'`([{]+|["'`)\]};:,]+$/g, "");
+    return !!s && !/^[&|<>-]/.test(s) && !/^(nul|\/dev\/null|stderr|stdout|console)$/i.test(s)
+      && !/[*?]|^\$|^%/.test(s) && /\.[A-Za-z0-9]{1,10}$|[\\/]/.test(s) ? s : null;
+  };
   const out = new Set<string>();
-  const writeCmds = /^(set-content|add-content|out-file|tee-object|tee|copy|xcopy|move|ren|rename|certutil)$/i;
+  // Writers take the FIRST arg (Set-Content path); copy/move/ren take the
+  // LAST positional (the destination is the produced file).
+  const writeFirst = /^(set-content|add-content|out-file|tee-object|tee|certutil)$/i;
+  const writeLast = /^(copy|xcopy|move|ren|rename)$/i;
+  const add = (s: string | undefined) => { const p = s && looksLikePath(s); if (p) out.add(p); };
   for (let i = 0; i < tokens.length; i++) {
     const t = tokens[i];
-    if (writeCmds.test(t)) {
-      const nxt = tokens.slice(i + 1).find((x) => !/^[-/]/.test(x));
-      if (nxt && looksLikePath(nxt)) out.add(nxt);
-      continue;
-    }
-    const r = /^[0-9]?>(>{0,1})(.+)$/.exec(t);
-    if (r && looksLikePath(r[2])) { out.add(r[2]); continue; }
-    if (/^[0-9]?>>?$/.test(t)) {
-      const nxt = tokens[i + 1];
-      if (nxt && looksLikePath(nxt)) out.add(nxt);
-      continue;
-    }
-    if (/^(-o|--out|--output|--output-file|--output-path|-output|-filepath|-file)$/i.test(t)) {
-      const nxt = tokens[i + 1];
-      if (nxt && looksLikePath(nxt)) out.add(nxt);
-      continue;
-    }
+    if (writeFirst.test(t)) { add(tokens.slice(i + 1).find((x) => !/^[-/]/.test(x))); continue; }
+    if (writeLast.test(t)) { add(tokens.slice(i + 1).filter((x) => !/^[-/]/.test(x)).pop()); continue; }
+    // Bare redirect token first — a `(.+)` tail pattern would let `>>`
+    // backtrack into r[2]='>' and swallow the real target token.
+    if (/^[0-9]?>>?$/.test(t)) { add(tokens[i + 1]); continue; }
+    const r = /^[0-9]?>>?(.+)$/.exec(t);
+    if (r) { add(r[1]); continue; }
+    if (/^(-o|--out|--output|--output-file|--output-path|-output|-filepath|-file)$/i.test(t)) { add(tokens[i + 1]); continue; }
     const eq = /^(--out(?:put(?:-file|-path)?)?|-o)=(.+)$/.exec(t);
-    if (eq && looksLikePath(eq[2])) out.add(eq[2]);
+    if (eq) add(eq[2]);
   }
   return [...out];
 }
