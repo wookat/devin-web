@@ -57,22 +57,6 @@ function ResourcesPanel({ id }: { id: string }) {
   const empty = 'text-[12px] text-muted-foreground'
   return (
     <div className="min-h-0 flex-1 overflow-y-auto">
-      <ResSection title={t('res.rules')} count={r.rules?.length ?? 0}>
-        {!r.rules?.length ? <p className={empty}>{t('res.noRules')}</p> : r.rules.map((x, i) => (
-          <div key={i} className="mb-2 rounded-md border border-border bg-card p-2">
-            <div className="mb-1 text-[11px] font-medium text-muted-foreground">{x.source || x.path || `rule ${i + 1}`}</div>
-            {x.content && <pre className="max-h-32 overflow-auto whitespace-pre-wrap text-[11px] leading-snug">{x.content}</pre>}
-          </div>
-        ))}
-      </ResSection>
-      <ResSection title={t('res.skills')} count={r.skills?.length ?? 0}>
-        {!r.skills?.length ? <p className={empty}>{t('res.noSkills')}</p> : r.skills.map((x, i) => (
-          <div key={i} className="mb-1.5 rounded-md border border-border bg-card px-2 py-1.5">
-            <div className="text-[12px] font-medium">{x.name || x.path}</div>
-            {x.description && <div className="mt-0.5 line-clamp-2 text-[11px] text-muted-foreground">{x.description}</div>}
-          </div>
-        ))}
-      </ResSection>
       <ResSection title={t('res.subProfiles')} count={r.subagentProfiles?.length ?? 0}>
         {!r.subagentProfiles?.length ? <p className={empty}>{t('res.noSub')}</p> : r.subagentProfiles.map((x, i) => (
           <div key={i} className="mb-1.5 rounded-md border border-border bg-card px-2 py-1.5">

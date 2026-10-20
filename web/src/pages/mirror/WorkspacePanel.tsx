@@ -614,7 +614,7 @@ function useSaver(dirty: boolean, onSave: () => void) {
 /** Overlay-highlight editor (VS Code style): a transparent-text textarea sits
  * over a shiki-highlighted <pre> with identical font metrics — one view, both
  * colored and editable. No Preview/Edit split for code files. */
-function CodeEditor({ text, savedText, name, onChange, onSave, onDiscard }: {
+export function CodeEditor({ text, savedText, name, onChange, onSave, onDiscard }: {
   text: string; savedText: string; name: string; onChange: (t: string) => void; onSave: () => void; onDiscard: () => void
 }) {
   const { t } = useTranslation()

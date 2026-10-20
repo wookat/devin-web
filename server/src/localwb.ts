@@ -928,6 +928,86 @@ export async function handleLocalWb(ctx: ApiContext, req: IncomingMessage, res: 
         return true;
       }
 
+      // Multi-level agent resources: global (~/.devin, ~/.agents) + project
+      // (<cwd>/.devin, <cwd>/.agents). Enumerate rules/skills for /settings.
+      if (parts[2] === "resources" && m === "GET") {
+        const scopes = [
+          { scope: "project" as const, dir: path.join(ctx.primaryCwd, ".devin") },
+          { scope: "project" as const, dir: path.join(ctx.primaryCwd, ".agents") },
+          { scope: "global" as const, dir: path.join(os.homedir(), ".devin") },
+          { scope: "global" as const, dir: path.join(os.homedir(), ".agents") },
+        ];
+        const rules: { scope: string; name: string; path: string }[] = [];
+        const skills: { scope: string; name: string; description: string; path: string }[] = [];
+        const seenSkill = new Set<string>();
+        const listMd = (dir: string, scope: string, rel: string) => {
+          try {
+            for (const e of fs.readdirSync(path.join(dir, rel), { withFileTypes: true })) {
+              const p = path.join(dir, rel, e.name);
+              if (e.isDirectory()) listMd(dir, scope, rel ? `${rel}/${e.name}` : e.name);
+              else if (/\.(md|txt|mdc)$/i.test(e.name)) rules.push({ scope, name: e.name, path: p });
+            }
+          } catch { /* missing dir */ }
+        };
+        for (const { scope, dir } of scopes) {
+          listMd(dir, scope, "rules");
+          try {
+            for (const e of fs.readdirSync(path.join(dir, "skills"), { withFileTypes: true })) {
+              if (!e.isDirectory() || seenSkill.has(e.name)) continue;
+              const md = path.join(dir, "skills", e.name, "SKILL.md");
+              let desc = "";
+              try {
+                const head = fs.readFileSync(md, "utf8").slice(0, 4000);
+                const fm = /^---\r?\n([\s\S]*?)\r?\n---/.exec(head)?.[1] ?? "";
+                desc = /^description:\s*(.+)$/m.exec(fm)?.[1]?.trim().replace(/^["']|["']$/g, "") ?? "";
+              } catch { continue; }
+              seenSkill.add(e.name);
+              skills.push({ scope, name: e.name, description: desc.slice(0, 200), path: md });
+            }
+          } catch { /* no skills dir */ }
+        }
+        // AGENTS.md / CLAUDE.md at the project root count as project rules.
+        for (const f of ["AGENTS.md", "CLAUDE.md", ".windsurfrules", ".cursorrules"]) {
+          const p = path.join(ctx.primaryCwd, f);
+          if (fs.existsSync(p)) rules.push({ scope: "project", name: f, path: p });
+        }
+        json(res, 200, { cwd: ctx.primaryCwd, rules, skills });
+        return true;
+      }
+
+      // /api/admin/resource-file?path= — read/write files under the resource
+      // roots only (project .devin/.agents + global ~/.devin/~/.agents + the
+      // project-root agent files). Confined exactly like session /file ops.
+      if (parts[2] === "resource-file") {
+        const roots = [
+          path.join(ctx.primaryCwd, ".devin"), path.join(ctx.primaryCwd, ".agents"),
+          path.join(os.homedir(), ".devin"), path.join(os.homedir(), ".agents"),
+        ];
+        const extra = ["AGENTS.md", "CLAUDE.md", ".windsurfrules", ".cursorrules"].map((f) => path.resolve(ctx.primaryCwd, f));
+        const raw = m === "GET" ? url.searchParams.get("path") : String((await readJson(req)).path ?? "");
+        const rp = raw ? path.resolve(raw) : "";
+        const ok = !!rp && (roots.some((r) => rp === path.resolve(r) || rp.startsWith(path.resolve(r) + path.sep)) || extra.includes(rp));
+        if (!ok) { json(res, 403, { error: "outside resource roots" }); return true; }
+        if (m === "GET") {
+          try {
+            const buf = fs.readFileSync(rp);
+            json(res, 200, { text: buf.toString("utf8"), binary: /[\x00-\x08]/.test(buf.subarray(0, 512).toString("binary")) });
+          } catch { json(res, 404, { error: "not found" }); }
+          return true;
+        }
+        if (m === "POST") {
+          const body = await readJson(req);
+          try {
+            fs.mkdirSync(path.dirname(rp), { recursive: true });
+            fs.writeFileSync(rp, String(body.text ?? ""), "utf8");
+            json(res, 200, { ok: true });
+          } catch (e) { json(res, 500, { error: e instanceof Error ? e.message : "write failed" }); }
+          return true;
+        }
+        json(res, 405, { error: "method" });
+        return true;
+      }
+
       // /api/admin/resolve/<hex> — official-link resolution has no cloud meaning locally
       if (parts[2] === "resolve") {
         json(res, 404, { error: "no upstream session" });

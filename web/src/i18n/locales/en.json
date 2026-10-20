@@ -897,7 +897,11 @@
     "restartConfirm": "Restart the service? The server respawns automatically; the page will refresh shortly.",
     "redeployConfirm": "Rebuild and restart? The build takes ~1-3 min and the page will disconnect meanwhile.",
     "language": "Language",
-    "languageDesc": "UI display language (follows browser or manual pick)"
+    "languageDesc": "UI display language (follows browser or manual pick)",
+    "agentRes": "Agent resources",
+    "resProject": "Project",
+    "resGlobal": "Global (user)",
+    "resEmpty": "None"
   },
   "as": {
     "resetConfirm": "Reset the share link? The old link stops working immediately.",
