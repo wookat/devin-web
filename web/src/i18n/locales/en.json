@@ -1077,7 +1077,8 @@
     "capability": "Capability",
     "envSuggested": "Environment changes suggested",
     "envSuggestedLong": "Devin suggested environment changes for your review",
-    "connLost": "Connection lost. Some data may be outdated."
+    "connLost": "Connection lost. Some data may be outdated.",
+    "sessionIndex": "Session index"
   },
   "env": {
     "viewInSettings": "View in settings",

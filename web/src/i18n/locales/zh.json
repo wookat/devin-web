@@ -1077,7 +1077,8 @@
     "capability": "能力",
     "envSuggested": "建议了环境变更",
     "envSuggestedLong": "Devin 建议了环境变更，请审阅",
-    "connLost": "连接已断开，数据可能已过期。"
+    "connLost": "连接已断开，数据可能已过期。",
+    "sessionIndex": "会话索引"
   },
   "env": {
     "viewInSettings": "在设置中查看",

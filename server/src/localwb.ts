@@ -1113,6 +1113,23 @@ export async function handleLocalWb(ctx: ApiContext, req: IncomingMessage, res: 
           return true;
         }
 
+        // GET .../index — full-history session index (official historySkeleton
+        // parity): every user message + PR event across the whole log, not
+        // just the loaded window. Fields mirror what the client indexEntries
+        // merge needs (id/ts/kind/body/pr) with body truncated server-side.
+        if (sub === "index" && m === "GET") {
+          const { items } = buildTimeline(ctx, id);
+          const entries = items
+            .filter((it) => (it.kind === "message" && it.role === "user") || (it.kind === "git" && it.raw_type === "pr_created"))
+            .map((it) => ({
+              id: it.id, ts: it.ts, kind: it.kind, raw_type: it.raw_type,
+              role: it.role,
+              body: it.body ? it.body.slice(0, 1200) : undefined,
+            }));
+          json(res, 200, { entries });
+          return true;
+        }
+
         if (sub === "changes" && m === "GET") {
           // Memory-only panel data — replay is already driven by /timeline.
           const items = buildTimeline(ctx, id).items;

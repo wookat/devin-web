@@ -567,20 +567,28 @@ export default function AdminMirrorPage() {
     }
   }, [closeHeaderMenus, settingsOpen, updateHeaderMenuPosition])
   // Official session-index entries: user messages plus PR rows ("#N" with a PR icon) in timeline order.
-  // Official builds this from a full-history skeleton (`historySkeleton` in the bundle), so entries
-  // exist for events not yet backfilled; the mirror gets the same coverage from detail.messages.
+  // Official builds this from a full-history skeleton (`historySkeleton` in the bundle); the mirror
+  // gets the same coverage from GET .../index (full log scan server-side), merged with live
+  // window items so a just-sent message appears before the next index refetch.
+  const [serverIdx, setServerIdx] = useState<TimelineItem[]>([])
+  useEffect(() => {
+    if (isDraft || isVisitor || !id) { setServerIdx([]); return }
+    let alive = true
+    adminFetch<{ entries: TimelineItem[] }>(`/api/admin/session/${id}/index`)
+      .then((r) => { if (alive) setServerIdx(r.entries ?? []) })
+      .catch(() => { if (alive) setServerIdx([]) })
+    return () => { alive = false }
+  }, [id, isDraft, isVisitor])
   const indexEntries = useMemo(() => {
     const loadedEntries = [...older, ...items].filter(
       (it) => (it.kind === 'message' && it.role === 'user') || (it.kind === 'git' && it.raw_type === 'pr_created'),
     )
     const seen = new Set(loadedEntries.map((it) => it.id))
-    const oldest = older[0] ?? items[0]
-    const oldestTs = oldest ? new Date(oldest.ts).getTime() : Infinity
-    const hist: TimelineItem[] = (isVisitor ? [] : detail?.messages || [])
-      .filter((m) => m.role !== 'devin' && !seen.has(m.id) && new Date(m.timestamp).getTime() < oldestTs)
-      .map((m) => ({ id: m.id, ts: m.timestamp, kind: 'message', role: 'user', body: m.message, raw_type: 'user_message' }))
+    // Server index is authoritative for anything older than the window —
+    // dedupe by id, keep server order then append live-only entries.
+    const hist = serverIdx.filter((e) => !seen.has(e.id))
     return [...hist, ...loadedEntries]
-  }, [older, items, detail, isVisitor])
+  }, [older, items, serverIdx])
   const userMsgs = useMemo(() => indexEntries.filter((it) => it.kind === 'message'), [indexEntries])
   const userMsgCount = userMsgs.length
   const [copied, setCopied] = useState(false)
@@ -1057,19 +1065,20 @@ export default function AdminMirrorPage() {
   const [idxActive, setIdxActive] = useState<string | null>(null)
   const [idxTip, setIdxTip] = useState<{ id: string; top: number; right: number } | null>(null)
   const idxTicks = useMemo(() => indexEntries.slice(-20), [indexEntries])
+  const idxIdSet = useMemo(() => new Set(indexEntries.map((it) => it.id)), [indexEntries])
   const updateIdxActive = useCallback(() => {
     const el = scrollRef.current
     if (!el) return
-    const box = el.getBoundingClientRect()
+    const mid = el.getBoundingClientRect().top + el.clientHeight / 2
+    // One DOM pass in document order — index rows carry data-eid; the last
+    // rendered index entry above mid-viewport is the active tick.
     let act: string | null = null
-    for (const it of indexEntries) {
-      const node = el.querySelector(`[data-eid="${CSS.escape(it.id)}"]`)
-      if (!node) continue
-      const r = node.getBoundingClientRect()
-      if (r.top - box.top <= el.clientHeight / 2) act = it.id
+    for (const node of el.querySelectorAll<HTMLElement>('[data-eid]')) {
+      const eid = node.dataset.eid
+      if (eid && idxIdSet.has(eid) && node.getBoundingClientRect().top <= mid) act = eid
     }
     setIdxActive(act)
-  }, [indexEntries])
+  }, [idxIdSet])
   useEffect(() => { updateIdxActive() }, [updateIdxActive, loaded])
   const [scAnchor, setScAnchor] = useState<{ id: string; ts: string } | null>(null)
   const [translations, setTranslations] = useState<Record<string, string>>({})
@@ -3087,7 +3096,7 @@ const groups = useMemo(() => groupItems(allItems, sessionWorking), [allItems, se
             <div data-quote-safe-area="true" className="pointer-events-none absolute bottom-2.5 right-0 top-2.5 z-30 flex w-7 flex-col justify-center md:w-[52px]">
               <button
                 type="button"
-                aria-label="Session index"
+                aria-label={t('am.sessionIndex')}
                 aria-haspopup="dialog"
                 aria-expanded={indexOpen}
                 onClick={() => setIndexOpen(!indexOpen)}
@@ -3125,7 +3134,7 @@ const groups = useMemo(() => groupItems(allItems, sessionWorking), [allItems, se
                         <button
                           key={it.id}
                           onMouseEnter={(e) => {
-                            if (it.kind !== 'message' || !(it.body || '').trim() || !it.origin || it.origin === 'web') { setIdxTip(null); return }
+                            if (it.kind !== 'message' || !(it.body || '').trim()) { setIdxTip(null); return }
                             const r = e.currentTarget.getBoundingClientRect()
                             setIdxTip({ id: it.id, top: r.top, right: r.left - 8 })
                           }}
@@ -3236,7 +3245,7 @@ const groups = useMemo(() => groupItems(allItems, sessionWorking), [allItems, se
         <footer className={cn('relative max-md:z-20', effShowPanel && 'max-md:hidden', isDraft && 'mb-auto')}>
           {showJump && (
             <button
-              aria-label="Scroll to bottom"
+              aria-label={t('am.scrollBottom')}
               onClick={() => {
                 const el = scrollRef.current
                 if (el) el.scrollTo({ top: el.scrollHeight, behavior: 'smooth' })
