@@ -170,6 +170,9 @@ body { @apply bg-background text-foreground antialiased; font-size: 14px; line-h
   outline-offset: 1px;
   border-radius: 8px;
 }
+/* Index/find jumps land rows at the container top — keep them clear of the
+   20px top pad and the sticky connLost pill. */
+.overflow-y-auto [data-eid] { scroll-margin-top: 40px; }
 .wg-time-host:hover .wg-gutter-time {
   opacity: 1;
 }

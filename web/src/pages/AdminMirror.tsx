@@ -3164,11 +3164,11 @@ const groups = useMemo(() => groupItems(allItems, sessionWorking), [allItems, se
                             }
                             if (node) {
                               node.scrollIntoView({ block: 'start' })
-                              // Official jump feedback: the landed row flashes once.
-                              node.classList.remove('wb-find-hit')
-                              void (node as HTMLElement).offsetWidth
+                              // Official jump feedback: the landed row is marked once.
+                              // (wb-find-hit is a static outline, not an animation —
+                              // clear it on a timer, not animationend.)
                               node.classList.add('wb-find-hit')
-                              node.addEventListener('animationend', () => node.classList.remove('wb-find-hit'), { once: true })
+                              window.setTimeout(() => node!.classList.remove('wb-find-hit'), 1600)
                             }
                           }}
                           className={cn('flex w-full cursor-pointer items-center gap-2 rounded-[6px] px-2 py-1.5 text-left text-[13px] leading-[18px] hover:bg-accent', it.id === idxActive && 'bg-accent')}
