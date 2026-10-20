@@ -1296,7 +1296,7 @@ export default function AdminMirrorPage() {
     }
     graduateTl.current = graduateNow
     const graduateTimer = peek ? window.setTimeout(graduateNow, 8000) : null
-    const load = (fresh = false) => {
+    const load = (fresh = false, retried = false) => {
       captureAnchor()
       return sessionFetchSwr<TimelinePage>(`/timeline?limit=300${peek ? '&peek=1' : ''}${first ? '&boot=1' : fresh ? '&fresh=1' : ''}`)
         .then(({ data: r, stale }) => {
@@ -1352,6 +1352,13 @@ export default function AdminMirrorPage() {
         })
         .catch((e) => {
           if (!alive) return
+          // One silent retry before counting — a single failure is usually a
+          // stale pooled socket or a sub-second blip, not a real outage. Only
+          // two counted (i.e. retried-and-still-failing) hits raise the banner.
+          if (!retried) {
+            window.setTimeout(() => { if (alive) void load(false, true) }, 1200)
+            return
+          }
           setTlError((e as Error).message)
           setLoaded(true)
           failCount.current += 1
@@ -2790,7 +2797,7 @@ const groups = useMemo(() => groupItems(allItems, sessionWorking), [allItems, se
         >
           {connLost && (
             <div className="sticky top-0 z-10 mx-auto mb-2 w-fit rounded-full border border-amber-500/30 bg-amber-500/10 px-3 py-1 text-[12px] leading-[16px] text-amber-600 dark:text-amber-400">
-              Connection lost. Some data may be outdated.
+              {t('am.connLost')}
             </div>
           )}
           {!loaded && (

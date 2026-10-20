@@ -1076,7 +1076,8 @@
     "preview": "Preview",
     "capability": "Capability",
     "envSuggested": "Environment changes suggested",
-    "envSuggestedLong": "Devin suggested environment changes for your review"
+    "envSuggestedLong": "Devin suggested environment changes for your review",
+    "connLost": "Connection lost. Some data may be outdated."
   },
   "env": {
     "viewInSettings": "View in settings",

@@ -178,6 +178,12 @@ const primaryCwd = process.cwd();
 const accounts = new AccountPool(store.dataDir);
 
 const httpServer = http.createServer();
+// Node's 5s default closes pooled sockets the browser still considers alive —
+// a 3s poll interval then occasionally lands on a dead socket → ECONNRESET →
+// "Failed to fetch" → false "Connection lost" banners. 75s (> browser idle
+// ~60s) means the client always closes first. headersTimeout must exceed it.
+httpServer.keepAliveTimeout = 75_000;
+httpServer.headersTimeout = 76_000;
 
 const hub = new WsHub(
   httpServer,
