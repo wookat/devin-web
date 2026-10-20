@@ -612,7 +612,9 @@
     "text": "Text",
     "clearAnnot": "Clear annotations",
     "delConfirm": "Delete ",
-    "clearAnnotText": "Clear annotations"
+    "clearAnnotText": "Clear annotations",
+    "showTree": "Show file tree",
+    "hideTree": "Collapse file tree"
   },
   "vp": {
     "cantLoad": "Cannot load {name}",

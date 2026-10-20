@@ -612,7 +612,9 @@
     "text": "文字",
     "clearAnnot": "清除标注",
     "delConfirm": "删除 ",
-    "clearAnnotText": "清除标注"
+    "clearAnnotText": "清除标注",
+    "showTree": "显示文件树",
+    "hideTree": "收起文件树"
   },
   "vp": {
     "cantLoad": "无法加载 {name}",

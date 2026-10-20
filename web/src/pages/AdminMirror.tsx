@@ -2396,6 +2396,13 @@ const groups = useMemo(() => groupItems(allItems, sessionWorking), [allItems, se
         onDragOver={(e) => { if (e.dataTransfer.types.includes('Files')) e.preventDefault() }}
         onDragLeave={(e) => { if (e.dataTransfer.types.includes('Files')) setDragOver((n) => Math.max(0, n - 1)) }}
         onDrop={(e) => {
+          // Workspace-tree file drag → insert an @path mention into the composer.
+          const wbPath = e.dataTransfer.getData('text/x-wb-path')
+          if (wbPath) {
+            e.preventDefault()
+            setInput((cur) => (cur.trim() ? `${cur} @${wbPath} ` : `@${wbPath} `))
+            return
+          }
           if (!e.dataTransfer.types.includes('Files')) return
           e.preventDefault()
           setDragOver(0)

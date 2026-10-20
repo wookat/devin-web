@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { useTranslation } from 'react-i18next'
-import { RefreshCw, Folder as FolderIcon, FileCode, FileText, FileSpreadsheet, FileImage, FileVideo, FileAudio, FileArchive, FileWarning, Save, ZoomIn, ZoomOut, Maximize, Crop as CropIcon, Square, Type, Undo2 } from 'lucide-react'
+import { RefreshCw, Folder as FolderIcon, FileCode, FileText, FileSpreadsheet, FileImage, FileVideo, FileAudio, FileArchive, FileWarning, Save, ZoomIn, ZoomOut, Maximize, Crop as CropIcon, Square, Type, Undo2, ChevronFirst, ChevronLast } from 'lucide-react'
 import { adminFetch } from '@/lib/api'
 import CodeView, { useShikiTokens, type Tok } from '@/components/CodeView'
 import Markdown from '@/components/Markdown'
@@ -82,7 +82,7 @@ function TypeIcon({ path, dir, size = 14, className }: { path: string; dir?: boo
 
 /* Persist tabs/tree across panel switches; also draft edits so a tab switch
    never loses unsaved text. */
-interface Sess { tabs: string[]; active: string | null; expanded: Record<string, boolean>; filter: string; drafts: Record<string, string> }
+interface Sess { tabs: string[]; active: string | null; expanded: Record<string, boolean>; filter: string; drafts: Record<string, string>; treeCollapsed?: boolean }
 const mem = new Map<string, Sess>()
 
 interface MenuPos { x: number; y: number }
@@ -128,6 +128,7 @@ function WorkspacePanel({ id }: { id: string }) {
   const [files, setFiles] = useState<Record<string, FileResp>>({})
   const [drafts, setDrafts] = useState<Record<string, string>>(saved?.drafts ?? {})
   const [renaming, setRenaming] = useState<string | null>(null)
+  const [treeCollapsed, setTreeCollapsed] = useState(saved?.treeCollapsed ?? false)
   const [ctxMenu, setCtxMenu] = useState<{ pos: MenuPos; node: Node | null } | null>(null)
   const [tabMenu, setTabMenu] = useState<{ pos: MenuPos; path: string } | null>(null)
   const [dragTab, setDragTab] = useState<string | null>(null)
@@ -135,7 +136,7 @@ function WorkspacePanel({ id }: { id: string }) {
   const [gitMap, setGitMap] = useState<Record<string, string>>({})
   const stripRef = useRef<HTMLDivElement>(null)
 
-  useEffect(() => { mem.set(id, { tabs, active, expanded, filter, drafts }) }, [id, tabs, active, expanded, filter, drafts])
+  useEffect(() => { mem.set(id, { tabs, active, expanded, filter, drafts, treeCollapsed }) }, [id, tabs, active, expanded, filter, drafts, treeCollapsed])
 
   const loadDir = useCallback(async (p: string, force = false) => {
     if (!force && dirs[p] === 'loading') return
@@ -272,7 +273,7 @@ function WorkspacePanel({ id }: { id: string }) {
           role="button"
           tabIndex={0}
           draggable={renaming !== n.path}
-          onDragStart={(e) => { setDragNode(n.path); e.dataTransfer.effectAllowed = 'move' }}
+          onDragStart={(e) => { setDragNode(n.path); e.dataTransfer.effectAllowed = 'move'; e.dataTransfer.setData('text/x-wb-path', n.path) }}
           onDragEnd={() => { setDragNode(null); setDropDir(null) }}
           onDragOver={n.entry.dir ? (e) => { e.preventDefault(); e.stopPropagation(); setDropDir(n.path) } : undefined}
           onDragLeave={n.entry.dir ? () => setDropDir((d) => (d === n.path ? null : d)) : undefined}
@@ -446,12 +447,23 @@ function WorkspacePanel({ id }: { id: string }) {
           )}
         </div>
       </div>
-      {/* right: REPOS tree */}
+      {/* right: REPOS tree — collapsible like VS Code's sidebar */}
+      {treeCollapsed ? (
+        <button onClick={() => setTreeCollapsed(false)} title={t('ws.showTree')} aria-label={t('ws.showTree')}
+          className="flex w-7 shrink-0 cursor-pointer flex-col items-center gap-2 border-l border-border bg-card pt-2 text-muted-foreground hover:text-foreground">
+          <ChevronFirst size={13} />
+          <span className="text-[10px] tracking-wide [writing-mode:vertical-rl]">{t('ws.repos')}</span>
+        </button>
+      ) : (
       <div className="flex w-[240px] shrink-0 flex-col border-l border-border bg-card">
         <div className="flex h-[36px] shrink-0 items-center justify-between border-b border-border px-2.5">
           <span className="text-[11px] font-medium tracking-wide text-muted-foreground">{t('ws.repos')}</span>
-          <button className="flex size-6 cursor-pointer items-center justify-center rounded-[4px] text-muted-foreground hover:bg-tint-secondary" aria-label={t('common.refresh')} title={t('common.refresh')}
-            onClick={() => { setDirs({}); void loadDir('', true) }}><RefreshCw size={12} /></button>
+          <div className="flex items-center">
+            <button className="flex size-6 cursor-pointer items-center justify-center rounded-[4px] text-muted-foreground hover:bg-tint-secondary" aria-label={t('common.refresh')} title={t('common.refresh')}
+              onClick={() => { setDirs({}); void loadDir('', true) }}><RefreshCw size={12} /></button>
+            <button className="flex size-6 cursor-pointer items-center justify-center rounded-[4px] text-muted-foreground hover:bg-tint-secondary" aria-label={t('ws.hideTree')} title={t('ws.hideTree')}
+              onClick={() => setTreeCollapsed(true)}><ChevronLast size={13} /></button>
+          </div>
         </div>
         <div className="shrink-0 border-b border-border p-2">
           <div className="flex h-7 items-center gap-1.5 rounded-[6px] border border-border bg-background px-2">
@@ -484,6 +496,7 @@ function WorkspacePanel({ id }: { id: string }) {
           {dirs[''] !== 'loading' && dirs[''] !== 'error' && dirs[''] && buildNodes('').map((n) => renderNode(n, 0))}
         </div>
       </div>
+      )}
       {ctxMenu && <CtxMenu pos={ctxMenu.pos} items={nodeMenuItems(ctxMenu.node)} onClose={() => setCtxMenu(null)} />}
       {tabMenu && <CtxMenu pos={tabMenu.pos} items={tabMenuItems(tabMenu.path)} onClose={() => setTabMenu(null)} />}
     </div>
