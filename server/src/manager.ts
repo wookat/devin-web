@@ -135,6 +135,9 @@ export class AcpManager {
       sessionId,
       startedAt: m.startedAt,
       exited: m.acp.exited,
+      pid: m.acp.pid,
+      account: m.acp.account,
+      busy: m.acp.busySessions.size,
       capabilities: {
         loadSession: m.acp.capabilities?.agentCapabilities?.loadSession ?? false,
         image: m.acp.capabilities?.agentCapabilities?.promptCapabilities?.image ?? false,
@@ -148,15 +151,30 @@ export class AcpManager {
 
   /** Kill every pooled process for an agent so the next get() respawns it —
    *  used after account rotation so new spawns pick up the new key.
-   *  `keepAccount` spares processes already running the target account. */
+   *  `keepAccount` spares processes already running the target account.
+   *  A process mid-turn is NOT killed — it is unpooled (nothing new lands on
+   *  the old key) and retires when its last in-flight turn settles. */
   killPooled(agentId?: string, keepAccount?: string | null) {
     this.spawnGen++;
     for (const [key, m] of this.pooled) {
       if (agentId && !key.startsWith(`${agentId}:`)) continue;
       if (keepAccount && m.acp.account === keepAccount) continue;
+      if (m.acp.busySessions.size) {
+        m.acp.retireAfterIdle = true;
+        this.pooled.delete(key);
+        continue;
+      }
       m.acp.kill();
       this.pooled.delete(key);
     }
+  }
+
+  /** Pull an acp out of the pooled map (and a dedicated slot) WITHOUT
+   *  killing it — sessions already pinned keep it until releaseBusy retires
+   *  it (retireAfterIdle). */
+  unpool(acp: DevinAcp, sessionId?: string) {
+    for (const [key, m] of this.pooled) if (m.acp === acp) this.pooled.delete(key);
+    if (sessionId && this.bySession.get(sessionId)?.acp === acp) this.bySession.delete(sessionId);
   }
 
   /** Account name a pooled process was spawned with, if known. */

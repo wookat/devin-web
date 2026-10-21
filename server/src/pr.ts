@@ -84,7 +84,7 @@ function parsePatch(patch: string | null | undefined): { before_lines: [number, 
 }
 
 const rg = (g: any) => (g?.nodes ?? g?.edges?.map((e: any) => e.node) ?? []).filter((x: any) => x && (x.users?.totalCount ?? x.users?.total_count ?? 1) > -1);
-const reactions = (groups: any[]) => rg(groups)
+const reactions = (groups: any[]) => (groups ?? [])
   .filter((g: any) => (g.users?.totalCount ?? 0) > 0)
   .map((g: any) => ({ content: g.content, count: g.users.totalCount, viewer_reacted: !!g.viewerHasReacted }));
 const cmOf = (n: any) => ({
@@ -146,11 +146,6 @@ async function fetchDetail(ref: PrRef) {
     author: pr.author ? { login: pr.author.login, avatar_url: pr.author.avatarUrl, is_bot: /\[bot\]|bot$/i.test(pr.author.login) } : null,
     _files: files, _nodeId: pr.id,
   };
-}
-
-async function threadFirstCommentDbId(threadId: string): Promise<number | null> {
-  const g = await ghGql(`query($id:ID!){node(id:$id){... on PullRequestReviewThread{comments(first:1){nodes{databaseId}}}}}`, { id: threadId });
-  return g?.data?.node?.comments?.nodes?.[0]?.databaseId ?? null;
 }
 
 // Comment id may be an issue comment or a review comment — try both resource paths.
@@ -360,14 +355,10 @@ export async function handlePrRoute(ctx: ApiContext, sub: string, m: string, req
       return true;
     }
     if (sub === "pr-thread-reply" && m === "POST") {
-      const tid = String(body.thread_id ?? ""), text = String(body.body ?? "");
-      if (body.start_review) {
-        await ghGql(`mutation($t:ID!,$b:String!){addPullRequestReviewThreadReply(input:{pullRequestReviewThreadId:$t,body:$b}){comment{id}}}`, { t: tid, b: text });
-      } else {
-        const dbid = await threadFirstCommentDbId(tid);
-        if (!dbid) throw new Error("thread not found");
-        await ghWrite(`repos/${ref.owner}/${ref.repo}/pulls/${ref.num}/comments/${dbid}/replies`, "POST", { body: text });
-      }
+      // GraphQL reply handles both cases: joins the viewer's pending review
+      // when one exists, else posts a standalone comment. The REST
+      // /replies endpoint 422s once a pending review exists for the user.
+      await ghGql(`mutation($t:ID!,$b:String!){addPullRequestReviewThreadReply(input:{pullRequestReviewThreadId:$t,body:$b}){comment{id}}}`, { t: String(body.thread_id ?? ""), b: String(body.body ?? "") });
       json(res, 200, { ok: true, error: null });
       return true;
     }

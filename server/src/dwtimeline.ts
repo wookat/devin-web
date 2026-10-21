@@ -175,6 +175,17 @@ interface TlState {
   produced: Map<string, string>;
   /** Session id — needed to build file-raw URLs for produced attachments. */
   sid: string;
+  /** Swap {$blob} refs in a disk-backed update for their payloads — set by
+   * build entry points that can reach sessionLog. Entries keep refs when
+   * unset (message text never offloads, so snapshot builds still render). */
+  resolve?: (u: Record<string, unknown>) => Record<string, unknown>;
+}
+
+/** Stored entries may offload big strings to blobs ({$blob} refs). Resolve
+ * only where full content is actually consumed — diff file updates arrive
+ * precomputed in _dwFileUpdates precisely to avoid this call. */
+function resolveU(st: TlState, u: Record<string, unknown>): Record<string, unknown> {
+  return u._dwBlobbed && st.resolve ? st.resolve(u) : u;
 }
 
 function freshTlState(sid = ""): TlState {
@@ -394,17 +405,22 @@ function tlPush(st: TlState, e: { ts: number; seq?: number; update: Record<strin
       return;
     }
 
+    // Big payloads persist as {$blob} refs — resolve lazily, once per
+    // entry, only where the code below actually reads full content.
+    let uFull: Record<string, unknown> | null = null;
+    const full = () => (uFull ??= resolveU(st, u));
+
     let it = st.toolItems.get(toolId);
     if (!it) {
       it = {
         id: `t${toolId}`, ts: iso, kind: toolKind(u), title: String(u.title ?? "tool"),
         worklog: "input", raw_type: `tool:${String(u.kind ?? "other")}`,
       };
-      it.fileUpdates = diffsToFileUpdates(u.content);
+      it.fileUpdates = (u._dwFileUpdates as FileUpdate[] | undefined) ?? diffsToFileUpdates(u._dwBlobbed ? undefined : u.content);
       const locFiles = locationsToFileUpdates(u.locations);
       if (locFiles.length && !it.fileUpdates!.length) it.fileUpdates = locFiles;
       if (it.kind === "shell") {
-        const text = contentText(u.content);
+        const text = contentText(full().content);
         if (text) it.output = text;
         const term = Array.isArray(u.content)
           ? (u.content as Record<string, unknown>[]).find((c) => c.type === "terminal")
@@ -412,7 +428,7 @@ function tlPush(st: TlState, e: { ts: number; seq?: number; update: Record<strin
         it.processId = String(term?.terminalId ?? u.toolCallId ?? "");
       }
       if (it.kind === "read" && u.content) {
-        const text = contentText(u.content);
+        const text = contentText(full().content);
         if (text) it.body = text.slice(0, 20000);
         // Image reads surface only as "View image <path> (WxH)" text — the
         // pixels never ride the event, so capture the path for inline preview.
@@ -426,7 +442,7 @@ function tlPush(st: TlState, e: { ts: number; seq?: number; update: Record<strin
     } else {
       it.ts = iso;
       if (typeof u.title === "string") it.title = u.title;
-      const files = diffsToFileUpdates(u.content);
+      const files = (u._dwFileUpdates as FileUpdate[] | undefined) ?? diffsToFileUpdates(u._dwBlobbed ? undefined : u.content);
       if (files.length) it.fileUpdates = files;
       // The read payload (path + line range) arrives on the streaming UPDATE,
       // not the first tool_call — backfill fileUpdates so the row label can
@@ -435,7 +451,7 @@ function tlPush(st: TlState, e: { ts: number; seq?: number; update: Record<strin
         const locFiles = locationsToFileUpdates(u.locations);
         if (locFiles.length) it.fileUpdates = locFiles;
       }
-      const text = contentText(u.content);
+      const text = contentText(full().content);
       if (text) it.kind === "shell" ? (it.output = (it.output ?? "") + text) : (it.body = (it.body ?? "") + text);
       if (it.kind === "read") {
         const loc = (u.locations as { path?: string }[] | undefined)?.[0]?.path;
@@ -456,10 +472,10 @@ function tlPush(st: TlState, e: { ts: number; seq?: number; update: Record<strin
     // The command STREAMS in via progressive tool_call_update deltas ("cd" →
     // "cd /" → …), so always take the latest non-empty value.
     if (it.kind === "shell" || it.kind === "shell_done") {
-      const ri = u.rawInput as { command?: unknown } | undefined;
+      const ri = full().rawInput as { command?: unknown } | undefined;
       let cmd = typeof ri?.command === "string" ? ri.command : "";
-      if (!cmd && Array.isArray(u.content)) {
-        const blk = (u.content as Record<string, unknown>[]).find((c) => {
+      if (!cmd && Array.isArray(full().content)) {
+        const blk = (full().content as Record<string, unknown>[]).find((c) => {
           const inner = (c.content ?? {}) as Record<string, unknown>;
           const res = inner.resource as { uri?: string } | undefined;
           const mmeta = (inner._meta ?? {}) as Record<string, unknown>;
@@ -481,7 +497,7 @@ function tlPush(st: TlState, e: { ts: number; seq?: number; update: Record<strin
     // update on the subagent's own root toolCallId — handled in the lifecycle
     // branch above, which claims this card off pendingSpawns.
     if (isSubSpawn && !it.subagent) {
-      const args = (u.rawInput ?? u.arguments ?? {}) as Record<string, unknown>;
+      const args = (full().rawInput ?? full().arguments ?? {}) as Record<string, unknown>;
       // A resume call (run_subagent(resume="<agentId>")) targets an existing
       // agent — tag it with the real id and keep it out of pendingSpawns so
       // the next subagent_started isn't adopted by the wrong card.
@@ -517,7 +533,7 @@ function tlPush(st: TlState, e: { ts: number; seq?: number; update: Record<strin
   }
 
   if (kind === "permission_request") {
-    const tc = (u.toolCall ?? {}) as Record<string, unknown>;
+    const tc = (resolveU(st, u).toolCall ?? {}) as Record<string, unknown>;
     const it = push({
       id, ts: iso, kind: "permission", raw_type: "permission_request",
       permission: {
@@ -558,8 +574,14 @@ function tlPush(st: TlState, e: { ts: number; seq?: number; update: Record<strin
 }
 
 /** Build a full timeline from an entry array (snapshots, exports). */
-function buildTimelineFrom(entries: { ts: number; update: Record<string, unknown> }[], forAgent?: string, sid = ""): DwItem[] {
+function buildTimelineFrom(
+  entries: { ts: number; update: Record<string, unknown> }[],
+  forAgent?: string,
+  sid = "",
+  resolve?: (u: Record<string, unknown>) => Record<string, unknown>,
+): DwItem[] {
   const st = freshTlState(sid);
+  st.resolve = resolve;
   for (let i = 0; i < entries.length; i++) tlPush(st, entries[i], i, undefined, forAgent);
   return st.items;
 }
@@ -592,6 +614,9 @@ function buildTimeline(ctx: ApiContext, sessionId: string): { items: DwItem[]; r
     const disk = ctx.sessionLog.readDisk(sessionId);
     const src = disk.length >= log.length ? disk : log;
     st = freshTlState(sessionId);
+    // Must be set BEFORE the seed loop — disk entries carry blob refs that
+    // resolve only through this hook.
+    st.resolve = (u) => ctx.sessionLog.resolveBlobs(u);
     tlCache.set(sessionId, st);
     rebuilt = true;
     for (let i = 0; i < src.length; i++) tlPush(st, src[i], i);
@@ -602,6 +627,7 @@ function buildTimeline(ctx: ApiContext, sessionId: string): { items: DwItem[]; r
       tlReset.add(sessionId);
     }
   }
+  st.resolve = (u) => ctx.sessionLog.resolveBlobs(u);
   for (const e of log) {
     const s = e.seq ?? -1;
     if (s > st.seenSeq) { tlPush(st, e, s); st.seenSeq = s; }
@@ -679,7 +705,7 @@ function persistTail(ctx: ApiContext, id: string) {
 function snapshotItems(ctx: ApiContext, id: string): DwItem[] | null {
   const src = tailSnapshot.get(id) ?? readDiskTail(ctx, id);
   if (!src?.length) return null;
-  const items = buildTimelineFrom(src);
+  const items = buildTimelineFrom(src, undefined, id, (u) => ctx.sessionLog.resolveBlobs(u));
   return items.length ? items : null;
 }
 

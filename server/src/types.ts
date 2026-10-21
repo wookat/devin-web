@@ -15,6 +15,7 @@ export interface WsServerEvent {
     | "account_limited"
     | "account_rotated"
     | "session_status"
+    | "persona_state"
     | "config";
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   [key: string]: any;

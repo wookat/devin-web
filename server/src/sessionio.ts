@@ -10,6 +10,8 @@ import type { DevinAcp } from "./acp.js";
 import { uploadPath, MIME } from "./uploads.js";
 import { isRateLimitError, retryAfterSeconds } from "./accounts.js";
 import { catalogInfo } from "./modelcat.js";
+import { remapLegacyCwd } from "./store.js";
+import { agentById } from "./agents.js";
 import { loadReg, saveReg, meta, noteLastUsed } from "./dwstore.js";
 import {
   noteUpdate, persistTail, buildTimeline, buildTimelineFrom, snippet, tlCache,
@@ -112,11 +114,14 @@ async function loadWithRetry(acp: { loadSession(id: string, cwd: string): Promis
   throw lastErr;
 }
 
-/** sessionId → in-flight history replay. Opening a session page fires several
- * endpoints at once (detail/timeline/config/todos/…); without dedup EACH of
- * them started its own `session/load`, replaying the same history N times —
- * the main reason cold opens felt so slow. */
-const loadInflight = new Map<string, Promise<void>>();
+/** sessionId → in-flight history replay + the acp ACTUALLY performing it.
+ * Opening a session page fires several endpoints at once (detail/timeline/
+ * config/todos/…); without dedup EACH of them started its own
+ * `session/load`, replaying the same history N times — the main reason cold
+ * opens felt so slow. The acp is recorded because a joining caller may have
+ * resolved a DIFFERENT pool (sessionCwd unset → primaryCwd fallback) — only
+ * the recorded host actually opened the session and may be marked/pinned. */
+const loadInflight = new Map<string, { acp: DevinAcp; p: Promise<void> }>();
 
 /** Post-replay echo guard: devin re-pushes the tail of the last streamed
  * message as live deltas right after session/load. Two signatures:
@@ -277,13 +282,33 @@ async function doLoad(ctx: ApiContext, acp: DevinAcp, id: string, cwd: string): 
   }
 }
 
-function loadOnce(ctx: ApiContext, acp: DevinAcp, id: string, cwd: string): Promise<void> {
-  let p = loadInflight.get(id);
-  if (!p) {
-    p = doLoad(ctx, acp, id, cwd).finally(() => loadInflight.delete(id));
-    loadInflight.set(id, p);
+/** Await the shared replay for `id`; resolves to the acp that ran it — not
+ * necessarily the `acp` arg (a concurrent caller may have started the load
+ * on another pool). */
+function loadOnce(ctx: ApiContext, acp: DevinAcp, id: string, cwd: string): Promise<DevinAcp> {
+  let rec = loadInflight.get(id);
+  if (!rec) {
+    // A replay is live work too — mark the acp busy so rotation/restart
+    // defers its kill instead of cutting the replay mid-flight.
+    acp.busySessions.add(id);
+    const p = doLoad(ctx, acp, id, cwd).finally(() => {
+      releaseBusy(ctx, acp, id);
+      if (loadInflight.get(id) === rec) loadInflight.delete(id);
+    });
+    rec = { acp, p };
+    loadInflight.set(id, rec);
   }
-  return p;
+  return rec.p.then(() => rec.acp);
+}
+
+/** Mark `id` as open on `host` — the only truthful pin target. Marks must
+ * never land on an acp that merely JOINED another process's load. */
+function markLoadedOn(id: string, host: DevinAcp): DevinAcp {
+  let s = loadedOn.get(host);
+  if (!s) loadedOn.set(host, (s = new Set()));
+  s.add(id);
+  sessionHost.set(id, host);
+  return host;
 }
 
 /** Resolve the acp process that owns (or should own) this session — the single
@@ -294,8 +319,17 @@ async function hostFor(ctx: ApiContext, id: string, cwdHint?: string): Promise<{
   const dedicated = ctx.manager.forSession(id);
   const host = sessionHost.get(id);
   const pinned = host && !host.exited ? host : undefined;
-  const cwd = dedicated?.cwd ?? pinned?.cwd ?? cwdHint ?? ctx.sessionCwd.get(id) ?? ctx.primaryCwd;
-  const acp = dedicated ?? pinned ?? await ctx.manager.get(cwd);
+  // Which agent CLI owns this session — dedicated agents record it in
+  // store.agentSessions; pooled agents remember it in dw.json meta.
+  const agent = agentById(ctx.store.agentSession(id)?.agent ?? meta(ctx, id).agent);
+  if (!agent.multiSession && !dedicated) {
+    throw Object.assign(
+      new Error(`this ${agent.label} session has ended — its history stays readable, but start a new session to continue`),
+      { status: 409 },
+    );
+  }
+  const cwd = remapLegacyCwd(dedicated?.cwd ?? pinned?.cwd ?? cwdHint ?? ctx.sessionCwd.get(id) ?? ctx.primaryCwd);
+  const acp = dedicated ?? pinned ?? await ctx.manager.get(cwd, agent);
   ctx.sessionCwd.set(id, cwd);
   let set = loadedOn.get(acp);
   if (!set) loadedOn.set(acp, (set = new Set()));
@@ -315,9 +349,9 @@ async function ensureLoaded(ctx: ApiContext, id: string): Promise<void> {
   const cool = loadCooldown.get(id);
   if (cool && Date.now() - cool < 60_000) return;
   try {
-    await loadOnce(ctx, acp, id, cwd);
-    set.add(id);
-    sessionHost.set(id, acp);
+    // Pin the host that RAN the load — ours may have only joined a replay
+    // already in flight on another pool.
+    markLoadedOn(id, await loadOnce(ctx, acp, id, cwd));
     loadCooldown.delete(id);
   } catch {
     loadCooldown.set(id, Date.now());
@@ -328,14 +362,9 @@ async function ensureLoaded(ctx: ApiContext, id: string): Promise<void> {
 async function acpForId(ctx: ApiContext, id: string) {
   const { acp, set, cwd } = await hostFor(ctx, id);
   if (!set.has(id)) {
-    await loadOnce(ctx, acp, id, cwd);
-    // A concurrent caller may have run the shared replay on a different
-    // process — if the session landed there, use that host instead of
-    // falsely marking ours.
-    const pinned = sessionHost.get(id);
-    if (!set.has(id) && pinned && pinned !== acp && !(pinned as DevinAcp).exited) return pinned;
-    set.add(id);
-    sessionHost.set(id, acp);
+    // Same cross-pool guard: the load may have lived on another acp — pin to
+    // it instead of falsely marking ours (the "Session not found" wedge).
+    return markLoadedOn(id, await loadOnce(ctx, acp, id, cwd));
   }
   return acp;
 }
@@ -350,6 +379,16 @@ function restartSession(ctx: ApiContext, id: string): void {
   sessionHost.delete(id);
   if (!acp || acp.exited) return;
   loadedOn.get(acp)?.delete(id);
+  if (acp.busySessions.size && !acp.busySessions.has(id)) {
+    // The host is mid-turn for OTHER sessions (a pooled acp is shared) — a
+    // hard kill would cut those turns off, including the caller's own when
+    // an agent "restarts" a poolmate (observed: it killed its own process
+    // and the turn died with ACP connection closed). Unpin + unpool so this
+    // session's next op respawns fresh; the process retires on idle.
+    ctx.manager.unpool(acp, id);
+    acp.retireAfterIdle = true;
+    return;
+  }
   ctx.manager.killProcess(acp);
 }
 
@@ -484,6 +523,14 @@ function recordTerminal(terminalId: string, sessionId: string, data: string) {
 /** sessions with a prompt currently in flight (drives status/composer state) */
 const inflight = new Set<string>();
 
+/** Set once a redeploy/restart enters its drain phase — after that, NO new
+ * prompts may be dispatched. Without this gate a send (or an auto-resume)
+ * landing mid-drain re-adds to `inflight` and the drain can be starved
+ * forever. Send-paths return 503; internal dispatchers just no-op. */
+let draining = false;
+function beginDrain() { draining = true; }
+function isDraining() { return draining; }
+
 // ---------------------------------------------------------------------------
 // Message queue — Ctrl+Enter while working parks a prompt here; the queue is
 // flushed FIFO in dispatchPrompt's settle path. In-memory only (a restart
@@ -529,7 +576,9 @@ export function queueRemove(ctx: ApiContext, id: string, qid: string): boolean {
 
 /** Dispatch the next queued prompt if nothing is in flight. */
 function queueFlush(ctx: ApiContext, id: string) {
-  if (inflight.has(id)) return;
+  // Leave the queue untouched during drain — dequeuing into a no-op
+  // dispatchPrompt would silently drop the message.
+  if (inflight.has(id) || draining) return;
   const q = promptQueues.get(id);
   const next = q?.shift();
   if (!next) return;
@@ -574,6 +623,85 @@ function openTurnsSave(ctx: ApiContext) {
   try {
     fs.writeFileSync(path.join(ctx.store.dataDir, "open-turns.json"), JSON.stringify(Object.fromEntries(openTurns)));
   } catch { /* best-effort */ }
+}
+
+// ---------------------------------------------------------------------------
+// Send diagnostics — every failed send is recorded per-session WITH the
+// pipeline stage that produced it, so the settings panel can answer "which
+// hop broke" instead of surfacing a bare error string.
+// ---------------------------------------------------------------------------
+interface SendError { ts: number; stage: string; message: string }
+const sendErrors = new Map<string, SendError>();
+function noteSendError(id: string, stage: string, err: unknown) {
+  sendErrors.set(id, { ts: Date.now(), stage, message: err instanceof Error ? err.message : String(err) });
+  while (sendErrors.size > 200) sendErrors.delete(sendErrors.keys().next().value!);
+}
+function lastSendError(id: string): SendError | null { return sendErrors.get(id) ?? null; }
+function recentSendErrors(): (SendError & { sessionId: string })[] {
+  return [...sendErrors.entries()].map(([sessionId, e]) => ({ sessionId, ...e })).slice(-20);
+}
+
+interface SendCheckStep { id: string; level: "ok" | "warn" | "fail"; detail: string }
+
+/** Side-effect-free preflight of the whole send pipeline for one session —
+ *  gate → registry → busy → host → account → store → last error. Never
+ *  spawns a process or sends anything; it reports what a send WOULD hit. */
+function sendPreflight(ctx: ApiContext, id: string) {
+  openTurnsLoad(ctx);
+  const steps: SendCheckStep[] = [];
+  const rec = (id2: string, level: SendCheckStep["level"], detail: string) => steps.push({ id: id2, level, detail });
+
+  rec("gate", draining ? "fail" : "ok",
+    draining ? "server is draining for a restart — sends are refused until it is back" : "dispatch gate open");
+
+  const known = ctx.sessionCwd.has(id) || !!ctx.store.agentSession(id) || loadReg(ctx).sessions[id] != null;
+  rec("known", known ? "ok" : "warn",
+    known ? "session registered" : "unknown session id — a first send must carry cwd");
+
+  const flying = inflight.has(id);
+  const queued = queueList(id).length;
+  rec("busy", flying ? "warn" : "ok",
+    flying ? `turn in flight — a send now parks in the queue (depth ${queued})`
+      : queued ? `idle — ${queued} queued message(s)` : "idle");
+
+  const dedicated = ctx.manager.forSession(id);
+  const pinned = sessionHost.get(id);
+  if (dedicated) {
+    rec("host", "ok", `dedicated agent process pid ${dedicated.pid}`);
+  } else if (pinned) {
+    rec("host", pinned.exited ? "warn" : "ok",
+      pinned.exited
+        ? `pinned host pid ${pinned.pid} exited — next send re-resolves and replays`
+        : `pinned ${pinned.agent.id} process pid ${pinned.pid} (account ${pinned.account ?? "?"})`);
+  } else {
+    const dir = ctx.sessionCwd.get(id);
+    rec("host", dir ? "ok" : "warn",
+      dir ? `no live host — next send spawns/loads on cwd pool (${dir})`
+        : "no live host and no known cwd — a send will fail with 'unknown session'");
+  }
+
+  const healthy = ctx.accounts.healthy();
+  const acct = pinned?.account ?? dedicated?.account ?? ctx.accounts.pick() ?? ctx.accounts.accountForCredFile();
+  rec("account", acct ? "ok" : healthy.length ? "warn" : "fail",
+    acct ? `account: ${acct}${pinned?.exited ? " (host dead — respawn picks a healthy one)" : ""}`
+      : healthy.length ? `no spawn attribution — healthy pool: ${healthy.join(", ")}`
+        : "ALL accounts cooling — sends will fail 429");
+
+  const dbs = ctx.sessionLog.dbStats();
+  rec("store", dbs ? "ok" : "warn",
+    dbs ? `${dbs.events.toLocaleString()} events · ${dbs.blobs.toLocaleString()} blobs · ${(dbs.fileBytes / 1048576).toFixed(0)}MB`
+      : "sqlite store unavailable — file-mirror fallback only");
+
+  const open = openTurns.get(id);
+  if (open) rec("openTurn", "warn", `an earlier turn never settled (${new Date(open.ts).toLocaleTimeString()}) — it will auto-recover or resend`);
+
+  const last = lastSendError(id);
+  if (last) rec("lastError", "warn", `${new Date(last.ts).toLocaleTimeString()} [${last.stage}] ${last.message}`);
+
+  return {
+    steps,
+    verdict: steps.some((s) => s.level === "fail") ? "blocked" : steps.some((s) => s.level === "warn") ? "degraded" : "ok",
+  };
 }
 
 /** The session's last turn if it never reached a settled state and nothing
@@ -701,19 +829,90 @@ async function attachmentBlocks(ctx: ApiContext, attachments: { url: string; nam
  * account the failing acp actually runs on, rotate (kills pooled processes so
  * the next spawn uses a fresh key), re-resolve the host via getAcp, resend.
  * Throws a status-429 error when every account is cooling. */
+/** devin's -32016: the session isn't open on the acp we resolved — the
+ * loadedOn mark/pin went stale (cross-pool join race, lock stolen by
+ * another app, or the acp silently dropped it). */
+function isSessionNotFoundError(e: unknown): boolean {
+  const kind = (e as { data?: Record<string, unknown> })?.data?.["cognition.ai/errorKind"];
+  if (kind === "session_not_found") return true;
+  const s = String((e as Error)?.message ?? e);
+  return /session not found|session_not_found/i.test(s);
+}
+
+/** Last streaming-update time per session — the turn silence watchdog reads
+ * it (a live turn streams chunks; a wedged RPC is silent). Touched from the
+ * onSessionUpdate path in index.ts. */
+const lastActivity = new Map<string, number>();
+function touchSessionActivity(id: string) { lastActivity.set(id, Date.now()); }
+
+/** A prompt RPC can hang forever when the agent backend wedges — it used to
+ * leave `inflight` set and stall the deploy drain indefinitely. A turn that
+ * produced no output for this long is declared dead: the host acp is
+ * recycled (its transport close rejects the pending RPC anyway; the race
+ * below is the belt-and-braces settle) so dispatchPrompt's finally runs and
+ * the drain can proceed. Env-tunable; default 15min of silence. */
+const TURN_SILENCE_MS = Number(process.env.DEVIN_WEB_TURN_SILENCE_MS ?? 15 * 60_000);
+
+/** Drop a session's busy mark on `acp` — when the acp was flagged for
+ * retire-after-idle (rotation/restart while mid-turn), the last settle is
+ * what actually recycles it. */
+function releaseBusy(ctx: ApiContext, acp: DevinAcp, id: string) {
+  acp.busySessions.delete(id);
+  if (acp.retireAfterIdle && !acp.busySessions.size && !acp.exited) {
+    ctx.manager.killProcess(acp);
+  }
+}
+
 async function promptWithRetry<T>(
   ctx: ApiContext,
   id: string,
   getAcp: () => Promise<DevinAcp>,
   act: (acp: DevinAcp) => Promise<T>,
 ): Promise<T> {
-  for (let retried = false; ; retried = true) {
-    const acp = await getAcp();
+  for (let retried = false, healed = false; ;) {
+    const acp = await getAcp().catch((e: unknown) => {
+      (e as { stage?: string }).stage ??= "resolve";
+      throw e;
+    });
+    acp.busySessions.add(id);
+    // Busy is released in act's own .finally so the catch-policy below sees
+    // the failed acp already idle — a rate-limit killPooled must be able to
+    // recycle THIS process so the retry lands on a fresh account.
+    let wedgedReject: (e: Error) => void = () => {};
+    const wedged = new Promise<never>((_, rej) => { wedgedReject = rej; });
+    const t0 = Date.now();
+    const watchdog = setInterval(() => {
+      // Floor at t0: lastActivity may hold a PREVIOUS turn's timestamp —
+      // without the floor an idle-for-a-while session gets killed 60s into
+      // its next (healthy) turn.
+      const last = Math.max(lastActivity.get(id) ?? 0, t0);
+      if (Date.now() - last <= TURN_SILENCE_MS) return;
+      clearInterval(watchdog);
+      console.warn(`[session] ${id}: no output for ${Math.round(TURN_SILENCE_MS / 60000)}min — recycling wedged host acp`);
+      if (!acp.exited) ctx.manager.killProcess(acp);
+      wedgedReject(Object.assign(new Error(`turn produced no output for ${Math.round(TURN_SILENCE_MS / 60000)}min — wedged host process recycled`), { stage: "watchdog" }));
+    }, 60_000);
+    watchdog.unref();
     try {
-      return await act(acp);
+      return await Promise.race([
+        act(acp).finally(() => { clearInterval(watchdog); releaseBusy(ctx, acp, id); }),
+        wedged,
+      ]);
     } catch (err) {
       const msg = err instanceof Error ? err.message : String(err);
+      (err as { stage?: string }).stage ??=
+        isSessionNotFoundError(err) ? "resolve" : isRateLimitError(msg) ? "rate-limit" : "prompt";
+      // The pin/mark lied — clear it and re-resolve once so loadOnce
+      // replays the session onto the acp the retry actually lands on.
+      if (isSessionNotFoundError(err) && !healed) {
+        healed = true;
+        loadedOn.get(acp)?.delete(id);
+        if (sessionHost.get(id) === acp) sessionHost.delete(id);
+        console.warn(`[session] ${id}: stale host mark — reloading onto a fresh acp (${msg})`);
+        continue;
+      }
       if (!isRateLimitError(msg) || retried) throw err;
+      retried = true;
       // acp.account = the key injected at spawn (real attribution); the
       // cred-file lookup covers keyless spawns (all accounts were cooling);
       // pick() is the last resort only.
@@ -736,7 +935,15 @@ async function promptWithRetry<T>(
   }
 }
 
+/** Post-settle delegates (persona 分身 registers here — keeps the import
+ * one-directional: persona→sessionio, never the reverse). */
+const turnEndHooks = new Set<(ctx: ApiContext, id: string) => void>();
+
 function dispatchPrompt(ctx: ApiContext, id: string, text: string, attachments: { url: string; name?: string; mime?: string; size?: number }[] = [], subagentId?: string, respawnRow?: { title: string; task: string; profile: string }) {
+  // Drain gate: no new turns once a restart is draining — internal callers
+  // (queueFlush, auto-resume, subagent relays) no-op; HTTP send-paths were
+  // already 503'd before reaching here.
+  if (draining) return;
   // U+FFFD in the text means the body arrived corrupted (bad client encoding)
   // or the source text was already broken — log so we can tell "browser-side
   // corrupt" from "downstream corrupt" without reproducing.
@@ -762,7 +969,9 @@ function dispatchPrompt(ctx: ApiContext, id: string, text: string, attachments: 
   openTurns.set(id, { text, ts: Date.now(), ...(attachments.length ? { attachments } : {}), resumeCount: openTurns.get(id)?.resumeCount ?? 0 });
   openTurnsSave(ctx);
   const run = async () => {
-    const blocks = await attachmentBlocks(ctx, attachments);
+    const blocks = await attachmentBlocks(ctx, attachments).catch((e: unknown) => {
+      throw Object.assign(e instanceof Error ? e : new Error(String(e)), { stage: "attachments" });
+    });
     const ctxMeta = subagentId
       ? {
           "cognition.ai/subagent_context": { agentId: subagentId, parentAgentId: subagentId },
@@ -802,12 +1011,15 @@ function dispatchPrompt(ctx: ApiContext, id: string, text: string, attachments: 
       ctx.sessionLog.append(id, { sessionUpdate: "dw_turn_end" });
       ctx.hub.broadcast({ type: "prompt_done", sessionId: id, result: null });
       persistTail(ctx, id);
+      for (const h of turnEndHooks) { try { h(ctx, id); } catch { /* hooks never break a settle */ } }
     })
     .catch((err: unknown) => {
       const msg = err instanceof Error ? err.message : String(err);
+      const stage = (err as { stage?: string })?.stage ?? "prompt";
+      noteSendError(id, stage, msg);
       ctx.sessionLog.append(id, {
         sessionUpdate: "dw_notice",
-        notice: `错误: ${msg.slice(0, 200)}`,
+        notice: `错误[${stage}]: ${msg.slice(0, 200)}`,
       });
       noteUpdate(ctx, id);
     })
@@ -1038,10 +1250,11 @@ function subagentTimeline(ctx: ApiContext, id: string, agentId: string): DwItem[
     const c = (e.update._meta as Record<string, unknown> | undefined)?.["cognition.ai/subagent_context"] as { parentAgentId?: string } | undefined;
     return c?.parentAgentId === agentId || e.update.toolCallId === agentId;
   };
+  const resolve = (u: Record<string, unknown>) => ctx.sessionLog.resolveBlobs(u);
   // Full coverage test: replay restarts seq at 0, so a ring whose first
   // entry is seq 0 was never truncated. A truncated window must be unioned
   // with the disk index or early subagent events vanish.
-  if (mem.length && mem[0].seq === 0) return buildTimelineFrom(mem.filter(forAgent), agentId, id);
+  if (mem.length && mem[0].seq === 0) return buildTimelineFrom(mem.filter(forAgent), agentId, id, resolve);
   // Cold parent → serve from the child's sidechain file. Cache keyed on the
   // SIDECAR's mtime (the main log's mtime churns during live writes and would
   // defeat the cache, re-parsing the stream on every poll).
@@ -1052,7 +1265,7 @@ function subagentTimeline(ctx: ApiContext, id: string, agentId: string): DwItem[
   if (ctx.sessionLog.subFilesStale(id)) ctx.sessionLog.ensureSubFiles(id);
   const idx = ctx.sessionLog.readSubStream(id, agentId) ?? [];
   const seen = new Set(idx.map((e) => e.seq));
-  const items = buildTimelineFrom((mem.length ? [...idx, ...mem.filter((e) => !seen.has(e.seq))] : idx).filter(forAgent), agentId, id);
+  const items = buildTimelineFrom((mem.length ? [...idx, ...mem.filter((e) => !seen.has(e.seq))] : idx).filter(forAgent), agentId, id, resolve);
   // Cache only a settled read — a missing stream means the scan is still
   // running and the empty result must not stick or the transcript never fills.
   if (im != null) subTlCache.set(key, { m: im, lastSeq, items });
@@ -1069,6 +1282,8 @@ interface ListedSession {
    *  apart from "本工作台已加载". */
   locked: boolean;
   created: string | null;
+  /** Owning agent id (devin default; custom agents from agents.json). */
+  agent?: string;
 }
 
 async function listLocalSessions(ctx: ApiContext): Promise<ListedSession[]> {
@@ -1082,7 +1297,7 @@ async function listLocalSessions(ctx: ApiContext): Promise<ListedSession[]> {
       for (const s of page.sessions) {
         // Pinned sessions keep their loaded host — session/list reporting a
         // different cwd must not bounce them to another pooled process.
-        if (!isSessionPinned(s.sessionId)) ctx.sessionCwd.set(s.sessionId, s.cwd);
+        if (!isSessionPinned(s.sessionId)) ctx.sessionCwd.set(s.sessionId, remapLegacyCwd(s.cwd));
         const m = meta(ctx, s.sessionId);
         // devin returns camelCase `updatedAt` (may be absent) — persist it so
         // restarts/list outages keep real times; NEVER fall back to now(),
@@ -1095,9 +1310,10 @@ async function listLocalSessions(ctx: ApiContext): Promise<ListedSession[]> {
           id: s.sessionId,
           title: m.title ?? s.title ?? "Untitled session",
           updated: seen ?? m.updatedAt ?? "1970-01-01T00:00:00.000Z",
-          cwd: s.cwd,
+          cwd: remapLegacyCwd(s.cwd),
           locked: lm["cognition.ai/isLocked"] === true,
           created: (lm["cognition.ai/createdAt"] as string | undefined) ?? null,
+          agent: m.agent ?? "devin",
         });
       }
       cursor = page.nextCursor ?? undefined;
@@ -1107,7 +1323,7 @@ async function listLocalSessions(ctx: ApiContext): Promise<ListedSession[]> {
   const known = new Set(out.map((s) => s.id));
   for (const [id, m] of Object.entries(loadReg(ctx).sessions)) {
     if (!known.has(id) && !m.archived) {
-      out.push({ id, title: m.title ?? "Untitled session", updated: m.updatedAt ?? "1970-01-01T00:00:00.000Z", cwd: ctx.sessionCwd.get(id) ?? ctx.primaryCwd, locked: false, created: null });
+      out.push({ id, title: m.title ?? "Untitled session", updated: m.updatedAt ?? "1970-01-01T00:00:00.000Z", cwd: remapLegacyCwd(ctx.sessionCwd.get(id) ?? ctx.primaryCwd), locked: false, created: null, agent: m.agent ?? ctx.store.agentSession(id)?.agent });
     }
   }
   return out;
@@ -1131,10 +1347,13 @@ export {
   loadedOn, sessionHost, isSessionPinned,
   responseCfg, lastAgentCfg, captureLoadResponse, isSessionLocked,
   loadWithRetry, loadInflight, loadOnce, hostFor, loadCooldown,
+  touchSessionActivity,
   ensureLoaded, acpForId, restartSession,
   type ConfigOption, type SessionConfig, sessionConfig, cloudVersionToModel,
   terminalBuf, recordTerminal, inflight, resolveUpload, attachmentBlocks,
-  promptWithRetry, dispatchPrompt, sessionStatus,
+  promptWithRetry, dispatchPrompt, sessionStatus, turnEndHooks,
+  noteSendError, lastSendError, recentSendErrors, sendPreflight,
+  beginDrain, isDraining,
   queueFlush,
   type SubagentInfo, listSubagents, subagentTimeline, subPingActive,
   type ListedSession, listLocalSessions, snippetFromLog,

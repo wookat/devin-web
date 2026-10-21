@@ -1,15 +1,16 @@
 import type { IncomingMessage, ServerResponse } from "node:http";
 import type { ContentBlock } from "@agentclientprotocol/sdk";
 import type { AcpManager } from "./manager.js";
-import type { Store } from "./store.js";
+import { remapLegacyCwd, type Store } from "./store.js";
 import type { WsHub } from "./ws.js";
 import type { SessionLog } from "./sessionlog.js";
 import type { DevinAcp } from "./acp.js";
 import { serveUpload, stageUpload } from "./uploads.js";
 import { buildSessionZip } from "./export.js";
 import { agentById } from "./agents.js";
+import { meta, saveReg } from "./dwstore.js";
 import { AccountPool, fetchUserStatus, pkceFinish, pkceStart } from "./accounts.js";
-import { isSessionPinned, hostFor, attachmentBlocks, promptWithRetry } from "./sessionio.js";
+import { isSessionPinned, hostFor, attachmentBlocks, promptWithRetry, isDraining, inflight, acpForId } from "./sessionio.js";
 import type { UsageRecord } from "./types.js";
 
 export interface ApiContext {
@@ -129,7 +130,7 @@ export async function handleApi(
           for (const s of page.sessions) {
             // Don't overwrite the cwd of a session already pinned to a host —
             // a stale/rewritten list entry would bounce it to another process.
-            if (!isSessionPinned(s.sessionId)) ctx.sessionCwd.set(s.sessionId, s.cwd);
+            if (!isSessionPinned(s.sessionId)) ctx.sessionCwd.set(s.sessionId, remapLegacyCwd(s.cwd));
             sessions.push({
               sessionId: s.sessionId,
               cwd: s.cwd,
@@ -148,7 +149,7 @@ export async function handleApi(
       const known = new Set(sessions.map((s) => s.sessionId));
       for (const [sid, rec] of Object.entries(ctx.store.agentSessions())) {
         if (known.has(sid)) continue;
-        ctx.sessionCwd.set(sid, rec.cwd);
+        ctx.sessionCwd.set(sid, remapLegacyCwd(rec.cwd));
         sessions.push({
           sessionId: sid,
           cwd: rec.cwd,
@@ -176,7 +177,14 @@ export async function handleApi(
         ctx.manager.bindSession(s.sessionId, acp);
         ctx.store.addAgentSession(s.sessionId, agent.id, cwd);
       }
-      ctx.sessionCwd.set(s.sessionId, cwd);
+      // Non-devin ownership goes into dw.json meta — hostFor reads it to
+      // route ops to the right process (absent = devin), and the registry
+      // entry keeps dedicated-agent sessions visible in the sidebar.
+      if (agent.id !== "devin") {
+        meta(ctx, s.sessionId).agent = agent.id;
+        saveReg();
+      }
+      ctx.sessionCwd.set(s.sessionId, remapLegacyCwd(cwd));
       return json(res, 200, {
         sessionId: s.sessionId,
         cwd,
@@ -206,6 +214,7 @@ export async function handleApi(
         const body = await readJson(req);
         const blocks = await normalizeBlocks(ctx, (body.blocks as unknown[]) ?? []);
         if (blocks.length === 0) return json(res, 400, { error: "empty prompt" });
+        if (isDraining()) return json(res, 503, { error: "server restarting" });
         // Mirror the user message into the session log for export/replay.
         for (const b of blocks) {
           if (b.type === "text") {
@@ -217,25 +226,37 @@ export async function handleApi(
         }
         // Same retry policy as the wb /message route: on rate-limit the server
         // cools the failing account, rotates, and resends once itself.
+        // Register in `inflight` for the await — the deploy drain must see
+        // this turn (it otherwise exits mid-prompt and resets the client).
         let acp: DevinAcp | undefined;
-        const done = await promptWithRetry(ctx, id,
-          async () => (acp = await acpForSession(ctx, id, body.cwd as string | undefined)),
-          (a) => a.prompt(id, blocks));
-        const usage = (done as { usage?: { inputTokens?: number; outputTokens?: number; totalTokens?: number } }).usage;
-        if (usage?.totalTokens) {
-          const rec: UsageRecord = {
-            ts: Date.now(),
-            sessionId: id,
-            cwd: acp!.cwd,
-            inputTokens: usage.inputTokens ?? 0,
-            outputTokens: usage.outputTokens ?? 0,
-            totalTokens: usage.totalTokens,
-          };
-          ctx.store.recordUsage(rec);
+        inflight.add(id);
+        try {
+          const done = await promptWithRetry(ctx, id,
+            // acpForSession keeps the 409/400 guards; acpForId then pins +
+            // loads so a never-loaded session doesn't session_not_found.
+            async () => {
+              await acpForSession(ctx, id, body.cwd as string | undefined);
+              return (acp = await acpForId(ctx, id));
+            },
+            (a) => a.prompt(id, blocks));
+          const usage = (done as { usage?: { inputTokens?: number; outputTokens?: number; totalTokens?: number } }).usage;
+          if (usage?.totalTokens) {
+            const rec: UsageRecord = {
+              ts: Date.now(),
+              sessionId: id,
+              cwd: acp!.cwd,
+              inputTokens: usage.inputTokens ?? 0,
+              outputTokens: usage.outputTokens ?? 0,
+              totalTokens: usage.totalTokens,
+            };
+            ctx.store.recordUsage(rec);
+          }
+          ctx.store.touchAgentSession(id);
+          ctx.hub.broadcast({ type: "prompt_done", sessionId: id, result: done });
+          return json(res, 200, done);
+        } finally {
+          inflight.delete(id);
         }
-        ctx.store.touchAgentSession(id);
-        ctx.hub.broadcast({ type: "prompt_done", sessionId: id, result: done });
-        return json(res, 200, done);
       }
 
       if (m === "POST" && action === "cancel") {

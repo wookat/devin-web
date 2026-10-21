@@ -1,5 +1,6 @@
 import fs from "node:fs";
 import path from "node:path";
+import { SessionDb } from "./sessiondb.js";
 
 const MAX_UPDATES_PER_SESSION = 5000;
 const MAX_SESSIONS = 200;
@@ -33,9 +34,18 @@ export class SessionLog {
    * in listings at 0 bytes and writes land in a doomed file object). */
   private scanOuts = new Map<string, ScanOuts>();
   private dirReady = false;
+  /** SQLite event store — the authoritative query side (readDisk/diskSize/
+   * seq-resume). The .jsonl stays as a write-through mirror: appends land in
+   * both, .bak/restore keeps its file-level semantics, and a legacy file is
+   * lazily imported on first touch. */
+  private db: SessionDb | null = null;
 
   /** @param dir disk-log directory; null disables persistence (tests). */
   constructor(private dir: string | null = null) {
+    if (dir) {
+      try { this.db = new SessionDb(path.join(path.dirname(dir), "sessionlog.db")); }
+      catch { this.db = null; }
+    }
     // A server killed mid-replay leaves `<id>.jsonl` partial and the last
     // complete copy stashed as `.jsonl.bak` — put it back on startup.
     // (Longer file wins: a replay that out-wrote the old log keeps its file.)
@@ -51,11 +61,27 @@ export class SessionLog {
         const origSize = (() => { try { return fs.statSync(orig).size; } catch { return -1; } })();
         const bakSize = (() => { try { return fs.statSync(bak).size; } catch { return -1; } })();
         try {
-          if (bakSize > origSize) { fs.rmSync(orig, { force: true }); fs.renameSync(bak, orig); }
-          else fs.rmSync(bak, { force: true });
+          if (bakSize > origSize) {
+            fs.rmSync(orig, { force: true });
+            fs.renameSync(bak, orig);
+            // The DB may hold partial replay rows for this session — drop
+            // them so readDisk lazily re-imports the restored file.
+            try { this.db?.deleteSession(decodeURIComponent(f.slice(0, -10))); } catch {}
+          } else fs.rmSync(bak, { force: true });
         } catch { /* leave it — next clear() cleans up */ }
       }
     } catch { /* dir unreadable */ }
+  }
+
+  /** SQLite store health for /api/admin/modules — null when the db failed to
+   *  open at boot (file-mirror-only degraded mode). */
+  dbStats(): { sessions: number; events: number; blobs: number; storedBytes: number; fileBytes: number } | null {
+    if (!this.db || !this.dir) return null;
+    const s = this.db.stats();
+    const f = path.join(path.dirname(this.dir), "sessionlog.db");
+    let fileBytes = 0;
+    try { fileBytes = fs.statSync(f).size; } catch {}
+    return { ...s, fileBytes };
   }
 
   private file(sessionId: string) {
@@ -65,9 +91,64 @@ export class SessionLog {
   /** The seq counter lives in memory but the file survives restarts — resume
    * past whatever is already on disk before assigning the next seq, or new
    * entries would reuse seqs already present in the file. */
+  /** One-time migration: stream a legacy .jsonl into the event store as its
+   * newest generation. Runs only while the DB has no rows — on success the
+   * file is DELETED (the DB now holds the history; gen-isolated replay no
+   * longer needs it as a restore source) and sidecar coverage resets so the
+   * next demand rebuilds sidecars from a DB scan. New appends re-create a
+   * fresh mirror containing only post-migration lines. */
+  private importLegacy(sessionId: string) {
+    if (!this.db || this.db.has(sessionId)) return;
+    const f = this.file(sessionId);
+    let imported = false;
+    try {
+      if (!fs.existsSync(f)) return;
+      const g = this.db.importLines(sessionId, (cb) => this.eachFileLine(f, cb));
+      this.gens.set(sessionId, g);
+      imported = true;
+    } catch {
+      // A mid-import failure leaves earlier batches committed — drop the
+      // partial rows so the next touch retries from the file.
+      try { this.db.deleteSession(sessionId); } catch {}
+    }
+    if (!imported) return;
+    try {
+      const fd = this.fds.get(sessionId);
+      this.fds.delete(sessionId);
+      if (fd != null) { try { fs.closeSync(fd); } catch {} }
+      fs.rmSync(f, { force: true });
+      this.coverSeq.delete(sessionId);
+      try { fs.rmSync(this.subScanFile(sessionId), { force: true }); } catch {}
+    } catch { /* file lingers — still a valid mirror */ }
+  }
+
+  /** Public wrapper for the boot-time bulk migration sweep. */
+  ensureImported(sessionId: string) {
+    this.importLegacy(sessionId);
+  }
+
+  /** Swap {$blob} refs in a stored update for their payloads. Only needed
+   * where full-fidelity content is consumed (export, read/terminal text). */
+  resolveBlobs(update: Record<string, unknown>): Record<string, unknown> {
+    return this.db?.resolveBlobs(update) ?? update;
+  }
+
   private resumeSeq(sessionId: string) {
     if (!this.dir || this.seqs.get(sessionId) != null) return;
     let seq = 0;
+    if (this.db) {
+      // Import BEFORE assigning seqs — an append that lands first would make
+      // has() true and skip the migration forever.
+      this.importLegacy(sessionId);
+      // The DB's stored gen persists across restarts while `gens` is
+      // in-memory — seed it so post-restart replays bump past stored rows.
+      if (this.gens.get(sessionId) == null) {
+        const g = this.db.maxGen(sessionId);
+        this.gens.set(sessionId, g < 0 ? 0 : g);
+      }
+      seq = this.db.maxSeq(sessionId) + 1;
+    }
+    if (seq) { this.seqs.set(sessionId, seq); return; }
     try {
       const f = this.file(sessionId);
       const size = fs.statSync(f).size;
@@ -124,6 +205,7 @@ export class SessionLog {
             // let ensureSubFiles rebuild lazily.
             this.fileEnd.delete(sessionId);
             this.coverOff.delete(sessionId);
+            this.coverSeq.delete(sessionId);
             try { fs.rmSync(this.subScanFile(sessionId), { force: true }); } catch {}
           }
         }
@@ -152,7 +234,18 @@ export class SessionLog {
       log.splice(0, log.length - MAX_UPDATES_PER_SESSION);
     }
     if (this.dir) {
-      const line = JSON.stringify(entry) + "\n";
+      // The disk/db copy may differ from the live entry: big payloads are
+      // swapped for blob refs so the ref-log stays small and dedups by sha.
+      let storedUpdate = update;
+      if (this.db) {
+        try {
+          // First-db-write for a legacy session must import before it lands —
+          // a lone insert would make has() true and orphan the file history.
+          this.importLegacy(sessionId);
+          storedUpdate = this.db.append(sessionId, seq, this.gens.get(sessionId) ?? 0, entry.ts, update);
+        } catch { /* db is best-effort — the .jsonl mirror still records it */ }
+      }
+      const line = JSON.stringify({ ts: entry.ts, seq, update: storedUpdate }) + "\n";
       const fd = this.writer(sessionId);
       const before = this.endOf(sessionId);
       if (fd != null) {
@@ -172,12 +265,19 @@ export class SessionLog {
       // belongs to the next scan's range — writing it here would double it.
       // Evaluated BEFORE fileEnd advances: coveredOff treats a 0-end file as
       // fresh, and fileEnd already including this line would fake a legacy gap.
-      if (fd != null && this.coveredOff(sessionId) === before) {
-        // Only claim coverage when every routed sidecar write landed — a
-        // failed open (delete-pending name on Windows, EPERM, ENOSPC) must
-        // leave cover behind so subFilesStale schedules a healing rescan.
-        if (this.writeSidecars(sessionId, update, line))
-          this.bumpCover(sessionId, before + Buffer.byteLength(line));
+      if (fd != null) {
+        if (this.db) {
+          // Seq-based coverage: sidecars cover event seqs [0, coverSeq).
+          if (this.coveredSeq(sessionId) === seq) {
+            if (this.writeSidecars(sessionId, update, line)) this.bumpCoverSeq(sessionId, seq + 1);
+          }
+        } else if (this.coveredOff(sessionId) === before) {
+          // Only claim coverage when every routed sidecar write landed — a
+          // failed open (delete-pending name on Windows, EPERM, ENOSPC) must
+          // leave cover behind so subFilesStale schedules a healing rescan.
+          if (this.writeSidecars(sessionId, update, line))
+            this.bumpCover(sessionId, before + Buffer.byteLength(line));
+        }
       }
       this.fileEnd.set(sessionId, before + Buffer.byteLength(line));
     }
@@ -199,6 +299,10 @@ export class SessionLog {
    * chunks: a whole-file readFileSync dies past the ~512MB string limit,
    * silently emptying the backfill for the largest sessions. */
   readDisk(sessionId: string): LogEntry[] {
+    if (this.db) {
+      this.importLegacy(sessionId);
+      return this.db.readAll(sessionId);
+    }
     const out: LogEntry[] = [];
     this.eachDiskLine(sessionId, (line) => {
       try { out.push(JSON.parse(line) as LogEntry); } catch { /* torn line */ }
@@ -210,12 +314,18 @@ export class SessionLog {
    * readers (subagent listing for never-loaded sessions). */
   diskMtime(sessionId: string): number | null {
     if (!this.dir) return null;
+    if (this.db) {
+      const t = this.db.maxTs(sessionId);
+      if (t != null) return t;
+    }
     try { return fs.statSync(this.file(sessionId)).mtimeMs; } catch { return null; }
   }
 
   /** Byte size of the on-disk log — 0 when absent. Lets callers skip
    * operations whose cost scales with history (boot auto-resume). */
   diskSize(sessionId: string): number {
+    const b = this.db?.totalBytes(sessionId) ?? 0;
+    if (b > 0) return b;
     if (!this.dir) return 0;
     try { return fs.statSync(this.file(sessionId)).size; } catch { return 0; }
   }
@@ -233,6 +343,8 @@ export class SessionLog {
   //       scans whatever lies beyond (legacy logs bootstrap this way).
   private sideFds = new Map<string, number>();
   private coverOff = new Map<string, number>();
+  /** Seq-mode coverage (db path): sidecars cover event seqs [0, coverSeq). */
+  private coverSeq = new Map<string, number>();
   private fileEnd = new Map<string, number>();
   private aidSets = new Map<string, Set<string>>();
   private subScanning = new Set<string>();
@@ -288,6 +400,37 @@ export class SessionLog {
   private bumpCover(sessionId: string, off: number) {
     this.coverOff.set(sessionId, off);
     try { fs.writeFileSync(this.subScanFile(sessionId), `{"off":${off}}\n`); } catch { /* best-effort */ }
+  }
+
+  /** Seq-mode coverage (db path): reads the same .subscan marker, `seq`
+   * field. A legacy {off}-only marker reads as -1 → full rescan owed. */
+  private coveredSeq(sessionId: string): number {
+    let s = this.coverSeq.get(sessionId);
+    if (s == null) {
+      s = -1;
+      try {
+        const fd = fs.openSync(this.subScanFile(sessionId), "r");
+        try {
+          const b = Buffer.alloc(128);
+          const n = fs.readSync(fd, b, 0, 128, 0);
+          const j = JSON.parse(b.subarray(0, n).toString("utf8").split("\n", 1)[0] || "{}") as Record<string, unknown>;
+          s = typeof j.seq === "number" ? j.seq : -1;
+        } finally { fs.closeSync(fd); }
+      } catch { /* no marker */ }
+      if (s < 0 && !this.hasData(sessionId)) s = 0; // empty history: nothing to scan
+      this.coverSeq.set(sessionId, s);
+    }
+    return s;
+  }
+
+  private hasData(sessionId: string): boolean {
+    if (this.db) return this.db.has(sessionId);
+    return this.endOf(sessionId) > 0;
+  }
+
+  private bumpCoverSeq(sessionId: string, seq: number) {
+    this.coverSeq.set(sessionId, seq);
+    try { fs.writeFileSync(this.subScanFile(sessionId), `{"seq":${seq}}\n`); } catch { /* best-effort */ }
   }
 
   private sideWriter(file: string): number | null {
@@ -374,12 +517,44 @@ export class SessionLog {
     scan.fds.clear();
   }
 
-  /** True when the main log has bytes beyond the guaranteed sidecar
-   * coverage — i.e. a scan is owed (legacy bootstrap or scan-window tail). */
+  /** True when the store has events beyond guaranteed sidecar coverage —
+   * i.e. a scan is owed (legacy bootstrap or scan-window tail). Seq-based
+   * on the DB path, byte-based on the legacy file path. */
   subFilesStale(sessionId: string): boolean {
     if (!this.dir) return false;
+    if (this.db) {
+      const g = this.db.maxGen(sessionId);
+      if (g < 0) return false;
+      return this.coveredSeq(sessionId) <= this.db.maxSeqInGen(sessionId, g);
+    }
     try { return fs.statSync(this.file(sessionId)).size > Math.max(0, this.coveredOff(sessionId)); }
     catch { return false; }
+  }
+
+  /** Cover [coverSeq, maxSeq] of the current generation into the sidecars —
+   * an indexed, LIKE-prefiltered scan of the event store (no byte spans, no
+   * background chunked pass needed). */
+  private scanSubsFromDb(sessionId: string): void {
+    const db = this.db!;
+    let covered = this.coveredSeq(sessionId);
+    const dgen = db.maxGen(sessionId);
+    const max = dgen < 0 ? -1 : db.maxSeqInGen(sessionId, dgen);
+    if (max < 0 || covered > max) return;
+    if (covered <= 0) { this.wipeSidecars(sessionId); covered = this.coveredSeq(sessionId) <= 0 ? 0 : covered; }
+    const known = this.knownAids(sessionId);
+    const memGen = this.gens.get(sessionId) ?? 0;
+    this.subScanning.add(sessionId);
+    const scan: ScanOuts = { dead: false, fds: new Map() };
+    this.scanOuts.set(sessionId, scan);
+    try {
+      for (const row of db.scanRows(sessionId, dgen, Math.max(0, covered), max)) {
+        if (scan.dead) break;
+        // Rebuild the LogEntry line verbatim — same shape the file wrote.
+        this.routeSubLine(sessionId, `{"ts":${row.ts},"seq":${row.seq},"update":${row.data}}`, scan, known);
+      }
+      if (!scan.dead && (this.gens.get(sessionId) ?? 0) === memGen) this.bumpCoverSeq(sessionId, max + 1);
+    } catch { /* retried on next poll */ }
+    finally { this.closeScan(scan); this.scanOuts.delete(sessionId); this.subScanning.delete(sessionId); }
   }
 
   /** Cover [coverOff, size) of the main log into the sidecars. Small spans
@@ -387,6 +562,7 @@ export class SessionLog {
    * loop never stalls on a multi-GB log. */
   ensureSubFiles(sessionId: string): void {
     if (!this.dir || this.subScanning.has(sessionId)) return;
+    if (this.db) { this.scanSubsFromDb(sessionId); return; }
     let size: number;
     try { size = fs.statSync(this.file(sessionId)).size; } catch { return; }
     let off = this.coveredOff(sessionId);
@@ -606,6 +782,9 @@ export class SessionLog {
     this.logs.delete(sessionId);
     this.seqs.delete(sessionId);
     this.gens.set(sessionId, (this.gens.get(sessionId) ?? 0) + 1);
+    // DB rows are NOT deleted — the bump hides them under gen isolation:
+    // new-gen rows shadow them, and a failed replay rolls back by dropping
+    // the partial gen (restoreFile), a successful one by dropBackup.
     const fd = this.fds.get(sessionId);
     this.fds.delete(sessionId);
     if (fd != null) { try { fs.closeSync(fd); } catch {} }
@@ -619,8 +798,10 @@ export class SessionLog {
     }
   }
 
-  /** Replay succeeded — the fresh log is authoritative; drop the stash. */
+  /** Replay succeeded — the fresh log is authoritative; drop the stash and
+   * every older DB generation (physically erasing replay-rewritten dupes). */
   dropBackup(sessionId: string) {
+    try { this.db?.deleteOlderGens(sessionId, this.gens.get(sessionId) ?? 0); } catch {}
     if (!this.dir) return;
     try { fs.rmSync(this.file(sessionId) + ".bak", { force: true }); } catch {}
   }
@@ -633,11 +814,25 @@ export class SessionLog {
     this.fds.delete(sessionId);
     if (fd != null) { try { fs.closeSync(fd); } catch {} }
     if (!this.dir) return;
+    // The failed replay appended at the CURRENT gen — capture it now,
+    // before wipeSidecars' liveness bump moves it forward.
+    const failedGen = this.gens.get(sessionId) ?? 0;
     const f = this.file(sessionId), bak = f + ".bak";
     try { fs.rmSync(f, { force: true }); } catch {}
     try { fs.renameSync(bak, f); } catch { /* nothing stashed */ }
     this.wipeSidecars(sessionId);
     this.fileEnd.delete(sessionId);
+    // DB rollback via gen isolation: drop the failed replay's partial rows
+    // so the previous generation resurfaces — no file re-import needed.
+    // Runs AFTER wipeSidecars, whose `gens` bump would otherwise undo the
+    // rollback below.
+    try {
+      if (this.db) {
+        this.db.deleteGen(sessionId, failedGen);
+        const back = this.db.maxGen(sessionId);
+        if (back >= 0) this.gens.set(sessionId, back);
+      }
+    } catch {}
   }
 
   /** Re-install the pre-clear memory window after a failed replay. File

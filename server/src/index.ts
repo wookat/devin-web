@@ -3,25 +3,26 @@ import net from "node:net";
 import os from "node:os";
 import path from "node:path";
 import fs from "node:fs";
-import child_process, { execFile } from "node:child_process";
+import child_process, { exec, execFile } from "node:child_process";
 import { fileURLToPath } from "node:url";
 import { promisify } from "node:util";
 import { AcpManager } from "./manager.js";
 import { AccountPool, isRateLimitError, retryAfterSeconds } from "./accounts.js";
-import { AGENTS, type AgentDef } from "./agents.js";
+import { AGENTS, agentById, agentCommandLine, listAgents, setAgentsDir, type AgentDef } from "./agents.js";
 import { Store } from "./store.js";
 import { WsHub } from "./ws.js";
 import { WebSocketServer } from "ws";
 import { SessionLog } from "./sessionlog.js";
 import { handleApi, type ApiContext } from "./routes.js";
 import { handleLocalWb } from "./localweb.js";
-import { recordTerminal, loadInflight, isReplayEcho, autoResumeInterrupted, sessionHost, markSubagentDead } from "./sessionio.js";
+import { recordTerminal, loadInflight, isReplayEcho, autoResumeInterrupted, sessionHost, markSubagentDead, touchSessionActivity } from "./sessionio.js";
 import { noteUpdate } from "./dwtimeline.js";
 import { initLocalBrowser, attachBrowserWs } from "./localbrowser.js";
 import { initScreen } from "./screen.js";
 import type { WsServerEvent } from "./types.js";
 
 const execFileP = promisify(execFile);
+const execP = promisify(exec);
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 
 // ---- args ----------------------------------------------------------------
@@ -146,7 +147,11 @@ async function agentCheck(agent: AgentDef): Promise<AgentCheck> {
     detail: "",
   };
   try {
-    const v = await execFileP(agent.command, agent.versionArgs, { timeout: 10_000 });
+    // .cmd/.ps1 shims need a shell (spawn EINVAL otherwise) — same rule as
+    // the acp process launcher.
+    const v = agent.shell
+      ? await execP(agentCommandLine(agent, agent.versionArgs), { timeout: 10_000 })
+      : await execFileP(agent.command, agent.versionArgs, { timeout: 10_000 });
     result.installed = true;
     // prime-agent prints its version to stderr; devin to stdout.
     result.version = (v.stdout.trim() || v.stderr.trim()).split("\n")[0] || null;
@@ -166,11 +171,12 @@ async function agentCheck(agent: AgentDef): Promise<AgentCheck> {
   checkCache.set(agent.id, { at: Date.now(), result });
   return result;
 }
-const devinCheck = () => agentCheck(AGENTS.devin);
-const agentsCheck = () => Promise.all(Object.values(AGENTS).map(agentCheck));
+const devinCheck = () => agentCheck(agentById("devin"));
+const agentsCheck = () => Promise.all(listAgents().map(agentCheck));
 
 // ---- wiring ----------------------------------------------------------------
 const store = new Store();
+setAgentsDir(store.dataDir);
 const sessionLog = new SessionLog(path.join(store.dataDir, "log"));
 const sessionCwd = new Map<string, string>();
 const permissionOwner = new Map<string, import("./acp.js").DevinAcp>();
@@ -246,6 +252,7 @@ const manager = new AcpManager({
     sessionLog.append(sessionId, update as Record<string, unknown>);
     watchSubRateLimit(sessionId, update as Record<string, unknown>);
     hub.broadcast({ type: "session_update", sessionId, update });
+    touchSessionActivity(sessionId);
     noteUpdate(ctx, sessionId);
   },
   onAgentLog: (sessionId, channel, message, level) => {
@@ -289,10 +296,10 @@ const manager = new AcpManager({
 
 // Inject the current pool account's key into every spawned devin acp process.
 manager.envFor = (agent) => {
-  if (agent.id !== "devin") return { env: {}, account: null };
+  if (agent.id !== "devin") return { env: { ...(agent.env ?? {}) }, account: null };
   const account = accounts.pick();
   const key = accounts.apiKey();
-  const env: Record<string, string> = {};
+  const env: Record<string, string> = { ...(agent.env ?? {}) };
   if (key) env.WINDSURF_API_KEY = key;
   return { env, account };
 };
@@ -436,6 +443,12 @@ httpServer.on("request", (req, res) => {
         );
         return;
       }
+      // Supervisor liveness probe — must be free of any store/acp/db touch so a
+      // wedged subsystem can't make a live server look dead (or vice versa).
+      if (url.pathname === "/api/health") {
+        res.writeHead(200, { "content-type": "application/json" }).end('{"ok":true}');
+        return;
+      }
       void (async () => {
         if (!(await handleLocalWb(ctx, req, res, url))) await handleApi(ctx, req, res, url);
       })();
@@ -469,6 +482,27 @@ httpServer.listen(PORT, HOST, async () => {
   setTimeout(() => {
     void autoResumeInterrupted(ctx).catch((e) => console.error("[auto-resume]", e));
   }, 4000);
+  // One-time migration sweep: import every legacy .jsonl mirror into the
+  // SQLite event store (per-file imports also fire lazily on first touch —
+  // this just makes it eager so no session waits on a cold import later).
+  // Runs after listen; each file is a one-off cost (~10s per GB-scale log).
+  setTimeout(() => {
+    try {
+      const logDir = path.join(store.dataDir, "log");
+      let done = 0;
+      const t0 = Date.now();
+      for (const f of fs.readdirSync(logDir)) {
+        // `<id>.jsonl` only — skip `.jsonl.bak` and the `.sub.*`/`.subs.jsonl`
+        // sidecars (both contain ".jsonl." mid-name).
+        if (!f.endsWith(".jsonl") || f.includes(".jsonl.")) continue;
+        try {
+          sessionLog.ensureImported(decodeURIComponent(f.slice(0, -6)));
+          done++;
+        } catch { /* leave for lazy import */ }
+      }
+      if (done) console.log(`[sessionlog] migrated ${done} log file(s) into sessionlog.db in ${Date.now() - t0}ms`);
+    } catch { /* log dir missing — nothing to migrate */ }
+  }, 100);
 });
 
 for (const sig of ["SIGINT", "SIGTERM"] as const) {

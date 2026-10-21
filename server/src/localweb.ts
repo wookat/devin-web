@@ -704,7 +704,7 @@ export async function handleLocalWb(ctx: ApiContext, req: IncomingMessage, res: 
             for (const r of myProcs) rows.push({
               name: `proc pid ${r.pid}`,
               value: `${r.exited ? "EXITED" : "alive"} · busy ${r.busy} · ${r.account ?? "no-acct"} · ${r.cwd}`,
-              level: r.exited ? "fail" : r.busy ? "warn" : "ok",
+              level: r.exited ? "fail" : "ok",
             });
             if (a.id === "devin") {
               if (!picked && recovery) rows.push({ name: "accounts recover", value: new Date(recovery * 1000).toLocaleString(), level: "warn" });

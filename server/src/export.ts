@@ -87,8 +87,10 @@ export function buildSessionZip(
   meta: Record<string, unknown>,
 ): Uint8Array {
   // The disk log holds the complete history; the memory ring only the tail.
+  // Stored entries may carry {$blob} refs — resolve for full-fidelity export.
   const disk = sessionLog.readDisk(sessionId);
-  const entries = disk.length ? disk : sessionLog.get(sessionId);
+  const entries = (disk.length ? disk : sessionLog.get(sessionId))
+    .map((e) => ({ ...e, update: sessionLog.resolveBlobs(e.update) }));
   return zipSync({
     "meta.json": strToU8(
       JSON.stringify({ sessionId, exportedAt: new Date().toISOString(), ...meta }, null, 2),

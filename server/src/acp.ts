@@ -1,4 +1,4 @@
-import { spawn, type ChildProcess } from "node:child_process";
+import { spawn, type ChildProcess, type ChildProcessByStdio } from "node:child_process";
 import { Readable, Writable } from "node:stream";
 import type { ReadableStream, WritableStream } from "node:stream/web";
 import { EventEmitter } from "node:events";
@@ -6,7 +6,7 @@ import path from "node:path";
 import fs from "node:fs/promises";
 import * as acp from "@agentclientprotocol/sdk";
 import type { TerminalRunner } from "./terminal.js";
-import { DEFAULT_AGENT, type AgentDef } from "./agents.js";
+import { DEFAULT_AGENT, agentCommandLine, type AgentDef } from "./agents.js";
 
 export interface DevinAcpEvents {
   onSessionUpdate: (sessionId: string, update: unknown) => void;
@@ -44,6 +44,13 @@ export class DevinAcp {
   readonly agent: AgentDef;
   capabilities: acp.InitializeResponse | null = null;
   exited = false;
+  /** Sessions with an in-flight prompt on this process. A pooled acp hosts
+   * several sessions — rotation/restart must not hard-kill it while any are
+   * mid-turn (that cuts every live turn, including the caller's own). */
+  busySessions = new Set<string>();
+  /** Set when a kill was requested while turns were in flight — the process
+   * is unpooled immediately but dies only once the last turn settles. */
+  retireAfterIdle = false;
 
   private constructor(
     cwd: string,
@@ -62,6 +69,9 @@ export class DevinAcp {
   /** Which pool account this process was launched with (key injected via env). */
   account: string | null = null;
 
+  /** OS pid of the wrapped child — diagnostics only. */
+  get pid(): number { return this.proc.pid ?? 0; }
+
   static async start(
     cwd: string,
     terminal: TerminalRunner,
@@ -71,16 +81,21 @@ export class DevinAcp {
     account: string | null = null,
   ): Promise<DevinAcp> {
     const pendingPermissions = new Map<string, PendingPermission>();
-    const proc = spawn(agent.command, agent.args, {
+    // Windows npm CLIs are .cmd/.ps1 shims — Node ≥20.12 refuses to spawn
+    // them without a shell (EINVAL). agent.shell routes through %ComSpec%.
+    const spawnOpts = {
       cwd,
       // devin's stderr is extremely verbose (chisel debug logs, tens of
       // thousands of lines per session load). Pipe + drain instead of
       // inheriting — console writes on Windows are slow and were measurable
       // jank during loadSession replays.
-      stdio: ["pipe", "pipe", "pipe"],
+      stdio: ["pipe", "pipe", "pipe"] as ["pipe", "pipe", "pipe"],
       env: { ...process.env, ...extraEnv },
       windowsHide: true,
-    });
+    };
+    const proc: ChildProcessByStdio<Writable, Readable, Readable> = agent.shell
+      ? (spawn(agentCommandLine(agent), { ...spawnOpts, shell: true }) as ChildProcessByStdio<Writable, Readable, Readable>)
+      : spawn(agent.command, agent.args, spawnOpts);
     proc.stderr?.on("data", () => { /* drain: see stdio note above */ });
     const spawnedAccount = account;
 
@@ -251,6 +266,23 @@ export class DevinAcp {
 
   async newSession(cwd: string) {
     return this.conn.newSession({ cwd, mcpServers: [] });
+  }
+
+  /** True when the agent advertised `sessionCapabilities.fork` at initialize
+   *  (opencode yes; devin's local acp does not — its fork fallback lives in
+   *  the /fork route). sessionCapabilities predates the SDK type, so it is
+   *  read through a structural cast. */
+  get supportsFork(): boolean {
+    const caps = this.capabilities?.agentCapabilities as
+      | { sessionCapabilities?: Record<string, unknown> }
+      | undefined;
+    return !!caps?.sessionCapabilities?.fork;
+  }
+
+  /** ACP `session/fork` — clone a session on the same process (unstable SDK
+   *  surface; only call when supportsFork). */
+  async forkSession(sessionId: string, cwd: string) {
+    return this.conn.unstable_forkSession({ sessionId, cwd, mcpServers: [] });
   }
 
   async loadSession(sessionId: string, cwd: string) {
