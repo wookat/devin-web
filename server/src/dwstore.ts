@@ -42,6 +42,23 @@ interface DwRegistry {
   persona?: { sessionId?: string };
   /** The persistent pr-review acp session (cwd=<dataDir>/pr-review). */
   prReview?: { sessionId?: string };
+  /** Scheduled sessions — 5-field cron entries fired by the automations
+   *  scheduler (server/src/automations.ts). */
+  automations?: Record<string, DwAutomation>;
+}
+
+export interface DwAutomation {
+  id: string;
+  name: string;
+  prompt: string;
+  /** 5-field cron expression "min hour dom mon dow". */
+  schedule: string;
+  cwd: string;
+  enabled: boolean;
+  createdAt: number;
+  lastRun?: number;
+  lastSession?: string;
+  nextRun?: number;
 }
 
 let reg: DwRegistry | null = null;

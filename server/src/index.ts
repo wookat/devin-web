@@ -16,6 +16,7 @@ import { SessionLog } from "./sessionlog.js";
 import { handleApi, type ApiContext } from "./routes.js";
 import { handleLocalWb } from "./localweb.js";
 import { recordTerminal, loadInflight, isReplayEcho, autoResumeInterrupted, sessionHost, markSubagentDead, touchSessionActivity } from "./sessionio.js";
+import { startAutomations } from "./automations.js";
 import { noteUpdate } from "./dwtimeline.js";
 import { initLocalBrowser, attachBrowserWs } from "./localbrowser.js";
 import { initScreen } from "./screen.js";
@@ -482,6 +483,7 @@ httpServer.listen(PORT, HOST, async () => {
   setTimeout(() => {
     void autoResumeInterrupted(ctx).catch((e) => console.error("[auto-resume]", e));
   }, 4000);
+  startAutomations(ctx);
   // One-time migration sweep: import every legacy .jsonl mirror into the
   // SQLite event store (per-file imports also fire lazily on first touch —
   // this just makes it eager so no session waits on a cold import later).

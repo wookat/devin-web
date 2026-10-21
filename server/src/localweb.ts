@@ -40,6 +40,8 @@ import {
 } from "./persona.js";
 import { agentById, listAgents, probeAgent, saveUserAgents } from "./agents.js";
 import { handlePrRoute } from "./pr.js";
+import { cronNext, runAutomation } from "./automations.js";
+import type { DwAutomation } from "./dwstore.js";
 
 // ---------------------------------------------------------------------------
 // CLI proxy — spawn `devin <args>` with a hard whitelist (see /api/admin/cli/run)
@@ -761,6 +763,65 @@ export async function handleLocalWb(ctx: ApiContext, req: IncomingMessage, res: 
         const id = url.searchParams.get("session") ?? "";
         if (!id) { json(res, 400, { error: "missing session" }); return true; }
         json(res, 200, { session: id, ...sendPreflight(ctx, id) });
+        return true;
+      }
+
+      // /api/admin/automations — scheduled-session CRUD + manual fire.
+      // GET list; POST create; POST /:id patch {name?,prompt?,schedule?,cwd?,enabled?};
+      // DELETE /:id; POST /:id/run → fire now (returns the new session id).
+      if (parts[2] === "automations") {
+        const reg = loadReg(ctx);
+        reg.automations ??= {};
+        const aid = parts[3] ? decodeURIComponent(parts[3]) : "";
+        const one = aid ? reg.automations[aid] : null;
+        if (one && parts[4] === "run" && m === "POST") {
+          const sid = await runAutomation(ctx, aid).catch(() => null);
+          json(res, sid ? 200 : 502, sid ? { ok: true, id: sid } : { error: "fire failed (acp unavailable?)" });
+          return true;
+        }
+        if (m === "GET" && !aid) {
+          json(res, 200, { automations: Object.values(reg.automations).sort((a, b) => a.createdAt - b.createdAt) });
+          return true;
+        }
+        if (m === "POST" && !aid) {
+          const body = await readJson(req);
+          const schedule = String(body.schedule ?? "").trim();
+          const next = cronNext(schedule);
+          if (!String(body.name ?? "").trim() || !String(body.prompt ?? "").trim() || !next) {
+            json(res, 400, { error: "name, prompt, and a valid 5-field cron schedule are required" });
+            return true;
+          }
+          const a: DwAutomation = {
+            id: `auto-${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 7)}`,
+            name: String(body.name).slice(0, 120), prompt: String(body.prompt).slice(0, 20_000),
+            schedule, cwd: String(body.cwd ?? ctx.primaryCwd),
+            enabled: body.enabled !== false, createdAt: Date.now(), nextRun: next,
+          };
+          reg.automations[a.id] = a; saveReg();
+          json(res, 200, { ok: true, automation: a });
+          return true;
+        }
+        if (one && m === "POST") {
+          const body = await readJson(req);
+          if (body.name != null) one.name = String(body.name).slice(0, 120) || one.name;
+          if (body.prompt != null) one.prompt = String(body.prompt).slice(0, 20_000);
+          if (body.cwd != null) one.cwd = String(body.cwd) || one.cwd;
+          if (body.schedule != null) {
+            const n = cronNext(String(body.schedule));
+            if (!n) { json(res, 400, { error: "invalid cron schedule" }); return true; }
+            one.schedule = String(body.schedule).trim(); one.nextRun = n;
+          }
+          if (body.enabled != null) { one.enabled = !!body.enabled; one.nextRun = one.enabled ? (cronNext(one.schedule) ?? undefined) : undefined; }
+          saveReg();
+          json(res, 200, { ok: true, automation: one });
+          return true;
+        }
+        if (one && m === "DELETE") {
+          delete reg.automations[aid]; saveReg();
+          json(res, 200, { ok: true });
+          return true;
+        }
+        json(res, 404, { error: "not found" });
         return true;
       }
 

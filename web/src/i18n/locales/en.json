@@ -1213,5 +1213,25 @@
   },
   "stub": {
     "na": "This surface isn't available in the local build — no local equivalent of the official product."
+  },
+  "au": {
+    "title": "Automations",
+    "new": "New automation",
+    "namePh": "Name — e.g. \"Daily sweep\"",
+    "promptPh": "Prompt sent to the new session on each run…",
+    "cwdPh": "Working directory (blank = default)",
+    "create": "Create",
+    "cancel": "Cancel",
+    "empty": "No automations yet. Schedule your first session.",
+    "next": "Next run",
+    "last": "Last run",
+    "off": "Disabled",
+    "run": "Run now",
+    "openLast": "Open session",
+    "p5": "Every 5 min",
+    "hourly": "Hourly",
+    "daily9": "Daily 09:00",
+    "mon9": "Mondays 09:00",
+    "custom": "Custom cron"
   }
 }
