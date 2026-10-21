@@ -61,15 +61,26 @@ try {
   if (fs.existsSync(oldReg) && !fs.existsSync(newReg)) fs.renameSync(oldReg, newReg);
 } catch { /* registry will rebuild */ }
 
-// 3. start the fresh server detached; stdout/stderr → server.log (rotated past
-// 4MB) so a startup crash leaves the reason on disk.
-const serverLog = path.join(logDir, "server.log");
-try { if (fs.statSync(serverLog).size > 4 * 1024 * 1024) fs.renameSync(serverLog, serverLog + ".old"); } catch {}
-const fd = fs.openSync(serverLog, "a");
-const child = spawn(process.execPath, [
-  path.join(repoRoot, "dist", "server", "index.js"),
-  "--host", "0.0.0.0", "--port", String(port),
-], { cwd: repoRoot, detached: true, stdio: ["ignore", fd, fd], windowsHide: true });
-child.on("error", (e) => log(`server spawn error: ${e.message}`));
-child.unref();
-log(`server spawned pid=${child.pid}`);
+// 3. start the SUPERVISOR detached on the public port — it in turn spawns and
+// babysits the backend. This is the migration hand-off: the last unsupervised
+// server's respawn installs the supervised topology permanently. Set
+// DEVIN_WEB_NO_SUPERVISOR=1 to keep spawning the bare backend instead.
+if (!process.env.DEVIN_WEB_NO_SUPERVISOR) {
+  const sup = spawn(process.execPath, [path.join(repoRoot, "scripts", "supervisor.mjs")],
+    { cwd: repoRoot, detached: true, stdio: "ignore", windowsHide: true,
+      env: { ...process.env, DEVIN_WEB_PUBLIC_PORT: String(port) } });
+  sup.on("error", (e) => log(`supervisor spawn error: ${e.message}`));
+  sup.unref();
+  log(`supervisor spawned pid=${sup.pid}`);
+} else {
+  const serverLog = path.join(logDir, "server.log");
+  try { if (fs.statSync(serverLog).size > 4 * 1024 * 1024) fs.renameSync(serverLog, serverLog + ".old"); } catch {}
+  const fd = fs.openSync(serverLog, "a");
+  const child = spawn(process.execPath, [
+    path.join(repoRoot, "dist", "server", "index.js"),
+    "--host", "0.0.0.0", "--port", String(port),
+  ], { cwd: repoRoot, detached: true, stdio: ["ignore", fd, fd], windowsHide: true });
+  child.on("error", (e) => log(`server spawn error: ${e.message}`));
+  child.unref();
+  log(`server spawned pid=${child.pid}`);
+}

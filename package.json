@@ -4,13 +4,16 @@
   "description": "devin-web — a local web client for the Devin CLI over ACP: cloud-style sessions, editor, timeline, terminal. LAN/internet accessible.",
   "license": "MIT",
   "type": "module",
-  "bin": { "devin-web": "bin/devin-web.js" },
+  "bin": {
+    "devin-web": "./devin-web.mjs"
+  },
   "files": [
-    "bin",
-    "dist"
+    "dist",
+    "devin-web.mjs",
+    "scripts"
   ],
   "engines": {
-    "node": ">=20"
+    "node": ">=22.5.0"
   },
   "scripts": {
     "dev": "concurrently -n server,web -c blue,green \"npm:dev:server\" \"npm:dev:web\"",
@@ -19,7 +22,7 @@
     "build": "npm run build:web && npm run build:server",
     "build:web": "vite build && node scripts/compress.mjs",
     "build:server": "tsc -p tsconfig.server.json",
-    "start": "node dist/server/index.js",
+    "start": "node devin-web.mjs run",
     "smoke": "tsx scripts/smoke.ts",
     "typecheck": "tsc --noEmit -p tsconfig.server.json && tsc --noEmit -p tsconfig.web.json",
     "prepack": "npm run build",
@@ -35,7 +38,7 @@
     "coding-agent",
     "web-ui"
   ],
-  "author": "Skander Ben Hamda",
+  "author": "zalize",
   "dependencies": {
     "@agentclientprotocol/sdk": "^1.2.1",
     "@novnc/novnc": "^1.7.0",
@@ -87,6 +90,7 @@
     "tsx": "^4.19.2",
     "typescript": "^5.7.2",
     "vite": "^6.0.3",
+    "webcrack": "^2.16.0",
     "zustand": "^5.0.14"
   }
 }
