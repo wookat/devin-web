@@ -81,7 +81,7 @@ export class AcpManager {
   /** Adopt a broker acp that outlived a backend restart: attach its stream,
    *  wire the same events a fresh spawn gets, and re-seat it in the pool
    *  (pooled key) or dedicated map (sessions discovered via session/list). */
-  async adopt(cwd: string, agent: AgentDef, key: string | null, acpId: string, after: number): Promise<DevinAcp> {
+  async adopt(cwd: string, agent: AgentDef, key: string | null, acpId: string, after: number, account: string | null = null): Promise<DevinAcp> {
     let instance: DevinAcp | null = null;
     const acp = await DevinAcp.adoptBrokered(cwd, this.terminal, {
       ...this.ev,
@@ -102,7 +102,7 @@ export class AcpManager {
         for (const [sid, m] of this.bySession) if (m.acp === acp) this.bySession.delete(sid);
         this.ev.onExit(cwd, code, agent.id);
       },
-    }, agent, acpId, after);
+    }, agent, acpId, after, account);
     instance = acp;
     // Only multi-session acp take pool slots — a dedicated key (bare agent.id)
     // is an identity marker, not a pool slot; its sessions live in bySession

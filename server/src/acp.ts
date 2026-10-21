@@ -154,7 +154,7 @@ export class DevinAcp {
   ): Promise<DevinAcp> {
     const { acpId } = await brokerSpawn({
       cwd, command: agent.command, args: agent.args, env: extraEnv,
-      shell: agent.shell === true, cmdline: agent.shell ? agentCommandLine(agent) : undefined, key: poolKey,
+      shell: agent.shell === true, cmdline: agent.shell ? agentCommandLine(agent) : undefined, key: poolKey, account,
     });
     const { proc } = await brokerAttach(acpId, 0);
     const self = await DevinAcp.init(cwd, terminal, ev, agent, proc, account);
@@ -173,9 +173,10 @@ export class DevinAcp {
     agent: AgentDef,
     acpId: string,
     after: number,
+    account: string | null = null,
   ): Promise<DevinAcp> {
     const { proc } = await brokerAttach(acpId, after);
-    const self = await DevinAcp.init(cwd, terminal, ev, agent, proc, null, true);
+    const self = await DevinAcp.init(cwd, terminal, ev, agent, proc, account, true);
     self.brokerId = acpId;
     void wireBrokerExit(acpId, proc).catch(() => {});
     return self;

@@ -28,6 +28,9 @@ export function brokerSockPath(dataDir: string): string {
 
 export interface BrokerAcpInfo {
   acpId: string; pid: number; cwd: string; cmd: string; key: string | null;
+  /** Pool account the process was spawned with — journaled so adoption
+   *  restores real attribution instead of "(account ?)". */
+  account: string | null;
   exited: boolean; exitCode: number | null; bytesOut: number; startedAt: number;
 }
 
@@ -103,12 +106,15 @@ export interface BrokerSpawnSpec {
   /** Manager pool key (`agent:cwd` / `agent:ssh:target:cwd`) — lets a fresh
    *  backend re-map a surviving acp to its pool slot on adoption. */
   key?: string;
+  /** Pool account whose key was injected into env — journaled by the broker
+   *  so adoption restores `acp.account` attribution. */
+  account?: string | null;
 }
 
 export async function brokerSpawn(spec: BrokerSpawnSpec): Promise<{ acpId: string; pid: number }> {
   const ctl = await connectCtl();
   if (!ctl) throw new Error("broker unavailable");
-  const r = await ctl.call({ op: "spawn", cwd: spec.cwd, command: spec.command, args: spec.args, env: spec.env, shell: spec.shell, cmdline: spec.cmdline, key: spec.key });
+  const r = await ctl.call({ op: "spawn", cwd: spec.cwd, command: spec.command, args: spec.args, env: spec.env, shell: spec.shell, cmdline: spec.cmdline, key: spec.key, account: spec.account });
   return { acpId: String(r.acpId), pid: r.pid as number };
 }
 

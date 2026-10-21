@@ -474,7 +474,7 @@ export async function adoptBrokerAcps(ctx: ApiContext) {
     const agentId = (a.key ?? "devin").split(":")[0];
     const agent = agentById(agentId) ?? DEFAULT_AGENT;
     try {
-      const acp = await ctx.manager.adopt(a.cwd, agent, a.key, a.acpId, offsets[a.acpId] ?? SKIP);
+      const acp = await ctx.manager.adopt(a.cwd, agent, a.key, a.acpId, offsets[a.acpId] ?? SKIP, a.account ?? null);
       adopted++;
       // Discover sessions this process still holds: devin stamps the holder
       // pid on loaded sessions — our own acp is "locked" BY its own pid.

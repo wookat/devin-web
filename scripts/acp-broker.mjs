@@ -61,7 +61,7 @@ function journalLoad() {
 }
 function journalWrite() {
   const out = {};
-  for (const [id, a] of acps) out[id] = { pid: a.proc.pid, cmd: a.meta.cmd, startedAt: a.meta.startedAt };
+  for (const [id, a] of acps) out[id] = { pid: a.proc.pid, cmd: a.meta.cmd, account: a.meta.account ?? null, startedAt: a.meta.startedAt };
   try { fs.mkdirSync(dataDir, { recursive: true }); fs.writeFileSync(stateFile, JSON.stringify(out)); } catch { /* best-effort */ }
 }
 function pidAlive(pid) {
@@ -118,7 +118,7 @@ function spawnAcp(spec) {
     : spawn(spec.command, spec.args ?? [], { cwd: spec.cwd, env: { ...process.env, ...spec.env }, windowsHide: true, detached: !isWin, stdio: ["pipe", "pipe", "pipe"] });
   const a = {
     proc: child,
-    meta: { cwd: spec.cwd, cmd: spec.cmdline ?? `${spec.command} ${(spec.args ?? []).join(" ")}`, key: spec.key ?? null, startedAt: Date.now() },
+    meta: { cwd: spec.cwd, cmd: spec.cmdline ?? `${spec.command} ${(spec.args ?? []).join(" ")}`, key: spec.key ?? null, account: spec.account ?? null, startedAt: Date.now() },
     pending: Buffer.alloc(0),
     ring: [], ringBytes: 0, bytesOut: 0,
     attached: null, exited: false, exitCode: null,
@@ -167,7 +167,7 @@ function handleCtl(sock, head, rest) {
         else if (m.op === "kill") { killAcp(m.acpId); reply({ ok: true }); }
         else if (m.op === "list") {
           reply({ ok: true, acps: [...acps].map(([acpId, a]) => ({
-            acpId, pid: a.proc.pid, cwd: a.meta.cwd, cmd: a.meta.cmd, key: a.meta.key,
+            acpId, pid: a.proc.pid, cwd: a.meta.cwd, cmd: a.meta.cmd, key: a.meta.key, account: a.meta.account ?? null,
             exited: a.exited, exitCode: a.exitCode, bytesOut: a.bytesOut,
             startedAt: a.meta.startedAt,
           })) });
