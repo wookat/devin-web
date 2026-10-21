@@ -104,6 +104,11 @@ function spawnBackend() {
         // can still override by exporting its own value first.
         DEVIN_WEB_ALLOWED_HOSTS: process.env.DEVIN_WEB_ALLOWED_HOSTS
           || "192.168.6.251:7791,devin.zalize.com,devin-web.zalize.com",
+        // Bound the deploy drain: auto-resumed replays of huge session logs
+        // stream continuously (never "silent"), so inflight never settles and
+        // restarts deadlock. 15min default; set DEVIN_WEB_DRAIN_TIMEOUT_MS=0
+        // explicitly to restore wait-forever semantics.
+        DEVIN_WEB_DRAIN_TIMEOUT_MS: process.env.DEVIN_WEB_DRAIN_TIMEOUT_MS || "900000",
       },
     });
   const c = child;

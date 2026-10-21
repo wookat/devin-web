@@ -178,6 +178,16 @@ export async function handleSecurityRoute(ctx: ApiContext, parts: string[], m: s
       json(res, 200, { ok: true, profile: p });
       return true;
     }
+    if (m === "PATCH" && parts.length === 5) {
+      const p = reg.securityProfiles[decodeURIComponent(parts[4])];
+      if (!p) { json(res, 404, { error: "not found" }); return true; }
+      const b = await readJson(req);
+      if (b.name != null) p.name = String(b.name).trim().slice(0, 120) || p.name;
+      if (b.prompt != null) p.prompt = String(b.prompt).trim().slice(0, 20_000);
+      saveReg();
+      json(res, 200, { ok: true, profile: p });
+      return true;
+    }
     if (m === "DELETE" && parts.length === 5) {
       delete reg.securityProfiles[decodeURIComponent(parts[4])]; saveReg();
       json(res, 200, { ok: true });
@@ -191,13 +201,24 @@ export async function handleSecurityRoute(ctx: ApiContext, parts: string[], m: s
   if (seg === "scans") {
     if (m === "GET" && parts.length === 4) {
       const scans = Object.values(reg.securityScans)
-        .filter((s) => !s.archived)
         .sort((a, b) => b.created_at - a.created_at);
       const counts = { open_findings: 0, critical: 0, high: 0, medium: 0, low: 0, info: 0 };
       for (const s of scans) for (const f of s.findings ?? []) {
         if (f.status === "open") { counts.open_findings++; (counts as any)[f.severity] = ((counts as any)[f.severity] ?? 0) + 1; }
       }
-      json(res, 200, { scans: scans.map((s) => ({ ...s, findings: undefined, finding_count: (s.findings ?? []).length, open_count: (s.findings ?? []).filter((f) => f.status === "open").length })), counts });
+      json(res, 200, {
+        scans: scans.map((s) => {
+          const sev: Record<string, number> = {};
+          for (const f of s.findings ?? []) if (f.status === "open") sev[f.severity] = (sev[f.severity] ?? 0) + 1;
+          return {
+            ...s, findings: undefined,
+            finding_count: (s.findings ?? []).length,
+            open_count: (s.findings ?? []).filter((f) => f.status === "open").length,
+            severity_counts: sev,
+          };
+        }),
+        counts,
+      });
       return true;
     }
     if (m === "POST" && parts.length === 4) {
@@ -230,9 +251,22 @@ export async function handleSecurityRoute(ctx: ApiContext, parts: string[], m: s
     }
     if (parts.length >= 5) {
       const scan = reg.securityScans[decodeURIComponent(parts[4])];
-      if (!scan || scan.archived) { json(res, 404, { error: "not found" }); return true; }
+      if (!scan) { json(res, 404, { error: "not found" }); return true; }
+      if (scan.archived && !(m === "PATCH" && parts.length === 5)) { json(res, 404, { error: "not found" }); return true; }
       if (m === "GET" && parts.length === 5) {
-        json(res, 200, { scan });
+        const sev: Record<string, number> = {};
+        const st: Record<string, number> = { open: 0, resolved: 0, dismissed: 0 };
+        for (const f of scan.findings ?? []) {
+          sev[f.severity] = (sev[f.severity] ?? 0) + 1;
+          st[f.status === "open" ? "open" : f.status === "resolved" ? "resolved" : "dismissed"]++;
+        }
+        json(res, 200, { scan: { ...scan, severity_counts: sev, status_counts: st } });
+        return true;
+      }
+      if (m === "PATCH" && parts.length === 5) {
+        const b = await readJson(req);
+        if (b.archived != null) { scan.archived = !!b.archived; saveReg(); json(res, 200, { ok: true, scan }); return true; }
+        json(res, 400, { error: "nothing to patch" });
         return true;
       }
       if (m === "DELETE" && parts.length === 5) {
@@ -245,7 +279,7 @@ export async function handleSecurityRoute(ctx: ApiContext, parts: string[], m: s
         const f = (scan.findings ?? []).find((x) => x.finding_id === decodeURIComponent(parts[6]));
         if (!f) { json(res, 404, { error: "finding not found" }); return true; }
         const b = await readJson(req);
-        if (b.status != null && ["open", "resolved", "ignored", "false_positive"].includes(String(b.status))) f.status = b.status;
+        if (b.status != null && ["open", "resolved", "dismissed", "ignored", "false_positive"].includes(String(b.status))) f.status = b.status;
         if (b.stage != null && ["unassigned", "triaged", "fixing", "resolved"].includes(String(b.stage))) f.stage = b.stage;
         saveReg();
         json(res, 200, { ok: true, finding: f });
