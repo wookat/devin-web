@@ -825,6 +825,9 @@
     "collapseSb": "Collapse sidebar",
     "newSession": "New session",
     "sessionsMgmt": "Sessions",
+    "automations": "Automations",
+    "security": "Security",
+    "wiki": "Wiki",
     "expandSb": "Expand sidebar",
     "sessions": "Sessions",
     "searchPh": "Search sessions…",
@@ -1207,5 +1210,8 @@
     "go": "Go to PR",
     "bad": "Paste a github.com PR link (owner/repo/pull/N)",
     "back": "Review"
+  },
+  "stub": {
+    "na": "This surface isn't available in the local build — no local equivalent of the official product."
   }
 }

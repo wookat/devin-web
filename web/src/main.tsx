@@ -11,6 +11,7 @@ const MirrorResolvePage = lazy(() => import('./pages/MirrorResolve'))
 const SettingsPage = lazy(() => import('./pages/Settings'))
 const SessionsPage = lazy(() => import('./pages/SessionsPage'))
 const ReviewPage = lazy(() => import('./pages/ReviewPage'))
+const StubPage = lazy(() => import('./pages/StubPage'))
 import { initTheme } from './lib/theme'
 import { initScrollReveal } from './lib/scrollReveal'
 import { prefetchAdmin, prefetchShare } from './lib/api'
@@ -81,6 +82,9 @@ function mount(boot: RouteModule | null) {
           <Route path="/admin/d/:hex" element={<MirrorResolvePage kind="session" />} />
           <Route path="/admin/review" element={<ReviewPage />} />
           <Route path="/admin/review/:owner/:repo/pull/:number" element={<ReviewPage />} />
+          <Route path="/admin/automations" element={<StubPage surface="automations" />} />
+          <Route path="/admin/security" element={<StubPage surface="security" />} />
+          <Route path="/admin/wiki" element={<StubPage surface="wiki" />} />
           <Route path="/admin/sessions" element={<SessionsPage />} />
           <Route path="/admin/:id" element={<Mirror />} />
           <Route path="/admin/:id/mirror" element={<Mirror />} />

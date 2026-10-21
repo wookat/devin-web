@@ -1,7 +1,7 @@
 import { useMemo, useState } from 'react'
 import { useTranslation } from 'react-i18next'
 import { Link, useNavigate } from 'react-router-dom'
-import { GitPullRequest, RefreshCw, RotateCcw, Rows3, Settings2 } from 'lucide-react'
+import { BookOpen, GitPullRequest, RefreshCw, RotateCcw, Rows3, Settings2, Shield, Zap } from 'lucide-react'
 import { OChevronDown, OCollapse, OCompose, OSearch, OBell } from './officialIcons'
 import { adminFetch } from '@/lib/api'
 import LocalDock from './LocalDock'
@@ -23,7 +23,7 @@ function readTreePrefs(): TreePrefs {
 export default function AppSidebar({ open, onToggle, active, tree, archivedTree, activeDevinId = '', onOpen, onRefresh, onLoadMore, loadingMore, folderOrder, folderTotals, onSearch }: {
   open: boolean
   onToggle: (open: boolean) => void
-  active: 'new' | 'sessions' | 'review'
+  active: 'new' | 'sessions' | 'review' | 'automations' | 'security' | 'wiki' | ''
   tree: MirrorTreeSession[]
   archivedTree?: MirrorTreeSession[]
   activeDevinId?: string
@@ -138,9 +138,21 @@ export default function AppSidebar({ open, onToggle, active, tree, archivedTree,
               <Rows3 size={14} className="shrink-0 text-muted-foreground" />
               <span className="min-w-0 flex-1 truncate">{t('sp.sessionsMgmt')}</span>
             </Link>
+            <Link to="/admin/automations" aria-current={active === 'automations' ? 'page' : undefined} className={navCls('automations')}>
+              <Zap size={14} className="shrink-0 text-muted-foreground" />
+              <span className="min-w-0 flex-1 truncate">{t('sp.automations')}</span>
+            </Link>
+            <Link to="/admin/security" aria-current={active === 'security' ? 'page' : undefined} className={navCls('security')}>
+              <Shield size={14} className="shrink-0 text-muted-foreground" />
+              <span className="min-w-0 flex-1 truncate">{t('sp.security')}</span>
+            </Link>
             <Link to="/admin/review" aria-current={active === 'review' ? 'page' : undefined} className={navCls('review')}>
               <GitPullRequest size={14} className="shrink-0 text-muted-foreground" />
               <span className="min-w-0 flex-1 truncate">{t('rv.back')}</span>
+            </Link>
+            <Link to="/admin/wiki" aria-current={active === 'wiki' ? 'page' : undefined} className={navCls('wiki')}>
+              <BookOpen size={14} className="shrink-0 text-muted-foreground" />
+              <span className="min-w-0 flex-1 truncate">{t('sp.wiki')}</span>
             </Link>
           </nav>
           <div className="min-h-0 flex-1 overflow-y-auto py-1">

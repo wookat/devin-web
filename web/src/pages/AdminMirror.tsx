@@ -7,7 +7,7 @@ import { useTranslation } from 'react-i18next'
 import i18n from '@/i18n'
 import { createPortal } from 'react-dom'
 import { Link, useLocation, useNavigate, useParams } from 'react-router-dom'
-import { ArrowLeft, Loader2, ChevronRight, ChevronDown, ChevronUp, Settings2, Copy, Check, RotateCcw, Archive, ArchiveRestore, Plus, FileText, Circle, ArrowUp, ArrowUpRight, Square, Link2, X, Expand, Code, Workflow as WorkflowIcon, BookOpen, UploadCloud, Folder as FolderIcon, Pencil, Clock, Lightbulb, Info, Laptop, FolderOpen, Image as ImageIcon, Share2, RefreshCw, AlertTriangle, Rows3, Globe, MessageSquare, Sparkles, GitFork, TextQuote, CornerDownLeft, GitPullRequest } from 'lucide-react'
+import { ArrowLeft, Loader2, ChevronRight, ChevronDown, ChevronUp, Settings2, Copy, Check, RotateCcw, Archive, ArchiveRestore, Plus, FileText, Circle, ArrowUp, ArrowUpRight, Square, Link2, X, Expand, Code, Workflow as WorkflowIcon, BookOpen, UploadCloud, Folder as FolderIcon, Pencil, Clock, Lightbulb, Info, Laptop, FolderOpen, Image as ImageIcon, Share2, RefreshCw, AlertTriangle, Rows3, Globe, MessageSquare, Sparkles, GitFork, TextQuote, CornerDownLeft, GitPullRequest, Zap, Shield } from 'lucide-react'
 import { OArchive, OBell, OCollapse, OCompose, OExpand, OSearch } from '../components/officialIcons'
 import { adminFetch, adminFetchSwr, shareFetchSwr, type AdminSession, type PublicMessage, type DashboardData } from '@/lib/api'
 import { adminViewer, visitorViewer, setViewer, sessionFetch, sessionFetchSwr, attachmentUrl, type Viewer, type SharePermission } from '@/lib/viewer'
@@ -2711,11 +2711,32 @@ const groups = useMemo(() => groupItems(allItems, sessionWorking), [allItems, se
               <span className="min-w-0 flex-1 truncate">{t('menu.manageSessions')}</span>
             </Link>
             <Link
+              to="/admin/automations"
+              className="mb-px flex h-[30px] items-center gap-2 rounded-[6px] px-2 text-[13px] leading-[18px] text-foreground hover:bg-tint-secondary"
+            >
+              <Zap size={14} className="shrink-0 text-muted-foreground" />
+              <span className="min-w-0 flex-1 truncate">{t('sp.automations')}</span>
+            </Link>
+            <Link
+              to="/admin/security"
+              className="mb-px flex h-[30px] items-center gap-2 rounded-[6px] px-2 text-[13px] leading-[18px] text-foreground hover:bg-tint-secondary"
+            >
+              <Shield size={14} className="shrink-0 text-muted-foreground" />
+              <span className="min-w-0 flex-1 truncate">{t('sp.security')}</span>
+            </Link>
+            <Link
               to="/admin/review"
               className="mb-px flex h-[30px] items-center gap-2 rounded-[6px] px-2 text-[13px] leading-[18px] text-foreground hover:bg-tint-secondary"
             >
               <GitPullRequest size={14} className="shrink-0 text-muted-foreground" />
               <span className="min-w-0 flex-1 truncate">{t('rv.back')}</span>
+            </Link>
+            <Link
+              to="/admin/wiki"
+              className="mb-px flex h-[30px] items-center gap-2 rounded-[6px] px-2 text-[13px] leading-[18px] text-foreground hover:bg-tint-secondary"
+            >
+              <BookOpen size={14} className="shrink-0 text-muted-foreground" />
+              <span className="min-w-0 flex-1 truncate">{t('sp.wiki')}</span>
             </Link>
           </nav>
           <div className="min-h-0 flex-1 overflow-y-auto py-1">
@@ -3650,6 +3671,46 @@ const groups = useMemo(() => groupItems(allItems, sessionWorking), [allItems, se
           )}
           <BeardBand
             onBandHeight={setBandH}
+            chin={interrupted || subDead ? (
+              <>
+                {interrupted && (
+                  <BandItem>
+                    <div className="flex min-h-8 items-center gap-2 py-1 pl-3.5 pr-1 text-amber-600 dark:text-amber-400">
+                      <AlertTriangle size={13} className="shrink-0" />
+                      <span className="min-w-0 flex-1 truncate text-[12px] leading-[16px]" title={interrupted.text}>{t('composer.resumeTurn')} {interrupted.text.slice(0, 80)}</span>
+                      <button
+                        onClick={() => void resumeInterrupted()}
+                        className="shrink-0 cursor-pointer rounded-[6px] px-2 py-0.5 text-[12px] font-medium hover:bg-accent"
+                      >
+                        {interrupted.kind === 'resend' ? t('common.resend') : t('common.continue')}
+                      </button>
+                      <button
+                        onClick={dismissInterrupted}
+                        aria-label={t('composer.resumeDismiss')}
+                        title={t('composer.resumeDismiss')}
+                        className="flex size-6 shrink-0 cursor-pointer items-center justify-center rounded-[6px] hover:bg-accent"
+                      >
+                        <X size={14} />
+                      </button>
+                    </div>
+                  </BandItem>
+                )}
+                {subDead && (
+                  <BandItem>
+                    <div className="flex min-h-8 items-center gap-2 py-1 pl-3.5 pr-1 text-muted-foreground">
+                      <AlertTriangle size={13} className="shrink-0" />
+                      <span className="min-w-0 flex-1 truncate text-[12px] leading-[16px]">{t('tree.handleDead')}</span>
+                      <button
+                        onClick={() => void respawnSub()}
+                        className="shrink-0 cursor-pointer rounded-[6px] px-2 py-0.5 text-[12px] font-medium hover:bg-accent"
+                      >
+                        {t('menu.spawnSuccessor')}
+                      </button>
+                    </div>
+                  </BandItem>
+                )}
+              </>
+            ) : undefined}
             band={queued.length > 0 || (pending && pending.questions?.length && caps.canAnswerQuestion) ? (
               <>
           {queued.length > 0 && (
@@ -4681,21 +4742,6 @@ const groups = useMemo(() => groupItems(allItems, sessionWorking), [allItems, se
                 } : undefined}
                 onClose={() => setSelQuote(null)}
               />
-            )}
-            {interrupted && (
-              <div className="flex items-center gap-2 px-1 pt-1 text-[12px] leading-[16px] text-amber-600 dark:text-amber-400">
-                <AlertTriangle size={13} className="shrink-0" />
-                <span className="min-w-0 truncate" title={interrupted.text}>{t('composer.resumeTurn')} {interrupted.text.slice(0, 80)}</span>
-                <button onClick={() => void resumeInterrupted()} className="shrink-0 cursor-pointer underline hover:opacity-80">{interrupted.kind === 'resend' ? t('common.resend') : t('common.continue')}</button>
-                <button onClick={dismissInterrupted} className="shrink-0 cursor-pointer underline hover:opacity-80">{t('composer.resumeDismiss')}</button>
-              </div>
-            )}
-            {subDead && (
-              <div className="flex items-center gap-2 px-1 pt-1 text-[12px] leading-[16px] text-muted-foreground">
-                <AlertTriangle size={13} className="shrink-0" />
-                <span className="min-w-0 truncate">{t('tree.handleDead')}</span>
-                <button onClick={() => void respawnSub()} className="shrink-0 cursor-pointer underline hover:opacity-80">{t('menu.spawnSuccessor')}</button>
-              </div>
             )}
             {persona && !isVisitor && !isDraft && (persona.mode !== 'off' || persona.escalated) && (
               <div className="flex items-center gap-2 px-1 pt-1 text-[12px] leading-[16px] text-muted-foreground">

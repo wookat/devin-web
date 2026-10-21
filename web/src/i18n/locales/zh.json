@@ -825,6 +825,9 @@
     "collapseSb": "收起侧栏",
     "newSession": "新会话",
     "sessionsMgmt": "会话管理",
+    "automations": "自动化",
+    "security": "安全",
+    "wiki": "Wiki",
     "expandSb": "展开侧栏",
     "sessions": "会话",
     "searchPh": "搜索会话…",
@@ -1207,5 +1210,8 @@
     "go": "打开 PR",
     "bad": "粘贴 github.com PR 链接（owner/repo/pull/N）",
     "back": "评审"
+  },
+  "stub": {
+    "na": "此功能面在本地版暂不可用——官方产品无对应本地实现。"
   }
 }
