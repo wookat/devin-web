@@ -58,14 +58,15 @@ function isSessionPinned(id: string): boolean {
 /** sessionId → config returned in the session/new / session/load RESPONSE
  * (modes + configOptions). Devin emits these in the response, not always as
  * streamed notifications, so capture them here and merge into sessionConfig. */
-const responseCfg = new Map<string, {
+interface ResponseCfgEntry {
   configOptions?: ConfigOption[] | null;
   modes?: { currentModeId: string; availableModes?: { id: string; name?: string }[] } | null;
   commands?: { name: string; description?: string; input?: { hint?: string } }[] | null;
   /** Time of the most recent authoritative echo (load or setConfigOption).
    * Logged config_option_update notifications older than this are stale. */
   echoTs?: number;
-}>();
+}
+const responseCfg = new Map<string, ResponseCfgEntry>();
 
 /** Last non-empty config seen from ANY session — model/mode option lists are
  * agent-level capabilities (identical for every session on the same CLI), so
@@ -80,18 +81,21 @@ let lastAgentCfg: {
  * whose replay hasn't reached its commands_update yet still gets the list. */
 let lastAgentCommands: SessionConfig["commands"] | null = null;
 
-/** Persisted agent-level config — session/load responses are the ONLY source
- *  of the model/mode option list, and broker adoption deliberately skips
- *  load, so a restart used to blank every model picker until some session
- *  happened to reload. Boot restores this file instead. */
-let cfgCacheDir = "";
+/** Persisted runtime state — ONE seam restores every piece of memory a
+ *  restart used to silently drop. Broker adoption deliberately skips
+ *  session/load (the only writer of the cfg caches), and a transparent
+ *  restart must not eat user data (message queue) or diagnostics
+ *  (sendErrors). All three files live in stateDir and write through on
+ *  mutation; this runs BEFORE adoption/auto-resume in index.ts. */
+let stateDir = "";
 export function setCfgCacheDir(dir: string) {
-  cfgCacheDir = dir;
+  stateDir = dir;
   try {
     const j = JSON.parse(fs.readFileSync(path.join(dir, "agent-cfg.json"), "utf8")) as {
       configOptions?: ConfigOption[];
       modes?: { currentModeId: string; availableModes?: { id: string; name?: string }[] };
       commands?: SessionConfig["commands"];
+      bySession?: Record<string, ResponseCfgEntry>;
     };
     if (j.configOptions?.length || j.modes) {
       lastAgentCfg = {
@@ -100,14 +104,33 @@ export function setCfgCacheDir(dir: string) {
       };
     }
     if (j.commands?.length) lastAgentCommands = j.commands;
+    for (const [sid, c] of Object.entries(j.bySession ?? {})) if (c && typeof c === "object") responseCfg.set(sid, c);
   } catch { /* cold start — no cache yet */ }
+  try {
+    const q = JSON.parse(fs.readFileSync(path.join(dir, "queues.json"), "utf8")) as Record<string, QueuedMsg[]>;
+    for (const [sid, msgs] of Object.entries(q)) {
+      const ok = Array.isArray(msgs) ? msgs.filter((m) => m && typeof m.id === "string" && typeof m.text === "string") : [];
+      if (ok.length) promptQueues.set(sid, ok);
+    }
+  } catch { /* cold start */ }
+  try {
+    const e = JSON.parse(fs.readFileSync(path.join(dir, "send-errors.json"), "utf8")) as Record<string, SendError>;
+    for (const [sid, se] of Object.entries(e)) if (se && typeof se.ts === "number") sendErrors.set(sid, se);
+  } catch { /* cold start */ }
+}
+function persistJson(file: string, data: unknown) {
+  if (!stateDir) return;
+  try { fs.writeFileSync(path.join(stateDir, file), JSON.stringify(data)); } catch { /* best-effort */ }
 }
 function persistAgentCfg() {
-  if (!cfgCacheDir) return;
-  try {
-    fs.writeFileSync(path.join(cfgCacheDir, "agent-cfg.json"),
-      JSON.stringify({ ...(lastAgentCfg ?? {}), commands: lastAgentCommands ?? undefined }));
-  } catch { /* best-effort */ }
+  // Per-session entries ride the same file (LRU-capped) — a session's
+  // currentValue picks (its model/mode) differ from agent defaults.
+  const bySession = [...responseCfg.entries()].sort((a, b) => (b[1].echoTs ?? 0) - (a[1].echoTs ?? 0)).slice(0, 40);
+  persistJson("agent-cfg.json", {
+    ...(lastAgentCfg ?? {}),
+    commands: lastAgentCommands ?? undefined,
+    bySession: bySession.length ? Object.fromEntries(bySession) : undefined,
+  });
 }
 
 function captureLoadResponse(id: string, r: unknown) {
@@ -120,8 +143,8 @@ function captureLoadResponse(id: string, r: unknown) {
       ...(res.configOptions?.length ? { configOptions: res.configOptions } : {}),
       ...(res.modes ? { modes: res.modes } : {}),
     };
-    persistAgentCfg();
   }
+  persistAgentCfg();
 }
 
 /** devin returns errorKind `session_locked` when a session is still open in a
@@ -572,8 +595,12 @@ function drainSince() { return draining ? drainStartedAt : 0; }
 
 // ---------------------------------------------------------------------------
 // Message queue — Ctrl+Enter while working parks a prompt here; the queue is
-// flushed FIFO in dispatchPrompt's settle path. In-memory only (a restart
-// drops queued drafts, same as the desktop's session-bound queue).
+// flushed FIFO in dispatchPrompt's settle path. Persisted to queues.json —
+// under the broker a restart is invisible, so queued user messages must
+// survive it too. They flush on the NEXT settle (adopted-turn watcher,
+// auto-resume replay, or the next manual send) — never on a blind boot
+// sweep: a non-empty queue always implies a turn was in flight when the
+// backend died, and that turn's own settle path is what drains it.
 // ---------------------------------------------------------------------------
 
 export interface QueuedMsg {
@@ -587,6 +614,7 @@ export interface QueuedMsg {
 }
 const promptQueues = new Map<string, QueuedMsg[]>();
 let queueSeq = 0;
+function saveQueues() { persistJson("queues.json", Object.fromEntries(promptQueues)); }
 
 export function queueList(id: string): QueuedMsg[] {
   return promptQueues.get(id) ?? [];
@@ -598,6 +626,7 @@ export function queueAdd(ctx: ApiContext, id: string, text: string, attachments:
   const q = promptQueues.get(id) ?? [];
   q.push(m);
   promptQueues.set(id, q);
+  saveQueues();
   noteUpdate(ctx, id);
   return m;
 }
@@ -609,6 +638,7 @@ export function queueRemove(ctx: ApiContext, id: string, qid: string): boolean {
   if (i < 0) return false;
   q.splice(i, 1);
   if (!q.length) promptQueues.delete(id);
+  saveQueues();
   noteUpdate(ctx, id);
   return true;
 }
@@ -622,6 +652,7 @@ function queueFlush(ctx: ApiContext, id: string) {
   const next = q?.shift();
   if (!next) return;
   if (q && !q.length) promptQueues.delete(id);
+  saveQueues();
   dispatchPrompt(ctx, id, next.text, next.attachments ?? [], next.subagentId, next.respawnRow);
 }
 
@@ -701,6 +732,7 @@ const sendErrors = new Map<string, SendError>();
 function noteSendError(id: string, stage: string, err: unknown) {
   sendErrors.set(id, { ts: Date.now(), stage, message: err instanceof Error ? err.message : String(err) });
   while (sendErrors.size > 200) sendErrors.delete(sendErrors.keys().next().value!);
+  persistJson("send-errors.json", Object.fromEntries(sendErrors));
 }
 function lastSendError(id: string): SendError | null { return sendErrors.get(id) ?? null; }
 function recentSendErrors(): (SendError & { sessionId: string })[] {
