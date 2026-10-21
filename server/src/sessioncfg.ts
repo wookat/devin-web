@@ -77,10 +77,16 @@ export function initCfgState(dir: string) {
   } catch { /* cold start — no cache yet */ }
 }
 
-/** Write-through for every durable file under stateDir (no-op pre-init). */
+/** Write-through for every durable file under stateDir (no-op pre-init).
+ *  tmp+rename so a mid-write crash can never leave a torn journal — the
+ *  readers' parse-failure tolerance is the floor, not the plan. */
 export function persistJson(file: string, data: unknown) {
   if (!stateDir) return;
-  try { fs.writeFileSync(path.join(stateDir, file), JSON.stringify(data)); } catch { /* best-effort */ }
+  try {
+    const full = path.join(stateDir, file);
+    fs.writeFileSync(full + ".tmp", JSON.stringify(data));
+    fs.renameSync(full + ".tmp", full);
+  } catch { /* best-effort */ }
 }
 
 function persistAgentCfg() {

@@ -11,7 +11,7 @@ import { acpForId } from "./sessionload.js";
 import { promptWithRetry } from "./sessionprompt.js";
 import { isDraining, inflight } from "./sessionlive.js";
 import { captureLoadResponse } from "./sessioncfg.js";
-import { loadedOn, sessionHost } from "./sessionplace.js";
+import { markLoadedOn } from "./sessionplace.js";
 
 // Never pass free-text via -f/-F: gh reads `@path` values as files (comment
 // bodies starting with a mention would break) and brace/escape handling is
@@ -208,10 +208,7 @@ async function ensureReviewSession(ctx: ApiContext): Promise<string> {
     const s = await acp.newSession(dir);
     ctx.sessionCwd.set(s.sessionId, dir);
     captureLoadResponse(s.sessionId, s);
-    let n = loadedOn.get(acp);
-    if (!n) loadedOn.set(acp, (n = new Set()));
-    n.add(s.sessionId);
-    sessionHost.set(s.sessionId, acp);
+      markLoadedOn(s.sessionId, acp);
     const mm = meta(ctx, s.sessionId);
     mm.title = "🔍 PR review"; mm.folder = ".persona";
     (loadReg(ctx).prReview ??= {}).sessionId = s.sessionId;

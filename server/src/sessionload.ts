@@ -18,7 +18,7 @@ import { queueList, queueFlush, restoreQueues, bindQueueDeps, queuedSessions } f
 import { restoreSendErrors } from "./sendhealth.js";
 import { dispatchPrompt, releaseBusy, bindPromptDeps } from "./sessionprompt.js";
 import { openTurns, openTurnsLoad, openTurnsSave, type OpenTurn } from "./sessionturns.js";
-import { loadedOn, sessionHost, loadEpoch, loadInflight } from "./sessionplace.js";
+import {loadedOn, sessionHost, loadEpoch, loadInflight, markLoadedOn } from "./sessionplace.js";
 import { inflight, adoptedTurns, lastActivity, touchSessionActivity, isDraining } from "./sessionlive.js";
 import { pingSubagent } from "./sessionsub.js";
 import { sessionStatus } from "./sessionview.js";
@@ -213,15 +213,6 @@ export function loadOnce(ctx: ApiContext, acp: DevinAcp, id: string, cwd: string
   return rec.p.then(() => rec.acp);
 }
 
-/** Mark `id` as open on `host` — the only truthful pin target. Marks must
- * never land on an acp that merely JOINED another process's load. */
-function markLoadedOn(id: string, host: DevinAcp): DevinAcp {
-  let s = loadedOn.get(host);
-  if (!s) loadedOn.set(host, (s = new Set()));
-  s.add(id);
-  sessionHost.set(id, host);
-  return host;
-}
 
 /** Resolve the acp process that owns (or should own) this session — the single
  * canonical resolver shared by every route layer. Order: dedicated
@@ -512,8 +503,7 @@ export async function adoptBrokerAcps(ctx: ApiContext) {
               // session listed by this acp but held elsewhere is still safe:
               // the next op's session/load is idempotent on the true owner.
               if (!loadedOn.get(acp)) loadedOn.set(acp, new Set());
-              loadedOn.get(acp)!.add(sid);
-              sessionHost.set(sid, acp);
+              markLoadedOn(sid, acp);
               // Dedicated (single-session) agents resolve via bySession —
               // the pool path is multi-session only.
               if (!agent.multiSession) ctx.manager.bindSession(sid, acp);

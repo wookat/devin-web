@@ -8,7 +8,7 @@ import { loadReg, saveReg, meta, type DwAutomation } from "./dwstore.js";
 import { agentById } from "./agents.js";
 import { dispatchPrompt } from "./sessionprompt.js";
 import { captureLoadResponse } from "./sessioncfg.js";
-import { loadedOn, sessionHost } from "./sessionplace.js";
+import { markLoadedOn } from "./sessionplace.js";
 import { isDraining } from "./sessionlive.js";
 import { remapLegacyCwd } from "./store.js";
 
@@ -77,10 +77,7 @@ async function fire(ctx: ApiContext, a: DwAutomation): Promise<string | null> {
   }
   ctx.sessionCwd.set(s.sessionId, remapLegacyCwd(cwd));
   captureLoadResponse(s.sessionId, s);
-  let n = loadedOn.get(acp);
-  if (!n) loadedOn.set(acp, (n = new Set()));
-  n.add(s.sessionId);
-  sessionHost.set(s.sessionId, acp);
+    markLoadedOn(s.sessionId, acp);
   const mm = meta(ctx, s.sessionId);
   mm.title = `⚙ ${a.name}`;
   mm.folder = ".automations";

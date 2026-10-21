@@ -11,7 +11,7 @@ import { remapLegacyCwd } from "../../store.js";
 import { buildTimeline } from "../../dwtimeline.js";
 import { sessionConfig, sessionStatus, listLocalSessions } from "../../sessionview.js";
 import { dispatchPrompt } from "../../sessionprompt.js";
-import { loadedOn, sessionHost } from "../../sessionplace.js";
+import {markLoadedOn } from "../../sessionplace.js";
 import { isDraining } from "../../sessionlive.js";
 import { captureLoadResponse } from "../../sessioncfg.js";
 import { agentById, listAgents, probeAgent, saveUserAgents } from "../../agents.js";
@@ -77,12 +77,9 @@ export async function handleNewSession(ctx: ApiContext, req: IncomingMessage, re
     ctx.sessionCwd.set(s.sessionId, ssh ? cwd : remapLegacyCwd(cwd));
     if (ssh) ctx.sessionSsh.set(s.sessionId, ssh);
     captureLoadResponse(s.sessionId, s);
-    let nset = loadedOn.get(acp);
-    if (!nset) loadedOn.set(acp, (nset = new Set()));
-    nset.add(s.sessionId);
-    // Pin the owning process or the next prompt re-loads onto a pooled
+        // Pin the owning process or the next prompt re-loads onto a pooled
     // acp and devin rejects it ("already open in another process").
-    sessionHost.set(s.sessionId, acp);
+    markLoadedOn(s.sessionId, acp);
     const mm = meta(ctx, s.sessionId);
     if (body.title) mm.title = String(body.title);
     if (body.folder) mm.folder = String(body.folder);

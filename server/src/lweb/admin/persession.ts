@@ -16,7 +16,7 @@ import { sessionConfig, sessionStatus, terminalBuf, cloudVersionToModel } from "
 import { subagentTimeline } from "../../sessionsub.js";
 import { dispatchPrompt } from "../../sessionprompt.js";
 import { queueList, queueAdd, queueRemove, queueFlush } from "../../sessionqueue.js";
-import { loadedOn, sessionHost, loadInflight } from "../../sessionplace.js";
+import {loadInflight, markLoadedOn } from "../../sessionplace.js";
 import { inflight, isDraining } from "../../sessionlive.js";
 import { responseCfg, captureLoadResponse, type ConfigOption } from "../../sessioncfg.js";
 import { personaState } from "../../persona.js";
@@ -647,10 +647,7 @@ export async function handlePerSession(ctx: ApiContext, req: IncomingMessage, re
         newId = s.sessionId;
         forkRes = s;
       }
-      let nset = loadedOn.get(acp);
-      if (!nset) loadedOn.set(acp, (nset = new Set()));
-      nset.add(newId);
-      sessionHost.set(newId, acp);
+        markLoadedOn(newId, acp);
       ctx.sessionCwd.set(newId, cwd);
       captureLoadResponse(newId, forkRes);
       const mm = meta(ctx, newId);

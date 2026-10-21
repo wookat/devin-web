@@ -30,3 +30,16 @@ export function isSessionPinned(id: string): boolean {
   const host = sessionHost.get(id);
   return !!host && !host.exited;
 }
+
+/** Mark `id` as open on `host` — the ONE placement write path. Both indexes
+ * must always move together (loadedOn ⊃ sessionHost's targets): a site that
+ * sets one without the other breaks ensureLoaded's pin lookup or lets ops
+ * bounce to the wrong pooled acp. Never mark an acp that merely JOINED
+ * another process's load. */
+export function markLoadedOn(id: string, host: DevinAcp): DevinAcp {
+  let s = loadedOn.get(host);
+  if (!s) loadedOn.set(host, (s = new Set()));
+  s.add(id);
+  sessionHost.set(id, host);
+  return host;
+}

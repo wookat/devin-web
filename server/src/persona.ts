@@ -16,7 +16,7 @@ import { acpForId } from "./sessionload.js";
 import { dispatchPrompt, promptWithRetry, turnEndHooks } from "./sessionprompt.js";
 import { inflight, isDraining } from "./sessionlive.js";
 import { captureLoadResponse } from "./sessioncfg.js";
-import { loadedOn, sessionHost, loadInflight } from "./sessionplace.js";
+import { loadInflight, markLoadedOn } from "./sessionplace.js";
 
 export type PersonaMode = "off" | "semi" | "auto";
 
@@ -120,10 +120,7 @@ async function ensurePersonaSession(ctx: ApiContext): Promise<string> {
     const s = await acp.newSession(cwd);
     ctx.sessionCwd.set(s.sessionId, cwd);
     captureLoadResponse(s.sessionId, s);
-    let nset = loadedOn.get(acp);
-    if (!nset) loadedOn.set(acp, (nset = new Set()));
-    nset.add(s.sessionId);
-    sessionHost.set(s.sessionId, acp);
+      markLoadedOn(s.sessionId, acp);
     const mm = meta(ctx, s.sessionId);
     mm.title = "🎭 分身"; mm.folder = ".persona";
     const reg = loadReg(ctx);

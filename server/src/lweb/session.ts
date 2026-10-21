@@ -18,7 +18,7 @@ import { listSubagents, subagentTimeline, subPingActive, type SubagentInfo } fro
 import { dispatchPrompt } from "../sessionprompt.js";
 import { queueList, queueAdd, queueFlush } from "../sessionqueue.js";
 import { noteSendError } from "../sendhealth.js";
-import { loadedOn, sessionHost, loadInflight } from "../sessionplace.js";
+import {loadInflight, markLoadedOn } from "../sessionplace.js";
 import { inflight, isDraining, drainSince } from "../sessionlive.js";
 import { captureLoadResponse } from "../sessioncfg.js";
 import { personaState, personaHumanMessage } from "../persona.js";
@@ -264,10 +264,7 @@ async function ensureHandoffSession(ctx: ApiContext): Promise<string> {
     const s = await acp.newSession(ctx.primaryCwd);
     ctx.sessionCwd.set(s.sessionId, ctx.primaryCwd);
     captureLoadResponse(s.sessionId, s);
-    let n = loadedOn.get(acp);
-    if (!n) loadedOn.set(acp, (n = new Set()));
-    n.add(s.sessionId);
-    sessionHost.set(s.sessionId, acp);
+      markLoadedOn(s.sessionId, acp);
     const mm = meta(ctx, s.sessionId);
     mm.title = "🍴 Fork 交接"; mm.folder = ".persona";
     (loadReg(ctx).forkHandoff ??= {}).sessionId = s.sessionId;

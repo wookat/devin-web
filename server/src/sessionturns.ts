@@ -10,6 +10,7 @@
  */
 import fs from "node:fs";
 import path from "node:path";
+import { persistJson } from "./sessioncfg.js";
 import type { ApiContext } from "./routes.js";
 
 export interface OpenTurn {
@@ -35,10 +36,8 @@ export function openTurnsLoad(ctx: ApiContext) {
   } catch { /* no file / corrupt — nothing to recover */ }
 }
 
-export function openTurnsSave(ctx: ApiContext) {
-  try {
-    fs.writeFileSync(path.join(ctx.store.dataDir, "open-turns.json"), JSON.stringify(Object.fromEntries(openTurns)));
-  } catch { /* best-effort */ }
+export function openTurnsSave(_ctx: ApiContext) {
+  persistJson("open-turns.json", Object.fromEntries(openTurns));
 }
 
 /** Drop open-turn entries — all of them, or one id. The tombstone case: an
