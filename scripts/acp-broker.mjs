@@ -107,7 +107,41 @@ function pushRing(a, chunk) {
   a.ring.push(framed);
   a.ringBytes += framed.length;
   a.bytesOut += framed.length;
+  // Index agent→client JSON-RPC requests by id. `end` is the enclosing
+  // chunk's byte position — the same granularity ring replay uses, so the
+  // attach dedup rule is exact (end > after ⟹ the ring already covers it).
+  if (framed.includes(METHOD_TAG)) {
+    for (const line of framed.toString("utf8").split("\n")) {
+      if (!line.includes('"id"') || !line.includes('"method"')) continue;
+      try {
+        const m = JSON.parse(line);
+        if (m != null && m.id != null && typeof m.method === "string") {
+          a.reqs.set(String(m.id), { frame: Buffer.from(line + "\n"), end: a.bytesOut });
+        }
+      } catch { /* non-json content line */ }
+    }
+  }
   while (a.ringBytes > RING_CAP) a.ringBytes -= a.ring.shift().length;
+}
+
+const METHOD_TAG = Buffer.from('"method"');
+const ID_TAG = Buffer.from('"id"');
+
+/** Tee-parse client→agent bytes: a JSON-RPC response (id, no method) clears
+ *  the pending request it answers. Requests/notifications pass through. */
+function feedStdin(a, chunk) {
+  a.inBuf = Buffer.concat([a.inBuf, chunk]);
+  for (;;) {
+    const nl = a.inBuf.indexOf(0x0a);
+    if (nl < 0) return;
+    const line = a.inBuf.subarray(0, nl + 1);
+    a.inBuf = a.inBuf.subarray(nl + 1);
+    if (!line.includes(ID_TAG)) continue;
+    try {
+      const m = JSON.parse(line.toString("utf8"));
+      if (m != null && m.id != null && m.method == null) a.reqs.delete(String(m.id));
+    } catch { /* non-json content line */ }
+  }
 }
 
 function spawnAcp(spec) {
@@ -121,6 +155,12 @@ function spawnAcp(spec) {
     meta: { cwd: spec.cwd, cmd: spec.cmdline ?? `${spec.command} ${(spec.args ?? []).join(" ")}`, key: spec.key ?? null, account: spec.account ?? null, startedAt: Date.now() },
     pending: Buffer.alloc(0),
     ring: [], ringBytes: 0, bytesOut: 0,
+    // Protocol awareness — agent→client requests (id+method) the attached
+    // backend has not answered. Re-emitted on re-attach so a request that
+    // died on the old byte stream (dead-window permission/fs/terminal)
+    // reaches the new backend instead of wedging devin forever.
+    reqs: new Map(),
+    inBuf: Buffer.alloc(0), // client→agent partial line (stdin tee parse)
     attached: null, exited: false, exitCode: null,
   };
   acps.set(acpId, a);
@@ -131,6 +171,7 @@ function spawnAcp(spec) {
   });
   child.on("exit", (code) => {
     a.exited = true; a.exitCode = code;
+    a.reqs.clear();
     for (const c of ctls) c.write(`${JSON.stringify({ ev: "exit", acpId, code })}\n`);
     if (a.attached && !a.attached.destroyed) a.attached.end();
     journalWrite();
@@ -168,7 +209,7 @@ function handleCtl(sock, head, rest) {
         else if (m.op === "list") {
           reply({ ok: true, acps: [...acps].map(([acpId, a]) => ({
             acpId, pid: a.proc.pid, cwd: a.meta.cwd, cmd: a.meta.cmd, key: a.meta.key, account: a.meta.account ?? null,
-            exited: a.exited, exitCode: a.exitCode, bytesOut: a.bytesOut,
+            exited: a.exited, exitCode: a.exitCode, bytesOut: a.bytesOut, pendingReqs: a.reqs.size,
             startedAt: a.meta.startedAt,
           })) });
         }
@@ -196,10 +237,15 @@ function handleAttach(sock, head, rest) {
   }
   if (a.pending.length) sock.write(a.pending); // live partial frame tail
   if (a.exited) { sock.end(); return; }
+  // Re-emit agent→client requests the previous backend never answered — a
+  // pending frame older than `after` is invisible to ring replay and would
+  // otherwise leave devin blocked on a dead stream forever (zombie turn).
+  // Frames inside the replay window already arrived via the ring.
+  for (const r of a.reqs.values()) if (r.end <= (head.after ?? 0)) sock.write(r.frame);
   // `rest` is bytes the client wrote before the header newline — they belong
   // to the child's stdin just like every later chunk.
-  if (rest.length) { try { a.proc.stdin.write(rest); } catch { /* dead */ } }
-  sock.on("data", (d) => { try { a.proc.stdin.write(d); } catch { /* dead */ } });
+  if (rest.length) { try { a.proc.stdin.write(rest); } catch { /* dead */ } feedStdin(a, rest); }
+  sock.on("data", (d) => { try { a.proc.stdin.write(d); } catch { /* dead */ } feedStdin(a, d); });
   sock.on("close", () => { if (a.attached === sock) a.attached = null; });
   sock.on("error", () => {});
 }
