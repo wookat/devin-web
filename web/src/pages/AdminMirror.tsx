@@ -7,21 +7,18 @@ import { useTranslation } from 'react-i18next'
 import i18n from '@/i18n'
 import { createPortal } from 'react-dom'
 import { Link, useLocation, useNavigate, useParams } from 'react-router-dom'
-import { ArrowLeft, Loader2, ChevronRight, ChevronDown, ChevronUp, Settings2, Copy, Check, RotateCcw, Archive, ArchiveRestore, Plus, FileText, Circle, ArrowUp, ArrowUpRight, Square, Link2, X, Expand, Code, Workflow as WorkflowIcon, BookOpen, UploadCloud, Folder as FolderIcon, Pencil, Clock, Lightbulb, Info, Laptop, FolderOpen, Image as ImageIcon, Share2, RefreshCw, AlertTriangle, Rows3, Globe, MessageSquare, Sparkles, GitFork, TextQuote, CornerDownLeft, GitPullRequest, Zap, Shield } from 'lucide-react'
-import { OArchive, OBell, OCollapse, OCompose, OExpand, OSearch } from '../components/officialIcons'
+import { ArrowLeft, Loader2, ChevronRight, ChevronDown, ChevronUp, Settings2, Copy, Check, RotateCcw, Archive, ArchiveRestore, Plus, FileText, Circle, ArrowUp, Square, X, Expand, Code, BookOpen, UploadCloud, Folder as FolderIcon, Pencil, Clock, Lightbulb, Info, Laptop, FolderOpen, Image as ImageIcon, RefreshCw, AlertTriangle, Rows3, Globe, MessageSquare, Sparkles, TextQuote, CornerDownLeft, GitPullRequest, Zap, Shield } from 'lucide-react'
+import { OBell, OCollapse, OCompose, OExpand, OSearch } from '../components/officialIcons'
 import { adminFetch, adminFetchSwr, shareFetchSwr, type AdminSession, type PublicMessage, type DashboardData } from '@/lib/api'
 import { adminViewer, visitorViewer, setViewer, sessionFetch, sessionFetchSwr, attachmentUrl, type Viewer, type SharePermission } from '@/lib/viewer'
 import { visibleInterval } from '@/lib/poll'
 import { subscribeWs } from '@/lib/ws'
 import Dashboard from '@/components/Dashboard'
 import { getTheme, setTheme, type Theme } from '@/lib/theme'
-import AttachmentCard from '@/components/AttachmentCard'
-import CollapsibleBody from '@/components/CollapsibleBody'
-import { type TimelineItem, fmtWorkedDur, STANDALONE_GIT_TYPES, workSeconds, CalloutCard, envSupersededMap } from '@/components/Timeline'
-import { SecretRequestCard, PrCreatedCard, PrStateIcon, StandaloneGitRow, mergeLivePr } from '@/components/StructuredCards'
-import Markdown from '@/components/Markdown'
+import { type TimelineItem, fmtWorkedDur, workSeconds, envSupersededMap } from '@/components/Timeline'
+import { PrStateIcon } from '@/components/StructuredCards'
 import QuestionPanel from '@/components/QuestionPanel'
-import { StatusDot, Combo } from '@/components/ui'
+import { StatusDot } from '@/components/ui'
 import ComposerEditor, { type ComposerEditorHandle } from '@/components/ComposerEditor'
 import LocalDock from '@/components/LocalDock'
 import DwMark from '@/components/DwMark'
@@ -29,33 +26,33 @@ import TermPanel from '@/components/TermPanel'
 import BeardBand, { BandItem } from '@/components/BeardBand'
 import { LightboxImage } from '@/components/Lightbox'
 import { filePillSvg } from '@/components/filePillIcons'
-import WakePersona from '@/components/WakePersona'
-import ThinkingPersona from '@/components/ThinkingPersona'
-import UserAttachments, { IMAGE_RE } from '@/components/UserAttachments'
-import { extractRepos } from '@/lib/repos'
+import { IMAGE_RE } from '@/components/UserAttachments'
 import { type QuoteAttachment } from '../../shared/quotes'
 import QuoteChip from '@/components/QuoteChip'
-import { cn, fmtTime } from '@/lib/utils'
+import { cn } from '@/lib/utils'
 import { ATTACH_MENU_ICONS, MODE_INFO_ICON, MODE_CHECK_ICON, MENU_CHEVRON_ICON } from '@/lib/officialMenuIcons'
 import { PanelAddTabIcon, PanelAttachmentsIcon, PanelCloseTabIcon, PanelFullWidthIcon, PanelHideTabsIcon, PanelPullRequestIcon } from '@/components/panelTabIcons'
 import { readTreeCache, type MirrorTreeSession, type TreeCachePayload, writeTreeCache } from './mirror/treeCache'
 import { prefetchSession, visitorTabs, type SessionDetail, tlSnapshots, messagesFromItems, type LocalCfg, EFFORT_SUFFIX_RE, modeOfVersion, speedOfVersion, type ShareMeta, defaultTabs, CommandPalette, TimelineSkeleton, LOCAL_MODE_ICONS, VERSION_LABEL, versionOf } from './mirror/pageBits'
 import { type PanelKey, PANELS, findItemText, parseOfficialTab, serializeOfficialTab, useUrlParamSync, ADD_TAB_ORDER, prNumber, type PanelIcon } from './mirror/panelTabs'
-import { type TimelinePage, preview, mergeItems, groupItems, time, rowClock, clock, COACH_RECOMMENDATIONS, COACH_ACTIONS } from './mirror/timelineUtil'
+import { type TimelinePage, preview, mergeItems, groupItems, clock, COACH_RECOMMENDATIONS, COACH_ACTIONS } from './mirror/timelineUtil'
 import { reduceStatus, stText } from './mirror/statusReduce'
 import { type ComposerMetaT, type SuggestItem, AT_CATEGORIES, QUEUE_DASHED_SVG, QUEUE_DRAG_SVG, QUEUE_PLACEHOLDER } from './mirror/composerMeta'
 import { type TreePrefs, TREE_PREFS_KEY, DEFAULT_TREE_PREFS, buildFilterQ, SessionTree } from './mirror/SessionTree'
 import DirPicker from './mirror/DirPicker'
 import LocalPicker, { type DraftTarget } from './mirror/LocalPicker'
-import CodeView from '@/components/CodeView'
 import { type WfAgentEventState, AgentsPanel } from './mirror/AgentsPanel'
-import { SessionSettingsGlyph, HeaderMenuPortal, AwaitingInstructionsGlyph, ApiOriginGlyph, OfficialGlyph, BubblePlusGlyph, CloseQuoteGlyph } from './mirror/glyphs'
-import { PermissionCard, PermissionSidebarPanel } from './mirror/Permission'
-import { EventRow, WorkGroup } from './mirror/TimelineRows'
+import { OfficialGlyph } from './mirror/glyphs'
+import { QuotePill } from './mirror/QuotePill'
+import { SessionMenu } from './mirror/SessionMenu'
+import { SessionIndex } from './mirror/SessionIndex'
+import { TimelineGroup, StatusTail } from './mirror/TimelineGroups'
+import { useCollapseLevel } from './mirror/useCollapseLevel'
+import { DraftExplorer } from './mirror/DraftExplorer'
+import { PermissionSidebarPanel } from './mirror/Permission'
 import ModelPicker from './mirror/ModelPicker'
-import { splitAttachments, isOwnUserMessage, indexPreview } from './mirror/attachments'
-import { ParticipantHeader, FileViewerPanel, ShellPanel, AttachmentsPanel } from './mirror/ViewerPanels'
-import { MessageToolbar, SidechatPanel } from './mirror/Sidechat'
+import { FileViewerPanel, ShellPanel, AttachmentsPanel } from './mirror/ViewerPanels'
+import { SidechatPanel } from './mirror/Sidechat'
 import { VoiceButton } from './mirror/VoiceButton'
 import { PrPanel } from './mirror/PrPanel'
 import { ProgressPanel, WorklogPanel } from './mirror/ProgressPanels'
@@ -68,14 +65,6 @@ let lastSeenLocalCfg: LocalCfg | null = null
 // Per-session cfg cache — session A's config must never warm-start session B
 // (module-level sharing was the "previous model / Ultra" flash on navigation).
 const lastSeenCfgBySid = new Map<string, LocalCfg>()
-
-/* Official dark-quote tokens (verbatim from app.devin.ai .dark scope):
-   wax bg rgb(31,31,31,.94)+blur, border white/.04, text white/.9, hint /.52. */
-const QWAX = 'rgb(31 31 31 / 0.94)'
-const QBORDER = 'rgb(255 255 255 / 0.04)'
-const QBORDER_FOCUS = 'rgb(255 255 255 / 0.08)'
-const QTEXT = 'rgb(255 255 255 / 0.9)'
-const QTINT = 'rgb(255 255 255 / 0.05)'
 
 /** Queue-row preview: stored queue text is the raw wire string — it can carry
  *  <quoted_artifact …> XML wrappers, ATTACHMENT:"url" marker lines and multi-line
@@ -91,231 +80,6 @@ function queuePreview(raw: string): string {
   s = s.replace(/^ATTACHMENT:"?([^"\n]+)"?\s*$/gm, '[附件] $1')
   s = s.replace(/<[^>]+>/g, '')
   return s.replace(/\s+/g, ' ').trim()
-}
-
-/** Floating quote affordance — official SelectionQuoteAffordance, two states:
- *  minimal  = dark pill above the anchor, [bubble-plus=Add caption]
- *             [close-quote-2=Add to chat ⏎]; typing begins the caption.
- *  expanded = the official 360px wax card: quoted-text preview header,
- *             caption input (min-h 28), footer split button
- *             [Add to chat | ▾ → Send immediately ⌘⏎]. Enter commits,
- *             ⌘/Ctrl+Enter sends immediately, Esc dismisses. */
-function QuotePill({ x, y, placement = 'above', hidden, startExpanded, quoteText, onCommit, onSend, onClose }: {
-  x: number; y: number; placement?: 'above' | 'below'; hidden?: boolean; startExpanded?: boolean; quoteText?: string
-  onCommit: (caption: string) => void; onSend?: (caption: string) => void; onClose: () => void
-}) {
-  const { t } = useTranslation()
-  const [expanded, setExpanded] = useState(!!startExpanded)
-  const [caption, setCaption] = useState('')
-  const [sendMenu, setSendMenu] = useState(false)
-  const capRef = useRef<HTMLInputElement>(null)
-  const cardRef = useRef<HTMLFormElement>(null)
-  const [cardH, setCardH] = useState(0)
-  useEffect(() => { if (expanded) capRef.current?.focus() }, [expanded])
-  // Official card geometry: top = anchor - measuredHeight when 'above' (the
-  // anchor point is the layer origin; gap 6 already folded into y).
-  useLayoutEffect(() => { if (expanded && cardRef.current) setCardH(cardRef.current.getBoundingClientRect().height) })
-  useEffect(() => {
-    const onKey = (e: KeyboardEvent) => {
-      if (e.key === 'Escape') { e.preventDefault(); onClose(); return }
-      if (e.key === 'Enter' && (e.metaKey || e.ctrlKey)) {
-        if (onSend) { e.preventDefault(); onSend(caption.trim()); return }
-      }
-      if (expanded) return
-      if (e.key === 'Enter') { e.preventDefault(); onCommit(caption); return }
-      if (e.key.length === 1 && !/\p{C}/u.test(e.key) && !e.ctrlKey && !e.metaKey && !e.altKey) {
-        setExpanded(true); setCaption(e.key)
-      }
-    }
-    // Official: while the pill is up, a plain-text paste becomes the caption
-    // (file clipboard items are ignored).
-    const onPaste = (e: ClipboardEvent) => {
-      if ([...(e.clipboardData?.items ?? [])].some((i) => i.kind === 'file')) return
-      const txt = e.clipboardData?.getData('text/plain')
-      if (txt) { e.preventDefault(); e.stopPropagation(); setExpanded(true); setCaption(txt) }
-    }
-    document.addEventListener('keydown', onKey, true)
-    document.addEventListener('paste', onPaste, true)
-    return () => { document.removeEventListener('keydown', onKey, true); document.removeEventListener('paste', onPaste, true) }
-  }, [expanded, caption, onCommit, onSend, onClose])
-  const iconBtn = 'flex h-6 w-6 items-center justify-center rounded-md'
-  return (
-    <div
-      className="dw-quote-pill fixed left-0 top-0 z-50 select-none"
-      style={{
-        transform: `translate(${x}px, ${expanded ? (placement === 'above' ? y - cardH : y) : (placement === 'above' ? y - 28 : y)}px)`,
-        transformOrigin: placement === 'above' ? 'center bottom' : 'center top',
-        visibility: hidden ? 'hidden' : undefined,
-      }}
-      onMouseDown={(e) => e.preventDefault()}
-    >
-      {expanded ? (
-        /* Official expanded card: 360px wax, r12, border secondary, blur, p6 gap10 */
-        <form
-          ref={cardRef}
-          className="dark w-[360px] overflow-hidden rounded-[12px] border backdrop-blur"
-          style={{ background: QWAX, borderColor: sendMenu ? QBORDER_FOCUS : QBORDER, color: QTEXT }}
-          onSubmit={(e) => { e.preventDefault(); onCommit(caption.trim()) }}
-        >
-          <div className="flex flex-col" style={{ padding: 6, gap: 10 }}>
-            {quoteText && (
-              <div className="line-clamp-3 text-[12px] leading-4" style={{ color: 'rgb(255 255 255 / 0.52)' }}>
-                {quoteText}
-              </div>
-            )}
-            <input
-              ref={capRef}
-              value={caption}
-              onChange={(e) => setCaption(e.target.value)}
-              onKeyDown={(e) => {
-                if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); onCommit(caption.trim()) }
-                if (e.key === 'Escape') { e.preventDefault(); setCaption(''); onClose() }
-                e.stopPropagation()
-              }}
-              placeholder={t('quote.captionPh')}
-              className="min-h-7 w-full bg-transparent text-[13px] leading-5 outline-none"
-              style={{ color: QTEXT }}
-            />
-            <div className="flex h-7 items-stretch justify-end">
-              {onSend ? (
-                /* Official split button: [Add to chat][|][▾ → Send immediately ⌘⏎] */
-                <div className="relative flex items-stretch rounded-[6px] border" style={{ borderColor: QBORDER_FOCUS, background: QTINT }}>
-                  <button
-                    type="submit"
-                    className="rounded-l-[5px] px-2 text-[13px] hover:bg-[rgb(255_255_255/0.08)]"
-                    style={{ color: QTEXT }}
-                  >{t('quote.addToChat')}</button>
-                  <div className="w-px" style={{ background: QBORDER_FOCUS }} />
-                  <button
-                    type="button"
-                    aria-label={t('quote.moreOptions')}
-                    className="flex w-6 items-center justify-center rounded-r-[5px] hover:bg-[rgb(255_255_255/0.08)]"
-                    style={{ color: QTEXT }}
-                    onClick={() => setSendMenu((v) => !v)}
-                  >
-                    <ChevronDown size={13} />
-                  </button>
-                  {sendMenu && (
-                    <div className="absolute right-0 top-[30px] z-10 min-w-[180px] rounded-lg border p-1 shadow-md" style={{ background: QWAX, borderColor: QBORDER, backdropFilter: 'blur(8px)' }}>
-                      <button
-                        type="button"
-                        className="flex w-full items-center justify-between gap-3 rounded-md px-2 py-1 text-left text-[13px] hover:bg-[rgb(255_255_255/0.05)]"
-                        style={{ color: QTEXT }}
-                        onClick={() => onSend(caption.trim())}
-                      >
-                        <span>{t('quote.sendImmediately')}</span>
-                        <kbd className="flex gap-0.5 text-[10px]" style={{ color: 'rgb(255 255 255 / 0.52)' }}>⌘⏎</kbd>
-                      </button>
-                    </div>
-                  )}
-                </div>
-              ) : (
-                <button type="submit" className="rounded-[6px] px-2 text-[13px] hover:bg-[rgb(255_255_255/0.08)]" style={{ color: QTEXT, background: QTINT }}>
-                  {t('quote.addToChat')}
-                </button>
-              )}
-            </div>
-          </div>
-        </form>
-      ) : (
-        /* Official minimal pill (verbatim `ht` class): h-7 gap-px rounded-8
-           p-0.5, bg-elevated, shadow-L1, ring-inset border-secondary */
-        <div
-          className="flex h-7 min-w-fit items-center gap-px whitespace-nowrap rounded-[8px] p-0.5 shadow-[0_1px_2px_0_rgba(0,0,0,0.2)] ring-1 ring-inset ring-[rgb(255_255_255/0.04)]"
-          style={{ background: 'rgb(31 31 31)', color: QTEXT }}
-        >
-          <button
-            type="button"
-            title={`${t('quote.addCaption')} — ${t('quote.startTyping')}`}
-            aria-label={t('quote.addCaption')}
-            className={iconBtn}
-            style={{ color: QTEXT }}
-            onMouseOver={(e) => (e.currentTarget.style.background = QTINT)}
-            onMouseOut={(e) => (e.currentTarget.style.background = 'transparent')}
-            onClick={() => setExpanded(true)}
-          >
-            <BubblePlusGlyph className="size-4" />
-          </button>
-          <button
-            type="submit"
-            title={`${t('quote.addToChat')} ⏎`}
-            aria-label={t('quote.addToChat')}
-            className={iconBtn}
-            style={{ color: QTEXT }}
-            onMouseOver={(e) => (e.currentTarget.style.background = QTINT)}
-            onMouseOut={(e) => (e.currentTarget.style.background = 'transparent')}
-            onClick={() => onCommit(caption.trim())}
-          >
-            <CloseQuoteGlyph className="size-4" />
-          </button>
-        </div>
-      )}
-    </div>
-  )
-}
-
-// Official composer collapse (decoded from the deob'd bundle — kE/OE/DE):
-// the toolbar row reports clientWidth; the collapsible "leading" cluster
-// reports scrollWidth−clientWidth overflow. overflow>1 → level+1, recording
-// the width that level needed (hysteresis, so levels don't flicker); when the
-// row later has room for the recorded need → level−1. A 200ms cooldown
-// between escalations prevents thrash. RO watches the row, the cluster, and
-// every cluster child (MutationObserver keeps the child set current).
-function useCollapseLevel(toolbarEl: HTMLElement | null, leadingEl: HTMLElement | null, maxLevel = 3): number {
-  const [level, setLevel] = useState(0)
-  const st = useRef({ level: 0, requiredAt: [] as (number | undefined)[], cooldown: 0, timer: 0 })
-  const measureRef = useRef<() => void>(() => {})
-  useLayoutEffect(() => {
-    const s = st.current
-    if (!toolbarEl || !leadingEl) {
-      s.level = 0
-      s.requiredAt = []
-      setLevel(0)
-      return
-    }
-    const measure = () => {
-      const available = toolbarEl.clientWidth
-      if (available <= 0) return
-      const overflow = leadingEl.scrollWidth - leadingEl.clientWidth
-      const now = Date.now()
-      const cooling = now < s.cooldown
-      if (cooling) {
-        // During cooldown escalations are capped at the current level; a
-        // deferred re-measure runs right after the cooldown ends.
-        window.clearTimeout(s.timer)
-        s.timer = window.setTimeout(() => measureRef.current(), s.cooldown - now + 25)
-      }
-      const cap = cooling ? s.level : maxLevel
-      if (overflow > 1 && s.level < cap) {
-        s.requiredAt[s.level] = available + overflow
-        s.level += 1
-        s.cooldown = now + 200
-        setLevel(s.level)
-      } else if (s.level > 0) {
-        const need = s.requiredAt[s.level - 1]
-        if (need === undefined || available >= need) {
-          s.requiredAt[s.level - 1] = undefined
-          s.level -= 1
-          setLevel(s.level)
-        }
-      }
-    }
-    measureRef.current = measure
-    measure()
-    const ro = new ResizeObserver(measure)
-    ro.observe(toolbarEl)
-    ro.observe(leadingEl)
-    const seen = new Set<Element>()
-    const watchChildren = () => {
-      for (const el of seen) if (!leadingEl.contains(el)) { ro.unobserve(el); seen.delete(el) }
-      for (const el of Array.from(leadingEl.children)) if (!seen.has(el)) { ro.observe(el); seen.add(el) }
-    }
-    watchChildren()
-    const mo = new MutationObserver(() => { watchChildren(); measure() })
-    mo.observe(leadingEl, { childList: true })
-    return () => { ro.disconnect(); mo.disconnect(); window.clearTimeout(s.timer) }
-  }, [toolbarEl, leadingEl, maxLevel])
-  return level
 }
 
 export default function AdminMirrorPage() {
@@ -565,7 +329,6 @@ export default function AdminMirrorPage() {
     addSubTimer.current = setTimeout(() => { setAddSub(false); setAddPrSub(false); setAddSubPos(null) }, 140)
   }
   const cancelAddSubClose = () => { if (addSubTimer.current) { clearTimeout(addSubTimer.current); addSubTimer.current = null } }
-  const [folderSubPos, setFolderSubPos] = useState<{ left: number; top: number } | null>(null)
   const [wfRunId, setWfRunId] = useState<string | null>(null)
 
   const [fullWidth, setFullWidth] = useState(false)
@@ -631,8 +394,6 @@ export default function AdminMirrorPage() {
     }
     return out.reverse()
   }, [detailMsgs])
-  const [settingsOpen, setSettingsOpen] = useState(false)
-  const [settingsSub, setSettingsSub] = useState<'none' | 'folder' | 'rename' | 'send'>('none')
   // Desktop parity: composer send shortcut (Settings → "Send messages with").
   const [sendWith, setSendWith] = useState<'enter' | 'ctrlenter'>(() =>
     (localStorage.getItem('dw-send-with') === 'ctrlenter' ? 'ctrlenter' : 'enter'))
@@ -640,10 +401,6 @@ export default function AdminMirrorPage() {
   // queue ('queue', official default) or interrupt the live turn ('interrupt')?
   const [workSend] = useState<'queue' | 'interrupt'>(() =>
     (localStorage.getItem('dw-work-send') === 'interrupt' ? 'interrupt' : 'queue'))
-  const [renameDraft, setRenameDraft] = useState('')
-  const settingsButtonRef = useRef<HTMLButtonElement>(null)
-  const headerMenuAnchorRef = useRef<HTMLButtonElement | null>(null)
-  const [headerMenuPos, setHeaderMenuPos] = useState({ left: 5, top: 0, width: 280 })
   const [sendOptOpen, setSendOptOpen] = useState(false)
   const [modeOpen, setModeOpen] = useState(false)
   const [sModeOpen, setSModeOpen] = useState(false)
@@ -807,49 +564,6 @@ export default function AdminMirrorPage() {
 
   const headerStatus = detail?.session.status_enum_raw || detail?.session.status || sessions.find((session) => session.id === id)?.status || ''
   const headerState = reduceStatus({ status: headerStatus, statusEnumRaw: headerStatus, sleepReason: detail?.session.sleep_reason })
-  const updateHeaderMenuPosition = useCallback((button: HTMLButtonElement | null) => {
-    if (!button) return
-    const rect = button.getBoundingClientRect()
-    const width = Math.min(280, window.innerWidth - 10)
-    setHeaderMenuPos({
-      left: Math.max(5, Math.min(rect.right - width, window.innerWidth - 5 - width)),
-      top: rect.bottom + 2,
-      width,
-    })
-  }, [])
-  const closeHeaderMenus = useCallback(() => {
-    setSettingsOpen(false)
-    setSettingsSub('none')
-    requestAnimationFrame(() => headerMenuAnchorRef.current?.focus())
-  }, [])
-  const toggleHeaderMenu = useCallback(() => {
-    const button = settingsButtonRef.current
-    headerMenuAnchorRef.current = button
-    if (settingsOpen) {
-      closeHeaderMenus()
-      return
-    }
-    setSettingsOpen(true)
-    setSettingsSub('none')
-    updateHeaderMenuPosition(button)
-  }, [closeHeaderMenus, settingsOpen, updateHeaderMenuPosition])
-  useEffect(() => {
-    if (!settingsOpen) return
-    const onKeyDown = (e: KeyboardEvent) => {
-      if (e.key !== 'Escape') return
-      e.preventDefault()
-      closeHeaderMenus()
-    }
-    const reposition = () => updateHeaderMenuPosition(headerMenuAnchorRef.current)
-    window.addEventListener('keydown', onKeyDown)
-    window.addEventListener('resize', reposition)
-    window.addEventListener('scroll', reposition, true)
-    return () => {
-      window.removeEventListener('keydown', onKeyDown)
-      window.removeEventListener('resize', reposition)
-      window.removeEventListener('scroll', reposition, true)
-    }
-  }, [closeHeaderMenus, settingsOpen, updateHeaderMenuPosition])
   // Official session-index entries: user messages plus PR rows ("#N" with a PR icon) in timeline order.
   // Official builds this from a full-history skeleton (`historySkeleton` in the bundle); the mirror
   // gets the same coverage from GET .../index (full log scan server-side), merged with live
@@ -875,12 +589,9 @@ export default function AdminMirrorPage() {
   }, [older, items, serverIdx])
   const userMsgs = useMemo(() => indexEntries.filter((it) => it.kind === 'message'), [indexEntries])
   const userMsgCount = userMsgs.length
-  const [copied, setCopied] = useState(false)
   const [dashboard, setDashboard] = useState<{ data: DashboardData | null; updatedAt?: string }>({ data: null })
   const [sidebar, setSidebar] = useState(window.innerWidth >= 1024)
   const [orgMenu, setOrgMenu] = useState(false)
-  const settingsRowCls = 'text-foreground text-[13px] leading-[18px] flex w-full cursor-pointer select-none items-center gap-2 rounded-[6px] px-2 py-1.5 outline-none [&>svg]:mx-px [&>svg]:size-4 [&>svg]:shrink-0 hover:bg-tint-secondary'
-  const settingsSeparatorCls = 'mx-2 h-[9px] bg-border bg-clip-content py-1'
   // Official collapsed-sidebar behavior: hovering the left edge shows the sidebar as a floating flyout.
   const [peek, setPeek] = useState(false)
   const [showPanel, setShowPanel] = useState(window.innerWidth >= 900 || !!wantPr)
@@ -1359,14 +1070,11 @@ export default function AdminMirrorPage() {
   const [stepChanges, setStepChanges] = useState<TimelineItem | null>(null)
   const [focusFile, setFocusFile] = useState<{ path: string; n: number } | null>(null)
   const [worklogJump, setWorklogJump] = useState<string | null>(null)
-  const [indexOpen, setIndexOpen] = useState(false)
   // Official minimap: the tick nearest the current scroll position is highlighted (text-primary);
   // PR ticks are purple (bg-text-purple).
   // Official minimap is a vertically centred stack of the last 20 entries (gap-2, 1.5px bars),
   // not bars positioned at each row's on-screen height.
   const [idxActive, setIdxActive] = useState<string | null>(null)
-  const [idxTip, setIdxTip] = useState<{ id: string; top: number; right: number } | null>(null)
-  const idxTicks = useMemo(() => indexEntries.slice(-20), [indexEntries])
   const idxIdSet = useMemo(() => new Set(indexEntries.map((it) => it.id)), [indexEntries])
   const updateIdxActive = useCallback(() => {
     const el = scrollRef.current
@@ -3200,262 +2908,7 @@ const groups = useMemo(() => groupItems(allItems, sessionWorking), [allItems, se
           </div>
           <div className="flex shrink-0 items-center gap-px pl-1">
           {!isVisitor && (
-          <div className="relative flex items-center gap-px">
-            <button
-              ref={settingsButtonRef}
-              type="button"
-              aria-label="Session settings"
-              aria-expanded={settingsOpen}
-              onClick={() => toggleHeaderMenu()}
-              className={cn('flex size-7 cursor-pointer items-center justify-center rounded-[6px] text-muted-foreground hover:bg-accent hover:text-foreground [&_svg]:size-[18px]', settingsOpen && 'bg-accent')}
-            >
-              <SessionSettingsGlyph />
-            </button>
-            {settingsOpen && detail && (
-              <HeaderMenuPortal open pos={headerMenuPos} onClose={closeHeaderMenus}>
-              <div
-                role="menu"
-                onKeyDown={(e) => { if (e.key === 'Escape') { e.preventDefault(); closeHeaderMenus() } }}
-                className="absolute right-0 top-8 z-20 w-[280px] max-w-[calc(100vw-10px)] overflow-hidden rounded-[10px] bg-[rgba(255,255,255,0.94)] p-0 text-[13px] leading-[18px] outline outline-1 outline-black/[.06] shadow-[0_10px_15px_-3px_rgba(0,0,0,0.1),0_4px_6px_-2px_rgba(0,0,0,0.05)] backdrop-blur-[8px] dark:bg-[#1f1f1f]/[.94]"
-              >
-                {/* Session-scoped actions only — app prefs live in /settings,
-                    service ops in the sidebar org menu / LocalDock gear. */}
-                <div className="p-1">
-                {settingsSub === 'rename' ? (
-                  <input
-                    autoFocus
-                    value={renameDraft}
-                    onChange={(e) => setRenameDraft(e.target.value)}
-                    onKeyDown={async (e) => {
-                      if (e.key === 'Escape') { setSettingsSub('none'); return }
-                      if (e.key === 'Enter' && renameDraft.trim()) {
-                        const title = renameDraft.trim()
-                        setSettingsOpen(false); setSettingsSub('none')
-                        await adminFetch('/api/admin/mirror/session-title', { method: 'POST', body: JSON.stringify({ devin_id: detail.session.devin_session_id, title }) }).catch(() => null)
-                        reloadDetail(); loadTree()
-                      }
-                    }}
-                    className="mb-0.5 h-[30px] w-full rounded-md border border-border bg-transparent px-2 text-[13px] outline-none"
-                  />
-                ) : (
-                  <button
-                    role="menuitem"
-                    onMouseEnter={() => setSettingsSub('none')}
-                    onClick={() => { setRenameDraft(current?.title || current?.devin_title || ''); setSettingsSub('rename') }}
-                    className={settingsRowCls}
-                  >
-                    <Pencil size={14} className="text-muted-foreground" /> Rename
-                  </button>
-                )}
-                {!isSub && <div className="relative">
-                  <button
-                    role="menuitem"
-                    aria-haspopup="menu"
-                    onMouseEnter={(e) => {
-                      setSettingsSub('folder')
-                      const r = e.currentTarget.getBoundingClientRect()
-                      setFolderSubPos({ left: Math.max(8, r.left - 226), top: Math.min(r.top, Math.max(8, window.innerHeight - 296)) })
-                    }}
-                    className={settingsRowCls}
-                  >
-                    <FolderIcon size={14} className="text-muted-foreground" /> Folder
-                    {treeNode?.folder && <span className="ml-auto max-w-24 truncate text-[12px] text-muted-foreground">{treeNode.folder}</span>}
-                    <ChevronRight size={13} className={cn('text-muted-foreground', !treeNode?.folder && 'ml-auto')} />
-                  </button>
-                  {settingsSub === 'folder' && folderSubPos && createPortal(
-                    <div role="menu" style={{ left: folderSubPos.left, top: folderSubPos.top }} onMouseLeave={() => setSettingsSub('none')} className="fixed z-50 max-h-72 w-56 overflow-y-auto rounded-[10px] border border-border bg-card p-1 shadow-lg">
-                      {folderOrder.map((f) => (
-                        <button
-                          key={f}
-                          role="menuitem"
-                          onClick={async () => {
-                            setSettingsOpen(false); setSettingsSub('none')
-                            await adminFetch('/api/admin/mirror/session-folder', { method: 'POST', body: JSON.stringify({ devin_id: detail.session.devin_session_id, folder: f }) }).catch(() => null)
-                            loadTree()
-                          }}
-                          className={settingsRowCls}
-                        >
-                          <FolderIcon size={13} className="shrink-0 text-muted-foreground" />
-                          <span className="truncate">{f}</span>
-                          {treeNode?.folder === f && <Check size={13} className="ml-auto shrink-0" />}
-                        </button>
-                      ))}
-                      {treeNode?.folder && (
-                        <button
-                          role="menuitem"
-                          onClick={async () => {
-                            setSettingsOpen(false); setSettingsSub('none')
-                            await adminFetch('/api/admin/mirror/session-folder', { method: 'POST', body: JSON.stringify({ devin_id: detail.session.devin_session_id, folder: null }) }).catch(() => null)
-                            loadTree()
-                          }}
-                          className={settingsRowCls}
-                        >
-                          <X size={13} className="text-muted-foreground" /> Remove from folder
-                        </button>
-                      )}
-                      {folderOrder.length === 0 && <p className="px-2 py-1.5 text-[12px] text-muted-foreground">{t('tree.noFolders')}</p>}
-                    </div>,
-                    document.body,
-                  )}
-                </div>}
-                  {!isSub && <button
-                  role="menuitem"
-                  onMouseEnter={() => setSettingsSub('none')}
-                  onClick={async () => {
-                    setSettingsOpen(false)
-                    const nowArchived = !detail.session.archived
-                    await adminFetch(`/api/admin/session/${id}/archive`, {
-                      method: 'POST',
-                      body: JSON.stringify({ archived: nowArchived }),
-                    })
-                    // An archived session leaves the sidebar — land on the
-                    // management page where the 已归档 group shows it.
-                    if (nowArchived) nav('/admin/sessions')
-                    else reloadDetail()
-                  }}
-                  className={settingsRowCls}
-                >
-                  {detail.session.archived ? <><OArchive size={14} className="text-muted-foreground" /> {t('sp.unarchive')}</> : <><OArchive size={14} className="text-muted-foreground" /> {t('sp.archive')}</>}
-                </button>}
-                <div className={settingsSeparatorCls} />
-                <button
-                  role="menuitem"
-                  onClick={() => {
-                    // share_url is null until the link is enabled — enabling
-                    // happens lazily here (opt-in is the point).
-                    void adminFetch<{ enabled: boolean; url: string | null }>(`/api/admin/session/${id}/share-link`, { method: 'POST', body: JSON.stringify({ enabled: true }) }).then((r) => {
-                      navigator.clipboard.writeText(window.location.origin + (r.url || `/admin/${id}`))
-                      reloadDetail()
-                    }).catch(() => navigator.clipboard.writeText(window.location.origin + `/admin/${id}`))
-                    setCopied(true); setTimeout(() => setCopied(false), 1500)
-                    setSettingsOpen(false); setSettingsSub('none')
-                  }}
-                  className={settingsRowCls}
-                >
-                  {copied ? <Check size={13} /> : <Link2 size={13} className="text-muted-foreground" />} Copy session link
-                </button>
-                {/* Verified live on local acp: uploads the transcript to
-                    Cognition and returns an app.devin.ai share URL. Devin-private
-                    extension — hidden for sessions owned by other agents. */}
-                {!isSub && isDevinSession && <button
-                  role="menuitem"
-                  onClick={async () => {
-                    setSettingsOpen(false); setSettingsSub('none')
-                    if (!confirm(t('menu.shareToCloudConfirm'))) return
-                    const r = await adminFetch<{ ok: boolean; url?: string; error?: string }>(`/api/admin/session/${id}/share`, { method: 'POST', body: JSON.stringify({}) }).catch(() => null)
-                    if (r?.ok && r.url) { navigator.clipboard.writeText(r.url); setControlMsg(t('menu.sharedOk', { url: r.url })) }
-                    else setControlMsg(r?.error || 'Share failed')
-                  }}
-                  className={settingsRowCls}
-                >
-                  <Share2 size={13} className="text-muted-foreground" /> {t('menu.shareToCloud')}
-                </button>}
-                {/* Fork — native session/fork on agents that advertise it
-                    (opencode), transcript-seed fallback on devin. Dedicated
-                    agents report canFork:false and the item hides. */}
-                {!isSub && detail.session.canFork && <button
-                  role="menuitem"
-                  onClick={async () => {
-                    setSettingsOpen(false); setSettingsSub('none')
-                    const r = await adminFetch<{ ok: boolean; id?: string; error?: string }>(`/api/admin/session/${id}/fork`, { method: 'POST', body: JSON.stringify({}) }).catch(() => null)
-                    if (r?.ok && r.id) nav(`/admin/${r.id}`)
-                    else setControlMsg(r?.error || t('menu.forkFailed'))
-                  }}
-                  className={settingsRowCls}
-                >
-                  <GitFork size={13} className="text-muted-foreground" /> {t('menu.forkSession')}
-                </button>}
-                {/* Desktop "Open in new window" — each session can live in its
-                    own browser window. */}
-                <button
-                  role="menuitem"
-                  onMouseEnter={() => setSettingsSub('none')}
-                  onClick={() => { setSettingsOpen(false); setSettingsSub('none'); window.open(`${window.location.origin}/admin/${id}`, '_blank', 'noopener') }}
-                  className={settingsRowCls}
-                >
-                  <ArrowUpRight size={13} className="text-muted-foreground" /> {t('menu.openNewWindow')}
-                </button>
-                {!isSub && <div className="mt-1 border-t border-border px-2 pb-1 pt-2">
-                  <p className="mb-1 text-[12px] text-muted-foreground">{t('visitor.permission')}</p>
-                  <Combo
-                    className="w-full"
-                    value={detail.session.permission}
-                    onPick={async (v) => {
-                      await adminFetch(`/api/admin/session/${id}/permission`, { method: 'POST', body: JSON.stringify({ permission: v }) })
-                      reloadDetail()
-                    }}
-                    options={[
-                      { v: 'detailed', l: t('visitor.permDetailed') },
-                      { v: 'full', l: t('visitor.permChatFile') },
-                      { v: 'chat', l: t('visitor.permChat') },
-                      { v: 'readonly', l: t('visitor.permReadonly') },
-                    ]}
-                  />
-                </div>}
-                <div className={settingsSeparatorCls} />
-                {/* Subagent (child session) controls: foreground/background +
-                    cancel — the desktop subagent semantics. */}
-                {isSub && detail.session.subagent?.live && (
-                  <button
-                    role="menuitem"
-                    onClick={async () => {
-                      setSettingsOpen(false); setSettingsSub('none')
-                      const action = detail.session.subagent?.isBackground ? 'foreground' : 'background'
-                      const r = await adminFetch<{ ok: boolean; error?: string }>(`/api/admin/session/${id}/control`, { method: 'POST', body: JSON.stringify({ action }) }).catch(() => null)
-                      setControlMsg(r?.ok ? `Subagent → ${action}` : r?.error || 'Control failed')
-                      reloadDetail()
-                    }}
-                    className={settingsRowCls}
-                  >
-                    <Laptop size={13} className="text-muted-foreground" /> {detail.session.subagent.isBackground ? 'Bring to foreground' : 'Send to background'}
-                  </button>
-                )}
-                {!isSub && (
-                  <>
-                {/* Kill the hosting acp process; next op respawns + replays
-                    session/load — the local analog of cloud "reboot VM". */}
-                <button
-                  role="menuitem"
-                  onClick={async () => {
-                    setSettingsOpen(false); setSettingsSub('none')
-                    if (!confirm(t('menu.restartAgentConfirm'))) return
-                    const r = await adminFetch<{ ok: boolean }>(`/api/admin/session/${id}/restart`, { method: 'POST', body: JSON.stringify({}) }).catch(() => null)
-                    setControlMsg(r?.ok ? t('menu.agentRestarting') : t('menu.agentRestartFailed'))
-                  }}
-                  className={settingsRowCls}
-                >
-                  <RotateCcw size={13} className="text-muted-foreground" /> {t('menu.restartAgent')}
-                </button>
-                  </>
-                )}
-                {/* Verified live: {_cognition.ai/session/end} → dispatched.
-                    For a sub session the server maps end → subagent cancel.
-                    Devin-private extension — hidden on other agents' sessions. */}
-                {(isSub || isDevinSession) && <button
-                  role="menuitem"
-                  onClick={async () => {
-                    setSettingsOpen(false); setSettingsSub('none')
-                    if (!confirm(isSub ? t('menu.endSubagentConfirm') : t('menu.endSessionConfirm'))) return
-                    const r = await adminFetch<{ ok: boolean; error: string }>(`/api/admin/session/${id}/end`, { method: 'POST', body: JSON.stringify({}) }).catch(() => null)
-                    setControlMsg(r?.ok ? (isSub ? t('menu.subagentCancelled') : t('menu.sessionEndSent')) : r?.error || t('menu.endFailed'))
-                    reloadDetail()
-                  }}
-                  className={settingsRowCls}
-                >
-                  <Square size={13} className="text-muted-foreground" /> {isSub ? t('menu.endSubagent') : t('menu.endSession')}
-                </button>}
-                <div className={settingsSeparatorCls} />
-                <div className="px-2 pb-1 pt-1.5 text-[12px] leading-[18px] text-muted-foreground">
-                  <div className="flex justify-between"><span>{t('am.userMsgs')}</span><span className="text-foreground">{userMsgCount}</span></div>
-                  {detail.session.platform && <div className="flex justify-between"><span>{t('am.platform')}</span><span className="text-foreground">{detail.session.platform}</span></div>}
-                  {detail.session.subagent && <div className="flex justify-between"><span>{t('am.subagent')}</span><span className="text-foreground">{[detail.session.subagent.profile, detail.session.subagent.model].filter(Boolean).join(' · ') || detail.session.subagent.agentId}</span></div>}
-                  {detail.dashboard_url && <p className="break-all pt-1 text-[11px] leading-[15px]">{t('tabs.dashboardPush')}：POST {window.location.origin}{detail.dashboard_url}</p>}
-                </div>
-                </div>
-              </div>
-              </HeaderMenuPortal>
-            )}
-          </div>
+          <SessionMenu detail={detail} id={id} isSub={isSub} isDevinSession={isDevinSession} current={current} treeNode={treeNode} folderOrder={folderOrder} userMsgCount={userMsgCount} reloadDetail={reloadDetail} loadTree={loadTree} onControlMsg={setControlMsg} />
           )}
           {!effShowPanel && !isDraft && (
             <button
@@ -3543,423 +2996,15 @@ const groups = useMemo(() => groupItems(allItems, sessionWorking), [allItems, se
                 <TimelineSkeleton rows={3} />
               </div>
             )}
-            {groups.map((g, gi) =>
-              g.type === 'item' && g.item.kind === 'permission' ? (
-                <PermissionCard
-                  key={g.item.id}
-                  item={g.item}
-                  sessionId={id}
-                  resolved={permResolved.get(g.item.permission?.requestId || '')}
-                  onOpenSidebar={() => { setPermSide(g.item); setShowPanel(true) }}
-                />
-              ) : g.type === 'item' && g.item.kind === 'secret_request' ? (
-                <SecretRequestCard
-                  key={g.item.id}
-                  item={g.item}
-                  provided={secretProvided.has(g.item.secretRequest?.requestId || '')}
-                  onProvide={caps.canProvideSecret ? provideSecret : undefined}
-                />
-              ) : g.type === 'item' && g.item.kind === 'workflow' ? (
-                (() => {
-                  const it = g.item
-                  const runId = it.workflow?.runId || ''
-                  const running = wf.status.get(runId) === 'running'
-                  const agentMap = wf.agents.get(runId)
-                  const done = agentMap ? [...agentMap.values()].filter((s) => s !== 'running' && s !== 'queued').length : 0
-                  return (
-                    <div key={it.id} data-eid={it.id} data-testid="transcript-workflow-run" className="relative my-2.5 flex w-full flex-col overflow-hidden rounded-xl border border-border bg-card">
-                      <div className="flex items-center gap-1.5 px-2.5 py-2">
-                        <WorkflowIcon size={14} className="shrink-0 text-muted-foreground" />
-                        <span className="min-w-0 flex-1 truncate text-[12px] leading-[16px] text-muted-foreground">
-                          {running ? (it.workflow?.resumed ? 'Resuming workflow' : 'Running workflow') : 'Ran workflow'}
-                        </span>
-                        <div className="my-[-2px] flex shrink-0 items-center gap-px">
-                          <a
-                            href="https://docs.devin.ai/work-with-devin/dynamic-workflows"
-                            target="_blank"
-                            rel="noopener noreferrer"
-                            aria-label="View workflow documentation"
-                            className="inline-flex size-6 shrink-0 items-center justify-center rounded-[6px] bg-transparent text-muted-foreground hover:bg-accent hover:text-foreground"
-                          >
-                            <BookOpen size={16} />
-                          </a>
-                          <span className="shrink-0 select-none text-[12px] text-muted-foreground">{time(it.ts)}</span>
-                        </div>
-                      </div>
-                      <button
-                        onClick={() => { setWfRunId(runId || null); openTab('agents') }}
-                        className="flex w-full min-w-0 cursor-pointer flex-col gap-1 border-t border-border px-2.5 py-2 text-left"
-                      >
-                        <span className="truncate text-[13px] font-medium leading-[18px]">{it.workflow?.name || 'Workflow run'}</span>
-                        {!!agentMap?.size && (
-                          <span className="truncate text-[12px] leading-[16px] text-muted-foreground">{done}/{agentMap.size} agents</span>
-                        )}
-                      </button>
-                    </div>
-                  )
-                })()
-              ) : g.type === 'item' && g.item.raw_type === 'pr_created' && g.item.pr ? (
-                <div key={g.item.id} data-eid={g.item.id} className="my-2.5 w-full min-w-0">
-                  <PrCreatedCard
-                    pr={mergeLivePr(g.item.pr, detail?.session.pull_requests)}
-                    onAnalyze={!isVisitor && caps.canAnalyzePr && g.item.pr.prUrl ? () => openPr(g.item.pr!.prUrl!) : undefined}
-                  />
-                </div>
-              ) : g.type === 'item' && STANDALONE_GIT_TYPES.has(g.item.raw_type || '') ? (
-                <StandaloneGitRow key={g.item.id} item={g.item} timestamp={rowClock(g.item.ts)} />
-              ) : g.type === 'row' ? (
-                <div key={g.item.id} className="wg-time-host relative pb-2.5">
-                  <EventRow item={g.item} sessionId={id} mt={mediaTok} live={gi === groups.length - 1 && status === 'working' && g.item.kind === 'shell' && !g.item.exitCode} tempOpen={g.item.id === tailThoughtId} selected={g.item.id === worklogJump && panel === 'worklog'} standalone onStepChanges={onStepChanges} onOpenProgress={onOpenProgress} onOpenSubagent={onOpenSubagent} />
-                  <span className="wg-gutter-time pointer-events-none absolute right-0 top-0 hidden h-[18px] select-none items-center whitespace-nowrap bg-background pl-3 text-[12px] leading-[16px] text-muted-foreground md:flex proportional-nums">{rowClock(g.item.ts)}</span>
-                </div>
-              ) : g.type === 'item' && (g.item.kind === 'env_suggestion' || g.item.kind === 'bot_flag') ? (
-                <EventRow key={g.item.id} item={g.item} sessionId={id} mt={mediaTok} envSupersededBy={envSuperseded.get(g.item.id)} onOpenSubagent={onOpenSubagent} />
-              ) : g.type === 'item' && g.item.callout ? (
-                <CalloutCard key={g.item.id} item={g.item} timestamp={rowClock(g.item.ts)} />
-              ) : g.type === 'item' && g.item.kind === 'status' ? (
-                <div key={g.item.id} data-eid={g.item.id} className="relative my-2.5 flex items-start gap-2 text-[13px] leading-[18px] text-muted-foreground">
-                  <span className="min-w-0 flex-1 break-words">{g.item.title}</span>
-                  <span className="shrink-0 text-[12px] leading-[16px]">{rowClock(g.item.ts)}</span>
-                </div>
-              ) : g.type === 'item' ? (() => {
-                const parsed = splitAttachments(g.item.body || '', g.item.quoteMeta, g.item.quotes)
-                const { text, quotes } = parsed
-                const attachments = g.item.attachments?.length
-                  ? g.item.attachments.map((a) => ({ url: a.url, name: a.name ?? a.url.split('/').pop() ?? 'file' }))
-                  : parsed.attachments
-                const isUser = g.item.role === 'user'
-                const own = isOwnUserMessage(g.item)
-                const showHeader = messageHeaders.get(g.item.id) === true
-                const hasText = !isUser || !!text.trim() || !!g.item.answers?.length || !!(translations[g.item.id] || g.item.translation)
-                // Official `ua`: repo pills only on the initial message; they join the file
-                // attachments in one group stacked under the bubble.
-                const repos = g.item.raw_type === 'initial_user_message' ? extractRepos(g.item.body || '', detail?.session.repos) : []
-                return (
-                <div key={g.item.id} data-eid={g.item.id} data-message-event-id={g.item.id} data-message-author={isUser ? 'user' : 'devin'} data-message-ts={g.item.ts ? String(new Date(g.item.ts).getTime()) : undefined} data-quotable-surface className={cn('group group/message-wrapper relative my-2.5 flex flex-col gap-1', own ? 'items-end' : 'items-start')}>
-                  {!own && showHeader ? (
-                    <ParticipantHeader kind={isUser ? 'user' : 'devin'} name={isUser ? (g.item.title || 'User') : undefined} ts={g.item.ts} />
-                  ) : null}
-                  {hasText && <div className={cn(
-                    'text-[14px] leading-[20px]',
-                    isUser
-                      ? cn('w-fit max-w-full overflow-hidden rounded-[16px] bg-tint-tertiary px-3.5 py-2', own ? 'rounded-tr-[4px]' : 'rounded-tl-[4px] self-start')
-                      : 'w-full',
-                  )} title={!isUser ? clock(g.item.ts) : undefined}>
-                    {(() => {
-                      const inner = (
-                        <>
-                          {g.item.answers?.length && g.item.questions?.[0]?.question ? (
-                            <div className="flex flex-col gap-1">
-                              {g.item.questions.map((q, qi) => (
-                                <div key={qi} className="flex flex-col gap-0.5">
-                                  <p className="text-[13px] leading-[18px] text-muted-foreground">Q: {q.question}</p>
-                                  <p>{g.item.answers?.[qi] || ''}</p>
-                                </div>
-                              ))}
-                            </div>
-                          ) : (translations[g.item.id] || g.item.translation) ? (
-                            <div className="space-y-2">
-                              <p className="text-[12px] leading-[16px] text-muted-foreground">{t('am.original')}</p>
-                              <Markdown text={text} rewriteUrl={(u) => attachmentUrl(id, u, mediaTok)} onFileRef={onFileRef} />
-                              <p className="text-[12px] leading-[16px] text-muted-foreground">{t('am.translation')}</p>
-                              <Markdown text={translations[g.item.id] || g.item.translation || ''} rewriteUrl={(u) => attachmentUrl(id, u, mediaTok)} onFileRef={onFileRef} />
-                            </div>
-                          ) : (
-                            <Markdown text={text} rewriteUrl={(u) => attachmentUrl(id, u, mediaTok)} onFileRef={onFileRef} />
-                          )}
-                          {!isUser && attachments.length > 0 && (
-                            <div className={cn('flex flex-col gap-2', text.trim() ? 'mt-[18px]' : '')}>
-                              {attachments.map((a) => (
-                                <AttachmentCard key={a.url} name={a.name} href={attachmentUrl(id, a.url, mediaTok)} ts={g.item.ts} onOpenTab={openFileTab} />
-                              ))}
-                            </div>
-                          )}
-                        </>
-                      )
-                      return isUser ? <CollapsibleBody>{inner}</CollapsibleBody> : inner
-                    })()}
-                  </div>}
-                  {isUser && (
-                    <UserAttachments
-                      attachments={attachments.map((a) => ({ name: a.name, href: attachmentUrl(id, a.url, mediaTok) }))}
-                      repos={repos}
-                      quotes={quotes.map((q) => (q.screenshot ? { ...q, screenshot: { ...q.screenshot, url: attachmentUrl(id, q.screenshot.url, mediaTok) } } : q))}
-                      secrets={g.item.secretsSent?.names}
-                      onQuoteNavigate={jumpToQuote}
-                      own={own}
-                      hasText={hasText}
-                      ts={g.item.ts}
-                      onOpenTab={openFileTab}
-                    />
-                  )}
-                  <MessageToolbar
-                    text={g.item.body || ''}
-                    eid={g.item.id}
-                    ts={g.item.ts}
-                    tab={typeof panel === 'string' ? serializeOfficialTab(panel, urlPrs, urlFiles) || undefined : undefined}
-                    onStartNewSession={g.item.role === 'user' && !isVisitor ? () => {
-                      try { localStorage.setItem('dw-new-session-draft', g.item.body || '') } catch { /* quota */ }
-                      nav('/admin/new')
-                    } : undefined}
-                    onQuote={!isVisitor && caps.canSendMessage && !isSub ? () => {
-                      // Whole-message quote — official's second entry point:
-                      // hover toolbar ❝ opens the same pill pre-expanded at
-                      // the message row's top edge.
-                      const host = document.querySelector(`[data-eid="${CSS.escape(g.item.id)}"]`)
-                      const r = host?.getBoundingClientRect()
-                      const bodyText = (g.item.body || '').replace(/<quoted_artifact[\s\S]*?<\/quoted_artifact>/g, '').trim().slice(0, 4000)
-                      if (!bodyText || !r) return
-                      quoteGuardUntil.current = Date.now() + 800
-                      setSelQuote({ x: Math.min(Math.max(r.left, 8), window.innerWidth - 8 - 360), y: r.top - 6, placement: 'above', text: bodyText, eventId: g.item.id, author: g.item.role === 'user' ? 'user' : 'devin', tsMs: g.item.ts ? Date.parse(g.item.ts) : undefined, expanded: true })
-                    } : undefined}
-                    onFork={!isVisitor && detail?.session.canFork && !isSub ? () => {
-                      void (async () => {
-                        const r = await adminFetch<{ ok: boolean; id?: string; error?: string }>(`/api/admin/session/${id}/fork`, { method: 'POST', body: JSON.stringify({ anchor: g.item.id }) }).catch(() => null)
-                        if (r?.ok && r.id) nav(`/admin/${r.id}`)
-                        else setControlMsg(r?.error || t('menu.forkFailed'))
-                      })()
-                    } : undefined}
-                    onSideChat={isVisitor ? undefined : () => { setScAnchor({ id: g.item.id, ts: g.item.ts }); openTab('sidechat') }}
-                    sessionId={g.item.role === 'user' || isVisitor ? undefined : id}
-                    onTranslated={isVisitor ? undefined : (t) => setTranslations((p) => ({ ...p, [g.item.id]: t }))}
-                  />
-                </div>
-                )
-              })() : (
-                <WorkGroup
-                  // keyed by the newest member: history backfill prepends older items and may
-                  // extend the group backwards, which must not remount it (would drop open state)
-                  key={gi === groups.length - 1 ? 'w-tail' : `w${g.items[g.items.length - 1]?.id ?? gi}`}
-                  items={g.items}
-                  seconds={g.seconds}
-                  sessionId={id}
-                  mt={mediaTok}
-                  defaultOpen
-                  live={gi === groups.length - 1 && status === 'working'}
-                  tailThoughtId={tailThoughtId}
-                  selectedId={panel === 'worklog' ? worklogJump ?? undefined : undefined}
-                  onStepChanges={onStepChanges}
-                  onOpenProgress={onOpenProgress}
-                />
-              ),
-            )}
-            {statusState.enum === 'blocked' && actionRequired ? (
-              <div className="mb-2 mt-5 flex flex-col gap-2 text-muted-foreground">
-                <div className="flex items-start gap-[6px]">
-                  <WakePersona tone="action" />
-                  <span className="min-h-[17px] text-[13px] leading-[18px]">{actionRequired}</span>
-                </div>
-              </div>
-            ) : ['initializing', 'resume_requested', 'resume_requested_frontend', 'suspend_requested', 'suspend_requested_frontend', 'paused', 'stopped', 'queued', 'waiting'].includes(statusState.enum) ? (
-              <div className="mb-2 mt-5 flex items-start gap-[6px] text-muted-foreground">
-                {statusState.persona === 'thinking' ? <ThinkingPersona /> : statusState.persona === 'sleep' ? <WakePersona /> : <span className="mt-1 size-2 shrink-0 rounded-full bg-orange-500" />}
-                <span className="min-h-[17px] text-[13px] leading-[18px]">{stText(t, statusState.tailText)}</span>
-              </div>
-            ) : statusState.enum === 'blocked' ? (
-              <div className="my-4 flex items-center gap-2 text-[13px] leading-[18px] text-muted-foreground">
-                <AwaitingInstructionsGlyph className="size-4 shrink-0 text-orange-500" />
-                {stText(t, statusState.tailText)}
-              </div>
-            ) : ['working', 'resumed', 'restored'].includes(statusState.enum) ? (
-              // Official working-status row (DOM sampled 2026-08-31): 17px animated Devin
-              // persona + 13px current-action line from latest_status_contents.message.
-              <div className="mb-2 mt-5 flex flex-col gap-2 text-muted-foreground">
-                <div className="flex items-start gap-[6px]">
-                  <ThinkingPersona />
-                  <span className="min-h-[17px] text-[13px] leading-[18px]">
-                    {stText(t, statusState.tailText)}
-                  </span>
-                </div>
-              </div>
-            ) : statusState.isSleeping && (!woke || controlling) && !isVisitor && statusState.wakeable ? (
-              <button
-                type="button"
-                aria-label="Wake Devin up"
-                disabled={controlling}
-                onClick={() => void control('resume')}
-                className="group mt-5 mb-2 flex cursor-pointer items-start gap-[6px] text-left"
-              >
-                <WakePersona />
-                <span className="grid min-h-[17px] overflow-hidden text-[13px] leading-[18px]">
-                  <span className="col-start-1 row-start-1 duration-200 group-hover:-translate-y-full motion-safe:transition-transform">Devin went to sleep</span>
-                  <span className="col-start-1 row-start-1 translate-y-full duration-200 group-hover:translate-y-0 motion-safe:transition-transform">{controlling ? t('menu.connecting') : stText(t, statusState.wakeText)}</span>
-                </span>
-              </button>
-            ) : statusState.isSleeping && !isVisitor && !statusState.wakeable ? (
-              <div className="mb-2 mt-5 flex items-start gap-[6px] text-muted-foreground">
-                <WakePersona />
-                <div className="flex flex-col">
-                  <span className="min-h-[17px] text-[13px] leading-[18px]">{stText(t, statusState.shortMessage)}</span>
-                  {statusState.enum === 'crashed' && detail?.session.auto_recover ? (
-                    <span className="text-[12px] leading-[16px] text-muted-foreground">
-                      {t('menu.autoResumed', { n: detail.session.auto_recover.attempts })}
-                    </span>
-                  ) : null}
-                </div>
-              </div>
-            ) : null}
+            {groups.map((g, gi) => (
+              // keyed by the newest member: history backfill prepends older items and may
+              // extend the group backwards, which must not remount it (would drop open state)
+              <TimelineGroup key={g.type === 'work' ? (gi === groups.length - 1 ? 'w-tail' : `w${g.items[g.items.length - 1]?.id ?? gi}`) : g.item.id} g={g} isLast={gi === groups.length - 1} id={id} isVisitor={isVisitor} isSub={isSub} caps={caps} detail={detail} status={status} panel={panel} mediaTok={mediaTok} permResolved={permResolved} secretProvided={secretProvided} provideSecret={provideSecret} wf={wf} onOpenWfRun={(runId) => { setWfRunId(runId || null); openTab('agents') }} onOpenPr={openPr} onOpenPermission={(it) => { setPermSide(it); setShowPanel(true) }} envSuperseded={envSuperseded} messageHeaders={messageHeaders} translations={translations} onTranslated={(itemId, tr) => setTranslations((p) => ({ ...p, [itemId]: tr }))} onFileRef={onFileRef} openFileTab={openFileTab} jumpToQuote={jumpToQuote} onSelQuote={setSelQuote} quoteGuardUntil={quoteGuardUntil} onControlMsg={setControlMsg} onSideChat={(it) => { setScAnchor({ id: it.id, ts: it.ts }); openTab('sidechat') }} onStepChanges={onStepChanges} onOpenProgress={onOpenProgress} onOpenSubagent={onOpenSubagent} worklogJump={worklogJump} tailThoughtId={tailThoughtId} urlPrs={urlPrs} urlFiles={urlFiles} />
+            ))}
+            <StatusTail statusState={statusState} actionRequired={actionRequired} woke={woke} controlling={controlling} onResume={() => void control('resume')} isVisitor={isVisitor} detail={detail} />
           </div></div>
         </div>
-        {/* Official session index: right-edge minimap of tick bars; popup (280px, opens left) lists user
-            messages, item click scrolls the timeline while the popup stays open. */}
-        {indexEntries.length > 0 && (
-          <>
-            {indexOpen && <div className="fixed inset-0 z-20" onClick={() => setIndexOpen(false)} />}
-            <div data-quote-safe-area="true" className="pointer-events-none absolute bottom-2.5 right-0 top-2.5 z-30 flex w-7 flex-col justify-center md:w-[52px]">
-              <button
-                type="button"
-                aria-label={t('am.sessionIndex')}
-                aria-haspopup="dialog"
-                aria-expanded={indexOpen}
-                onClick={() => setIndexOpen(!indexOpen)}
-                className="pointer-events-auto mr-1 cursor-pointer py-2 md:mr-2"
-              >
-                <div
-                  className={cn(
-                    'flex flex-col gap-2 pl-2 pr-1 duration-300 motion-safe:transition-opacity md:pl-4 md:pr-2',
-                    indexOpen ? 'opacity-0' : 'opacity-100',
-                  )}
-                >
-                  {idxTicks.map((t) => (
-                    <div
-                      key={t.id}
-                      className={cn(
-                        'h-[1.5px] w-full rounded-full',
-                        t.id === idxActive
-                          ? 'bg-foreground'
-                          : t.kind === 'git'
-                            ? 'bg-purple-500'
-                            : 'bg-tint-secondary',
-                      )}
-                    />
-                  ))}
-                </div>
-              </button>
-              {indexOpen && (
-                <div
-                  role="dialog"
-                  className="pointer-events-auto absolute right-8 top-1/2 z-40 w-[280px] -translate-y-1/2 overflow-hidden rounded-[10px] border border-border bg-card/95 p-0 shadow-lg backdrop-blur md:right-[52px]"
-                >
-                  <div className="max-h-[min(595px,calc(100vh-16px))] overflow-y-auto rounded-[10px]">
-                    <div className="flex flex-col gap-0 p-1.5">
-                      {indexEntries.map((it) => (
-                        <button
-                          key={it.id}
-                          onMouseEnter={(e) => {
-                            if (it.kind !== 'message' || !(it.body || '').trim()) { setIdxTip(null); return }
-                            const r = e.currentTarget.getBoundingClientRect()
-                            setIdxTip({ id: it.id, top: r.top, right: r.left - 8 })
-                          }}
-                          onMouseLeave={() => setIdxTip(null)}
-                          onClick={async () => {
-                            // events folded into a collapsed work group have no rendered row; fall back to the nearest by timestamp
-                            stickBottom.current = false
-                            let node = scrollRef.current?.querySelector(`[data-eid="${CSS.escape(it.id)}"]`)
-                            if (!node && cursor) {
-                              // entry beyond the loaded window — backfill history first (official full-history index jump)
-                              await loadUntil(it.id, it.ts)
-                              await new Promise((res) => requestAnimationFrame(res))
-                              node = scrollRef.current?.querySelector(`[data-eid="${CSS.escape(it.id)}"]`)
-                              // backfilled toward the target but its row may be folded into a
-                              // work group: land on the oldest loaded row rather than stale state
-                              if (!node) node = scrollRef.current?.querySelector('[data-eid]')
-                            }
-                            if (!node) {
-                              const target = new Date(it.ts).getTime()
-                              const byDist = [...allItems].sort(
-                                (a, b) => Math.abs(new Date(a.ts).getTime() - target) - Math.abs(new Date(b.ts).getTime() - target),
-                              )
-                              for (const cand of byDist) {
-                                node = scrollRef.current?.querySelector(`[data-eid="${CSS.escape(cand.id)}"]`) ?? null
-                                if (node) break
-                              }
-                            }
-                            if (node) {
-                              node.scrollIntoView({ block: 'start' })
-                              // Official jump feedback: the landed row is marked once.
-                              // (dw-find-hit is a static outline, not an animation —
-                              // clear it on a timer, not animationend.)
-                              node.classList.add('dw-find-hit')
-                              window.setTimeout(() => node!.classList.remove('dw-find-hit'), 1600)
-                            }
-                          }}
-                          className={cn('flex w-full cursor-pointer items-center gap-2 rounded-[6px] px-2 py-1.5 text-left text-[13px] leading-[18px] hover:bg-accent', it.id === idxActive && 'bg-accent')}
-                        >
-                          {it.kind === 'git' ? (
-                            (() => {
-                              const pr = mergeLivePr(it.pr || {}, detail?.session.pull_requests)
-                              return (
-                                <>
-                                  <PrStateIcon state={pr.state} draft={pr.draft} size={16} />
-                                  <span className="min-w-0 shrink-0 truncate">{pr.pullNumber !== undefined ? `#${pr.pullNumber}` : 'PR'}</span>
-                                  {pr.additions !== undefined || pr.deletions !== undefined ? (
-                                    <span className="flex shrink-0 gap-0.5">
-                                      <span className="text-[rgb(0,165,88)]">+{pr.additions ?? 0}</span>
-                                      <span className="text-[#f53b3a]">−{pr.deletions ?? 0}</span>
-                                    </span>
-                                  ) : null}
-                                </>
-                              )
-                            })()
-                          ) : (
-                            <>
-                              {/* Official: only non-web (API) user messages get the 16px circular glyph; web messages are plain pl-6 rows */}
-                              {it.origin && it.origin !== 'web' ? (
-                                <>
-                                  <span className="flex size-4 shrink-0 items-center justify-center rounded-full bg-muted">
-                                    <ApiOriginGlyph />
-                                  </span>
-                                  <span className="truncate">{indexPreview(it.body || '')}</span>
-                                </>
-                              ) : (
-                                <span className="min-w-0 flex-1 truncate pl-6">{indexPreview(it.body || '')}</span>
-                              )}
-                              <span className="ml-auto shrink-0 pl-2 text-[11px] text-muted-foreground">{fmtTime(it.ts)}</span>
-                            </>
-                          )}
-                        </button>
-                      ))}
-                      {queued.map((q) => (
-                        <button
-                          key={`q-${q.id}`}
-                          onClick={() => {
-                            const el = scrollRef.current
-                            if (el) el.scrollTo({ top: el.scrollHeight })
-                          }}
-                          className="flex w-full cursor-pointer items-center gap-2 rounded-[6px] px-2 py-1.5 text-left text-[13px] leading-[18px] hover:bg-accent"
-                        >
-                          <span className="min-w-0 flex-1 truncate pl-6">{(q.text || '').split('\n')[0].slice(0, 80)}</span>
-                        </button>
-                      ))}
-                      <button
-                        onClick={() => {
-                          const el = scrollRef.current
-                          if (el) el.scrollTo({ top: el.scrollHeight })
-                        }}
-                        className="flex w-full cursor-pointer items-center gap-2 rounded-[6px] px-2 py-1.5 text-left text-[13px] leading-[18px] hover:bg-accent"
-                      >
-                        <span className="min-w-0 flex-1 truncate pl-6 text-muted-foreground">{t('am.scrollBottom')}</span>
-                      </button>
-                    </div>
-                  </div>
-                </div>
-              )}
-              {indexOpen && idxTip && (() => {
-                const it = indexEntries.find((x) => x.id === idxTip.id)
-                if (!it) return null
-                return (
-                  <div
-                    role="dialog"
-                    style={{ position: 'fixed', top: Math.max(8, Math.min(idxTip.top, window.innerHeight - 308)), left: idxTip.right - 280 }}
-                    className="pointer-events-none z-50 max-h-[300px] w-[280px] overflow-hidden whitespace-pre-wrap rounded-[10px] border border-border bg-card p-2.5 text-left text-[13px] leading-[18px] shadow-lg"
-                  >
-                    {(it.body || '').slice(0, 1200)}
-                  </div>
-                )
-              })()}
-            </div>
-          </>
-        )}
+        <SessionIndex entries={indexEntries} active={idxActive} scrollRef={scrollRef} stickBottom={stickBottom} cursor={cursor} loadUntil={loadUntil} allItems={allItems} pullRequests={detail?.session.pull_requests} queued={queued} />
         </div>
 
         <footer className={cn('relative max-md:z-20', effShowPanel && 'max-md:hidden')}>
@@ -5326,62 +4371,3 @@ const groups = useMemo(() => groupItems(allItems, sessionWorking), [allItems, se
     </div>
   )
 }
-
-/* Draft-page project explorer — browse the picked workspace before the
- * session exists (fs/list + fs/file; read-only CodeView preview). */
-function DraftExplorer({ root }: { root: string }) {
-  const { t } = useTranslation()
-  const [dirs, setDirs] = useState<Record<string, { name: string; dir: boolean }[] | 'loading'>>({})
-  const [open, setOpen] = useState<Record<string, boolean>>({})
-  const [file, setFile] = useState<{ path: string; text: string | null; binary?: boolean } | null>(null)
-  const load = (p: string) => {
-    setDirs((m) => ({ ...m, [p]: 'loading' }))
-    void adminFetch<{ entries: { name: string; dir: boolean }[] }>(`/api/admin/fs/list?path=${encodeURIComponent(p)}`)
-      .then((d) => setDirs((m) => ({ ...m, [p]: d.entries })))
-      .catch(() => setDirs((m) => ({ ...m, [p]: [] })))
-  }
-  useEffect(() => { setDirs({}); setOpen({}); setFile(null); load(root) }, [root]) // eslint-disable-line react-hooks/exhaustive-deps
-  const renderDir = (p: string, depth: number): React.ReactNode => {
-    const es = dirs[p]
-    if (!es || es === 'loading') return null
-    return es.map((e) => {
-      const fp = `${p.replace(/[\\/]+$/, '')}\\${e.name}`
-      const isOpen = !!open[fp]
-      return (
-        <div key={fp}>
-          <button
-            className="flex w-full cursor-pointer items-center gap-1.5 rounded px-1.5 py-[3px] text-left text-[12px] hover:bg-tint-secondary"
-            style={{ paddingLeft: 6 + depth * 14 }}
-            onClick={() => {
-              if (e.dir) { setOpen((m) => ({ ...m, [fp]: !m[fp] })); if (!dirs[fp]) load(fp) }
-              else {
-                void adminFetch<{ text: string | null; binary: boolean }>(`/api/admin/fs/file?path=${encodeURIComponent(fp)}`)
-                  .then((d) => setFile({ path: fp, ...d })).catch(() => {})
-              }
-            }}
-          >
-            {e.dir ? (isOpen ? <ChevronDown size={12} className="shrink-0 text-muted-foreground" /> : <ChevronRight size={12} className="shrink-0 text-muted-foreground" />) : <span className="w-3 shrink-0" />}
-            <span className="min-w-0 flex-1 truncate">{e.name}</span>
-          </button>
-          {e.dir && isOpen && renderDir(fp, depth + 1)}
-        </div>
-      )
-    })
-  }
-  return (
-    <div className="mt-3 flex h-[300px] w-full max-w-[720px] overflow-hidden rounded-[10px] border border-border bg-card text-left">
-      <div className="w-[240px] shrink-0 overflow-auto border-r border-border p-1.5">
-        <div className="px-1.5 pb-1 text-[11px] font-medium text-muted-foreground">{root.replace(/[\\/]+$/, '').split(/[\\/]/).pop()}</div>
-        {renderDir(root, 0)}
-      </div>
-      <div className="min-w-0 flex-1 overflow-auto bg-background">
-        {file
-          ? file.binary || file.text === null
-            ? <p className="p-4 text-[12px] text-muted-foreground">{t('ws.binary')}</p>
-            : <CodeView text={file.text} name={file.path} />
-          : <p className="p-4 text-[12px] text-muted-foreground">{t('draft.pickFile')}</p>}
-      </div>
-    </div>
-  )
-}
-

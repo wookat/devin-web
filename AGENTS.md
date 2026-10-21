@@ -212,12 +212,17 @@ route code never changes.
   `_local` log entry → `DwItem.attachments` → `TimelineItem.attachments`.
   Legacy `ATTACHMENT:"url"` marker lines in old persisted tails are still
   parsed by `splitAttachments` as fallback — keep it.
-- `AdminMirror.tsx` = the page component only (~4.3k). Everything else lives in
+- `AdminMirror.tsx` = the page component only (~4.4k). Everything else lives in
   `web/src/pages/mirror/`: glyphs, treeCache, composerMeta, timelineUtil,
   dialogs, VoiceButton, Sidechat, ResourcePanels, TimelineRows, Permission,
   ChangesPanel, ComputerPanel, attachments, ViewerPanels, ProgressPanels,
   PrPanel, WorkspacePanel, AgentsPanel, panelTabs, statusReduce, SessionTree,
-  pageBits.
+  pageBits, QuotePill (selection-quote pill + dark-quote tokens),
+  useCollapseLevel (composer overflow-hysteresis hook), DraftExplorer
+  (draft-page fs browser), SessionMenu (header gear menu — owns its whole
+  open/sub/position state cluster), SessionIndex (right-edge minimap + jump
+  popup; idxActive stays parent-side for the scroll handler), TimelineGroups
+  (groups.map row dispatch TimelineGroup + StatusTail status footer).
 - `session/new` and `session/load` carry `modes` + `configOptions` in the
   RESPONSE, not notifications — captured via `captureLoadResponse`. Old loaded
   sessions get the last-seen agent-level config as fallback (`lastAgentCfg`).
