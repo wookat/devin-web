@@ -73,6 +73,7 @@ const DEFAULT_CLI = process.env.DEVIN_CLI_BIN || "devin";
 
 const INDEX_SKIP_DIRS = new Set([".git", "node_modules", "dist", "build", "out", ".next", ".nuxt", "target", "vendor", "__pycache__", ".venv", "venv", ".idea", ".vscode", "coverage", ".cache", "bin", "obj"]);
 const wsIndexCache = new Map<string, { at: number; paths: string[] }>();
+let restartPending = false; // serialized restart/redeploy — see /api/admin/restart
 
 /** Bounded BFS of a workspace → relative forward-slash file paths (@files). */
 function indexWorkspace(root: string): string[] {
@@ -983,13 +984,17 @@ export async function handleLocalWb(ctx: ApiContext, req: IncomingMessage, res: 
         return true;
       }
 
-      // POST /api/admin/restart|redeploy — IMMEDIATE restart, no drain wait:
+      // POST /api/admin/restart|redeploy — IMMEDIATE restart, no drain wait.
+      // restartPending serializes concurrent requests — a second call during
+      // the exit window (or a parallel redeploy build) gets a clean 409.
       // beginDrain gates NEW sends for the ~400ms exit window, markGracefulExit
       // keeps in-flight turns' open-turns entries (auto-resume replays them on
       // the next backend), manager.killAll kills acp children (frees session
       // locks — the orphan-lock send failure), then exit. The supervisor
       // respawns us on exit; bare dev runs hand :7791 to it directly.
       if ((p === "/api/admin/restart" || p === "/api/admin/redeploy") && m === "POST") {
+        if (restartPending) { json(res, 409, { error: "restart already in progress" }); return true; }
+        restartPending = true;
         json(res, 202, { ok: true });
         const repoRoot = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..", "..");
         const respawn = () => {

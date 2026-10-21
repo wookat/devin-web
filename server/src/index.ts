@@ -521,8 +521,9 @@ httpServer.listen(PORT, HOST, async () => {
   setTimeout(() => {
     void import("./diagnose.js").then(d => d.killOrphans())
       .then(r => { if (r !== "none found") console.error(`[boot] orphan acp sweep: ${r}`); })
-      .catch(() => {});
-    void autoResumeInterrupted(ctx).catch((e) => console.error("[auto-resume]", e));
+      .catch(() => {})
+      .then(() => autoResumeInterrupted(ctx)) // AFTER the sweep — dead locks cleared first
+      .catch((e) => console.error("[auto-resume]", e));
   }, 4000);
   startAutomations(ctx);
   resumeScans(ctx);
