@@ -204,6 +204,12 @@ route code never changes.
 - `session/new` and `session/load` carry `modes` + `configOptions` in the
   RESPONSE, not notifications — captured via `captureLoadResponse`. Old loaded
   sessions get the last-seen agent-level config as fallback (`lastAgentCfg`).
+  Durable-state seam: `setCfgCacheDir(<dataDir>)` (called BEFORE adoption in
+  index.ts) restores every piece of memory a restart used to drop —
+  `agent-cfg.json` (agent cfg + commands + `bySession` per-session picks,
+  LRU 40), `queues.json` (message queue — broker turns survive restarts so
+  queued drafts must too; they flush on the next settle, never a blind boot
+  sweep), `send-errors.json` (diagnose evidence). Write-through on mutation.
 - `mode` is dual-exposed: `modes` (set via `session/set_mode`) + a `configOptions`
   mirror group that lags. `POST .../config` routes both `mode` and `_mode` to
   set_mode.
