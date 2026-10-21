@@ -10,6 +10,7 @@ const AdminMirrorPage = lazy(() => import('./pages/AdminMirror'))
 const MirrorResolvePage = lazy(() => import('./pages/MirrorResolve'))
 const SettingsPage = lazy(() => import('./pages/Settings'))
 const SessionsPage = lazy(() => import('./pages/SessionsPage'))
+const ReviewPage = lazy(() => import('./pages/ReviewPage'))
 import { initTheme } from './lib/theme'
 import { initScrollReveal } from './lib/scrollReveal'
 import { prefetchAdmin, prefetchShare } from './lib/api'
@@ -19,9 +20,9 @@ initScrollReveal()
 
 // Kick off the session's first-paint requests in parallel with the route chunk download.
 const mirrorMatch = /^\/admin\/([\w-]+)(?:\/mirror)?\/?$/.exec(location.pathname)
-// 'new' is the draft sentinel and 'sessions' the management page — prefetching
-// session endpoints for either would 404.
-if (mirrorMatch && mirrorMatch[1] !== 'new' && mirrorMatch[1] !== 'sessions') {
+// 'new' is the draft sentinel, 'sessions' the management page, 'review' the
+// standalone PR review — prefetching session endpoints for any would 404.
+if (mirrorMatch && mirrorMatch[1] !== 'new' && mirrorMatch[1] !== 'sessions' && mirrorMatch[1] !== 'review') {
   const id = mirrorMatch[1]
   // peek=1 must match AdminMirror's first timeline fetch exactly — a non-peek
   // prefetch would start a session/load server-side and bump the session's
@@ -78,7 +79,8 @@ function mount(boot: RouteModule | null) {
           <Route path="/" element={<LastOrNew />} />
           <Route path="/settings" element={<SettingsPage />} />
           <Route path="/admin/d/:hex" element={<MirrorResolvePage kind="session" />} />
-          <Route path="/admin/review/:owner/:repo/pull/:number" element={<MirrorResolvePage kind="review" />} />
+          <Route path="/admin/review" element={<ReviewPage />} />
+          <Route path="/admin/review/:owner/:repo/pull/:number" element={<ReviewPage />} />
           <Route path="/admin/sessions" element={<SessionsPage />} />
           <Route path="/admin/:id" element={<Mirror />} />
           <Route path="/admin/:id/mirror" element={<Mirror />} />

@@ -66,7 +66,7 @@
     "queuedCount_one": "{{count}} message queued",
     "queuedCount_other": "{{count}} messages queued",
     "clearAll": "Clear all",
-    "sendNow": "Send now",
+    "sendNow": "Send now (interrupts the turn)",
     "removeFromQueue": "Remove from queue",
     "attachAfterFirst": "Attachments available after the first message",
     "attachFiles": "Attach files",
@@ -80,6 +80,30 @@
     "resumeDismiss": "Dismiss",
     "respondPending": "Respond directly to Devin's question or ask something else",
     "queuedCount": "{{count}} messages queued"
+  },
+  "persona": {
+    "label": "Persona",
+    "off": "Off",
+    "semi": "Semi",
+    "auto": "Auto",
+    "cycleTip": "Click to cycle the persona reply mode",
+    "ask": "Ask persona",
+    "asking": "Persona thinking…",
+    "escalated": "Persona declined to answer — waiting for you",
+    "answered": "Answered by persona"
+  },
+  "draft": {
+    "pickFile": "Pick a file to preview",
+    "tip": "Tip: Ctrl+N for a new session; @ for files/skills, / for commands",
+    "local": "Local",
+    "sessionsLink": "Go to sessions list",
+    "recentProjects": "Recent projects",
+    "viewAll": "View all",
+    "noProjects": "No recent projects",
+    "recent": "Recent sessions",
+    "try": "Try these",
+    "agentPick": "Choose agent",
+    "agentHint": "The agent is bound at session creation"
   },
   "st": {
     "loading": "Loading history…",
@@ -108,7 +132,7 @@
     "ask": "Ask Devin to build features, fix bugs, or work on your code",
     "message": "Message Devin…",
     "waitResponse": "Waiting for your response",
-    "actionReq": "Action required: {x}",
+    "actionReq": "Action required: {{x}}",
     "capacityPos": "High server load. Devin is waiting for capacity. Queue position: {{n}}…"
   },
   "panels": {
@@ -220,7 +244,9 @@
     "renameSession": "Rename",
     "openInNew": "Open in new window",
     "newFolder": "New folder",
-    "archivedTxt": "Archived"
+    "archivedTxt": "Archived",
+    "forkSession": "Fork session",
+    "forkFailed": "Fork failed"
   },
   "tabs": {
     "progress": "Progress",
@@ -312,7 +338,7 @@
     "unarchive": "Unarchive",
     "running": "Running",
     "inactive": "Inactive",
-    "showMore": "Show {n} more sessions",
+    "showMore": "Show {{n}} more sessions",
     "flt": {
       "flt_stype": "Session type",
       "flt_createdby": "Created by",
@@ -534,7 +560,7 @@
   },
   "dir": {
     "default": "Default directory",
-    "defaultParen": "Default ({cwd})",
+    "defaultParen": "Default ({{cwd}})",
     "serverDir": "server directory",
     "browse": "Browse folders…",
     "back": "Back",
@@ -618,7 +644,7 @@
     "binary": "Binary file — no preview"
   },
   "vp": {
-    "cantLoad": "Cannot load {name}",
+    "cantLoad": "Cannot load {{name}}",
     "copyContent": "Copy content",
     "copyLink": "Copy link",
     "download": "Download",
@@ -660,14 +686,26 @@
     "output": "Output",
     "noTodos": "No task list for this session yet."
   },
+  "quote": {
+    "add": "Quote",
+    "remove": "Remove quote",
+    "addCaption": "Add caption",
+    "addToChat": "Add to chat",
+    "captionPh": "Add a caption…",
+    "startTyping": "Start typing...",
+    "moreOptions": "More quote options",
+    "sendImmediately": "Send immediately"
+  },
   "sc": {
     "newWithPrompt": "Start new session with this prompt",
+    "forkHere": "Fork session from this message",
     "good": "Good response",
     "bad": "Bad response",
     "copy": "Copy",
     "copyLink": "Copy link",
     "translate": "Translate",
-    "sidechat": "Side chat"
+    "sidechat": "Side chat",
+    "quote": "Quote message"
   },
   "perm": {
     "createAuto": "Create automation",
@@ -770,11 +808,11 @@
       "expired": "Expired"
     },
     "noFolder": "(no folder)",
-    "archivedN": "Archived {n} sessions",
-    "restoredN": "Unarchived {n} sessions",
-    "movedN": "Moved {n} sessions",
+    "archivedN": "Archived {{n}} sessions",
+    "restoredN": "Unarchived {{n}} sessions",
+    "movedN": "Moved {{n}} sessions",
     "selectSession": "Select session",
-    "selectAll": "Select all {name}",
+    "selectAll": "Select all {{name}}",
     "removeFilter": "Remove filter",
     "appName": "Local Devin",
     "prefs": "Preferences…",
@@ -902,7 +940,41 @@
     "agentRes": "Agent resources",
     "resProject": "Project",
     "resGlobal": "Global (user)",
-    "resEmpty": "None"
+    "resEmpty": "None",
+    "general": "General",
+    "svcStatus": "Runtime status",
+    "svcUnmanaged": "No supervisor detected — unmanaged/dev mode",
+    "svcSupervisor": "Supervisor",
+    "svcBackend": "Backend",
+    "svcPorts": "Port mapping",
+    "svcUptime": "Uptime",
+    "svcExits": "Recent restarts",
+    "svcStateUp": "healthy",
+    "svcStateDown": "down",
+    "svcStateStarting": "starting",
+    "svcStateRestarting": "restarting",
+    "svcHardRestart": "Hard-restart backend",
+    "svcHardRestartDesc": "Kill the backend immediately; the supervisor respawns it (interrupts in-flight replies)",
+    "svcHardConfirm": "Hard-restart the backend? In-flight replies will be interrupted (history is preserved and resumable).",
+    "svcHardBtn": " Hard restart",
+    "svcHardSent": "Hard restart issued",
+    "svcStop": "Stop service",
+    "svcStopDesc": "Stop backend + supervisor (the watchdog will not revive it — run start to recover)",
+    "svcStopConfirm": "Stop the whole service? The page disconnects; run node devin-web.mjs start to recover.",
+    "svcStopBtn": " Stop",
+    "svcStopSent": "Stop issued — run node devin-web.mjs start to recover",
+    "logs": "Logs",
+    "logFile": "Log file",
+    "logTail": "Tail lines",
+    "logRefresh": "Refresh",
+    "logMissing": "(file missing)",
+    "about": "About",
+    "aboutVersion": "Version",
+    "aboutRuntime": "Runtime",
+    "aboutRepo": "Repo path",
+    "aboutData": "Data dir",
+    "aboutDev": "Developers",
+    "aboutDevDesc": "zalize — self-built Devin Web workbench (on Devin ACP)"
   },
   "as": {
     "resetConfirm": "Reset the share link? The old link stops working immediately.",
@@ -969,9 +1041,9 @@
     "waiting": "Waiting for admin to provide"
   },
   "dock": {
-    "pctLeft": "{p} left",
-    "confirmRemove": "Remove account {name}? (Only removed from the rotation list — not signed out)",
-    "confirmWrite": "Run devin {cmd}? This is a write operation.",
+    "pctLeft": "{{p}} left",
+    "confirmRemove": "Remove account {{name}}? (Only removed from the rotation list — not signed out)",
+    "confirmWrite": "Run devin {{cmd}}? This is a write operation.",
     "noOutput": "(no output)",
     "curCooling": "Current account cooling",
     "healthy": "Account healthy",
@@ -987,12 +1059,12 @@
     "collapse": "Collapse account list",
     "expand": "Expand account list",
     "allCooling": "All accounts cooling",
-    "earliest": ", earliest recovery in {t}",
-    "coolingLeft": "cooling {t}",
+    "earliest": ", earliest recovery in {{t}}",
+    "coolingLeft": "cooling {{t}}",
     "coolingN": "cooling",
     "clearCooling": "Clear cooldown mark (remove manually when the account is healthy)",
     "clear": "Clear",
-    "switchTo": "Switch to {name}",
+    "switchTo": "Switch to {{name}}",
     "switch": "Switch",
     "refreshQuota": "Refresh quota",
     "removeAcc": "Remove account",
@@ -1015,7 +1087,7 @@
     "refreshBtn": " Refresh quota",
     "addAccBtn": " Add account",
     "argPh": "Args (for show/info/remove/install/update commands)",
-    "needsArg": " (requires arg: {a})",
+    "needsArg": " (requires arg: {{a}})",
     "writeOp": " · write op",
     "cloudSsh": "Cloud session · ssh",
     "sidPh": "Cloud session id or URL",
@@ -1105,7 +1177,11 @@
     "connecting": "Connecting to Devin's Computer…",
     "reconnecting": "Reconnecting..."
   },
-  "draft": {
-    "pickFile": "Pick a file to preview"
+  "rv": {
+    "title": "Review a pull request",
+    "ph": "https://github.com/owner/repo/pull/123 or owner/repo#123",
+    "go": "Go to PR",
+    "bad": "Paste a github.com PR link (owner/repo/pull/N)",
+    "back": "Review"
   }
 }

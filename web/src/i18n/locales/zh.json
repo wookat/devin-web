@@ -67,7 +67,7 @@
     "queuedCount_one": "{{count}} 条消息排队中",
     "queuedCount_other": "{{count}} 条消息排队中",
     "clearAll": "全部清除",
-    "sendNow": "立即发送",
+    "sendNow": "立即发送（打断当前回合）",
     "removeFromQueue": "移出队列",
     "attachAfterFirst": "发出第一条消息后即可传附件",
     "attachFiles": "附加文件",
@@ -80,6 +80,30 @@
     "resumeResendTip": "原始消息未送达，重新发送",
     "resumeDismiss": "忽略",
     "respondPending": "直接回复 Devin 的问题，或问点别的"
+  },
+  "persona": {
+    "label": "分身",
+    "off": "关闭",
+    "semi": "半自动",
+    "auto": "自动",
+    "cycleTip": "点击切换分身代答模式（跟随全局 → 关闭 → 半自动 → 自动）",
+    "ask": "问分身",
+    "asking": "分身思考中…",
+    "escalated": "分身未敢代答，等待本人处理",
+    "answered": "分身已代答"
+  },
+  "draft": {
+    "pickFile": "点击左侧文件查看内容",
+    "tip": "提示：Ctrl+N 新建会话；@ 引用文件和技能，/ 运行命令",
+    "local": "本地",
+    "sessionsLink": "前往会话列表",
+    "recentProjects": "最近项目",
+    "viewAll": "查看全部",
+    "noProjects": "暂无最近项目",
+    "recent": "最近会话",
+    "try": "试试这些",
+    "agentPick": "选择 Agent",
+    "agentHint": "Agent 在会话创建时绑定，不可更换"
   },
   "st": {
     "loading": "正在加载历史…",
@@ -108,7 +132,7 @@
     "ask": "让 Devin 构建功能、修复 bug 或处理你的代码",
     "message": "给 Devin 发消息…",
     "waitResponse": "等待你的回复",
-    "actionReq": "需要操作：{x}",
+    "actionReq": "需要操作：{{x}}",
     "capacityPos": "服务器负载高，Devin 排队中，位置 {{n}}…"
   },
   "panels": {
@@ -182,7 +206,7 @@
     "sessionMirror": "会话镜像",
     "createFailed": "创建会话失败",
     "share": "分享",
-    "appName": "本地 Devin",
+    "appName": "Devin Web",
     "preferences": "首选项…",
     "unreadSessions": "未读会话",
     "noUnread": "暂无未读",
@@ -220,7 +244,9 @@
     "renameSession": "重命名",
     "openInNew": "在新窗口打开",
     "newFolder": "新建文件夹",
-    "archivedTxt": "已归档"
+    "archivedTxt": "已归档",
+    "forkSession": "分叉会话",
+    "forkFailed": "分叉失败"
   },
   "tabs": {
     "progress": "Progress",
@@ -312,7 +338,7 @@
     "unarchive": "取消归档",
     "running": "运行中",
     "inactive": "未活跃",
-    "showMore": "显示另外 {n} 个会话",
+    "showMore": "显示另外 {{n}} 个会话",
     "flt": {
       "flt_stype": "会话类型",
       "flt_createdby": "创建者",
@@ -534,7 +560,7 @@
   },
   "dir": {
     "default": "默认目录",
-    "defaultParen": "默认（{cwd}）",
+    "defaultParen": "默认（{{cwd}}）",
     "serverDir": "服务目录",
     "browse": "浏览文件夹…",
     "back": "返回",
@@ -618,7 +644,7 @@
     "binary": "二进制文件，不支持预览"
   },
   "vp": {
-    "cantLoad": "无法加载 {name}",
+    "cantLoad": "无法加载 {{name}}",
     "copyContent": "复制内容",
     "copyLink": "复制链接",
     "download": "下载",
@@ -660,14 +686,26 @@
     "output": "输出",
     "noTodos": "此会话暂无任务列表。"
   },
+  "quote": {
+    "add": "引用",
+    "remove": "移除引用",
+    "addCaption": "添加备注",
+    "addToChat": "添加到对话",
+    "captionPh": "给引用加个备注…",
+    "startTyping": "直接输入",
+    "moreOptions": "更多引用选项",
+    "sendImmediately": "立即发送"
+  },
   "sc": {
     "newWithPrompt": "用此提示开新会话",
+    "forkHere": "从此消息分叉会话",
     "good": "回答得好",
     "bad": "回答得差",
     "copy": "复制",
     "copyLink": "复制链接",
     "translate": "翻译",
-    "sidechat": "侧边聊天"
+    "sidechat": "侧边聊天",
+    "quote": "引用此条消息"
   },
   "perm": {
     "createAuto": "创建自动化",
@@ -770,13 +808,13 @@
       "expired": "已失效"
     },
     "noFolder": "(无文件夹)",
-    "archivedN": "已归档 {n} 个会话",
-    "restoredN": "已恢复 {n} 个会话",
-    "movedN": "已移动 {n} 个会话",
+    "archivedN": "已归档 {{n}} 个会话",
+    "restoredN": "已恢复 {{n}} 个会话",
+    "movedN": "已移动 {{n}} 个会话",
     "selectSession": "选择会话",
-    "selectAll": "全选 {name}",
+    "selectAll": "全选 {{name}}",
     "removeFilter": "移除筛选",
-    "appName": "本地 Devin",
+    "appName": "Devin Web",
     "prefs": "首选项…",
     "restartConfirm": "重启服务？server 将自动重生，页面稍后自动刷新。",
     "rebuildConfirm": "重新构建并重启？构建约 1-3 分钟，期间页面断开属正常。",
@@ -902,7 +940,41 @@
     "agentRes": "Agent 资源",
     "resProject": "项目",
     "resGlobal": "全局（用户）",
-    "resEmpty": "暂无"
+    "resEmpty": "暂无",
+    "general": "通用",
+    "svcStatus": "运行状态",
+    "svcUnmanaged": "未检测到守护进程——当前为未托管/开发模式",
+    "svcSupervisor": "守护进程",
+    "svcBackend": "后端",
+    "svcPorts": "端口映射",
+    "svcUptime": "运行时长",
+    "svcExits": "近期重启",
+    "svcStateUp": "正常",
+    "svcStateDown": "异常",
+    "svcStateStarting": "启动中",
+    "svcStateRestarting": "重启中",
+    "svcHardRestart": "硬重启后端",
+    "svcHardRestartDesc": "立即结束后端并由守护进程拉起（中断在途会话的回复）",
+    "svcHardConfirm": "硬重启后端？在途会话的回复会被中断（历史保留，可继续）。",
+    "svcHardBtn": " 硬重启",
+    "svcHardSent": "硬重启已下发",
+    "svcStop": "停止服务",
+    "svcStopDesc": "停止后端与守护进程（看门狗不会复活，需手动 start 恢复）",
+    "svcStopConfirm": "停止整个服务？页面将断开，需运行 node devin-web.mjs start 恢复。",
+    "svcStopBtn": " 停止",
+    "svcStopSent": "停止指令已发送——恢复请运行 node devin-web.mjs start",
+    "logs": "日志",
+    "logFile": "日志文件",
+    "logTail": "尾部行数",
+    "logRefresh": "刷新",
+    "logMissing": "（文件不存在）",
+    "about": "关于",
+    "aboutVersion": "版本",
+    "aboutRuntime": "运行时",
+    "aboutRepo": "仓库路径",
+    "aboutData": "数据目录",
+    "aboutDev": "开发者",
+    "aboutDevDesc": "zalize — 自研 Devin Web 工作台（基于 Devin ACP）"
   },
   "as": {
     "resetConfirm": "重置分享链接？旧链接将立即失效。",
@@ -969,9 +1041,9 @@
     "waiting": "等待管理员提供"
   },
   "dock": {
-    "pctLeft": "剩余 {p}",
-    "confirmRemove": "移除账号 {name}？（只从轮换列表删除，不登出）",
-    "confirmWrite": "执行 devin {cmd}？这是写操作。",
+    "pctLeft": "剩余 {{p}}",
+    "confirmRemove": "移除账号 {{name}}？（只从轮换列表删除，不登出）",
+    "confirmWrite": "执行 devin {{cmd}}？这是写操作。",
     "noOutput": "(无输出)",
     "curCooling": "当前账号冷却中",
     "healthy": "账号健康",
@@ -987,12 +1059,12 @@
     "collapse": "收起账号列表",
     "expand": "展开账号列表",
     "allCooling": "所有账号都在冷却",
-    "earliest": "，最早 {t} 后恢复",
-    "coolingLeft": "冷却 {t}",
+    "earliest": "，最早 {{t}} 后恢复",
+    "coolingLeft": "冷却 {{t}}",
     "coolingN": "冷却",
     "clearCooling": "清除冷却标记（确认账号健康时手动清除）",
     "clear": "清除",
-    "switchTo": "切换到 {name}",
+    "switchTo": "切换到 {{name}}",
     "switch": "切换",
     "refreshQuota": "刷新额度",
     "removeAcc": "移除账号",
@@ -1015,7 +1087,7 @@
     "refreshBtn": " 刷新额度",
     "addAccBtn": " 添加账号",
     "argPh": "参数（show/info/remove/install/update 类命令用）",
-    "needsArg": "（需要参数: {a}）",
+    "needsArg": "（需要参数: {{a}}）",
     "writeOp": " · 写操作",
     "cloudSsh": "云端会话 · ssh",
     "sidPh": "云端 session id 或 URL",
@@ -1105,7 +1177,11 @@
     "connecting": "正在连接 Devin 的电脑…",
     "reconnecting": "重新连接中…"
   },
-  "draft": {
-    "pickFile": "点击左侧文件查看内容"
+  "rv": {
+    "title": "评审 Pull Request",
+    "ph": "https://github.com/owner/repo/pull/123 或 owner/repo#123",
+    "go": "打开 PR",
+    "bad": "粘贴 github.com PR 链接（owner/repo/pull/N）",
+    "back": "评审"
   }
 }

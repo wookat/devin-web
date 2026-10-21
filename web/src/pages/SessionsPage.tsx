@@ -2,7 +2,7 @@ import { useEffect, useMemo, useRef, useState, type MouseEvent as ReactMouseEven
 import { useTranslation } from 'react-i18next'
 import { Link, useNavigate } from 'react-router-dom'
 import { createPortal } from 'react-dom'
-import { Bot, Download, FolderInput, Plus, RefreshCw, RotateCcw, Rows3, Settings2, Tag } from 'lucide-react'
+import { Bot, Download, FolderInput, GitPullRequest, Plus, RefreshCw, RotateCcw, Rows3, Settings2, Tag } from 'lucide-react'
 import { OArchive, OBell, OCheck, OChevronDown, OChevronRight, OCollapse, OCompose, OExpand, OPin, OSearch, OX } from '../components/officialIcons'
 import { adminFetch } from '@/lib/api'
 import { subscribeWs } from '@/lib/ws'
@@ -118,7 +118,7 @@ function Cb({ checked, onToggle, label, stop = true }: { checked: boolean; onTog
       className={cn(
         'flex size-[14px] shrink-0 cursor-pointer touch-manipulation items-center justify-center rounded-[4px] border transition-colors',
         FOCUS_RING,
-        checked ? 'border-accent-primary bg-accent-primary text-white' : 'border-border bg-transparent hover:bg-tint-tertiary',
+        checked ? 'border-accent-primary bg-accent-fill text-white' : 'border-border bg-transparent hover:bg-tint-tertiary',
       )}
     >
       {checked && <OCheck size={12} />}
@@ -448,6 +448,13 @@ export default function SessionsPage() {
             >
               <Rows3 size={14} className="shrink-0 text-muted-foreground" />
               <span className="min-w-0 flex-1 truncate">{t('sp.sessionsMgmt')}</span>
+            </Link>
+            <Link
+              to="/admin/review"
+              className="mb-px flex h-[30px] items-center gap-2 rounded-[6px] px-2 text-[13px] leading-[18px] text-foreground hover:bg-tint-secondary"
+            >
+              <GitPullRequest size={14} className="shrink-0 text-muted-foreground" />
+              <span className="min-w-0 flex-1 truncate">{t('rv.back')}</span>
             </Link>
           </nav>
           <div className="min-h-0 flex-1 overflow-y-auto py-1">
