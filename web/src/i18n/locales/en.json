@@ -98,6 +98,7 @@
     "pickFile": "Pick a file to preview",
     "tip": "Tip: Ctrl+N for a new session; @ for files/skills, / for commands",
     "local": "Local",
+    "message": "Message Devin… (Ctrl+N new session; @ for files/skills, / for commands)",
     "sessionsLink": "Go to sessions list",
     "recentProjects": "Recent projects",
     "viewAll": "View all",
@@ -105,7 +106,15 @@
     "recent": "Recent sessions",
     "try": "Try these",
     "agentPick": "Choose agent",
-    "agentHint": "The agent is bound at session creation"
+    "agentHint": "The agent is bound at session creation",
+    "sshNone": "No SSH hosts configured",
+    "sshAdd": "Add",
+    "sshAddHost": "Add SSH host…",
+    "sshTargetPh": "user@host or ssh config alias",
+    "sshNamePh": "Name (optional)",
+    "sshCwdPh": "Default remote dir (optional, e.g. ~/projects)",
+    "sshSaveFail": "Save failed",
+    "remoteDirPh": "Remote dir (e.g. ~/projects)"
   },
   "st": {
     "loading": "Loading history…",
@@ -1013,25 +1022,19 @@
     "sendErrStage": "stage",
     "diagFlow": "send path ↓ browser → ingress → dispatch → resolve → fan-out (per-agent lane: CLI/proc/auth) → merge → WS return",
     "tab": {
-      "general": "General",
-      "session": "Sessions",
-      "sidebar": "Sidebar",
+      "preferences": "Preferences",
       "accounts": "Accounts",
       "resources": "Agent resources",
       "service": "Service",
       "diag": "Diagnostics",
-      "logs": "Logs",
       "about": "About"
     },
     "tabDesc": {
-      "general": "Send shortcut, theme, language",
-      "session": "Auto-resume interrupted turns",
-      "sidebar": "Session list grouping and display",
+      "preferences": "Interface, session and sidebar preferences",
       "accounts": "Devin account pool and rotation",
       "resources": "Project/global rules and skills",
-      "service": "Service status, restart and rebuild",
+      "service": "Status, restart/rebuild, logs",
       "diag": "Chain doctor, module and send checks",
-      "logs": "Service logs",
       "about": "Version and build info"
     },
     "hub": "Overview",

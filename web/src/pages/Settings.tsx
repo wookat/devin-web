@@ -33,14 +33,11 @@ const readTreePrefs = () => { try { return JSON.parse(localStorage.getItem(TREE_
 // rail (Personal group → Preferences…; org group → everything else). Ours maps:
 // personal: general/session/sidebar; local instance: accounts → about.
 const TABS: { key: string; group: 'personal' | 'instance'; icon: React.ReactNode }[] = [
-  { key: 'general', group: 'personal', icon: <SlidersHorizontal size={15} /> },
-  { key: 'session', group: 'personal', icon: <MessagesSquare size={15} /> },
-  { key: 'sidebar', group: 'personal', icon: <PanelLeftClose size={15} /> },
+  { key: 'preferences', group: 'personal', icon: <SlidersHorizontal size={15} /> },
   { key: 'accounts', group: 'instance', icon: <KeyRound size={15} /> },
   { key: 'resources', group: 'instance', icon: <Boxes size={15} /> },
   { key: 'service', group: 'instance', icon: <Wrench size={15} /> },
   { key: 'diag', group: 'instance', icon: <Stethoscope size={15} /> },
-  { key: 'logs', group: 'instance', icon: <ScrollText size={15} /> },
   { key: 'about', group: 'instance', icon: <Info size={15} /> },
 ]
 
@@ -221,7 +218,8 @@ export default function Settings() {
               </Link>
             ))}
 
-            {tab === 'general' && <Section title={t('set.general')}>
+            {tab === 'preferences' && <>
+            <Section title={t('set.general')}>
               <Row title={t('set.sendShortcut')} desc={t('set.sendShortcutDesc')}>
                 <Sel value={sendWith} onPick={(v) => pickSend(v as 'enter' | 'ctrlenter')}
                   options={[{ v: 'enter', l: 'Enter' }, { v: 'ctrlenter', l: 'Ctrl+Enter' }]} />
@@ -234,15 +232,30 @@ export default function Settings() {
                 <Sel value={i18n.language.startsWith('zh') ? 'zh' : 'en'} onPick={(v) => void i18n.changeLanguage(v)}
                   options={[{ v: 'zh', l: '中文' }, { v: 'en', l: 'English' }]} />
               </Row>
-            </Section>}
+            </Section>
 
-            {tab === 'session' && <Section title={t('set.devinSession')}>
+            <Section title={t('set.devinSession')}>
               <Row title={t('set.autoResume')} desc={t('set.autoResumeDesc')}>
                 <Sw on={!!autoResume} onToggle={toggleAutoResume} busy={autoResume == null} />
               </Row>
-            </Section>}
+            </Section>
 
-            {tab === 'accounts' && <Section title={t('set.accounts')}>
+
+
+            <Section title={t('set.sidebar')}>
+              <Row title={t('set.groupBy')} desc={t('set.groupByDesc')}>
+                <Sel value={groupBy} onPick={pickGroupBy}
+                  options={[{ v: 'folders', l: t('set.foldersOpt') }, { v: 'project', l: t('set.projectOpt') }]} />
+              </Row>
+              <Row title={t('set.compact')} desc={t('set.compactDesc')}>
+                <Sw on={compact} onToggle={toggleCompact} />
+              </Row>
+              <Row title={t('set.showArchived')} desc={t('set.showArchivedDesc')}>
+                <Sw on={showArchived} onToggle={toggleArchived} />
+              </Row>
+            </Section></>}
+
+            {tab === 'accounts' &&             <Section title={t('set.accounts')}>
               {accounts.length === 0 && (
                 <div className="px-[12px] py-[10px] text-[13px] text-muted-foreground">{t('set.noAccounts')}</div>
               )}
@@ -297,19 +310,6 @@ export default function Settings() {
               {prefsMsg && <div className="px-[12px] pb-2 text-[12px] text-amber-600">{prefsMsg}</div>}
             </Section>}
 
-            {tab === 'sidebar' && <Section title={t('set.sidebar')}>
-              <Row title={t('set.groupBy')} desc={t('set.groupByDesc')}>
-                <Sel value={groupBy} onPick={pickGroupBy}
-                  options={[{ v: 'folders', l: t('set.foldersOpt') }, { v: 'project', l: t('set.projectOpt') }]} />
-              </Row>
-              <Row title={t('set.compact')} desc={t('set.compactDesc')}>
-                <Sw on={compact} onToggle={toggleCompact} />
-              </Row>
-              <Row title={t('set.showArchived')} desc={t('set.showArchivedDesc')}>
-                <Sw on={showArchived} onToggle={toggleArchived} />
-              </Row>
-            </Section>}
-
             {tab === 'resources' && <Section title={t('set.agentRes')}>
               <AgentResources />
             </Section>}
@@ -358,7 +358,7 @@ export default function Settings() {
               <SendCheck />
             </Section>}
 
-            {tab === 'logs' && <Section title={t('set.logs')}>
+            {tab === 'service' && <Section title={t('set.logs')}>
               <LogsPanel />
             </Section>}
 

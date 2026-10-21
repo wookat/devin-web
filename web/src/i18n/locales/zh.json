@@ -98,6 +98,7 @@
     "pickFile": "点击左侧文件查看内容",
     "tip": "提示：Ctrl+N 新建会话；@ 引用文件和技能，/ 运行命令",
     "local": "本地",
+    "message": "给 Devin 发消息…（Ctrl+N 新建会话；@ 引用文件和技能，/ 运行命令）",
     "sessionsLink": "前往会话列表",
     "recentProjects": "最近项目",
     "viewAll": "查看全部",
@@ -105,7 +106,15 @@
     "recent": "最近会话",
     "try": "试试这些",
     "agentPick": "选择 Agent",
-    "agentHint": "Agent 在会话创建时绑定，不可更换"
+    "agentHint": "Agent 在会话创建时绑定，不可更换",
+    "sshNone": "未配置 SSH 主机",
+    "sshAdd": "添加",
+    "sshAddHost": "添加 SSH 主机…",
+    "sshTargetPh": "user@host 或 ssh 配置别名",
+    "sshNamePh": "名称（可选）",
+    "sshCwdPh": "默认远端目录（可选，如 ~/projects）",
+    "sshSaveFail": "保存失败",
+    "remoteDirPh": "远端目录（如 ~/projects）"
   },
   "st": {
     "loading": "正在加载历史…",
@@ -1013,25 +1022,19 @@
     "sendErrStage": "阶段",
     "diagFlow": "链路方向 ↓ 浏览器 → 入口 → 派发 → 解析 → 扇出(每 agent 一支线:CLI/进程/凭证) → 汇合 → WS 回传",
     "tab": {
-      "general": "通用",
-      "session": "会话",
-      "sidebar": "侧栏",
+      "preferences": "首选项",
       "accounts": "账号",
       "resources": "Agent 资源",
       "service": "服务",
       "diag": "诊断",
-      "logs": "日志",
       "about": "关于"
     },
     "tabDesc": {
-      "general": "发送快捷键、主题、语言",
-      "session": "会话中断后的自动继续策略",
-      "sidebar": "会话列表分组与显示",
+      "preferences": "界面、会话与侧栏偏好",
       "accounts": "Devin 账号池与轮换",
       "resources": "项目/全局规则与技能",
-      "service": "服务状态、重启与构建",
+      "service": "服务状态、重启/构建、运行日志",
       "diag": "链路体检、模块与发送检查",
-      "logs": "服务运行日志",
       "about": "版本与构建信息"
     },
     "hub": "总览",
