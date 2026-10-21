@@ -13,10 +13,10 @@ import path from "node:path";
 import type { ApiContext } from "./routes.js";
 import { loadReg, saveReg, meta } from "./dwstore.js";
 import {
-  acpForId, dispatchPrompt, promptWithRetry, isDraining,
-  inflight,
+  acpForId, dispatchPrompt, promptWithRetry,
   turnEndHooks,
 } from "./sessionio.js";
+import { inflight, isDraining } from "./sessionlive.js";
 import { captureLoadResponse } from "./sessioncfg.js";
 import { loadedOn, sessionHost, loadInflight } from "./sessionplace.js";
 

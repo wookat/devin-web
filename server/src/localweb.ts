@@ -28,8 +28,7 @@ import {
 import {
   hostFor,
   ensureLoaded, acpForId, restartSession,
-  sessionConfig, recordTerminal, inflight, resolveUpload, dispatchPrompt, drainSince,
-  beginDrain, isDraining, markGracefulExit,
+  sessionConfig, recordTerminal, resolveUpload, dispatchPrompt,
   sessionStatus, interruptedTurn, listSubagents, subagentTimeline, subPingActive, listLocalSessions,
   snippetFromLog, terminalBuf, cloudVersionToModel,
   sendPreflight,
@@ -38,6 +37,7 @@ import {
 import { queueList, queueAdd, queueRemove, queueFlush } from "./sessionqueue.js";
 import { noteSendError, recentSendErrors } from "./sendhealth.js";
 import { loadedOn, sessionHost, loadInflight, isSessionPinned } from "./sessionplace.js";
+import { inflight, beginDrain, isDraining, drainSince, markGracefulExit } from "./sessionlive.js";
 import { responseCfg, captureLoadResponse, type SessionConfig, type ConfigOption } from "./sessioncfg.js";
 import {
   personaState, personaMode, askPersona, personaHumanMessage, decisionsTail,

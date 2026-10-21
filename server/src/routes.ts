@@ -10,7 +10,8 @@ import { buildSessionZip } from "./export.js";
 import { agentById } from "./agents.js";
 import { meta, saveReg } from "./dwstore.js";
 import { AccountPool, fetchUserStatus, pkceFinish, pkceStart } from "./accounts.js";
-import { hostFor, attachmentBlocks, promptWithRetry, isDraining, inflight, acpForId } from "./sessionio.js";
+import { hostFor, attachmentBlocks, promptWithRetry, acpForId } from "./sessionio.js";
+import { isDraining, inflight } from "./sessionlive.js";
 import { isSessionPinned } from "./sessionplace.js";
 import type { UsageRecord } from "./types.js";
 

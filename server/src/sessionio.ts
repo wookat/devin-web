@@ -22,6 +22,7 @@ import { queueList, queueAdd, queueRemove, queueFlush, restoreQueues, bindQueueD
 import { noteSendError, lastSendError, recentSendErrors, restoreSendErrors, type SendCheckStep } from "./sendhealth.js";
 import { openTurns, openTurnsLoad, openTurnsSave, clearOpenTurns, type OpenTurn } from "./sessionturns.js";
 import { loadedOn, sessionHost, loadEpoch, loadInflight, isSessionPinned } from "./sessionplace.js";
+import { inflight, adoptedTurns, lastActivity, touchSessionActivity, beginDrain, isDraining, drainSince, markGracefulExit, isGracefulExit } from "./sessionlive.js";
 import { loadReg, saveReg, meta, noteLastUsed } from "./dwstore.js";
 import {
   noteUpdate, persistTail, buildTimeline, buildTimelineFrom, snippet, tlCache,
@@ -452,18 +453,8 @@ function recordTerminal(terminalId: string, sessionId: string, data: string) {
   terminalBuf.set(terminalId, e);
 }
 
-/** sessions with a prompt currently in flight (drives status/composer state) */
-const inflight = new Set<string>();
-
-/** Set once a redeploy/restart enters its drain phase — after that, NO new
- * prompts may be dispatched. Without this gate a send (or an auto-resume)
- * landing mid-drain re-adds to `inflight` and the drain can be starved
- * forever. Send-paths return 503; internal dispatchers just no-op. */
-let draining = false;
-let drainStartedAt = 0;
-function beginDrain() { if (!draining) drainStartedAt = Date.now(); draining = true; }
-function isDraining() { return draining; }
-function drainSince() { return draining ? drainStartedAt : 0; }
+/** Liveness state (inflight/draining/adoptedTurns/lastActivity/gracefulExit)
+ * lives in sessionlive.ts — volatile runtime state, a leaf module. */
 
 // ---------------------------------------------------------------------------
 // Message queue — module lives in sessionqueue.ts (imported above). The
@@ -471,7 +462,7 @@ function drainSince() { return draining ? drainStartedAt : 0; }
 // here — storage must not import its consumers.
 // ---------------------------------------------------------------------------
 bindQueueDeps({
-  isBusy: (id) => inflight.has(id) || draining,
+  isBusy: (id) => inflight.has(id) || isDraining(),
   dispatch: (ctx, id, m) => dispatchPrompt(ctx, id, m.text, m.attachments ?? [], m.subagentId, m.respawnRow),
 });
 
@@ -485,25 +476,8 @@ bindQueueDeps({
 // turn boundary to test the tail against.
 // ---------------------------------------------------------------------------
 
-/** Set during a deliberate restart: turn settles caused by the acp killAll
- * must NOT clear open-turns — the entries are what auto-resume replays on
- * the next backend. Crash paths never set this (they die before settling).
- * The journal itself (map/load/save/clear + OpenTurn) lives in
- * sessionturns.ts — imported above. */
-let gracefulExit = false;
-export function markGracefulExit(ctx?: ApiContext) {
-  gracefulExit = true;
-  // Broker mode: snapshot each acp's consumed-byte offset so the next backend
-  // re-attaches at the exact stream position — its ring replay then covers
-  // only the death-gap frames (no duplicates, no skipped chunks).
-  if (ctx && brokerEnabled) {
-    const m: Record<string, number> = {};
-    for (const a of ctx.manager.allAcps()) {
-      if (a.brokerId) m[a.brokerId] = a.bytesReceived;
-    }
-    writeOffsets(ctx.store.dataDir, m);
-  }
-}
+/** gracefulExit + markGracefulExit moved to sessionlive.ts — restart
+ * liveness is that module's domain (it owns the offset journal write). */
 
 // ---------------------------------------------------------------------------
 // Send diagnostics — the error journal lives in sendhealth.ts (imported
@@ -519,8 +493,8 @@ function sendPreflight(ctx: ApiContext, id: string) {
   const steps: SendCheckStep[] = [];
   const rec = (id2: string, level: SendCheckStep["level"], detail: string) => steps.push({ id: id2, level, detail });
 
-  rec("gate", draining ? "fail" : "ok",
-    draining ? "server is draining for a restart — sends are refused until it is back" : "dispatch gate open");
+  rec("gate", isDraining() ? "fail" : "ok",
+    isDraining() ? "server is draining for a restart — sends are refused until it is back" : "dispatch gate open");
 
   const known = ctx.sessionCwd.has(id) || !!ctx.store.agentSession(id) || loadReg(ctx).sessions[id] != null;
   rec("known", known ? "ok" : "warn",
@@ -631,7 +605,7 @@ export function interruptedTurn(ctx: ApiContext, id: string): OpenTurn | null {
  * update stream goes silent the moment it ends; 90s of silence is declared
  * settled (false-positive cost: a rare >90s-silent live turn looks idle —
  * a follow-up prompt may then hit devin's busy error, recoverable). */
-const adoptedTurns = new Set<string>();
+// adoptedTurns set lives in sessionlive.ts — see imports.
 const ADOPT_SILENCE_MS = 90_000;
 
 function watchAdoptedTurn(ctx: ApiContext, id: string, acp: DevinAcp) {
@@ -842,8 +816,7 @@ function isTransportDeadError(e: unknown): boolean {
 /** Last streaming-update time per session — the turn silence watchdog reads
  * it (a live turn streams chunks; a wedged RPC is silent). Touched from the
  * onSessionUpdate path in index.ts. */
-const lastActivity = new Map<string, number>();
-function touchSessionActivity(id: string) { lastActivity.set(id, Date.now()); }
+// lastActivity map + touchSessionActivity live in sessionlive.ts — see imports.
 
 /** A prompt RPC can hang forever when the agent backend wedges — it used to
  * leave `inflight` set and stall the deploy drain indefinitely. A turn that
@@ -957,7 +930,7 @@ function dispatchPrompt(ctx: ApiContext, id: string, text: string, attachments: 
   // Drain gate: no new turns once a restart is draining — internal callers
   // (queueFlush, auto-resume, subagent relays) no-op; HTTP send-paths were
   // already 503'd before reaching here.
-  if (draining) return;
+  if (isDraining()) return;
   // U+FFFD in the text means the body arrived corrupted (bad client encoding)
   // or the source text was already broken — log so we can tell "browser-side
   // corrupt" from "downstream corrupt" without reproducing.
@@ -1040,7 +1013,7 @@ function dispatchPrompt(ctx: ApiContext, id: string, text: string, attachments: 
     .finally(() => {
       inflight.delete(id);
       ctx.hub.broadcast({ type: "session_status", sessionId: id, status: sessionStatus(ctx, id).status });
-      if (gracefulExit) {
+      if (isGracefulExit()) {
         // A deploy-killed resume never got a fair shot — refund the attempt.
         // resumeCount only counts turns that failed NATURALLY; otherwise N
         // restarts burn the cap and the entry parks as a forever tombstone.
@@ -1365,13 +1338,11 @@ function snippetFromLog(ctx: ApiContext, id: string): string {
 
 export {
   loadOnce, hostFor, loadCooldown,
-  touchSessionActivity,
   ensureLoaded, acpForId, restartSession,
   sessionConfig, cloudVersionToModel,
-  terminalBuf, recordTerminal, inflight, resolveUpload, attachmentBlocks,
+  terminalBuf, recordTerminal, resolveUpload, attachmentBlocks,
   promptWithRetry, dispatchPrompt, sessionStatus, turnEndHooks,
   sendPreflight,
-  beginDrain, isDraining, drainSince,
   type SubagentInfo, listSubagents, subagentTimeline, subPingActive,
   type ListedSession, listLocalSessions, snippetFromLog,
 };

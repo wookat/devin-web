@@ -8,9 +8,9 @@ import type { IncomingMessage, ServerResponse } from "node:http";
 import type { ApiContext } from "./routes.js";
 import { loadReg, saveReg, meta } from "./dwstore.js";
 import {
-  acpForId, promptWithRetry, isDraining,
-  inflight,
+  acpForId, promptWithRetry,
 } from "./sessionio.js";
+import { isDraining, inflight } from "./sessionlive.js";
 import { captureLoadResponse } from "./sessioncfg.js";
 import { loadedOn, sessionHost } from "./sessionplace.js";
 
