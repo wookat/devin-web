@@ -851,6 +851,10 @@ export async function adoptBrokerAcps(ctx: ApiContext) {
   const SKIP = Number.MAX_SAFE_INTEGER; // crash path: no offset → skip replay
   let adopted = 0, turns = 0;
   for (const a of alive) {
+    // Skip acp this backend ALREADY owns — a concurrent spawn (auto-resume,
+    // a user send) can land mid-adoption; attaching it again pipes a second
+    // logical client onto one byte stream ("response to unknown request").
+    if (ctx.manager.allAcps().some((x) => x.brokerId === a.acpId)) continue;
     const agentId = (a.key ?? "devin").split(":")[0];
     const agent = agentById(agentId) ?? DEFAULT_AGENT;
     try {
@@ -860,6 +864,7 @@ export async function adoptBrokerAcps(ctx: ApiContext) {
       // pid on loaded sessions — our own acp is "locked" BY its own pid.
       try {
         let cursor: string | undefined;
+        let held = 0;
         do {
           const page = await acp.listSessions(cursor);
           for (const s of page.sessions) {
@@ -868,6 +873,7 @@ export async function adoptBrokerAcps(ctx: ApiContext) {
             if (!sid) continue;
             const holder = Number(lm["cognition.ai/lockHolderPid"] ?? 0);
             if (holder === a.pid || holder === 0) {
+              held++;
               // holder===0 also claims it when devin omits the pid — a
               // session listed by this acp but held elsewhere is still safe:
               // the next op's session/load is idempotent on the true owner.
@@ -882,6 +888,13 @@ export async function adoptBrokerAcps(ctx: ApiContext) {
           }
           cursor = page.nextCursor ?? undefined;
         } while (cursor);
+        // Redundant duplicate: another live acp already owns this pool slot
+        // (concurrent spawn during adoption) and this one holds NO sessions —
+        // an invisible 100MB+ idle process otherwise. Retire it at the broker.
+        if (agent.multiSession && a.key && held === 0 && ctx.manager.pooledSlotTaken(a.key, acp)) {
+          console.error(`[adopt] ${a.acpId}: duplicate of a live pool slot with no sessions — retiring`);
+          acp.kill(); // proc.kill → brokerKill — the broker child dies, socket exits
+        }
       } catch { /* list failed — lazy reload covers unpinned sessions */ }
     } catch (e) {
       console.error(`[adopt] ${a.acpId} (${a.cmd}) failed:`, e);

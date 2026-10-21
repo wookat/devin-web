@@ -106,8 +106,12 @@ export class AcpManager {
     instance = acp;
     // Only multi-session acp take pool slots — a dedicated key (bare agent.id)
     // is an identity marker, not a pool slot; its sessions live in bySession
-    // via bindSession during session discovery.
-    if (key && agent.multiSession) this.pooled.set(key, { acp, cwd, startedAt: Date.now() });
+    // via bindSession during session discovery. Never overwrite a LIVE slot:
+    // a same-key acp spawned during adoption keeps its seat — this one stays
+    // session-pinned only (redundant-but-harmless until idle-retire).
+    if (key && agent.multiSession && (this.pooled.get(key)?.acp.exited ?? true)) {
+      this.pooled.set(key, { acp, cwd, startedAt: Date.now() });
+    }
     return acp;
   }
 
@@ -250,6 +254,13 @@ export class AcpManager {
    *  iterates this to snapshot broker stream positions. */
   allAcps(): DevinAcp[] {
     return [...this.pooled.values(), ...this.bySession.values()].map((m) => m.acp);
+  }
+
+  /** Another LIVE acp already seats this pool key — the passed acp is a
+   *  redundant adoption duplicate (spawn raced adoption). */
+  pooledSlotTaken(key: string, acp: DevinAcp): boolean {
+    const m = this.pooled.get(key);
+    return !!m && m.acp !== acp && !m.acp.exited;
   }
 
   /** Kill only backend-local helper processes (terminal runners). Broker mode
