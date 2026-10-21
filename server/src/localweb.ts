@@ -27,7 +27,7 @@ import {
 import {
   loadedOn, sessionHost, hostFor,
   isSessionPinned, captureLoadResponse, loadInflight, ensureLoaded, acpForId, restartSession,
-  sessionConfig, recordTerminal, inflight, resolveUpload, dispatchPrompt,
+  sessionConfig, recordTerminal, inflight, resolveUpload, dispatchPrompt, drainSince,
   beginDrain, isDraining,
   sessionStatus, interruptedTurn, listSubagents, subagentTimeline, subPingActive, listLocalSessions,
   snippetFromLog, responseCfg, terminalBuf, cloudVersionToModel,
@@ -636,7 +636,7 @@ export async function handleLocalWb(ctx: ApiContext, req: IncomingMessage, res: 
           } catch {}
           return {
             level: isDraining() ? "warn" : "ok",
-            detail: `${isDraining() ? "DRAINING · " : ""}${inflight.size} in flight · ${open} interrupted`,
+            detail: `${isDraining() ? `DRAINING ${Math.round((Date.now() - drainSince()) / 1000)}s · ` : ""}${inflight.size} in flight · ${open} interrupted`,
             rows: [
               { name: "draining", value: String(isDraining()), level: isDraining() ? "warn" : "ok" },
               { name: "in flight", value: [...inflight].join(", ") || "0" },
@@ -952,11 +952,22 @@ export async function handleLocalWb(ctx: ApiContext, req: IncomingMessage, res: 
           // the turn-silence watchdog in promptWithRetry (a wedged prompt
           // settles within DEVIN_WEB_TURN_SILENCE_MS, default 15min), and by
           // beginDrain() which stops NEW dispatches from starving the drain.
+          // Optional escape: DEVIN_WEB_DRAIN_TIMEOUT_MS bounds the wait —
+          // after it, exit anyway; open-turns.json survives and
+          // autoResumeInterrupted replays the cut turns on the new backend
+          // (same path as crash recovery). Default 0 = wait forever.
+          const drainLimit = Math.max(0, +(process.env.DEVIN_WEB_DRAIN_TIMEOUT_MS ?? 0) || 0);
           const tick = () => {
             if (inflight.size) {
-              console.error(`[respawn] waiting on ${inflight.size} inflight prompt(s): ${[...inflight].join(", ")}`);
-              setTimeout(tick, 30_000);
-              return;
+              const waited = Date.now() - drainSince();
+              if (drainLimit && waited > drainLimit) {
+                console.error(`[respawn] drain timeout ${Math.round(waited / 1000)}s > ${drainLimit}ms — exiting with ${inflight.size} inflight (${[...inflight].join(", ")}); auto-resume will replay them`);
+                inflight.clear();
+              } else {
+                console.error(`[respawn] waiting on ${inflight.size} inflight prompt(s) for ${Math.round(waited / 1000)}s: ${[...inflight].join(", ")}`);
+                setTimeout(tick, 30_000);
+                return;
+              }
             }
             // Supervised mode (DEVIN_WEB_SUPERVISED=1): the supervisor owns the
             // public port and respawns us on ANY exit — a plain exit IS the

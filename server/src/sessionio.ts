@@ -401,7 +401,7 @@ interface SessionConfig {
   options: ConfigOption[];
   mode: string | null;
   commands: { name: string; description?: string; input?: { hint?: string } }[];
-  model: { id: string; current: string; currentName: string; options: { value: string; name?: string; efforts?: string[]; effortCtl?: boolean; family?: string; fast?: boolean; ctx1m?: boolean }[] } | null;
+  model: { id: string; current: string; currentName: string; options: { value: string; name?: string; efforts?: string[]; effortCtl?: boolean; family?: string; fast?: boolean; ctx1m?: boolean; prices?: { input?: number; cached?: number; output?: number } }[] } | null;
 }
 
 function sessionConfig(ctx: ApiContext, id: string): SessionConfig {
@@ -479,6 +479,7 @@ function sessionConfig(ctx: ApiContext, id: string): SessionConfig {
           family: info?.family,
           fast: info?.fast ?? false,
           ctx1m: info?.ctx1m ?? false,
+          prices: info?.prices,
         };
       }),
     };
@@ -528,8 +529,10 @@ const inflight = new Set<string>();
  * landing mid-drain re-adds to `inflight` and the drain can be starved
  * forever. Send-paths return 503; internal dispatchers just no-op. */
 let draining = false;
-function beginDrain() { draining = true; }
+let drainStartedAt = 0;
+function beginDrain() { if (!draining) drainStartedAt = Date.now(); draining = true; }
 function isDraining() { return draining; }
+function drainSince() { return draining ? drainStartedAt : 0; }
 
 // ---------------------------------------------------------------------------
 // Message queue — Ctrl+Enter while working parks a prompt here; the queue is
@@ -1353,7 +1356,7 @@ export {
   terminalBuf, recordTerminal, inflight, resolveUpload, attachmentBlocks,
   promptWithRetry, dispatchPrompt, sessionStatus, turnEndHooks,
   noteSendError, lastSendError, recentSendErrors, sendPreflight,
-  beginDrain, isDraining,
+  beginDrain, isDraining, drainSince,
   queueFlush,
   type SubagentInfo, listSubagents, subagentTimeline, subPingActive,
   type ListedSession, listLocalSessions, snippetFromLog,
