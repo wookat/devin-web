@@ -37,6 +37,9 @@ try { // supervisor.log rotation — same 4MB rule as server.log
 } catch {}
 // A fresh start always clears an intentional-stop marker (watchdog honors it).
 try { fs.unlinkSync(STOPPED); } catch {}
+// Pidfile — the watchdog reads this to force-kill a wedged supervisor that
+// still holds :7791 (probe fails but the process is alive → EADDRINUSE loop).
+try { fs.writeFileSync(path.join(dataDir, "supervisor.pid"), String(process.pid)); } catch {}
 
 const log = (m) => {
   const line = `${new Date().toISOString()} ${m}\n`;

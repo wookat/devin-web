@@ -22,8 +22,23 @@ const req = http.get({ host: "127.0.0.1", port: PUB, path: "/api/_super/status",
   res.resume();
   process.exit(res.statusCode === 200 ? 0 : 1);
 });
+// A wedged supervisor keeps holding :7791 — a naive respawn then dies on
+// EADDRINUSE forever. Read the pidfile and kill the corpse first.
+const killStale = () => {
+  try {
+    const pid = Number(fs.readFileSync(path.join(DATA, "supervisor.pid"), "utf8").trim());
+    if (!pid) return;
+    try { process.kill(pid, 0); } catch { return; } // already gone — nothing to kill
+    const fd = fs.openSync(path.join(DATA, "supervisor.log"), "a");
+    fs.writeSync(fd, `${new Date().toISOString()} watchdog: killing wedged supervisor pid=${pid}\n`);
+    fs.closeSync(fd);
+    if (process.platform === "win32") spawn("taskkill", ["/pid", String(pid), "/t", "/f"], { stdio: "ignore", windowsHide: true });
+    else process.kill(pid, "SIGKILL");
+  } catch {}
+};
 const revive = () => {
   try {
+    killStale();
     fs.mkdirSync(DATA, { recursive: true });
     const fd = fs.openSync(path.join(DATA, "supervisor.log"), "a");
     fs.writeSync(fd, `${new Date().toISOString()} watchdog: supervisor silent — respawning\n`);
