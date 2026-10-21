@@ -154,8 +154,11 @@ const ComposerEditor = forwardRef<
     },
   }), [onChange])
 
+  // Official input scroll area (deob'd spec): flex-col, p-1, min-h 54px (default
+  // variant), max-h 250px, overflow-y-auto. Scrollbar stays hidden per user request
+  // (official uses scrollbar-width:thin).
   return (
-    <div className="relative max-h-[250px] overflow-y-auto p-1">
+    <div className="relative flex min-h-[54px] max-h-[250px] flex-col overflow-y-auto p-1 [scrollbar-width:none] [&::-webkit-scrollbar]:hidden">
       {placeholderNode != null && value === '' && (
         <div aria-hidden className="pointer-events-none absolute inset-0 select-none p-1 text-[14px] leading-[20px] text-muted-foreground">
           {placeholderNode}
@@ -189,7 +192,7 @@ const ComposerEditor = forwardRef<
         if (!disabled && files.length > 0) onFiles?.(files)
       }}
       className={cn(
-        'composer-editor relative min-h-5 overflow-visible whitespace-pre-wrap break-words text-[14px] leading-[20px] outline-none',
+        'composer-editor relative min-h-5 flex-1 overflow-visible whitespace-pre-wrap break-words text-[14px] leading-[20px] outline-none',
         disabled && 'cursor-not-allowed opacity-60',
         'empty:before:pointer-events-none empty:before:text-muted-foreground empty:before:content-[attr(data-placeholder)]',
         className,

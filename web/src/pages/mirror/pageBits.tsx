@@ -242,7 +242,7 @@ const VERSION_LABEL: Record<string, string> = {
   'devin-auto-fast': 'Fusion Fast' }
 
 /** Local ACP session config (GET /config): real model + mode options. */
-type LocalCfgOption = { value: string; name?: string; description?: string; efforts?: string[]; effortCtl?: boolean; family?: string; fast?: boolean; ctx1m?: boolean; _meta?: Record<string, unknown> }
+type LocalCfgOption = { value: string; name?: string; description?: string; efforts?: string[]; effortCtl?: boolean; family?: string; fast?: boolean; ctx1m?: boolean; prices?: { input?: number; cached?: number; output?: number }; _meta?: Record<string, unknown> }
 type LocalCfg = {
   options?: { id?: string; name?: string; category?: string; currentValue?: string; options?: LocalCfgOption[] }[]
   mode?: string | null

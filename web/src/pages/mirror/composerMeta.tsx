@@ -18,6 +18,9 @@ interface ComposerMetaT {
   cfg?: LocalCfg
   /** dw.json lastConfig — the picks a fresh session inherits. */
   last_config?: Record<string, string>
+  /** prefs.sshHosts — run targets for the draft page's local/remote picker.
+   *  Secrets are never echoed (hasPassword/hasPassphrase flags only). */
+  ssh_hosts?: { name?: string; target: string; cwd?: string; auth?: 'agent' | 'password' | 'key'; keyPath?: string; hasPassword?: boolean; hasPassphrase?: boolean }[]
 }
 
 interface SuggestItem {

@@ -258,7 +258,7 @@ function VoiceButton({ onText, onRecordingChange, disabled }: { onText: (t: stri
         disabled={disabled || busy}
         aria-label={t('vb.record')}
         title={t('vb.record')}
-        className="flex size-7 cursor-pointer items-center justify-center rounded-full text-muted-foreground hover:bg-accent hover:text-foreground disabled:opacity-50"
+        className="flex size-7 shrink-0 cursor-pointer items-center justify-center rounded-full text-muted-foreground hover:bg-tint-secondary hover:text-foreground disabled:opacity-50"
       >
         {busy ? <Loader2 size={18} className="animate-spin" /> : <Mic size={18} />}
       </button>
