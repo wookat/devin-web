@@ -1430,6 +1430,10 @@
     "fixAll": "Fix all",
     "recheck": "Re-check",
     "allOk": "All checks pass",
-    "failing": "{{n}} failing"
+    "failing": "{{n}} failing",
+    "rowDesc": "Full-chain probe: supervisor → drain → inflight → acp pool → locks/replays → disk → public domain",
+    "runBtn": "Run checks",
+    "gService": "Service infra",
+    "gSession": "Session runtime"
   }
 }

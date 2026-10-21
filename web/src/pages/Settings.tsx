@@ -7,6 +7,7 @@ import { Combo } from '@/components/ui'
 import { adminFetch } from '@/lib/api'
 import { getTheme, setTheme, type Theme } from '@/lib/theme'
 import { CodeEditor } from '@/pages/mirror/WorkspacePanel'
+import DoctorDialog from '@/components/DoctorDialog'
 
 /** Preferences — markup replicated from app.devin.ai/settings/preferences
  * (DOM extracted live 2026-10-19): content column `flex flex-col gap-[36px]
@@ -41,6 +42,7 @@ export default function Settings() {
   const [groupBy, setGroupBy] = useState<string>(() => readTreePrefs().groupBy ?? 'folders')
   const [compact, setCompact] = useState<boolean>(() => !!readTreePrefs().compact)
   const [showArchived, setShowArchived] = useState<boolean>(() => !!readTreePrefs().showArchived)
+  const [doctor, setDoctor] = useState(false)
 
   const loadAccounts = () => {
     void adminFetch<{ accounts: Account[] }>('/api/accounts')
@@ -313,6 +315,9 @@ export default function Settings() {
             </Section>
 
             <Section title={t('set.diag')}>
+              <Row title={t('doc.entry')} desc={t('doc.rowDesc')}>
+                <Btn2 onClick={() => setDoctor(true)}>{t('doc.runBtn')}</Btn2>
+              </Row>
               <ModulesPanel />
               <SendCheck />
             </Section>
@@ -328,6 +333,7 @@ export default function Settings() {
         </div>
       </main>
       </div>
+      {doctor && <DoctorDialog onClose={() => setDoctor(false)} />}
     </div>
   )
 }

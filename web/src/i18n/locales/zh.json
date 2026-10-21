@@ -1430,6 +1430,10 @@
     "fixAll": "一键修复",
     "recheck": "重新检查",
     "allOk": "全部正常",
-    "failing": "{{n}} 项异常"
+    "failing": "{{n}} 项异常",
+    "rowDesc": "全链路自检：supervisor → drain → inflight → acp 池 → 锁/重放残留 → 磁盘 → 公网域名",
+    "runBtn": "运行体检",
+    "gService": "服务设施",
+    "gSession": "会话运行时"
   }
 }

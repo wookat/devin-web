@@ -18,6 +18,7 @@ interface Check {
   label: string;
   ok: boolean;
   detail: string;
+  group: 'service' | 'session'; // 服务设施层 vs 会话运行时层
   fix?: string; // repair action id that resolves this check
 }
 
@@ -51,30 +52,30 @@ export async function diagnose(ctx: ApiContext): Promise<{ ok: boolean; checks: 
 
   // supervisor reachable (we're answering, but supervised flag tells the mode)
   const supervised = process.env.DEVIN_WEB_SUPERVISED === "1";
-  checks.push({ id: "supervisor", label: "Supervisor", ok: supervised,
+  checks.push({ id: "supervisor", group: "service", label: "Supervisor", ok: supervised,
     detail: supervised ? `pid ${process.ppid} · :7791 proxying :7792` : "bare backend — no supervisor/self-heal" });
 
   // drain gate
   const draining = isDraining();
-  checks.push({ id: "drain", label: "Drain (deploy gate)", ok: !draining,
+  checks.push({ id: "drain", group: "service", label: "Drain (deploy gate)", ok: !draining,
     detail: draining ? `draining ${Math.round((Date.now() - drainSince()) / 1000)}s — sends 503 until it clears` : "not draining",
     fix: draining ? "restart-now" : undefined });
 
   // inflight turns — replays of huge logs look exactly like this and block sends
   const inFl = [...inflight];
-  checks.push({ id: "inflight", label: "In-flight turns", ok: inFl.length === 0,
+  checks.push({ id: "inflight", group: "session", label: "In-flight turns", ok: inFl.length === 0,
     detail: inFl.length ? `${inFl.length} running: ${inFl.join(", ")}` : "none",
     fix: inFl.length ? "stop-turns" : undefined });
 
   // acp host pool
   const procs = (ctx.manager.status() as { exited: boolean; busy: number }[]);
   const dead = procs.filter(p => p.exited).length;
-  checks.push({ id: "acp", label: "Agent processes", ok: dead === 0,
+  checks.push({ id: "acp", group: "session", label: "Agent processes", ok: dead === 0,
     detail: `${procs.length} pooled · ${dead} exited · ${procs.reduce((a, p) => a + p.busy, 0)} busy` });
 
   // orphaned acp holding locks
   const orphans = await orphanAcps();
-  checks.push({ id: "orphans", label: "Orphaned acp (lock holders)", ok: orphans.length === 0,
+  checks.push({ id: "orphans", group: "session", label: "Orphaned acp (lock holders)", ok: orphans.length === 0,
     detail: orphans.length ? `${orphans.length} zombie(s) holding session locks: ${orphans.join(",")}` : "none",
     fix: orphans.length ? "kill-orphans" : undefined });
 
@@ -83,13 +84,13 @@ export async function diagnose(ctx: ApiContext): Promise<{ ok: boolean; checks: 
   try {
     lockedIds = (await listLocalSessions(ctx)).filter(s => (s as { is_locked?: boolean }).is_locked).map(s => s.id);
   } catch {}
-  checks.push({ id: "locks", label: "Session locks (other processes)", ok: lockedIds.length === 0,
+  checks.push({ id: "locks", group: "session", label: "Session locks (other processes)", ok: lockedIds.length === 0,
     detail: lockedIds.length ? `${lockedIds.length} locked: ${lockedIds.slice(0, 6).join(",")}${lockedIds.length > 6 ? "…" : ""}` : "none",
     fix: lockedIds.length ? "kill-orphans" : undefined });
 
   // open-turns residue — entries here get auto-resumed (replayed) on next boot
   const ot = Object.keys(openTurns(ctx));
-  checks.push({ id: "open-turns", label: "Pending turn replays", ok: ot.length === 0,
+  checks.push({ id: "open-turns", group: "session", label: "Pending turn replays", ok: ot.length === 0,
     detail: ot.length ? `${ot.length} will auto-resume: ${ot.join(", ")}` : "none",
     fix: ot.length ? "clear-open-turns" : undefined });
 
@@ -97,16 +98,16 @@ export async function diagnose(ctx: ApiContext): Promise<{ ok: boolean; checks: 
   try {
     const st = fs.statfsSync(ctx.store.dataDir);
     const freeGb = (st.bavail * st.bsize) / 1e9;
-    checks.push({ id: "disk", label: "Disk free", ok: freeGb > 2,
+    checks.push({ id: "disk", group: "service", label: "Disk free", ok: freeGb > 2,
       detail: `${freeGb.toFixed(1)} GB free` });
   } catch {}
 
   // public domain (best-effort — the box itself may lack outbound https)
   try {
     const r = await fetch("https://devin-web.zalize.com/api/health", { signal: AbortSignal.timeout(8000) });
-    checks.push({ id: "public", label: "devin-web.zalize.com", ok: r.ok, detail: `HTTP ${r.status}` });
+    checks.push({ id: "public", group: "service", label: "devin-web.zalize.com", ok: r.ok, detail: `HTTP ${r.status}` });
   } catch (e) {
-    checks.push({ id: "public", label: "devin-web.zalize.com", ok: false,
+    checks.push({ id: "public", group: "service", label: "devin-web.zalize.com", ok: false,
       detail: `unreachable — ${e instanceof Error ? e.message : String(e)} (check cloudflared service)` });
   }
 

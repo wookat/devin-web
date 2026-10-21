@@ -5,7 +5,7 @@ import { adminFetch } from '@/lib/api'
 import { cn } from '@/lib/utils'
 import { OCheck, OX } from './officialIcons'
 
-interface Check { id: string; label: string; ok: boolean; detail: string; fix?: string }
+interface Check { id: string; label: string; ok: boolean; detail: string; group?: 'service' | 'session'; fix?: string }
 
 /** "链路体检" — GET /api/admin/diagnose lists every hop (supervisor → drain →
  * inflight → acp pool → orphan lock-holders → session locks → pending replays →
@@ -57,25 +57,16 @@ export default function DoctorDialog({ onClose }: { onClose: () => void }) {
         ) : (
           <>
             <ul className="max-h-[46vh] space-y-1 overflow-y-auto">
-              {checks.map(c => (
-                <li key={c.id} className="flex items-center gap-2.5 rounded-lg border border-border-secondary px-3 py-2">
-                  <span className={cn('flex size-4 shrink-0 items-center justify-center rounded-full text-[10px] font-bold text-white', c.ok ? 'bg-green-600' : 'bg-red-500')}>
-                    {c.ok ? <OCheck size={11} /> : '!'}
-                  </span>
-                  <div className="min-w-0 flex-1">
-                    <div className="text-[13px] font-medium text-foreground">{c.label}</div>
-                    <div className="truncate text-[11px] text-muted-foreground" title={c.detail}>{c.detail}</div>
-                    {results[c.fix ?? ''] && <div className="mt-0.5 text-[11px] text-text-blue">→ {results[c.fix!]}</div>}
-                  </div>
-                  {c.fix && (
-                    <button
-                      disabled={fixing !== null}
-                      onClick={() => repair([c.fix!])}
-                      className="shrink-0 rounded-md border border-border bg-card px-2 py-1 text-[12px] font-medium text-foreground hover:bg-tint-secondary disabled:opacity-40"
-                    >{fixing === c.fix ? '…' : t('doc.fix')}</button>
-                  )}
-                </li>
-              ))}
+              {(['service', 'session'] as const).map(g => {
+                const grp = checks.filter(c => c.group === g || (!c.group && g === 'service'))
+                if (!grp.length) return null
+                return (
+                  <li key={g} className="pt-1 first:pt-0">
+                    <div className="px-1 pb-1 text-[11px] font-medium uppercase tracking-wide text-muted-foreground">{t(g === 'service' ? 'doc.gService' : 'doc.gSession')}</div>
+                    <ul className="space-y-1">{grp.map(c => <CheckRow key={c.id} c={c} fixing={fixing} result={results[c.fix ?? '']} onFix={() => repair([c.fix!])} />)}</ul>
+                  </li>
+                )
+              })}
             </ul>
             <div className="mt-4 flex items-center gap-2">
               <span className={cn('text-[12px]', bad ? 'text-text-orange' : 'text-text-green')}>
@@ -95,5 +86,28 @@ export default function DoctorDialog({ onClose }: { onClose: () => void }) {
       </div>
     </div>,
     document.body,
+  )
+}
+
+function CheckRow({ c, fixing, result, onFix }: { c: Check; fixing: string | 'all' | null; result?: string; onFix: () => void }) {
+  const { t } = useTranslation()
+  return (
+    <li className="flex items-center gap-2.5 rounded-lg border border-border-secondary px-3 py-2">
+      <span className={cn('flex size-4 shrink-0 items-center justify-center rounded-full text-[10px] font-bold text-white', c.ok ? 'bg-green-600' : 'bg-red-500')}>
+        {c.ok ? <OCheck size={11} /> : '!'}
+      </span>
+      <div className="min-w-0 flex-1">
+        <div className="text-[13px] font-medium text-foreground">{c.label}</div>
+        <div className="truncate text-[11px] text-muted-foreground" title={c.detail}>{c.detail}</div>
+        {result && <div className="mt-0.5 text-[11px] text-text-blue">→ {result}</div>}
+      </div>
+      {c.fix && (
+        <button
+          disabled={fixing !== null}
+          onClick={onFix}
+          className="shrink-0 rounded-md border border-border bg-card px-2 py-1 text-[12px] font-medium text-foreground hover:bg-tint-secondary disabled:opacity-40"
+        >{fixing === c.fix ? '…' : t('doc.fix')}</button>
+      )}
+    </li>
   )
 }
