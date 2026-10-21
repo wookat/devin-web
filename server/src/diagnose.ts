@@ -9,7 +9,8 @@ import path from "node:path";
 import { execFile } from "node:child_process";
 import { promisify } from "node:util";
 import type { ApiContext } from "./routes.js";
-import { isDraining, drainSince, inflight, restartSession, listLocalSessions, markGracefulExit, clearOpenTurns } from "./sessionio.js";
+import { isDraining, drainSince, inflight, restartSession, listLocalSessions, markGracefulExit } from "./sessionio.js";
+import { clearOpenTurns } from "./sessionturns.js";
 import { brokerEnabled } from "./acpbroker.js";
 
 const execFileP = promisify(execFile);

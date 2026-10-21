@@ -20,6 +20,7 @@ import {
 } from "./sessioncfg.js";
 import { queueList, queueAdd, queueRemove, queueFlush, restoreQueues, bindQueueDeps, type QueuedMsg } from "./sessionqueue.js";
 import { noteSendError, lastSendError, recentSendErrors, restoreSendErrors, type SendCheckStep } from "./sendhealth.js";
+import { openTurns, openTurnsLoad, openTurnsSave, clearOpenTurns, type OpenTurn } from "./sessionturns.js";
 import { loadReg, saveReg, meta, noteLastUsed } from "./dwstore.js";
 import {
   noteUpdate, persistTail, buildTimeline, buildTimelineFrom, snippet, tlCache,
@@ -508,22 +509,11 @@ bindQueueDeps({
 // turn boundary to test the tail against.
 // ---------------------------------------------------------------------------
 
-interface OpenTurn {
-  text: string;
-  ts: number;
-  attachments?: { url: string; name?: string; mime?: string; size?: number }[];
-  /** 'continue' = the turn reached the agent → a "继续" nudge resumes it;
-   * 'resend' = the prompt died before any echo → resend the original text. */
-  kind?: "continue" | "resend";
-  /** Auto-resume attempts already made — caps a resume→crash→resume loop. */
-  resumeCount?: number;
-}
-
-const openTurns = new Map<string, OpenTurn>();
-let openTurnsLoaded = false;
 /** Set during a deliberate restart: turn settles caused by the acp killAll
  * must NOT clear open-turns — the entries are what auto-resume replays on
- * the next backend. Crash paths never set this (they die before settling). */
+ * the next backend. Crash paths never set this (they die before settling).
+ * The journal itself (map/load/save/clear + OpenTurn) lives in
+ * sessionturns.ts — imported above. */
 let gracefulExit = false;
 export function markGracefulExit(ctx?: ApiContext) {
   gracefulExit = true;
@@ -537,31 +527,6 @@ export function markGracefulExit(ctx?: ApiContext) {
     }
     writeOffsets(ctx.store.dataDir, m);
   }
-}
-
-/** Drop open-turn entries — all of them, or one id. The tombstone case: an
- * entry that hit the resumeCount cap sits in the map forever otherwise
- * (clearing only the file gets resurrected by the next openTurnsSave). */
-export function clearOpenTurns(ctx: ApiContext, id?: string): number {
-  const n = id ? (openTurns.delete(id) ? 1 : 0) : openTurns.size;
-  if (!id) openTurns.clear();
-  openTurnsSave(ctx);
-  return n;
-}
-
-function openTurnsLoad(ctx: ApiContext) {
-  if (openTurnsLoaded) return;
-  openTurnsLoaded = true;
-  try {
-    const raw = JSON.parse(fs.readFileSync(path.join(ctx.store.dataDir, "open-turns.json"), "utf8")) as Record<string, OpenTurn>;
-    for (const [id, t] of Object.entries(raw)) if (t && typeof t.text === "string") openTurns.set(id, t);
-  } catch { /* no file / corrupt — nothing to recover */ }
-}
-
-function openTurnsSave(ctx: ApiContext) {
-  try {
-    fs.writeFileSync(path.join(ctx.store.dataDir, "open-turns.json"), JSON.stringify(Object.fromEntries(openTurns)));
-  } catch { /* best-effort */ }
 }
 
 // ---------------------------------------------------------------------------
