@@ -2124,14 +2124,19 @@ export async function handleLocalWb(ctx: ApiContext, req: IncomingMessage, res: 
             const s = await acp.newSession(cwd);
             newId = s.sessionId;
             forkRes = s;
-            // Transcript carryover: messages up to the anchor (or the whole
-            // tail when forking at head), bounded to the last ~6000 chars of
-            // user/agent text so the seed prompt stays usable.
+            // Transcript carryover: dense seed within the same ~6000-char
+            // budget — the ORIGINAL TASK always survives (a pure tail-slice
+            // dropped it on long sessions), plus a tool-call digest so the
+            // fork knows what was already done, then the tail transcript.
             const log = ctx.sessionLog.get(id);
             const rows: { seq: number; text: string }[] = [];
+            const ops: string[] = [];
+            let taskText = "";
             for (const e of log) {
-              const u = e.update as { sessionUpdate?: string; content?: { type?: string; text?: string } };
+              const u = e.update as { sessionUpdate?: string; content?: { type?: string; text?: string }; title?: string };
+              if (u.sessionUpdate === "tool_call" && u.title && ops[ops.length - 1] !== u.title) ops.push(u.title);
               if ((u.sessionUpdate === "user_message_chunk" || u.sessionUpdate === "agent_message_chunk") && u.content?.text) {
+                if (!taskText && u.sessionUpdate === "user_message_chunk") taskText = u.content.text;
                 rows.push({ seq: e.seq ?? -1, text: (u.sessionUpdate === "user_message_chunk" ? "用户: " : "Devin: ") + u.content.text });
               }
             }
@@ -2140,11 +2145,15 @@ export async function handleLocalWb(ctx: ApiContext, req: IncomingMessage, res: 
               json(res, 409, { error: "该位置之前没有可分叉的消息" });
               return true;
             }
-            const joined = picked.map((r) => r.text).join("\n\n");
-            const bounded = joined.slice(-6000);
+            const parts: string[] = [];
+            if (taskText) parts.push(`## 原始任务\n${taskText.slice(0, 1500)}`);
+            if (ops.length) parts.push(`## 已执行的关键操作\n${ops.slice(-12).map((o) => `- ${o}`).join("\n")}`);
+            const head = parts.join("\n\n");
+            const tail = picked.map((r) => r.text).join("\n\n").slice(-Math.max(2000, 6000 - head.length));
+            const bounded = head ? `${head}\n\n## 最近对话\n${tail}` : tail;
             const where = anchor !== null ? `，截至第 ${picked.length} 条消息处` : "（仅尾部，可能截断）";
             transcriptPrompt = bounded
-              ? `[分叉自会话「${srcTitle}」${where}] 以下是原会话的对话记录。请在此基础上继续完成相同任务：\n\n${bounded}`
+              ? `[分叉自会话「${srcTitle}」${where}] 以下是原会话的上下文摘要。请在此基础上继续完成相同任务：\n\n${bounded}`
               : `[分叉自会话「${srcTitle}」] 请继续该会话的任务。`;
           }
           let nset = loadedOn.get(acp);
@@ -2155,6 +2164,7 @@ export async function handleLocalWb(ctx: ApiContext, req: IncomingMessage, res: 
           captureLoadResponse(newId, forkRes);
           const mm = meta(ctx, newId);
           mm.title = `${srcTitle} (fork)`;
+          (mm as Record<string, unknown>).forkedFrom = anchor !== null ? `${id}@${anchor}` : id;
           if (agent.id !== "devin") mm.agent = agent.id;
           saveReg();
           if (transcriptPrompt) dispatchPrompt(ctx, newId, transcriptPrompt, []);
