@@ -1320,6 +1320,7 @@ export async function handleAdminTree(ctx: ApiContext, req: IncomingMessage, res
             return true;
           }
           const m2 = queueAdd(ctx, id, text);
+          if (!inflight.has(id)) queueFlush(ctx, id); // idle + stale queue → keep FIFO moving
           json(res, 200, { ok: true, id: m2.id });
           return true;
         }
@@ -1467,6 +1468,15 @@ export async function handleAdminTree(ctx: ApiContext, req: IncomingMessage, res
             if (!text) { json(res, 400, { error: "empty message" }); return true; }
             if (isDraining()) { json(res, 503, { error: "server restarting" }); return true; }
             if (agentId.startsWith("spawn:")) { json(res, 400, { error: "subagent transcript not replayed; cannot message" }); return true; }
+            // Busy → park like the main message path: concurrent dispatches
+            // would overwrite each other's open-turns entry (it's a per-
+            // session map slot, not per-turn).
+            if (inflight.has(id) || queueList(id).length) {
+              const m2 = queueAdd(ctx, id, text, [], { subagentId: agentId });
+              if (!inflight.has(id)) queueFlush(ctx, id);
+              json(res, 200, { ok: true, queued: m2.id });
+              return true;
+            }
             dispatchPrompt(ctx, id, text, [], agentId);
             json(res, 200, { ok: true });
             return true;

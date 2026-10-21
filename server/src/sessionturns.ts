@@ -6,7 +6,7 @@
  * boot means a server died mid-turn. A successful settle also appends
  * `dw_turn_end` to the session log so replayed logs keep a durable turn
  * boundary. Pure storage — interruptedTurn/autoResume/watchAdoptedTurn are
- * consumers and stay downstream in sessionio.
+ * consumers and stay downstream in sessionload/sessionprompt.
  */
 import fs from "node:fs";
 import path from "node:path";

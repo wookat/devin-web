@@ -9,7 +9,7 @@
  * Flush contract: a non-empty queue always implies a turn WAS in flight
  * (idle sends never enter the queue), so the queue drains only from settle
  * paths — never a blind boot sweep. dispatchPrompt + the busy predicate are
- * injected (bindQueueDeps) because they live downstream in sessionio —
+ * injected (bindQueueDeps) because they live downstream in sessionprompt/sessionload —
  * storage must not import its consumers.
  */
 import fs from "node:fs";
@@ -32,7 +32,7 @@ const promptQueues = new Map<string, QueuedMsg[]>();
 let queueSeq = 0;
 const saveQueues = () => persistJson("queues.json", Object.fromEntries(promptQueues));
 
-/** Downstream capabilities the flush needs — injected once by sessionio at
+/** Downstream capabilities the flush needs — injected once by sessionload at
  *  module init. isBusy: "turn in flight or drain gate shut" → don't dequeue. */
 let busy: (id: string) => boolean = () => false;
 let dispatch: (ctx: ApiContext, id: string, m: QueuedMsg) => void = () => {};
@@ -41,7 +41,7 @@ export function bindQueueDeps(deps: {
   dispatch: (ctx: ApiContext, id: string, m: QueuedMsg) => void;
 }) { busy = deps.isBusy; dispatch = deps.dispatch; }
 
-/** Restore queues.json — sessionio calls this from its boot hook. */
+/** Restore queues.json — sessionload calls this from its boot hook. */
 export function restoreQueues(dir: string) {
   try {
     const q = JSON.parse(fs.readFileSync(path.join(dir, "queues.json"), "utf8")) as Record<string, QueuedMsg[]>;
@@ -51,6 +51,10 @@ export function restoreQueues(dir: string) {
     }
   } catch { /* cold start */ }
 }
+
+/** Session ids holding queued (parked) messages — the boot sweep uses
+ * this to log parked-without-evidence entries for visibility. */
+export function queuedSessions(): string[] { return [...promptQueues.keys()]; }
 
 export function queueList(id: string): QueuedMsg[] {
   return promptQueues.get(id) ?? [];

@@ -1,5 +1,5 @@
 /**
- * lweb/common — shared HTTP utilities for the localweb route family:
+ * lweb/common — shared HTTP utilities for the lweb route family:
  * json/readBody/readJson + the UNSUPPORTED placeholder body. Leaf module.
  */
 import type { IncomingMessage, ServerResponse } from "node:http";

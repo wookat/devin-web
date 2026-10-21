@@ -4,7 +4,7 @@
  * Owns: the configOptions/modes/commands captured from session/new·load
  * responses (agent-level fallback + per-session picks), the lock-retry
  * helper for session/load, and persistJson — the one write-through
- * primitive all of sessionio's durable files (agent-cfg.json, queues.json,
+ * primitive all of the session family's durable files (agent-cfg.json, queues.json,
  * send-errors.json, open-turns.json) share. Extracted from sessionio.ts;
  * behavior unchanged.
  */
@@ -52,11 +52,11 @@ export function setLastAgentCommands(v: SessionConfig["commands"]) { lastAgentCo
  *  session/load (the only writer of the cfg caches), and a transparent
  *  restart must not eat user data (message queue) or diagnostics
  *  (sendErrors). All durable files live in stateDir and write through on
- *  mutation; sessionio calls this BEFORE adoption/auto-resume. */
+ *  mutation; sessionload calls this BEFORE adoption/auto-resume. */
 let stateDir = "";
 
 /** Restore the config caches from agent-cfg.json (agent-level + bySession).
- *  Called by sessionio's own restore — it owns the queue/error files. */
+ *  Called by sessionload's restore hook — it owns the queue/error files. */
 export function initCfgState(dir: string) {
   stateDir = dir;
   try {

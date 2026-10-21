@@ -210,3 +210,11 @@ export function readOffsets(dataDir: string): Record<string, number> {
 export function writeOffsets(dataDir: string, m: Record<string, number>): void {
   try { fs.writeFileSync(offsetsFile(dataDir), JSON.stringify(m)); } catch { /* best-effort */ }
 }
+/** The offset journal is single-use: a graceful exit writes the consumed
+ *  positions, the next boot's adoption reads them — then MUST delete them.
+ *  Otherwise a subsequent hard crash leaves stale low offsets on disk and
+ *  the next attach replays already-consumed frames (duplicate updates,
+ *  ghost RPC responses, re-executed agent→client requests). */
+export function clearOffsets(dataDir: string): void {
+  try { fs.rmSync(offsetsFile(dataDir), { force: true }); } catch { /* best-effort */ }
+}

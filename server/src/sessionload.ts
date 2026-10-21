@@ -8,13 +8,13 @@
  */
 import type { ApiContext } from "./routes.js";
 import type { DevinAcp } from "./acp.js";
-import { brokerEnabled, brokerList, readOffsets } from "./acpbroker.js";
+import { brokerEnabled, brokerList, readOffsets, clearOffsets } from "./acpbroker.js";
 import { agentById, DEFAULT_AGENT } from "./agents.js";
 import { remapLegacyCwd } from "./store.js";
 import { loadReg, meta, noteLastUsed } from "./dwstore.js";
 import { noteUpdate, persistTail, tlCache, tailSnapshot, type LogEntry } from "./dwtimeline.js";
 import { initCfgState, isSessionLocked, loadWithRetry, captureLoadResponse } from "./sessioncfg.js";
-import { queueFlush, restoreQueues, bindQueueDeps } from "./sessionqueue.js";
+import { queueList, queueFlush, restoreQueues, bindQueueDeps, queuedSessions } from "./sessionqueue.js";
 import { restoreSendErrors } from "./sendhealth.js";
 import { dispatchPrompt, releaseBusy, bindPromptDeps } from "./sessionprompt.js";
 import { openTurns, openTurnsLoad, openTurnsSave, type OpenTurn } from "./sessionturns.js";
@@ -25,7 +25,7 @@ import { sessionStatus } from "./sessionview.js";
 
 /** Config caches + durable-state primitives live in sessioncfg.ts — imported
  * above as live bindings (responseCfg is shared state, lastAgentCfg a `let`).
- * setCfgCacheDir stays sessionio's public boot hook: initCfgState restores
+ * setCfgCacheDir is this module's public boot hook: initCfgState restores
  * the cfg file, then the queue/error files owned below. */
 export function setCfgCacheDir(dir: string) {
   initCfgState(dir);
@@ -412,7 +412,7 @@ export function interruptedTurn(ctx: ApiContext, id: string): OpenTurn | null {
 // adoptedTurns set lives in sessionlive.ts — see imports.
 const ADOPT_SILENCE_MS = 90_000;
 
-function watchAdoptedTurn(ctx: ApiContext, id: string, acp: DevinAcp) {
+function watchAdoptedTurn(ctx: ApiContext, id: string, acp: DevinAcp, resync = false) {
   adoptedTurns.add(id);
   inflight.add(id);
   acp.busySessions.add(id); // same protection a real prompt gets — no hard
@@ -420,6 +420,14 @@ function watchAdoptedTurn(ctx: ApiContext, id: string, acp: DevinAcp) {
   ctx.hub.broadcast({ type: "session_status", sessionId: id, status: sessionStatus(ctx, id).status });
   const t0 = Date.now();
   touchSessionActivity(id);
+  const settle = () => {
+    ctx.sessionLog.append(id, { sessionUpdate: "dw_turn_end" });
+    if (openTurns.delete(id)) openTurnsSave(ctx);
+    persistTail(ctx, id);
+    noteUpdate(ctx, id);
+    queueFlush(ctx, id);
+    ctx.hub.broadcast({ type: "session_status", sessionId: id, status: sessionStatus(ctx, id).status });
+  };
   const iv = setInterval(() => {
     const done = (err: boolean) => {
       clearInterval(iv);
@@ -430,14 +438,20 @@ function watchAdoptedTurn(ctx: ApiContext, id: string, acp: DevinAcp) {
         // The host died mid-adopted-turn — keep the open-turns entry so the
         // NEXT boot's auto-resume replays it (same contract as any crash).
         noteUpdate(ctx, id);
+        ctx.hub.broadcast({ type: "session_status", sessionId: id, status: sessionStatus(ctx, id).status });
+      } else if (resync) {
+        // Crash attach (no offset): the dead window's frames are gone —
+        // heal the transcript hole via a bounded session/load resync
+        // BEFORE the turn-end marker, so the gap isn't fossilized under
+        // dw_turn_end. Dedup machinery (replayGuard + tail-anchor merge)
+        // covers the overlap.
+        void Promise.race([
+          loadOnce(ctx, acp, id, ctx.sessionCwd.get(id) ?? acp.cwd).catch(() => {}),
+          new Promise((r) => setTimeout(r, 60_000)),
+        ]).finally(settle);
       } else {
-        ctx.sessionLog.append(id, { sessionUpdate: "dw_turn_end" });
-        if (openTurns.delete(id)) openTurnsSave(ctx);
-        persistTail(ctx, id);
-        noteUpdate(ctx, id);
-        queueFlush(ctx, id);
+        settle();
       }
-      ctx.hub.broadcast({ type: "session_status", sessionId: id, status: sessionStatus(ctx, id).status });
     };
     if (acp.exited) return done(true);
     const last = Math.max(lastActivity.get(id) ?? 0, t0);
@@ -464,6 +478,10 @@ export async function adoptBrokerAcps(ctx: ApiContext) {
   const alive = list.filter((a) => !a.exited);
   if (!alive.length) return;
   const offsets = readOffsets(ctx.store.dataDir);
+  // The journal is single-use — a later hard crash must NOT replay frames
+  // this boot already consumed. Delete on read; markGracefulExit rewrites
+  // it on the next clean exit.
+  clearOffsets(ctx.store.dataDir);
   const SKIP = Number.MAX_SAFE_INTEGER; // crash path: no offset → skip replay
   let adopted = 0, turns = 0;
   for (const a of alive) {
@@ -499,7 +517,7 @@ export async function adoptBrokerAcps(ctx: ApiContext) {
               // Dedicated (single-session) agents resolve via bySession —
               // the pool path is multi-session only.
               if (!agent.multiSession) ctx.manager.bindSession(sid, acp);
-              if (openTurns.has(sid) && !adoptedTurns.has(sid)) { watchAdoptedTurn(ctx, sid, acp); turns++; }
+              if (openTurns.has(sid) && !adoptedTurns.has(sid)) { watchAdoptedTurn(ctx, sid, acp, offsets[a.acpId] == null); turns++; }
             }
           }
           cursor = page.nextCursor ?? undefined;
@@ -524,6 +542,15 @@ export async function autoResumeInterrupted(ctx: ApiContext) {
   // DEVIN_WEB_NO_AUTORESUME: a second instance sharing the data dir must
   // not double-drive interrupted turns — each boot would otherwise re-send
   // "继续" into sessions the primary instance already resumed.
+  // Parked-queue visibility sweep — a queued message with no open-turn and
+  // no adopted-turn evidence is parked forever (queueFlush only fires on a
+  // settle). Log it once at boot; manual disposition via queue-op. Never
+  // auto-dispatch: the text was written for a turn context that no longer
+  // exists.
+  for (const sid of queuedSessions()) {
+    if (!openTurns.has(sid) && !adoptedTurns.has(sid) && queueList(sid).length)
+      console.error(`[boot] ${sid}: ${queueList(sid).length} queued message(s) parked with no turn evidence — left for manual queue-op`);
+  }
   if (process.env.DEVIN_WEB_NO_AUTORESUME || !loadReg(ctx).prefs?.autoResume || !openTurns.size) return;
   // A resume triggers session/load, which replays the FULL transcript back
   // through the update stream — on multi-GB logs that replay alone saturates

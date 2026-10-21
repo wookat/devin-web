@@ -25,7 +25,7 @@ import { loadedOn, sessionHost } from "./sessionplace.js";
 // injected engine callbacks — bound once by the load domain at module init.
 // dispatchPrompt needs a host resolver (acpForId), a status read for the
 // settle broadcast (sessionStatus), and a subagent-liveness ping (subPing);
-// all three live in sessionio, which imports this module — injection keeps
+// all three live in sessionload/sessionsub/sessionview — injection keeps
 // the edge one-directional.
 // ---------------------------------------------------------------------------
 interface PromptDeps {

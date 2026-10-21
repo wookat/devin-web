@@ -376,8 +376,10 @@ export async function handleSubSession(
       json(res, 409, { error: "该子代理句柄已失效（宿主进程已重启/重放），不能续聊 — 可派生新子代理继续", dead: true });
       return true;
     }
-    if (inflight.has(parent)) {
+    if (isDraining()) { json(res, 503, { error: "server_restarting" }); return true; }
+    if (inflight.has(parent) || queueList(parent).length) {
       const m2 = queueAdd(ctx, parent, text, [], { subagentId: aid, ...(row ? { respawnRow: row } : {}) });
+      if (!inflight.has(parent)) queueFlush(ctx, parent); // idle + stale queue → keep FIFO moving
       json(res, 200, { ok: true, queued: m2.id });
       return true;
     }

@@ -5,8 +5,8 @@
  * on the user's behalf. Uncertain answers come back as `[升级]` → the session
  * is flagged personaEscalated (amber banner) until a human message clears it.
  *
- * Wiring: sessionio's turnEndHooks (registered below on import — no import
- * cycle: persona→sessionio only). Routes live in localweb.ts.
+ * Wiring: sessionprompt's turnEndHooks (registered below on import — no import
+ * cycle: persona→sessionprompt only). Routes live in lweb/admin.ts.
  */
 import fs from "node:fs";
 import path from "node:path";
@@ -281,7 +281,7 @@ export async function askPersona(ctx: ApiContext, id: string, reason: "auto" | "
   }
 }
 
-/** Turn-end hook (registered in sessionio): auto-mode sessions get a
+/** Turn-end hook (registered in sessionprompt): auto-mode sessions get a
  * delegated answer when the agent ends on a question. */
 function personaOnTurnEnd(ctx: ApiContext, id: string) {
   try {

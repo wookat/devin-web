@@ -110,7 +110,7 @@ Interrupted-turn recovery: `dispatchPrompt` records the outgoing message in
 surviving at boot means the server died mid-turn. A successful settle also
 appends `dw_turn_end` to the session log (errors append `dw_notice`); both
 survive replay via the tail re-append and are NOT timeline rows (tlPush
-skips them). `interruptedTurn()` (exported from sessionio) feeds
+skips them). `interruptedTurn()` (exported from sessionload) feeds
 `interrupted` on the /timeline response: open-turns evidence first, then a
 log tail with a user message but no turn boundary — for pre-marker logs
 only when the tail ends on a bare tool_call/thought (a finished turn never
@@ -167,23 +167,35 @@ route code never changes.
 - i18next interpolation is `{{var}}` ONLY — single-brace `{name}` renders
   literally. All locale keys must use `{{var}}`.
 - `session/load` locks a session to ONE acp process (`session_locked`,
-  retryable). `sessionHost` in `server/src/sessionio.ts` pins ops to the host
-  process — never re-resolve cwd for a loaded session (session/list rewrites
-  `sessionCwd` and would bounce it to the other pooled acp).
-- Server module map: `localweb.ts` = dw.json registry routes + workspace index
-  + the big admin/share router; `sessionio.ts` = hostFor (the ONE session→acp
-  resolver: dedicated → sessionHost pin → cwd pool), load/replay dedup, live
-  config, attachmentBlocks, promptWithRetry (the ONE retry policy: cool
-  acp.account → rotate → resend once → 429 when all cooling; also the
-  busy-tracking + turn-silence watchdog per attempt), dispatchPrompt,
-  beginDrain/isDraining (deploy drain gate — 503s new sends, no-ops
-  internal dispatchers, queue preserved), subagents, session listing;
-  `dwtimeline.ts` = log→DwItem
-  builder + tlCache + noteUpdate deltas + tail snapshots; `dwstore.ts` =
-  dw.json registry (meta/folders/pins/lastConfig). `sessionSubs` in localweb.ts
-  is the shared admin/share subroute table — add identical-semantics subs there
-  (message/upload/file-contents/dashboard), keep sanitized share-only or
-  admin-only subs in the branches.
+  retryable). `sessionHost` in `server/src/sessionplace.ts` pins ops to the
+  host process — never re-resolve cwd for a loaded session (session/list
+  rewrites `sessionCwd` and would bounce it to the other pooled acp).
+- Server module map (sessionio/localweb are GONE — full graph in
+  docs/architecture.md): `lweb/` = the web-frontend route family
+  (`index.ts` dispatch shell · `admin.ts` the /api/admin/* tree ·
+  `share.ts` the /api/share/* tree · `session.ts` sessionSubs +
+  sub:* machinery · `common.ts` HTTP utils). `sessionload.ts` = the
+  load/recovery engine: hostFor (the ONE session→acp resolver:
+  dedicated → sessionHost pin → cwd pool), doLoad/loadOnce + replay
+  dedup, adoptBrokerAcps/watchAdoptedTurn, autoResumeInterrupted,
+  interruptedTurn, setCfgCacheDir boot hook, and the two injection
+  binds. `sessionprompt.ts` = the send pipeline: dispatchPrompt,
+  promptWithRetry (the ONE retry policy: cool acp.account → rotate →
+  resend once → 429 when all cooling; busy-tracking + turn-silence
+  watchdog per attempt), attachments, sendPreflight. `sessionsub.ts` =
+  subagent registry; `sessionview.ts` = read-models (sessionStatus,
+  sessionConfig, terminalBuf, listLocalSessions, snippetFromLog).
+  Level-0 leaves: `sessioncfg.ts` (config caches + persistJson),
+  `sessionqueue.ts` (queues.json FIFO), `sessionturns.ts`
+  (open-turns.json), `sessionplace.ts` (loadedOn/sessionHost/
+  loadEpoch/loadInflight), `sessionlive.ts` (inflight/drain gate/
+  adoptedTurns/gracefulExit+offsets), `sendhealth.ts` (send-errors).
+  `dwtimeline.ts` = log→DwItem builder + tlCache + noteUpdate deltas +
+  tail snapshots; `dwstore.ts` = dw.json registry
+  (meta/folders/pins/lastConfig). `sessionSubs` in `lweb/session.ts` is
+  the shared admin/share subroute table — add identical-semantics subs
+  there (message/upload/file-contents/dashboard), keep sanitized
+  share-only or admin-only subs in the branches.
 - `automations.ts` = local scheduled sessions (official "Automations" parity):
   dw.json `automations` holds 5-field cron entries (Vixie dom/dow OR rule,
   impossible exprs rejected at save); a 30s tick fires due ones via the
@@ -317,7 +329,7 @@ route code never changes.
   replays the full history. Sidebar prefetch (`prefetchSession`) must only hit
   memory-only endpoints (slim detail); never prefetch timeline/config or every
   hover loads history + marks sessions "just now".
-- Load dedup: `loadInflight` in sessionio.ts shares one replay per session —
+- Load dedup: `loadInflight` in sessionplace.ts shares one replay per session —
   the entry records the acp that STARTED the load; joiners resolving a
   different pool (sessionCwd empty → primaryCwd fallback vs real cwd) MUST
   pin to that recorded host, never mark their own — a wrong mark makes every
@@ -501,7 +513,7 @@ route code never changes.
 - **Child sessions = `sub:<parent>:<agentId>` pseudo-ids** — cloud parity:
   a subagent opens as a FULL session page (own timeline+composer+controls),
   nested under the parent in the sidebar tree. `handleSubSession` in
-  localweb.ts serves the whole per-session contract for the `sub:` id
+  lweb/session.ts serves the whole per-session contract for the `sub:` id
   (detail/timeline/messages/message/control/end/subagents/changes/todos/
   config/files via `cwdFor`→parent cwd). Children populate via
   `GET mirror/session-children?root=<id|sub:id>` (lazy per row) and
@@ -513,7 +525,7 @@ route code never changes.
   session/load replay (post-replay resumes answer "doesn't exist in my
   current session") — a child is `resumable` only while its registering
   event's `cognition.ai/timestamp` (replay-proof; our append ts would fake
-  liveness) is newer than `loadEpoch` in sessionio, its host is alive, and
+  liveness) is newer than `loadEpoch` in sessionplace, its host is alive, and
   no failed resume condemned it (`deadSubs`). POST `sub:…/message` 409s on
   a dead handle rather than burn a lead turn; `{respawn:1}` makes the lead
   spawn a SUCCESSOR carrying title/profile/task + a 1.5KB stream-tail
@@ -625,7 +637,7 @@ migrate, sandbox, setup, uninstall, acp.
 
 ## CLI proxy (frontend ↔ devin.exe)
 
-`POST /api/admin/cli/run {cmd, arg?}` — whitelist table in localweb.ts maps
+`POST /api/admin/cli/run {cmd, arg?}` — whitelist table in lweb/admin.ts maps
 `cmd` → argv; `runCli` spawns `devin` (same binary as the acp pool), 30s cap,
 256KB output cap, no shell (arg is positional-only, can't inject). Wired UI:
 LocalDock "CLI 工具" section (Terminal icon in the sidebar dock header).
@@ -691,8 +703,8 @@ hand it a different cwd or the registry lookup misses).
 
 Modes (`off|semi|auto`): per-session override `meta.personaMode` > global
 `prefs.persona.mode`. Auto only fires from `dispatchPrompt`'s settle hook —
-`turnEndHooks` in sessionio.ts (persona registers on import; the direction is
-always persona→sessionio so no cycle). Detection = tail scan since the last
+`turnEndHooks` in sessionprompt.ts (persona registers on import; the direction is
+always persona→sessionprompt so no cycle). Detection = tail scan since the last
 user/boundary entry for `agent_message_chunk`s: ends `?`/`？` or matches the
 QUESTION_RE phrase list (请确认/需要你/should i/…). `personaLastSeq` dedupes
 re-detection of the same question; `maxPerHour` (default 4) caps asks and the
