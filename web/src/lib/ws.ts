@@ -11,6 +11,8 @@ export interface WsEvent {
   [key: string]: unknown
 }
 
+import { adminKey } from './api'
+
 type Handler = (ev: WsEvent) => void
 
 const handlers = new Set<Handler>()
@@ -22,7 +24,7 @@ function ensure() {
   if (ws && (ws.readyState === WebSocket.OPEN || ws.readyState === WebSocket.CONNECTING)) return
   if (retryTimer != null) return
   const proto = location.protocol === 'https:' ? 'wss' : 'ws'
-  const sock = new WebSocket(`${proto}://${location.host}/ws`)
+  const sock = new WebSocket(`${proto}://${location.host}/ws${adminKey() ? `?key=${encodeURIComponent(adminKey())}` : ''}`)
   ws = sock
   sock.onopen = () => { retry = 0 }
   sock.onmessage = (m) => {

@@ -12,7 +12,7 @@ import type { ApiContext } from "./routes.js";
 import { restartSession } from "./sessionload.js";
 import { listLocalSessions } from "./sessionview.js";
 import { isDraining, drainSince, inflight, markGracefulExit } from "./sessionlive.js";
-import { clearOpenTurns } from "./sessionturns.js";
+import { clearOpenTurns, openTurns, openTurnsLoad } from "./sessionturns.js";
 import { brokerEnabled } from "./acpbroker.js";
 
 const execFileP = promisify(execFile);
@@ -58,8 +58,8 @@ export async function killOrphans(): Promise<string> {
   return pids.length ? `killed ${pids.join(",")}` : "none found";
 }
 
-function openTurns(ctx: ApiContext): Record<string, unknown> {
-  try { return JSON.parse(fs.readFileSync(path.join(ctx.store.dataDir, "open-turns.json"), "utf8")); }
+function openTurnsMap(ctx: ApiContext): Record<string, unknown> {
+  try { openTurnsLoad(ctx); return Object.fromEntries(openTurns); }
   catch { return {}; }
 }
 
@@ -107,7 +107,7 @@ export async function diagnose(ctx: ApiContext): Promise<{ ok: boolean; checks: 
 
   // open-turns residue — entries whose resumeCount hit the cap (2) are stale
   // and won't actually auto-resume: report each with its state.
-  const otMap = openTurns(ctx) as Record<string, { resumeCount?: number; text?: string }>;
+  const otMap = openTurnsMap(ctx) as Record<string, { resumeCount?: number; text?: string }>;
   const otEntries = Object.entries(otMap);
   const pending = otEntries.filter(([, v]) => (v?.resumeCount ?? 0) < 2).map(([k]) => k);
   const stale = otEntries.length - pending.length;

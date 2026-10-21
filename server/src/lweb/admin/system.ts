@@ -15,6 +15,7 @@ import { loadReg } from "../../dwstore.js";
 import { sendPreflight } from "../../sessionprompt.js";
 import { recentSendErrors } from "../../sendhealth.js";
 import { inflight, beginDrain, isDraining, drainSince, markGracefulExit } from "../../sessionlive.js";
+import { openTurns, openTurnsLoad } from "../../sessionturns.js";
 import { handleWikiRoute } from "../../wiki.js";
 import { handleSecurityRoute } from "../../security.js";
 import { json, readJson } from "../common.js";
@@ -62,8 +63,8 @@ export async function handleSystem(ctx: ApiContext, req: IncomingMessage, res: S
       let open = 0;
       const openIds: string[] = [];
       try {
-        const raw = JSON.parse(fs.readFileSync(path.join(ctx.store.dataDir, "open-turns.json"), "utf8")) as Record<string, { ts?: number }>;
-        for (const k of Object.keys(raw)) { open++; openIds.push(k); }
+        openTurnsLoad(ctx); // the in-memory journal is authoritative post-boot
+        for (const k of openTurns.keys()) { open++; openIds.push(k); }
       } catch {}
       return {
         level: isDraining() ? "warn" : "ok",

@@ -211,6 +211,18 @@ const httpServer = http.createServer();
 httpServer.keepAliveTimeout = 75_000;
 httpServer.headersTimeout = 76_000;
 
+/** WS key gate shared by every endpoint: with DEVIN_WEB_ADMIN_KEY set a
+ *  socket needs the key too — the hub broadcast carries full session
+ *  traffic to every client, and term/browser are full-power surfaces.
+ *  Browsers can't send headers on WS, so ?key= is accepted alongside the
+ *  x-admin-key header (same channel the frontend api.ts uses). */
+function wsKeyAllowed(req: http.IncomingMessage): boolean {
+  if (!adminKeyRequired()) return true;
+  const k = process.env.DEVIN_WEB_ADMIN_KEY;
+  if (req.headers["x-admin-key"] === k) return true;
+  try { return new URL(req.url ?? "", "http://x").searchParams.get("key") === k; } catch { return false; }
+}
+
 const hub = new WsHub(
   httpServer,
   () => ({
@@ -218,7 +230,7 @@ const hub = new WsHub(
     app: { name: "devin-web", version: pkg.version },
     settings: store.settings,
   }),
-  { verifyOrigin: isAllowedRequest },
+  { verifyOrigin: (req) => isAllowedRequest(req) && wsKeyAllowed(req) },
 );
 
 // Interactive session terminal — one shell per WS connection, spawned in the
@@ -234,15 +246,8 @@ httpServer.on("upgrade", (req, socket, head) => {
   if (pathname !== "/ws/term" && pathname !== "/ws/browser") return;
   if (!isAllowedRequest(req)) { socket.destroy(); return; }
   // Interactive endpoints are full-power surfaces (a shell in the session
-  // cwd, CDP control of a real browser) — when the admin key is set they
-  // must honor it too. Browsers can't send headers on WS, so the key also
-  // rides as ?key= (same channel the admin fetch header uses).
-  if (adminKeyRequired()) {
-    const q = new URL(req.url ?? "", "http://x").searchParams;
-    if (req.headers["x-admin-key"] !== process.env.DEVIN_WEB_ADMIN_KEY && q.get("key") !== process.env.DEVIN_WEB_ADMIN_KEY) {
-      socket.destroy(); return;
-    }
-  }
+  // cwd, CDP control of a real browser) — same key gate as the hub.
+  if (!wsKeyAllowed(req)) { socket.destroy(); return; }
   const wss = pathname === "/ws/term" ? termWss : browserWss;
   wss.handleUpgrade(req, socket, head, (ws) => wss.emit("connection", ws, req));
 });
