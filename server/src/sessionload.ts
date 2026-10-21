@@ -308,7 +308,6 @@ export function restartSession(ctx: ApiContext, id: string): void {
 // here — storage must not import its consumers.
 // ---------------------------------------------------------------------------
 bindQueueDeps({
-  isBusy: (id) => inflight.has(id) || isDraining(),
   dispatch: (ctx, id, m) => dispatchPrompt(ctx, id, m.text, m.attachments ?? [], m.subagentId, m.respawnRow),
 });
 

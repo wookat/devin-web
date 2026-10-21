@@ -16,6 +16,7 @@ import fs from "node:fs";
 import path from "node:path";
 import type { ApiContext } from "./routes.js";
 import { persistJson } from "./sessioncfg.js";
+import { inflight, isDraining } from "./sessionlive.js";
 import { noteUpdate } from "./dwtimeline.js";
 
 export interface QueuedMsg {
@@ -32,14 +33,11 @@ const promptQueues = new Map<string, QueuedMsg[]>();
 let queueSeq = 0;
 const saveQueues = () => persistJson("queues.json", Object.fromEntries(promptQueues));
 
-/** Downstream capabilities the flush needs — injected once by sessionload at
- *  module init. isBusy: "turn in flight or drain gate shut" → don't dequeue. */
-let busy: (id: string) => boolean = () => false;
+/** dispatchPrompt lives downstream in sessionprompt — injecting it keeps
+ *  this storage module from importing its consumer (same-level sessionlive
+ *  import for the busy check is fine: leaf, no cycle). */
 let dispatch: (ctx: ApiContext, id: string, m: QueuedMsg) => void = () => {};
-export function bindQueueDeps(deps: {
-  isBusy: (id: string) => boolean;
-  dispatch: (ctx: ApiContext, id: string, m: QueuedMsg) => void;
-}) { busy = deps.isBusy; dispatch = deps.dispatch; }
+export function bindQueueDeps(deps: { dispatch: (ctx: ApiContext, id: string, m: QueuedMsg) => void }) { dispatch = deps.dispatch; }
 
 /** Restore queues.json — sessionload calls this from its boot hook. */
 export function restoreQueues(dir: string) {
@@ -87,7 +85,7 @@ export function queueRemove(ctx: ApiContext, id: string, qid: string): boolean {
 export function queueFlush(ctx: ApiContext, id: string) {
   // Leave the queue untouched while busy — dequeuing into a dead-end
   // dispatch would silently drop the message.
-  if (busy(id)) return;
+  if (inflight.has(id) || isDraining()) return;
   const q = promptQueues.get(id);
   const next = q?.shift();
   if (!next) return;
