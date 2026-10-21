@@ -9,7 +9,7 @@
 // Failure handling: child exit or 3 consecutive /api/health failures → restart
 // (orphan acp cleanup in between). >5 restarts in 5min → 60s backoff. The
 // backend runs with DEVIN_WEB_SUPERVISED=1 — its own drain-restart becomes a
-// plain process.exit, we respawn it (no respawn.mjs chain inside production).
+// plain process.exit, we respawn it (immediate-exit model — no drain chain).
 // Install/boot persistence lives in devin-web.mjs `install` (platform-native).
 // Logs: <dataDir>/supervisor.log; backend stdout → <dataDir>/server.log.
 import http from "node:http";
@@ -350,3 +350,4 @@ process.on("uncaughtException", (e) => log(`supervisor uncaught: ${e.stack || e}
 process.on("unhandledRejection", (e) => log(`supervisor unhandledRejection: ${e}`));
 process.on("SIGTERM", () => { killBackend().finally(() => process.exit(0)); });
 process.on("SIGINT", () => { killBackend().finally(() => process.exit(0)); });
+

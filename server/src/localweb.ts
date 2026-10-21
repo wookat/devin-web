@@ -1003,10 +1003,11 @@ export async function handleLocalWb(ctx: ApiContext, req: IncomingMessage, res: 
           setTimeout(() => process.exit(0), 400);
         };
         if (p === "/api/admin/redeploy") {
-          const b = spawn("cmd.exe", ["/c", "npm", "run", "build"], {
-            cwd: repoRoot, stdio: "inherit", windowsHide: true,
-          });
+          const b = process.platform === "win32"
+            ? spawn(process.env.ComSpec || "cmd.exe", ["/d", "/s", "/c", "npm run build"], { cwd: repoRoot, stdio: "inherit", windowsHide: true })
+            : spawn("npm", ["run", "build"], { cwd: repoRoot, stdio: "inherit" });
           b.on("exit", (code) => { if (code === 0) respawn(); else console.error(`[redeploy] build failed (${code}) — staying up`); });
+          b.on("error", (e) => console.error(`[redeploy] build spawn failed: ${e.message} — staying up`));
         } else respawn();
         return true;
       }

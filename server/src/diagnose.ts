@@ -9,7 +9,7 @@ import path from "node:path";
 import { execFile } from "node:child_process";
 import { promisify } from "node:util";
 import type { ApiContext } from "./routes.js";
-import { isDraining, drainSince, inflight, restartSession, listLocalSessions } from "./sessionio.js";
+import { isDraining, drainSince, inflight, restartSession, listLocalSessions, markGracefulExit } from "./sessionio.js";
 
 const execFileP = promisify(execFile);
 
@@ -24,16 +24,27 @@ interface Check {
   fix?: string; // repair action id that resolves this check
 }
 
-/** `devin.exe acp` children whose parent pid is already dead — they keep
+/** `devin acp` children whose parent pid is already dead — they keep
  * holding session locks after a hard restart, which is why "send" errors
- * with session_locked until they die. Windows-only probe; 0 on other OS. */
+ * with session_locked until they die. win32 → CIM process table;
+ * POSIX → `ps` scan + ppid liveness probe. */
 async function orphanAcps(): Promise<number[]> {
-  if (process.platform !== "win32") return [];
+  if (process.platform === "win32") {
+    try {
+      const { stdout } = await execFileP("powershell", ["-NoProfile", "-Command",
+        "Get-CimInstance Win32_Process -Filter \"name='devin.exe'\" | Where-Object { $_.CommandLine -match 'acp' -and -not (Get-Process -Id $_.ParentProcessId -ErrorAction SilentlyContinue) } | Select-Object -ExpandProperty ProcessId"],
+        { timeout: 15000, windowsHide: true });
+      return stdout.trim().split(/\r?\n/).map(Number).filter(Boolean);
+    } catch { return []; }
+  }
   try {
-    const { stdout } = await execFileP("powershell", ["-NoProfile", "-Command",
-      "Get-CimInstance Win32_Process -Filter \"name='devin.exe'\" | Where-Object { $_.CommandLine -match 'acp' -and -not (Get-Process -Id $_.ParentProcessId -ErrorAction SilentlyContinue) } | Select-Object -ExpandProperty ProcessId"],
-      { timeout: 15000, windowsHide: true });
-    return stdout.trim().split(/\r?\n/).map(Number).filter(Boolean);
+    const { stdout } = await execFileP("ps", ["-ax", "-o", "pid=,ppid=,args="], { timeout: 15000 });
+    const dead = (pid: number) => { try { process.kill(pid, 0); return false; } catch { return true; } };
+    return stdout.split("\n")
+      .map(l => l.trim().match(/^(\d+)\s+(\d+)\s+(.*)$/))
+      .filter((m): m is RegExpMatchArray => !!m && /\bdevin\b/.test(m[3]) && /\bacp\b/.test(m[3])
+        && Number(m[2]) !== 1 && dead(Number(m[2])))
+      .map(m => Number(m[1]));
   } catch { return []; }
 }
 
@@ -60,7 +71,7 @@ export async function diagnose(ctx: ApiContext): Promise<{ ok: boolean; checks: 
   // drain gate — expected transient during deploys, so warn not fail
   const draining = isDraining();
   checks.push({ id: "drain", group: "service", label: "Drain (deploy gate)", level: draining ? "warn" : "ok",
-    detail: draining ? `deploy in progress — waiting ${Math.round((Date.now() - drainSince()) / 1000)}s on in-flight turns; sends 503 until it clears` : "not draining",
+    detail: draining ? `restarting — sends 503 for the ~${Math.round((Date.now() - drainSince()) / 1000)}s exit window` : "not draining",
     fix: draining ? "restart-now" : undefined });
 
   // inflight turns — live work, warn with a force-stop escape
@@ -161,7 +172,12 @@ export async function repair(ctx: ApiContext, fixes: string[] | "all"): Promise<
         results[fix] = "cleared — next boot won't replay them";
       } else if (fix === "restart-now") {
         results[fix] = "exiting — supervisor respawns immediately";
-        setTimeout(() => { console.error("[repair] hard exit requested by user"); process.exit(0); }, 400);
+        setTimeout(() => {
+          console.error("[repair] restart requested by user");
+          markGracefulExit();       // open-turns survive for auto-resume
+          ctx.manager.killAll();    // no orphaned acp holding session locks
+          process.exit(0);
+        }, 400);
       } else results[fix] = "unknown fix";
     } catch (e) { results[fix] = `failed: ${e instanceof Error ? e.message : String(e)}`; }
   }
