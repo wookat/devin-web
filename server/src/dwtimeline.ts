@@ -62,6 +62,9 @@ interface DwItem {
   /** read of an image file: workspace path for inline preview via file-raw. */
   image?: { path: string };
   callout?: "error" | "warning" | "info";
+  /** Machine tag on dw_notice rows: "conflict" (session open elsewhere) or
+   * "error:<stage>" — lets the client localize/actionable-render it. */
+  notice_kind?: string;
   suffix?: string;
   worklog?: "output" | "input";
   raw_type: string;
@@ -564,7 +567,16 @@ function tlPush(st: TlState, e: { ts: number; seq?: number; update: Record<strin
   // but a flush point: produced files settle onto the turn's final reply.
   if (kind === "dw_turn_end") { flushProduced(st, dirty, true); return; }
   if (kind === "dw_notice") {
-    push({ id, ts: iso, kind: "status", title: String(u.notice ?? ""), callout: "info", raw_type: "status_update" });
+    const notice = String(u.notice ?? "");
+    // Machine-readable notice classification so the client can render an
+    // actionable card instead of raw English. "already open in another
+    // process" = the session is owned by another acp/desktop instance —
+    // the fix lives outside this UI (close it there), hence a dedicated kind.
+    const errStage = /^错误\[(\w+)\]:/.exec(notice)?.[1];
+    const noticeKind = /already open in another process/i.test(notice)
+      ? "conflict"
+      : errStage ? `error:${errStage}` : undefined;
+    push({ id, ts: iso, kind: "status", title: notice, callout: errStage ? "error" : "info", notice_kind: noticeKind, raw_type: "status_update" });
     return;
   }
   // mode/config churn is composer state, not transcript rows

@@ -567,7 +567,9 @@
     "done": "完成",
     "inProgress": "进行中",
     "viewStepChanges": "查看此步骤的变更",
-    "noLinkedPr": "该事件无关联 PR"
+    "noLinkedPr": "该事件无关联 PR",
+    "conflictTitle": "该会话已在另一个进程中打开",
+    "conflictBody": "它可能正开着于 Devin 桌面端或另一个 devin acp 实例——同一条会话同一时间只能由一个控制方使用。请在那里关闭它，然后回到这里重发。"
   },
   "dir": {
     "default": "默认目录",

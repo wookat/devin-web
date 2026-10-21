@@ -196,6 +196,9 @@ export interface TimelineItem {
   suffix?: string
   /** Prominent callout variant (official ReportBlockerCard banner). */
   callout?: 'error' | 'warning' | 'info'
+  /** dw_notice machine tag: 'conflict' = session open in another process;
+   * 'error:<stage>' otherwise. Localizes the card into actionable guidance. */
+  notice_kind?: string
   subagent?: { finished: boolean; failed: boolean; actions?: { label: string; ts: string }[]; truncated?: boolean; agentId?: string; title?: string; task?: string; profile?: string; model?: string; isBackground?: boolean; depth?: number; summary?: string }
   /** Official scripted_tools_group children (tool rows emitted inside the script). */
   nested?: { label: string; ts: string }[]
@@ -381,23 +384,27 @@ export function BrowserPreviewChip({ item }: { item: TimelineItem }) {
 
 /** Official prominent callout (`ReportBlockerCard` hard/soft-blocked banner): variant-tinted card with title + headline. */
 export function CalloutCard({ item, timestamp }: { item: TimelineItem; timestamp?: string }) {
+  const { t } = useTranslation()
+  const conflict = item.notice_kind === 'conflict'
   const v = item.callout || 'warning'
   const tone = v === 'error'
     ? 'border-red-500/30 bg-red-500/[0.06] text-red-700 dark:text-red-300'
     : v === 'info'
       ? 'border-blue-500/30 bg-blue-500/[0.06] text-blue-700 dark:text-blue-300'
       : 'border-amber-500/30 bg-amber-500/[0.06] text-amber-700 dark:text-amber-300'
-  const Icon = v === 'error' ? XCircle : v === 'info' ? AlertCircle : AlertTriangle
+  const Icon = conflict ? Monitor : v === 'error' ? XCircle : v === 'info' ? AlertCircle : AlertTriangle
   return (
     <div className="my-2 w-full min-w-0" data-eid={item.id} data-testid="transcript-report-blocker">
       <div className={cn('flex items-start gap-2.5 rounded-[12px] border px-3 py-2.5', tone)}>
         <Icon size={16} className="mt-0.5 shrink-0" />
         <div className="min-w-0 flex-1">
           <div className="flex items-start gap-2">
-            <span className="min-w-0 flex-1 text-[13px] font-medium leading-[18px]">{item.title}</span>
+            <span className="min-w-0 flex-1 text-[13px] font-medium leading-[18px]">{conflict ? t('tl.conflictTitle') : item.title}</span>
             {timestamp && <span className="shrink-0 text-[12px] leading-[18px] text-muted-foreground">{timestamp}</span>}
           </div>
-          {item.body && <p className="mt-0.5 break-words text-[13px] leading-[18px] text-foreground">{item.body}</p>}
+          {conflict && <p className="mt-0.5 break-words text-[13px] leading-[18px] text-foreground">{t('tl.conflictBody')}</p>}
+          {conflict && <p className="mt-1 break-words font-mono text-[11px] leading-[15px] opacity-60">{item.title}</p>}
+          {!conflict && item.body && <p className="mt-0.5 break-words text-[13px] leading-[18px] text-foreground">{item.body}</p>}
         </div>
       </div>
     </div>

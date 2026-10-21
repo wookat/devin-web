@@ -567,7 +567,9 @@
     "done": "done",
     "inProgress": "In progress",
     "viewStepChanges": "View changes from this step",
-    "noLinkedPr": "This event has no linked PR"
+    "noLinkedPr": "This event has no linked PR",
+    "conflictTitle": "This session is open in another process",
+    "conflictBody": "It is likely open in the Devin desktop app or another devin acp instance — a session can only be driven by one owner at a time. Close it there, then resend here."
   },
   "dir": {
     "default": "Default directory",
