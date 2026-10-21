@@ -32,6 +32,14 @@ const execFileP = promisify(execFile);
 const execP = promisify(exec);
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 
+// A stray async rejection must not kill the process — Node ≥15 exits on
+// unhandledRejection by default, and a long-lived server has fire-and-forget
+// paths (auto-resume, broker calls) whose failures are per-request, not
+// fatal. Log loudly; the supervisor still restarts us on a REAL exit.
+process.on("unhandledRejection", (e) => {
+  console.error("[unhandledRejection]", e instanceof Error ? e.stack ?? e.message : e);
+});
+
 // ---- args ----------------------------------------------------------------
 const args = process.argv.slice(2);
 function argValue(flag: string): string | undefined {

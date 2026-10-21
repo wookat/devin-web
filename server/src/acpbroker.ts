@@ -54,7 +54,14 @@ function connectCtl(): Promise<Ctl | null> {
       for (const p of pending.values()) p.rej(e);
       pending.clear();
     };
-    sock.once("connect", () => sock.write(`${JSON.stringify({ ctl: 1 })}\n`));
+    // Ready on CONNECT, not first data: the broker's ctl channel never speaks
+    // unsolicited — waiting for a first line deadlocks every call behind the
+    // 5s timer and reports a live broker as "unavailable".
+    sock.once("connect", () => {
+      sock.write(`${JSON.stringify({ ctl: 1 })}\n`);
+      ready = true;
+      resolve({ call, onExit, close });
+    });
     sock.on("data", (d) => {
       buf += d.toString("utf8");
       let i;
@@ -67,7 +74,6 @@ function connectCtl(): Promise<Ctl | null> {
         pending.delete(m.req as number);
         m.ok ? p.res(m) : p.rej(new Error(String(m.error ?? "broker error")));
       }
-      if (!ready) { ready = true; resolve({ call, onExit, close }); }
     });
     const dead = () => { fail(new Error("broker control channel closed")); if (!ready) resolve(null); ctlPromise = null; };
     sock.once("error", dead);

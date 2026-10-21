@@ -109,9 +109,15 @@ export class DevinAcp {
     // Broker mode: the broker process owns the child — a backend restart
     // leaves it alive and the next boot adopts it (see adoptBrokered). SSH
     // agents stay direct: ssh2-shim channels are in-process objects, not
-    // child processes a broker can hold.
+    // child processes a broker can hold. A broker outage degrades to DIRECT
+    // spawn rather than a failed spawn — the ctl channel self-heals on the
+    // next attempt (turns just lose restart-survival for this process).
     if (brokerEnabled && !ssh) {
-      return DevinAcp.startBrokered(cwd, terminal, ev, agent, extraEnv, account, poolKey);
+      try {
+        return await DevinAcp.startBrokered(cwd, terminal, ev, agent, extraEnv, account, poolKey);
+      } catch (e) {
+        console.warn(`[acp] broker spawn failed (${String((e as Error)?.message ?? e).slice(0, 120)}) — falling back to direct spawn`);
+      }
     }
     // Windows npm CLIs are .cmd/.ps1 shims — Node ≥20.12 refuses to spawn
     // them without a shell (EINVAL). agent.shell routes through %ComSpec%.

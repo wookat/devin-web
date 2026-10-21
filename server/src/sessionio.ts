@@ -918,7 +918,10 @@ export async function autoResumeInterrupted(ctx: ApiContext) {
     t.resumeCount = (t.resumeCount ?? 0) + 1;
     openTurnsSave(ctx);
     console.error(`[auto-resume] ${id}: interrupted turn → "继续" (attempt ${t.resumeCount})`);
-    try { dispatchPrompt(ctx, id, "继续"); } catch (e) { console.error(`[auto-resume] ${id} failed`, e); }
+    // Promise-bearing dispatch — a sync try would let the rejection escape
+    // to unhandledRejection (which used to kill the whole backend).
+    try { void Promise.resolve(dispatchPrompt(ctx, id, "继续")).catch((e) => console.error(`[auto-resume] ${id} dispatch failed`, e)); }
+    catch (e) { console.error(`[auto-resume] ${id} failed`, e); }
   }
 }
 
