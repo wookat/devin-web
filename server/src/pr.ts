@@ -84,9 +84,14 @@ function parsePatch(patch: string | null | undefined): { before_lines: [number, 
 }
 
 const rg = (g: any) => (g?.nodes ?? g?.edges?.map((e: any) => e.node) ?? []).filter((x: any) => x && (x.users?.totalCount ?? x.users?.total_count ?? 1) > -1);
+// GraphQL ReactionContent enums → the REST names the write path + UI use.
+const REACT_NAME: Record<string, string> = {
+  THUMBS_UP: "+1", THUMBS_DOWN: "-1", LAUGH: "laugh", HOORAY: "hooray",
+  CONFUSED: "confused", HEART: "heart", ROCKET: "rocket", EYES: "eyes",
+};
 const reactions = (groups: any[]) => (groups ?? [])
   .filter((g: any) => (g.users?.totalCount ?? 0) > 0)
-  .map((g: any) => ({ content: g.content, count: g.users.totalCount, viewer_reacted: !!g.viewerHasReacted }));
+  .map((g: any) => ({ content: REACT_NAME[g.content] ?? String(g.content).toLowerCase(), count: g.users.totalCount, viewer_reacted: !!g.viewerHasReacted }));
 const cmOf = (n: any) => ({
   id: String(n.databaseId ?? n.id), body: n.body ?? "", login: n.author?.login ?? "",
   avatar_url: n.author?.avatarUrl ?? "", is_bot: /\[bot\]|bot$/i.test(n.author?.login ?? ""),
@@ -385,7 +390,16 @@ export async function handlePrRoute(ctx: ApiContext, sub: string, m: string, req
       if (body.start_review) {
         // No `event:` — a review created without an event IS the pending review
         // (PENDING is not a PullRequestReviewEvent; omitting it leaves it pending).
-        await ghGql(`mutation(${decls.join(",")}){addPullRequestReview(input:{pullRequestId:$p,threads:[{${thread}}]}){pullRequestReview{id}}}`, vars);
+        // DraftPullRequestReviewThread rejects `subjectType`, so a FILE-level
+        // comment can't ride the batch threads[] input — create the pending
+        // review first, then attach the thread via pullRequestReviewId.
+        if (line == null) {
+          const rv = await ghGql(`mutation($p:ID!){addPullRequestReview(input:{pullRequestId:$p}){pullRequestReview{id}}}`, { p: d._nodeId });
+          const rid = rv?.data?.addPullRequestReview?.pullRequestReview?.id;
+          await ghGql(`mutation($p:ID!,$r:ID!,$path:String!,$b:String!){addPullRequestReviewThread(input:{pullRequestId:$p,pullRequestReviewId:$r,path:$path,subjectType:FILE,body:$b}){thread{id}}}`, { p: d._nodeId, r: rid, path: fp, b: text });
+        } else {
+          await ghGql(`mutation(${decls.join(",")}){addPullRequestReview(input:{pullRequestId:$p,threads:[{${thread}}]}){pullRequestReview{id}}}`, vars);
+        }
       } else {
         await ghGql(`mutation(${decls.join(",")}){addPullRequestReviewThread(input:{pullRequestId:$p,${thread}}){thread{id}}}`, vars);
       }
