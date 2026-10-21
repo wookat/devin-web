@@ -371,13 +371,16 @@ export default function Settings() {
             {tab === 'service' && <Section title={t('set.service')}>
               <ServiceStatus />
               <Row title={t('set.accessKey')} desc={t('set.accessKeyDesc')}>
-                <input
-                  type="password"
-                  defaultValue={adminKey()}
-                  placeholder={t('set.accessKeyPh')}
-                  onBlur={(e) => setAdminKey(e.target.value.trim())}
-                  className="h-7 w-[220px] rounded-[6px] border border-border bg-background px-2 text-[12px] outline-none focus:ring-1 focus:ring-ring"
-                />
+                <span className="flex items-center gap-2">
+                  <input
+                    type="password"
+                    defaultValue={adminKey()}
+                    placeholder={t('set.accessKeyPh')}
+                    onBlur={(e) => setAdminKey(e.target.value.trim())}
+                    className="h-7 w-[220px] rounded-[6px] border border-border bg-background px-2 text-[12px] outline-none focus:ring-1 focus:ring-ring"
+                  />
+                  <KeyState />
+                </span>
               </Row>
               <Row title={t('set.restart')} desc={t('set.restartDesc')}>
                 <Btn2 onClick={() => {
@@ -552,6 +555,28 @@ const useSuperStatus = () => {
 }
 const fmtUptime = (s: number) =>
   s >= 3600 ? `${Math.floor(s / 3600)}h ${Math.floor((s % 3600) / 60)}m` : s >= 60 ? `${Math.floor(s / 60)}m ${s % 60}s` : `${s}s`
+
+/** Whether the server actually enforces the admin key — /api/health
+ * reports keyRequired so the row shows real state, not a guess. */
+function KeyState() {
+  const { t } = useTranslation()
+  const [req, setReq] = useState<boolean | null>(null)
+  useEffect(() => {
+    let alive = true
+    void fetch('/api/health').then((r) => r.json())
+      .then((j) => alive && setReq(!!j.keyRequired))
+      .catch(() => alive && setReq(null))
+    return () => { alive = false }
+  }, [])
+  if (req === null) return null
+  return (
+    <span className={req
+      ? 'rounded-full bg-tint-green px-2 py-px text-[11px] text-green'
+      : 'rounded-full bg-tint-secondary px-2 py-px text-[11px] text-muted-foreground'}>
+      {req ? t('set.keyOn') : t('set.keyOff')}
+    </span>
+  )
+}
 
 function ServiceStatus() {
   const { t } = useTranslation()

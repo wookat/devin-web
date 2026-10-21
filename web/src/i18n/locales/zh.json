@@ -1048,7 +1048,9 @@
     "wsInterrupt": "打断并立即发送",
     "accessKey": "访问密钥",
     "accessKeyDesc": "对应服务端 DEVIN_WEB_ADMIN_KEY——设置后 /api/admin/* 需携带此密钥（留空 = 本机开放模式）",
-    "accessKeyPh": "粘贴或输入密钥…"
+    "accessKeyPh": "粘贴或输入密钥…",
+    "keyOn": "已启用",
+    "keyOff": "未启用（开放模式）"
   },
   "as": {
     "resetConfirm": "重置分享链接？旧链接将立即失效。",

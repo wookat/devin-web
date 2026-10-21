@@ -23,8 +23,14 @@ export function currentUser(_req: IncomingMessage): Principal {
 
 const ADMIN_KEY = process.env.DEVIN_WEB_ADMIN_KEY ?? "";
 
+/** Whether the key gate is actually armed — /api/health surfaces this so
+ * the settings UI can show 已启用/未启用 instead of guessing. */
+export function adminKeyRequired(): boolean {
+  return !!ADMIN_KEY && featureEnabled("adminKey");
+}
+
 /** /api/admin/* gate. Returns the principal, or null → respond 401. */
 export function requireAdmin(req: IncomingMessage): Principal | null {
-  if (!ADMIN_KEY || !featureEnabled("adminKey")) return LOCAL_USER;
+  if (!adminKeyRequired()) return LOCAL_USER;
   return req.headers["x-admin-key"] === ADMIN_KEY ? LOCAL_USER : null;
 }

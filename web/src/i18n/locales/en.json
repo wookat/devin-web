@@ -1048,7 +1048,9 @@
     "wsInterrupt": "Interrupt and send now",
     "accessKey": "Access key",
     "accessKeyDesc": "Matches server DEVIN_WEB_ADMIN_KEY — when set, /api/admin/* requires this key (empty = open local mode)",
-    "accessKeyPh": "Paste or enter key…"
+    "accessKeyPh": "Paste or enter key…",
+    "keyOn": "Enforced",
+    "keyOff": "Off (open mode)"
   },
   "as": {
     "resetConfirm": "Reset the share link? The old link stops working immediately.",
