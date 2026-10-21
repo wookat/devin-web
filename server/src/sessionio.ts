@@ -21,6 +21,7 @@ import {
 import { queueList, queueAdd, queueRemove, queueFlush, restoreQueues, bindQueueDeps, type QueuedMsg } from "./sessionqueue.js";
 import { noteSendError, lastSendError, recentSendErrors, restoreSendErrors, type SendCheckStep } from "./sendhealth.js";
 import { openTurns, openTurnsLoad, openTurnsSave, clearOpenTurns, type OpenTurn } from "./sessionturns.js";
+import { loadedOn, sessionHost, loadEpoch, loadInflight, isSessionPinned } from "./sessionplace.js";
 import { loadReg, saveReg, meta, noteLastUsed } from "./dwstore.js";
 import {
   noteUpdate, persistTail, buildTimeline, buildTimelineFrom, snippet, tlCache,
@@ -32,35 +33,17 @@ import {
 // session helpers
 // ---------------------------------------------------------------------------
 
-/** acp instance → sessions already `session/load`ed on it (dies with the process). */
-const loadedOn = new WeakMap<object, Set<string>>();
-
-/** sessionId → the acp process that has it loaded. Once a session is open on a
- * process it is LOCKED to it — later ops must reuse this host even if
- * sessionCwd gets rewritten by session/list (otherwise the pooled acp for the
- * *other* cwd tries to load it and devin reports session_locked). */
-const sessionHost = new Map<string, DevinAcp>();
-/** Server boot — the acp subagent registry is process-local, so any agent
+/** Placement state (loadedOn/sessionHost/loadEpoch/loadInflight/
+ * isSessionPinned) lives in sessionplace.ts — a leaf module imported above.
+ * Server boot — the acp subagent registry is process-local, so any agent
  * spawned before this process started has no live handle by definition. */
 const BOOT_TS = Date.now();
-/** sessionId → when its acp-side subagent registry was last emptied — every
- * successful session/load resets it (post-replay resumes answer "doesn't
- * exist in my current session"). Failed loads keep the old registry, so the
- * stamp is only written on success inside doLoad. */
-const loadEpoch = new Map<string, number>();
 /** `parent:agentId` — a resume already failed with a missing-handle error
  * for these; short-circuits further relays instead of burning a turn each
  * time the user retries a dead child. */
 const deadSubs = new Set<string>();
 export function markSubagentDead(parent: string, aid: string) {
   deadSubs.add(`${parent}:${aid}`);
-}
-/** sessionId → the acp process that holds its session/load lock. Exported so
- * the generic routes never rewrite a pinned session's cwd mapping. */
-
-function isSessionPinned(id: string): boolean {
-  const host = sessionHost.get(id);
-  return !!host && !host.exited;
 }
 
 /** Config caches + durable-state primitives live in sessioncfg.ts — imported
@@ -73,14 +56,7 @@ export function setCfgCacheDir(dir: string) {
   restoreSendErrors(dir);
 }
 
-/** sessionId → in-flight history replay + the acp ACTUALLY performing it.
- * Opening a session page fires several endpoints at once (detail/timeline/
- * config/todos/…); without dedup EACH of them started its own
- * `session/load`, replaying the same history N times — the main reason cold
- * opens felt so slow. The acp is recorded because a joining caller may have
- * resolved a DIFFERENT pool (sessionCwd unset → primaryCwd fallback) — only
- * the recorded host actually opened the session and may be marked/pinned. */
-const loadInflight = new Map<string, { acp: DevinAcp; p: Promise<void> }>();
+/** loadInflight moved to sessionplace.ts (placement leaf). */
 
 /** Post-replay echo guard: devin re-pushes the tail of the last streamed
  * message as live deltas right after session/load. Two signatures:
@@ -1383,8 +1359,7 @@ function snippetFromLog(ctx: ApiContext, id: string): string {
 
 
 export {
-  loadedOn, sessionHost, isSessionPinned,
-  loadInflight, loadOnce, hostFor, loadCooldown,
+  loadOnce, hostFor, loadCooldown,
   touchSessionActivity,
   ensureLoaded, acpForId, restartSession,
   sessionConfig, cloudVersionToModel,

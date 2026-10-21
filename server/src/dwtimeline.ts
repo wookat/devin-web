@@ -6,7 +6,7 @@
 import fs from "node:fs";
 import path from "node:path";
 import type { ApiContext } from "./routes.js";
-import { loadInflight } from "./sessionio.js";
+import { loadInflight } from "./sessionplace.js";
 
 // ---------------------------------------------------------------------------
 // ACP session-update log → web TimelineItem[]

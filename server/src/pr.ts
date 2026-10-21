@@ -9,9 +9,10 @@ import type { ApiContext } from "./routes.js";
 import { loadReg, saveReg, meta } from "./dwstore.js";
 import {
   acpForId, promptWithRetry, isDraining,
-  inflight, loadedOn, sessionHost,
+  inflight,
 } from "./sessionio.js";
 import { captureLoadResponse } from "./sessioncfg.js";
+import { loadedOn, sessionHost } from "./sessionplace.js";
 
 // Never pass free-text via -f/-F: gh reads `@path` values as files (comment
 // bodies starting with a mention would break) and brace/escape handling is

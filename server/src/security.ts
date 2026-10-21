@@ -12,8 +12,9 @@ import type { IncomingMessage, ServerResponse } from "node:http";
 import type { ApiContext } from "./routes.js";
 import { loadReg, saveReg, meta, type DwSecurityScan, type DwSecurityFinding } from "./dwstore.js";
 import { agentById } from "./agents.js";
-import { dispatchPrompt, loadedOn, sessionHost, isDraining } from "./sessionio.js";
+import { dispatchPrompt, isDraining } from "./sessionio.js";
 import { captureLoadResponse } from "./sessioncfg.js";
+import { loadedOn, sessionHost } from "./sessionplace.js";
 import { remapLegacyCwd } from "./store.js";
 
 function json(res: ServerResponse, code: number, body: unknown) {

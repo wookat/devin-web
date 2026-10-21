@@ -26,8 +26,8 @@ import {
   type DwItem,
 } from "./dwtimeline.js";
 import {
-  loadedOn, sessionHost, hostFor,
-  isSessionPinned, loadInflight, ensureLoaded, acpForId, restartSession,
+  hostFor,
+  ensureLoaded, acpForId, restartSession,
   sessionConfig, recordTerminal, inflight, resolveUpload, dispatchPrompt, drainSince,
   beginDrain, isDraining, markGracefulExit,
   sessionStatus, interruptedTurn, listSubagents, subagentTimeline, subPingActive, listLocalSessions,
@@ -37,6 +37,7 @@ import {
 } from "./sessionio.js";
 import { queueList, queueAdd, queueRemove, queueFlush } from "./sessionqueue.js";
 import { noteSendError, recentSendErrors } from "./sendhealth.js";
+import { loadedOn, sessionHost, loadInflight, isSessionPinned } from "./sessionplace.js";
 import { responseCfg, captureLoadResponse, type SessionConfig, type ConfigOption } from "./sessioncfg.js";
 import {
   personaState, personaMode, askPersona, personaHumanMessage, decisionsTail,
