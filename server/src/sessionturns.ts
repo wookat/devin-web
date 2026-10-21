@@ -22,6 +22,16 @@ export interface OpenTurn {
   kind?: "continue" | "resend";
   /** Auto-resume attempts already made — caps a resume→crash→resume loop. */
   resumeCount?: number;
+  /** JSON-RPC request id the in-flight prompt was sent under — journaled by
+   *  the acp wire sniffer so a `session/prompt` response that outlives its
+   *  byte stream (backend restart dead window; the SDK drops it as
+   *  "response to unknown request") can still be correlated back to the
+   *  turn it answers. */
+  reqId?: number | string;
+  /** Broker acp id the prompt's connection attached to — reqIds are
+   *  per-connection counters, so dead-window correlation needs the process
+   *  identity to disambiguate same-id turns on different acp children. */
+  acpId?: string;
 }
 
 export const openTurns = new Map<string, OpenTurn>();
@@ -36,8 +46,43 @@ export function openTurnsLoad(ctx: ApiContext) {
   } catch { /* no file / corrupt — nothing to recover */ }
 }
 
-export function openTurnsSave(_ctx: ApiContext) {
+export function openTurnsSave(_ctx?: ApiContext) {
   persistJson("open-turns.json", Object.fromEntries(openTurns));
+}
+
+/** Record the JSON-RPC request id a session's open turn was dispatched
+ *  under (called by the acp wire sniffer the moment the session/prompt
+ *  frame is written). Rides the normal journal write-through so a
+ *  post-restart backend inherits the correlation. No-op when the session
+ *  has no open-turn entry — prompts dispatched outside dispatchPrompt
+ *  never journaled one. */
+export function notePromptReq(sessionId: string, reqId: number | string, acpId?: string | null): void {
+  const t = openTurns.get(sessionId);
+  if (!t) return;
+  t.reqId = reqId;
+  t.acpId = acpId ?? undefined;
+  openTurnsSave();
+}
+
+/** The session whose journaled open turn carries this JSON-RPC request id —
+ *  a response arriving for an id the live connection never sent is a
+ *  dead-window prompt response. `acpId` is the sniffing acp's brokerId:
+ *  entries journaled for a DIFFERENT acp's connection are skipped, and
+ *  unattributed entries (legacy journal) match only when unique. */
+export function sessionByReqId(reqId: number | string, acpId?: string | null): string | null {
+  const key = String(reqId);
+  let loose: string | null = null;
+  let looseN = 0;
+  for (const [sid, t] of openTurns) {
+    if (t.reqId == null || String(t.reqId) !== key) continue;
+    if (t.acpId != null && acpId != null) {
+      if (t.acpId === acpId) return sid;
+      continue; // journaled to a different acp's connection
+    }
+    loose = sid;
+    looseN++;
+  }
+  return looseN === 1 ? loose : null;
 }
 
 /** Drop open-turn entries — all of them, or one id. The tombstone case: an

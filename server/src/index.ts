@@ -16,7 +16,8 @@ import { SessionLog } from "./sessionlog.js";
 import { handleApi, type ApiContext } from "./routes.js";
 import { handleLocalWb } from "./lweb/index.js";
 import { recordTerminal } from "./sessionview.js";
-import { isReplayEcho, autoResumeInterrupted, adoptBrokerAcps, setCfgCacheDir } from "./sessionload.js";
+import { isReplayEcho, autoResumeInterrupted, adoptBrokerAcps, setCfgCacheDir, resolveTurnByReq } from "./sessionload.js";
+import { notePromptReq } from "./sessionturns.js";
 import { watchSubRateLimit } from "./sessionsub.js";
 import { loadInflight, sessionHost } from "./sessionplace.js";
 import { touchSessionActivity, markGracefulExit } from "./sessionlive.js";
@@ -357,6 +358,14 @@ const manager = new AcpManager({
       hub.broadcast({ type: "account_limited", account: name, sessionId, message });
     }
     rotate("rate-limit");
+  },
+  // Wire sniffer → turn journal: the prompt's JSON-RPC id rides open-turns
+  // so a response replayed/arriving after a restart still correlates.
+  onPromptRequest: (acp, sessionId, requestId) => {
+    notePromptReq(sessionId, requestId, acp.brokerId);
+  },
+  onPromptResponse: (acp, requestId, sessionId, ok, errorMessage) => {
+    resolveTurnByReq(ctx, acp, requestId, sessionId, ok, errorMessage);
   },
 });
 

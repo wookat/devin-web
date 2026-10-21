@@ -1,5 +1,5 @@
 import { spawn, type ChildProcess, type ChildProcessByStdio } from "node:child_process";
-import { Readable, Writable } from "node:stream";
+import { Readable, Writable, Transform } from "node:stream";
 import type { ReadableStream, WritableStream } from "node:stream/web";
 import { EventEmitter } from "node:events";
 import path from "node:path";
@@ -24,10 +24,34 @@ export interface DevinAcpEvents {
   onPermissionResolved: (requestId: string) => void;
   onTerminalOutput: (terminalId: string, sessionId: string, data: string) => void;
   onTerminalExit: (terminalId: string, sessionId: string, exitCode: number | null, signal: string | null) => void;
+  /** Wire-sniffed client→agent `session/prompt` request: `requestId` is the
+   * JSON-RPC id this connection dispatched the turn under — consumers
+   * journal it on the session's open-turn entry so a response that outlives
+   * the byte stream (dead window over a restart) can still be correlated. */
+  onPromptRequest: (acp: DevinAcp, sessionId: string, requestId: number | string) => void;
+  /** Wire-sniffed agent→client JSON-RPC response. `sessionId` is set when
+   * the id matches a request THIS connection sent; null when the id is
+   * unknown to the connection — the dead-window case (the SDK drops those
+   * as "response to unknown request", but they may answer a journaled
+   * open turn from the previous backend's connection). */
+  onPromptResponse: (
+    acp: DevinAcp,
+    requestId: number | string,
+    sessionId: string | null,
+    ok: boolean,
+    errorMessage?: string,
+  ) => void;
   onExit: (code: number | null) => void;
 }
 
 let permissionSeq = 0;
+
+// Wire-sniffer substring prefilters (same trick as acp-broker.mjs): a JSON-RPC
+// frame is only parsed when the tag bytes are actually present.
+const METHOD_TAG = Buffer.from('"method"');
+const ID_TAG = Buffer.from('"id"');
+const RESULT_TAG = Buffer.from('"result"');
+const ERROR_TAG = Buffer.from('"error"');
 
 /** Pipe the broker's control-channel exit event into the fake proc's 'exit'
  * so DevinAcp's real code + cleanup lands (socket 'close' also emits
@@ -70,6 +94,11 @@ export class DevinAcp {
   /** Set when a kill was requested while turns were in flight — the process
    * is unpooled immediately but dies only once the last turn settles. */
   retireAfterIdle = false;
+  /** JSON-RPC requests THIS connection sent without yet seeing a response —
+   * reqId (a per-connection counter) → {method, sessionId}. Written by the
+   * wire sniffer, reaped on response or exit; lets an inbound response be
+   * attributed to the method (and prompt session) that asked for it. */
+  readonly pendingReqs = new Map<string, { method: string; sessionId?: string }>();
 
   private constructor(
     cwd: string,
@@ -276,8 +305,98 @@ export class DevinAcp {
       }
     };
 
+    // ---- wire sniffer -------------------------------------------------------
+    // Tap the raw stdio BEFORE the web-stream adapters: outbound request
+    // frames (stdin write wrap) are recorded in `self.pendingReqs`, inbound
+    // frames (a PassThrough-style Transform tee on stdout) resolve them.
+    // This is what lets a session/prompt response emitted during a backend
+    // restart be attributed to its turn: the frame arrives on the NEW
+    // connection carrying an id it never sent — the SDK drops it as
+    // "response to unknown request", but the sniffer still sees it.
+    // Sniffing is strictly passive — the tee forwards every byte in order
+    // and the stdin wrap only observes chunks before forwarding them.
+    let inBuf = Buffer.alloc(0);
+    const sniffOutLine = (line: Buffer) => {
+      if (!line.includes(METHOD_TAG) || !line.includes(ID_TAG)) return;
+      let m: Record<string, unknown>;
+      try { m = JSON.parse(line.toString("utf8")) as Record<string, unknown>; } catch { return; }
+      if (m == null || (typeof m.id !== "number" && typeof m.id !== "string") || typeof m.method !== "string") return;
+      const rec: { method: string; sessionId?: string } = { method: m.method };
+      if (m.method === "session/prompt") {
+        const sid = (m.params as { sessionId?: unknown } | undefined)?.sessionId;
+        if (typeof sid === "string" && sid) rec.sessionId = sid;
+      }
+      self.pendingReqs.set(String(m.id), rec);
+      if (rec.sessionId) ev.onPromptRequest(self, rec.sessionId, m.id);
+    };
+    let outBuf = Buffer.alloc(0);
+    const sniffInLine = (line: Buffer) => {
+      // Prefilter: every notification frame carries "method" (tool output
+      // inside it routinely contains "id"/"result"/"error" text) — skip it
+      // before JSON.parse. A response carries "id" + ("result"|"error").
+      if (line.includes(METHOD_TAG) || !line.includes(ID_TAG)) return;
+      if (!line.includes(RESULT_TAG) && !line.includes(ERROR_TAG)) return;
+      let m: Record<string, unknown>;
+      try { m = JSON.parse(line.toString("utf8")) as Record<string, unknown>; } catch { return; }
+      if (m == null || (typeof m.id !== "number" && typeof m.id !== "string") || m.method != null) return;
+      if (!("result" in m) && !("error" in m)) return;
+      const ok = "result" in m;
+      const errMsg = !ok && m.error && typeof m.error === "object"
+        ? String((m.error as { message?: unknown }).message ?? "request failed")
+        : undefined;
+      const key = String(m.id);
+      const rec = self.pendingReqs.get(key);
+      if (rec) {
+        self.pendingReqs.delete(key);
+        if (rec.method === "session/prompt" && rec.sessionId) {
+          ev.onPromptResponse(self, m.id, rec.sessionId, ok, errMsg);
+        }
+      } else {
+        // Unknown to this connection — maybe a dead-window prompt response
+        // for a journaled open turn; the consumer decides via reqId lookup.
+        ev.onPromptResponse(self, m.id, null, ok, errMsg);
+      }
+    };
+    const sniffChunk = (c: unknown): Buffer =>
+      Buffer.isBuffer(c) ? c : typeof c === "string" ? Buffer.from(c, "utf8") : Buffer.from(c as Uint8Array);
+    const procStdin = proc.stdin!;
+    const rawWrite = procStdin.write.bind(procStdin) as (chunk: unknown, ...rest: unknown[]) => boolean;
+    (procStdin as unknown as { write: (chunk: unknown, ...rest: unknown[]) => boolean }).write = (chunk, ...rest) => {
+      try {
+        inBuf = Buffer.concat([inBuf, sniffChunk(chunk)]);
+        for (;;) {
+          const nl = inBuf.indexOf(0x0a);
+          if (nl < 0) break;
+          const line = inBuf.subarray(0, nl);
+          inBuf = inBuf.subarray(nl + 1);
+          sniffOutLine(line);
+        }
+      } catch { /* sniffing never disturbs the wire */ }
+      return rawWrite(chunk, ...rest);
+    };
+    const stdoutTee = new Transform({
+      transform(chunk: Buffer, _enc, cb) {
+        try {
+          outBuf = Buffer.concat([outBuf, chunk]);
+          for (;;) {
+            const nl = outBuf.indexOf(0x0a);
+            if (nl < 0) break;
+            const line = outBuf.subarray(0, nl);
+            outBuf = outBuf.subarray(nl + 1);
+            sniffInLine(line);
+          }
+        } catch { /* sniffing never disturbs the wire */ }
+        cb(null, chunk);
+      },
+    });
+    // Route agent output THROUGH the tee — the SDK consumes the tee (bytes
+    // unchanged, 'data' stays fully delivered), the sniffer taps frames.
+    // Works identically for ChildProcess pipes and broker attach sockets.
+    proc.stdout!.on("error", (e) => stdoutTee.destroy(e));
+    proc.stdout!.pipe(stdoutTee);
+
     const input = Writable.toWeb(proc.stdin!) as WritableStream<Uint8Array>;
-    const output = Readable.toWeb(proc.stdout!) as ReadableStream<Uint8Array>;
+    const output = Readable.toWeb(stdoutTee) as ReadableStream<Uint8Array>;
     const stream = acp.ndJsonStream(input, output);
     const conn = new acp.ClientSideConnection(() => clientWithExt, stream);
 
@@ -302,6 +421,7 @@ export class DevinAcp {
         ev.onPermissionResolved(requestId);
       }
       self.pendingPermissions.clear();
+      self.pendingReqs.clear();
       if (!handshaken) {
         failStart(err ?? new Error(`${agent.command} exited (code ${code}) before the ACP handshake completed`));
       }

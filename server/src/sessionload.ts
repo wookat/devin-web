@@ -17,7 +17,7 @@ import { initCfgState, isSessionLocked, loadWithRetry, captureLoadResponse } fro
 import { queueList, queueFlush, restoreQueues, bindQueueDeps, queuedSessions } from "./sessionqueue.js";
 import { restoreSendErrors } from "./sendhealth.js";
 import { dispatchPrompt, releaseBusy, bindPromptDeps } from "./sessionprompt.js";
-import { openTurns, openTurnsLoad, openTurnsSave, type OpenTurn } from "./sessionturns.js";
+import { openTurns, openTurnsLoad, openTurnsSave, sessionByReqId, type OpenTurn } from "./sessionturns.js";
 import {loadedOn, sessionHost, loadEpoch, loadInflight, markLoadedOn } from "./sessionplace.js";
 import { inflight, adoptedTurns, lastActivity, touchSessionActivity, isDraining } from "./sessionlive.js";
 import { pingSubagent } from "./sessionsub.js";
@@ -402,6 +402,94 @@ export function interruptedTurn(ctx: ApiContext, id: string): OpenTurn | null {
 // adoptedTurns set lives in sessionlive.ts — see imports.
 const ADOPT_SILENCE_MS = 90_000;
 
+/** Early-settle hooks for adopted turns — armed by watchAdoptedTurn, fired
+ *  by resolveTurnByReq when the turn's terminal prompt response is sniffed
+ *  on the wire (instant settle instead of the silence heuristic). */
+const adoptedSettle = new Map<string, (ok: boolean, errMsg?: string) => void>();
+
+/** Prompt responses sniffed on the wire BEFORE/without an adopted-turn
+ *  watcher armed (ring replay floods in during init, ahead of the adoption
+ *  scan's session discovery). Stashed so the watcher consumes them at arm
+ *  time — its done() path keeps the crash-attach resync — and flushed on a
+ *  bounded delay for sessions the adoption scan never re-discovers.
+ *  `turn` pins the exact open-turn entry the response belonged to: a live
+ *  dispatch replacing the entry makes the stash stale. */
+const sniffedSettles = new Map<string, { ok: boolean; errMsg?: string; turn: OpenTurn }>();
+let sniffedSettleTimer: NodeJS.Timeout | null = null;
+const SNIFF_SETTLE_DELAY_MS = 30_000;
+
+/** Shared settle for a recovered turn — durable turn boundary + open-turn
+ *  journal clear + tail persist + queued-message flush + status push.
+ *  ok=false means the prompt RPC itself errored — mark like a failed
+ *  dispatch (dw_notice) rather than a clean dw_turn_end. */
+function settleRecoveredTurn(ctx: ApiContext, id: string, ok = true, errMsg?: string) {
+  ctx.sessionLog.append(id, ok
+    ? { sessionUpdate: "dw_turn_end" }
+    : { sessionUpdate: "dw_notice", notice: `错误[prompt]: ${(errMsg ?? "prompt request failed").slice(0, 200)}` });
+  if (openTurns.delete(id)) openTurnsSave(ctx);
+  persistTail(ctx, id);
+  noteUpdate(ctx, id);
+  queueFlush(ctx, id);
+  ctx.hub.broadcast({ type: "session_status", sessionId: id, status: sessionStatus(ctx, id).status });
+}
+
+/** Settle every stashed dead-window response that still has live evidence —
+ *  armed watchers get the early-settle (resync-aware) path; journaled turns
+ *  nothing claimed settle directly. Called on the stash delay AND at the
+ *  end of adoptBrokerAcps (sessions its scan never re-discovered). */
+function flushSniffedSettles(ctx: ApiContext) {
+  sniffedSettleTimer = null;
+  for (const [id, s] of [...sniffedSettles]) {
+    sniffedSettles.delete(id);
+    const early = adoptedSettle.get(id);
+    if (early) { early(s.ok, s.errMsg); continue; }
+    if (inflight.has(id) || !openTurns.has(id) || openTurns.get(id) !== s.turn) continue;
+    console.error(`[wire] ${id}: dead-window prompt response ${s.ok ? "ok" : "error"} — settling instantly`);
+    settleRecoveredTurn(ctx, id, s.ok, s.errMsg);
+  }
+}
+
+/** Instant-settle entry for the acp wire sniffer. `sessionId` non-null means
+ *  the response answers a request THIS connection sent — a live
+ *  dispatchPrompt already owns that settle (nothing to do). `sessionId`
+ *  null means the id matched no pending request on the connection — a
+ *  dead-window response for a turn journaled before a restart, correlated
+ *  back through the open-turn reqId (notePromptReq). */
+export function resolveTurnByReq(
+  ctx: ApiContext,
+  acp: DevinAcp,
+  reqId: number | string,
+  sessionId: string | null,
+  ok: boolean,
+  errMsg?: string,
+): void {
+  openTurnsLoad(ctx);
+  let id = sessionId;
+  if (!id) {
+    id = sessionByReqId(reqId, acp.brokerId);
+    if (!id) return;
+    // The response can only belong to a session this acp hosts — a turn
+    // already re-pinned elsewhere is that host's business.
+    const host = sessionHost.get(id) ?? ctx.manager.forSession(id);
+    if (host && host !== acp) return;
+  }
+  const early = adoptedSettle.get(id);
+  if (early) { early(ok, errMsg); return; }
+  // A live dispatchPrompt owns the settle — the SDK resolves its prompt
+  // promise; writing the boundary here too would duplicate dw_turn_end.
+  if (inflight.has(id)) return;
+  const t = openTurns.get(id);
+  if (!t) return;
+  // No watcher armed yet — stash so watchAdoptedTurn can consume the
+  // response through its bookkeeping path when the adoption scan reaches
+  // the session; the flush timer covers sessions never re-discovered.
+  sniffedSettles.set(id, { ok, errMsg, turn: t });
+  if (!sniffedSettleTimer) {
+    sniffedSettleTimer = setTimeout(() => flushSniffedSettles(ctx), SNIFF_SETTLE_DELAY_MS);
+    sniffedSettleTimer.unref();
+  }
+}
+
 function watchAdoptedTurn(ctx: ApiContext, id: string, acp: DevinAcp, resync = false) {
   adoptedTurns.add(id);
   inflight.add(id);
@@ -410,39 +498,44 @@ function watchAdoptedTurn(ctx: ApiContext, id: string, acp: DevinAcp, resync = f
   ctx.hub.broadcast({ type: "session_status", sessionId: id, status: sessionStatus(ctx, id).status });
   const t0 = Date.now();
   touchSessionActivity(id);
-  const settle = () => {
-    ctx.sessionLog.append(id, { sessionUpdate: "dw_turn_end" });
-    if (openTurns.delete(id)) openTurnsSave(ctx);
-    persistTail(ctx, id);
-    noteUpdate(ctx, id);
-    queueFlush(ctx, id);
-    ctx.hub.broadcast({ type: "session_status", sessionId: id, status: sessionStatus(ctx, id).status });
+  let finished = false;
+  const done = (err: boolean, ok = true, errMsg?: string) => {
+    if (finished) return;
+    finished = true;
+    clearInterval(iv);
+    adoptedSettle.delete(id);
+    adoptedTurns.delete(id);
+    inflight.delete(id);
+    releaseBusy(ctx, acp, id);
+    if (err) {
+      // The host died mid-adopted-turn — keep the open-turns entry so the
+      // NEXT boot's auto-resume replays it (same contract as any crash).
+      noteUpdate(ctx, id);
+      ctx.hub.broadcast({ type: "session_status", sessionId: id, status: sessionStatus(ctx, id).status });
+    } else if (resync) {
+      // Crash attach (no offset): the dead window's frames are gone —
+      // heal the transcript hole via a bounded session/load resync
+      // BEFORE the turn-end marker, so the gap isn't fossilized under
+      // dw_turn_end. Dedup machinery (replayGuard + tail-anchor merge)
+      // covers the overlap.
+      void Promise.race([
+        loadOnce(ctx, acp, id, ctx.sessionCwd.get(id) ?? acp.cwd).catch(() => {}),
+        new Promise((r) => setTimeout(r, 60_000)),
+      ]).finally(() => settleRecoveredTurn(ctx, id, ok, errMsg));
+    } else {
+      settleRecoveredTurn(ctx, id, ok, errMsg);
+    }
   };
+  adoptedSettle.set(id, (ok, errMsg) => done(false, ok, errMsg));
+  // A prompt response may already have been sniffed (ring replay lands
+  // during init, before this watcher's arm) — consume it instantly through
+  // done() so resync + busy bookkeeping stay exact.
+  const sniffed = sniffedSettles.get(id);
+  if (sniffed && openTurns.get(id) === sniffed.turn) {
+    sniffedSettles.delete(id);
+    setTimeout(() => done(false, sniffed.ok, sniffed.errMsg), 0);
+  }
   const iv = setInterval(() => {
-    const done = (err: boolean) => {
-      clearInterval(iv);
-      adoptedTurns.delete(id);
-      inflight.delete(id);
-      releaseBusy(ctx, acp, id);
-      if (err) {
-        // The host died mid-adopted-turn — keep the open-turns entry so the
-        // NEXT boot's auto-resume replays it (same contract as any crash).
-        noteUpdate(ctx, id);
-        ctx.hub.broadcast({ type: "session_status", sessionId: id, status: sessionStatus(ctx, id).status });
-      } else if (resync) {
-        // Crash attach (no offset): the dead window's frames are gone —
-        // heal the transcript hole via a bounded session/load resync
-        // BEFORE the turn-end marker, so the gap isn't fossilized under
-        // dw_turn_end. Dedup machinery (replayGuard + tail-anchor merge)
-        // covers the overlap.
-        void Promise.race([
-          loadOnce(ctx, acp, id, ctx.sessionCwd.get(id) ?? acp.cwd).catch(() => {}),
-          new Promise((r) => setTimeout(r, 60_000)),
-        ]).finally(settle);
-      } else {
-        settle();
-      }
-    };
     if (acp.exited) return done(true);
     const last = Math.max(lastActivity.get(id) ?? 0, t0);
     if (Date.now() - last > ADOPT_SILENCE_MS) {
@@ -524,6 +617,10 @@ export async function adoptBrokerAcps(ctx: ApiContext) {
     }
   }
   console.error(`[adopt] ${adopted}/${alive.length} broker acp(s) re-attached, ${turns} in-flight turn(s) resumed-streaming`);
+  // Dead-window responses sniffed before the scan armed their watchers were
+  // stashed; sessions the scan re-discovered consume them at arm time —
+  // flush settles the rest (turn whose session was never re-listed).
+  flushSniffedSettles(ctx);
 }
 
 export async function autoResumeInterrupted(ctx: ApiContext) {

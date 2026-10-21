@@ -97,10 +97,22 @@ ssh2 channels are in-process objects, not children a broker can hold.
 Boot order in index.ts: `adoptBrokerAcps(ctx)` (broker list → per-acp
 attach + `session/list` → rebuild loadedOn/sessionHost/bySession; sessions
 with surviving open-turns get `watchAdoptedTurn` — pseudo-inflight +
-busySessions protection + a 90s-silence settle detector, since the turn's
+busySessions protection + a 90s-silence settle FALLBACK, since the turn's
 prompt response died on the old byte stream) is AWAITED before the orphan
 sweep + `autoResumeInterrupted` so resume never double-prompts a turn that
-is still running. `manager.adopt` re-seats pooled acp by their journaled
+is still running. Instant settle: the acp wire sniffer (acp.ts — stdin
+write-wrap + stdout Transform tee in DevinAcp.init, strictly passive)
+records every outbound reqId in `acp.pendingReqs` and journals each
+session/prompt's reqId + broker acpId onto its open-turn entry
+(`notePromptReq`, sessionturns); an inbound response whose id matches a
+pending prompt → `resolveTurnByReq` (sessionload) — and, more importantly,
+a response matching NOTHING this connection sent (the SDK's "response to
+unknown request") → `sessionByReqId` scans the journaled open-turns for
+that reqId hosted on the same acp → the armed watcher's early-settle hook
+runs the same done() (resync included); responses sniffed before the
+watcher arms are stashed (`sniffedSettles`, consumed at arm time, 30s
+flush for never-re-discovered sessions). Genuine wedges still fall to the
+90s silence detector. `manager.adopt` re-seats pooled acp by their journaled
 pool `key` (spawn args thread it through); dedicated agents journal a bare
 `agent.id` key and are re-bound via `bindSession`. Exit-event dedup:
 broker ctl `ev:exit` → fake proc 'exit' AND socket 'close' → same 'exit' —
