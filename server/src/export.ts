@@ -1,4 +1,5 @@
 import { zipSync, strToU8 } from "fflate";
+import { MSG_KINDS } from "./sessiondb.js";
 import type { SessionLog } from "./sessionlog.js";
 
 interface AnyUpdate {
@@ -11,7 +12,7 @@ function textOf(content: unknown): string {
   return c?.text ?? "";
 }
 
-const CHUNK_KINDS = new Set(["user_message_chunk", "agent_message_chunk", "agent_thought_chunk"]);
+const CHUNK_KINDS = MSG_KINDS;
 
 /**
  * Merge consecutive streaming chunks of the same kind into one entry, so the

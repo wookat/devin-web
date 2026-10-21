@@ -31,7 +31,10 @@ import crypto from "node:crypto";
 const BLOB_MIN = 16 * 1024;
 const OFFLOAD_MIN = 64 * 1024;
 const IMPORT_BATCH = 4000;
-const MSG_KINDS = new Set(["user_message_chunk", "agent_message_chunk", "agent_thought_chunk"]);
+/** Which sessionUpdate kinds are streamable text chunks — the storage layer
+ *  owns this fact (it decides blob-offload eligibility); export.ts reuses it
+ *  for transcript merging. */
+export const MSG_KINDS = new Set(["user_message_chunk", "agent_message_chunk", "agent_thought_chunk"]);
 
 export interface StoredEntry {
   ts: number;

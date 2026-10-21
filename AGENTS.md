@@ -172,9 +172,14 @@ route code never changes.
   rewrites `sessionCwd` and would bounce it to the other pooled acp).
 - Server module map (sessionio/localweb are GONE — full graph in
   docs/architecture.md): `lweb/` = the web-frontend route family
-  (`index.ts` dispatch shell · `admin.ts` the /api/admin/* tree ·
-  `share.ts` the /api/share/* tree · `session.ts` sessionSubs +
-  sub:* machinery · `common.ts` HTTP utils). `sessionload.ts` = the
+  (`index.ts` dispatch shell · `admin/` five route families —
+  system/registry/fsbrowse/newsession/persession · `share.ts` the
+  /api/share/* tree · `session.ts` sessionSubs + sub:* machinery).
+  `httputil.ts` = the ONE json/readBody/readJson/UNSUPPORTED set.
+  `sessionlog.ts` = append/ring/mirror/DB session log;
+  `sessionsidecars.ts` = the subagent sidecar projection hung on
+  `sessionLog.sidecars` (`.sub.<aid>`/`.subs`/`.subscan` files).
+  `sessionload.ts` = the
   load/recovery engine: hostFor (the ONE session→acp resolver:
   dedicated → sessionHost pin → cwd pool), doLoad/loadOnce + replay
   dedup, adoptBrokerAcps/watchAdoptedTurn, autoResumeInterrupted,
