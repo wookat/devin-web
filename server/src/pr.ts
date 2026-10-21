@@ -95,10 +95,12 @@ const cmOf = (n: any) => ({
 });
 
 const PR_QUERY = `query($o:String!,$r:String!,$n:Int!){
+ viewer{login}
  repository(owner:$o,name:$r){
   pullRequest(number:$n){
    id title number state isDraft merged body url changedFiles additions deletions
    baseRefName headRefName headRefOid mergeable mergedBy{login}
+   reviews(last:20, states:[PENDING]){nodes{databaseId author{login}}}
    author{login avatarUrl}
    assignees(first:20){nodes{login avatarUrl}}
    reviewRequests(first:20){nodes{requestedReviewer{... on User{login avatarUrl}}}}
@@ -116,6 +118,8 @@ async function fetchDetail(ref: PrRef) {
   ]);
   const pr = g?.data?.repository?.pullRequest;
   if (!pr) throw new Error("PR not found (check gh auth + repo access)");
+  const viewer = g?.data?.viewer?.login;
+  const pendRev = rg(pr.reviews).find((v: any) => v.author?.login === viewer);
   let checks: any[] = [];
   try {
     const cr = await ghRest(`repos/${ref.owner}/${ref.repo}/commits/${pr.headRefOid}/check-runs?per_page=100`);
@@ -140,6 +144,7 @@ async function fetchDetail(ref: PrRef) {
     })),
     commits: rg(pr.commits).map((n: any) => ({ sha: n.commit.oid, headline: n.commit.messageHeadline, author: n.commit.author?.user?.login ?? n.commit.author?.name ?? "", committed_at: n.commit.committedDate })),
     head_sha: pr.headRefOid,
+    viewer_pending_review_id: pendRev?.databaseId ?? null,
     assignees: rg(pr.assignees).map((u: any) => ({ login: u.login, avatar_url: u.avatarUrl })),
     requested_reviewers: rg(pr.reviewRequests).map((n: any) => ({ login: n.requestedReviewer?.login ?? "", avatar_url: n.requestedReviewer?.avatarUrl ?? "" })),
     labels: rg(pr.labels).map((l: any) => ({ name: l.name, color: l.color })),
@@ -394,6 +399,37 @@ export async function handlePrRoute(ctx: ApiContext, sub: string, m: string, req
     }
     if (sub === "pr-comment-delete" && m === "POST") {
       await tryIssueThenPull(ref, String(body.comment_id ?? ""), (base) => ghWrite(base, "DELETE", {}));
+      json(res, 200, { ok: true, error: null });
+      return true;
+    }
+    if (sub === "pr-submit-review" && m === "POST") {
+      // Submit the viewer's pending review via REST events endpoint (official
+      // semantics: POST gh/reviews/{id}/submit {event}). Events are whitelisted;
+      // body is optional review summary text.
+      const event = String(body.event ?? "").toUpperCase();
+      if (!["APPROVE", "REQUEST_CHANGES", "COMMENT"].includes(event)) {
+        json(res, 400, { ok: false, error: "event must be APPROVE, REQUEST_CHANGES, or COMMENT" });
+        return true;
+      }
+      const g = await ghGql(`query($o:String!,$r:String!,$n:Int!){viewer{login} repository(owner:$o,name:$r){pullRequest(number:$n){reviews(last:20, states:[PENDING]){nodes{databaseId author{login}}}}}}`, { o: ref.owner, r: ref.repo, n: ref.num });
+      const me = g?.data?.viewer?.login;
+      const rid = rg(g?.data?.repository?.pullRequest?.reviews).find((v: any) => v.author?.login === me)?.databaseId;
+      if (!rid) { json(res, 400, { ok: false, error: "no pending review" }); return true; }
+      const payload: Record<string, unknown> = { event };
+      if (body.body) payload.body = String(body.body);
+      await ghWrite(`repos/${ref.owner}/${ref.repo}/pulls/${ref.num}/reviews/${rid}/events`, "POST", payload);
+      json(res, 200, { ok: true, error: null });
+      return true;
+    }
+    if (sub === "pr-merge" && m === "POST") {
+      const method = ["merge", "squash", "rebase"].includes(String(body.method ?? "")) ? String(body.method) : "merge";
+      const r = await ghWrite(`repos/${ref.owner}/${ref.repo}/pulls/${ref.num}/merge`, "PUT", { merge_method: method });
+      json(res, 200, { ok: !!r?.merged, sha: r?.sha ?? null, error: r?.merged ? null : String(r?.message ?? "not merged") });
+      return true;
+    }
+    if (sub === "pr-close" && m === "POST") {
+      const reopen = String(body.op ?? "") === "reopen";
+      await ghWrite(`repos/${ref.owner}/${ref.repo}/pulls/${ref.num}`, "PATCH", { state: reopen ? "open" : "closed" });
       json(res, 200, { ok: true, error: null });
       return true;
     }

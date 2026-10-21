@@ -723,7 +723,7 @@ function ReactionRow({ commentId, reactions, reacting, onToggle }: { commentId: 
  */
 function PrPanel({ id, prUrl }: { id: string; prUrl: string }) {
   const { t } = useTranslation()
-  const [data, setData] = useState<{ info: PrInfo | null; merge_status: Record<string, unknown> | null; checks: { checks?: { name: string; status?: string; conclusion?: string; description?: string; details_url?: string; is_required?: boolean }[] } | null; comments?: { id: string; body: string; login: string; avatar_url: string; is_bot: boolean; created_at: string; reactions?: { content: string; count: number; viewer_reacted: boolean }[]; url?: string }[]; threads?: { id: string; path: string; line: number; is_resolved: boolean; is_outdated: boolean; comments: { id: string; body: string; login: string; avatar_url: string; is_bot: boolean; created_at: string; reactions?: { content: string; count: number; viewer_reacted: boolean }[]; url?: string; pending?: boolean }[] }[]; commits?: { sha: string; headline: string; author: string; committed_at: string }[]; head_sha?: string; assignees?: { login: string; avatar_url: string }[]; requested_reviewers?: { login: string; avatar_url: string }[]; labels?: { name: string; color: string }[]; author?: { login: string; avatar_url: string; is_bot: boolean } | null } | null>(null)
+  const [data, setData] = useState<{ info: PrInfo | null; merge_status: Record<string, unknown> | null; checks: { checks?: { name: string; status?: string; conclusion?: string; description?: string; details_url?: string; is_required?: boolean }[] } | null; comments?: { id: string; body: string; login: string; avatar_url: string; is_bot: boolean; created_at: string; reactions?: { content: string; count: number; viewer_reacted: boolean }[]; url?: string }[]; threads?: { id: string; path: string; line: number; is_resolved: boolean; is_outdated: boolean; comments: { id: string; body: string; login: string; avatar_url: string; is_bot: boolean; created_at: string; reactions?: { content: string; count: number; viewer_reacted: boolean }[]; url?: string; pending?: boolean }[] }[]; commits?: { sha: string; headline: string; author: string; committed_at: string }[]; head_sha?: string; viewer_pending_review_id?: number | null; assignees?: { login: string; avatar_url: string }[]; requested_reviewers?: { login: string; avatar_url: string }[]; labels?: { name: string; color: string }[]; author?: { login: string; avatar_url: string; is_bot: boolean } | null } | null>(null)
   const [err, setErr] = useState<string | null>(null)
   const [sub, setSub] = useState<'changes' | 'bugs' | 'description' | 'discussion' | 'commits'>('changes')
   const [diffOpts, setDiffOpts] = useState<DiffOptsT>(readDiffOpts)
@@ -874,6 +874,46 @@ function PrPanel({ id, prUrl }: { id: string; prUrl: string }) {
     const r = await adminFetch<{ data: typeof data; error: string | null }>(`/api/admin/session/${id}/pr?pr_url=${encodeURIComponent(prUrl)}`)
     if (r.data) setData(r.data)
   }
+  // Official review-lifecycle writes: pending-review submit (events endpoint)
+  // and merge/close. Buttons render only in matching states (pending review →
+  // Submit review split; open+mergeable → Merge split) — same gating as the
+  // official review page.
+  const [actBusy, setActBusy] = useState(false)
+  const [actErr, setActErr] = useState('')
+  const [mergeOpen, setMergeOpen] = useState(false)
+  const [reviewOpen, setReviewOpen] = useState(false)
+  const [reviewBody, setReviewBody] = useState('')
+  const submitReview = async (event: string) => {
+    if (actBusy) return
+    setActBusy(true)
+    setActErr('')
+    try {
+      const r = await adminFetch<{ ok: boolean; error: string | null }>(`/api/admin/session/${id}/pr-submit-review`, { method: 'POST', body: JSON.stringify({ pr_url: prUrl, event, body: reviewBody.trim() || undefined }) })
+      if (!r.ok) { setActErr(r.error || 'failed'); return }
+      setReviewOpen(false)
+      setReviewBody('')
+      await refetchPr()
+    } catch {
+      setActErr('network error')
+    } finally {
+      setActBusy(false)
+    }
+  }
+  const mergePr = async (method: string) => {
+    if (actBusy) return
+    setActBusy(true)
+    setActErr('')
+    try {
+      const r = await adminFetch<{ ok: boolean; error: string | null }>(`/api/admin/session/${id}/pr-merge`, { method: 'POST', body: JSON.stringify({ pr_url: prUrl, method }) })
+      if (!r.ok) { setActErr(r.error || 'failed'); return }
+      setMergeOpen(false)
+      await refetchPr()
+    } catch {
+      setActErr('network error')
+    } finally {
+      setActBusy(false)
+    }
+  }
   // Official inline "Add a comment" (+) protocol (first-hand capture):
   // POST gh/review-threads {file_path, body, subject_type:"LINE", line, side:"RIGHT", pr_path},
   // then (single comment) POST gh/reviews/{pending_review_id}/submit {pr_path, event:"COMMENT"}.
@@ -939,6 +979,45 @@ function PrPanel({ id, prUrl }: { id: string; prUrl: string }) {
         <a href={reviewMirrorPath(repoPath, info?.number ?? '')} target="_blank" rel="noreferrer" className="flex items-center gap-1 text-[13px] text-muted-foreground hover:text-foreground">
           Full view <ArrowUpRight size={12} />
         </a>
+        {info?.state === 'open' && !info?.merged && data.viewer_pending_review_id != null && (
+          <div className="relative">
+            <button onClick={() => { setMergeOpen(false); setReviewOpen((o) => !o) }} className="flex cursor-pointer items-center gap-1 rounded-md border border-amber-500/50 bg-amber-500/10 px-2.5 py-1 text-[13px] font-medium text-amber-600 hover:bg-amber-500/20 dark:text-amber-400">
+              {t('pr.submitReview')} <ChevronDown size={12} />
+            </button>
+            {reviewOpen && (
+              <div className="absolute right-0 top-full z-30 mt-1 w-80 rounded-lg border border-border bg-background p-3 shadow-lg">
+                <textarea value={reviewBody} onChange={(e) => setReviewBody(e.target.value)} placeholder={t('pr.reviewBodyPh')} className="min-h-20 w-full resize-none rounded-md border border-border bg-background p-2 text-[13px] placeholder:text-muted-foreground" />
+                {actErr && <p className="mt-1 text-[12px] text-red-500">Failed: {actErr}</p>}
+                <div className="mt-2 flex justify-end gap-2">
+                  <button disabled={actBusy} onClick={() => void submitReview('COMMENT')} className="cursor-pointer rounded-md border border-border px-2.5 py-1 text-[12px] hover:bg-accent disabled:opacity-50">{t('pr.comment')}</button>
+                  <button disabled={actBusy} onClick={() => void submitReview('REQUEST_CHANGES')} className="cursor-pointer rounded-md border border-red-500/40 px-2.5 py-1 text-[12px] text-red-600 hover:bg-red-500/10 disabled:opacity-50 dark:text-red-400">{t('pr.requestChanges')}</button>
+                  <button disabled={actBusy} onClick={() => void submitReview('APPROVE')} className="cursor-pointer rounded-md bg-emerald-600 px-2.5 py-1 text-[12px] font-medium text-white hover:bg-emerald-700 disabled:opacity-50">{t('pr.approve')}</button>
+                </div>
+              </div>
+            )}
+          </div>
+        )}
+        {info?.state === 'open' && !info?.merged && (
+          <div className="relative">
+            <button
+              disabled={data.merge_status?.mergeable === 'CONFLICTING'}
+              onClick={() => { setReviewOpen(false); setMergeOpen((o) => !o) }}
+              className="flex cursor-pointer items-center gap-1 rounded-md bg-emerald-600 px-2.5 py-1 text-[13px] font-medium text-white hover:bg-emerald-700 disabled:cursor-not-allowed disabled:opacity-50"
+            >
+              {t('pr.merge')} <ChevronDown size={12} />
+            </button>
+            {mergeOpen && (
+              <div className="absolute right-0 top-full z-30 mt-1 min-w-[170px] rounded-lg border border-border bg-background p-1 shadow-lg">
+                {(['merge', 'squash', 'rebase'] as const).map((m) => (
+                  <button key={m} disabled={actBusy} onClick={() => void mergePr(m)} className="flex h-8 w-full cursor-pointer items-center rounded-md px-2.5 text-[13px] hover:bg-accent disabled:opacity-50">
+                    {m === 'merge' ? t('pr.mergeCreate') : m === 'squash' ? t('pr.mergeSquash') : t('pr.mergeRebase')}
+                  </button>
+                ))}
+                {actErr && <p className="px-2.5 py-1 text-[12px] text-red-500">Failed: {actErr}</p>}
+              </div>
+            )}
+          </div>
+        )}
         <div className="relative">
           <button onClick={() => setCommentOpen((o) => !o)} className="flex cursor-pointer items-center gap-1 rounded-md border border-border px-2.5 py-1 text-[13px] font-medium hover:bg-accent">
             Comment <ChevronDown size={12} />

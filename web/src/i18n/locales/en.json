@@ -797,7 +797,15 @@
     "current": "Current",
     "noCommits": "No commits.",
     "noDesc": "No description.",
-    "addCommentPh": "Add a comment..."
+    "addCommentPh": "Add a comment...",
+    "submitReview": "Submit review",
+    "reviewBodyPh": "Leave a review summary (optional)",
+    "requestChanges": "Request changes",
+    "approve": "Approve",
+    "merge": "Merge",
+    "mergeCreate": "Create a merge commit",
+    "mergeSquash": "Squash and merge",
+    "mergeRebase": "Rebase and merge"
   },
   "sp": {
     "st": {
