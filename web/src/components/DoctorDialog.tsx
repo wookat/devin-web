@@ -5,7 +5,8 @@ import { adminFetch } from '@/lib/api'
 import { cn } from '@/lib/utils'
 import { OCheck, OX } from './officialIcons'
 
-interface Check { id: string; label: string; ok: boolean; detail: string; group?: 'service' | 'session'; fix?: string }
+interface Check { id: string; label: string; level?: 'ok' | 'warn' | 'fail'; ok?: boolean; detail: string; group?: 'service' | 'session'; fix?: string }
+const levelOf = (c: Check) => c.level ?? (c.ok === false ? 'fail' : 'ok')
 
 /** "链路体检" — GET /api/admin/diagnose lists every hop (supervisor → drain →
  * inflight → acp pool → orphan lock-holders → session locks → pending replays →
@@ -40,7 +41,8 @@ export default function DoctorDialog({ onClose }: { onClose: () => void }) {
   }
 
   const fixable = checks?.filter(c => c.fix) ?? []
-  const bad = checks?.filter(c => !c.ok).length ?? 0
+  const fails = checks?.filter(c => levelOf(c) === 'fail').length ?? 0
+  const warns = checks?.filter(c => levelOf(c) === 'warn').length ?? 0
 
   return createPortal(
     <div className="fixed inset-0 z-[100] flex items-center justify-center bg-black/40" onMouseDown={(e) => { if (e.target === e.currentTarget) onClose() }}>
@@ -69,8 +71,8 @@ export default function DoctorDialog({ onClose }: { onClose: () => void }) {
               })}
             </ul>
             <div className="mt-4 flex items-center gap-2">
-              <span className={cn('text-[12px]', bad ? 'text-text-orange' : 'text-text-green')}>
-                {bad ? t('doc.failing', { n: bad }) : t('doc.allOk')}
+              <span className={cn('text-[12px]', fails ? 'text-text-red' : warns ? 'text-text-orange' : 'text-text-green')}>
+                {[fails ? t('doc.failing', { n: fails }) : '', warns ? t('doc.warning', { n: warns }) : '', !fails && !warns ? t('doc.allOk') : ''].filter(Boolean).join(' · ')}
               </span>
               <div className="ml-auto flex gap-2">
                 <button onClick={run} className="rounded-md border border-border bg-card px-3 py-1.5 text-[13px] font-medium hover:bg-tint-secondary">{t('doc.recheck')}</button>
@@ -93,8 +95,9 @@ function CheckRow({ c, fixing, result, onFix }: { c: Check; fixing: string | 'al
   const { t } = useTranslation()
   return (
     <li className="flex items-center gap-2.5 rounded-lg border border-border-secondary px-3 py-2">
-      <span className={cn('flex size-4 shrink-0 items-center justify-center rounded-full text-[10px] font-bold text-white', c.ok ? 'bg-green-600' : 'bg-red-500')}>
-        {c.ok ? <OCheck size={11} /> : '!'}
+      <span className={cn('flex size-4 shrink-0 items-center justify-center rounded-full text-[10px] font-bold text-white',
+        levelOf(c) === 'ok' ? 'bg-green-600' : levelOf(c) === 'warn' ? 'bg-amber-500' : 'bg-red-500')}>
+        {levelOf(c) === 'ok' ? <OCheck size={11} /> : '!'}
       </span>
       <div className="min-w-0 flex-1">
         <div className="text-[13px] font-medium text-foreground">{c.label}</div>

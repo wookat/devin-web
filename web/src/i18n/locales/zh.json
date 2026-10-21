@@ -1434,6 +1434,7 @@
     "rowDesc": "全链路自检：supervisor → drain → inflight → acp 池 → 锁/重放残留 → 磁盘 → 公网域名",
     "runBtn": "运行体检",
     "gService": "服务设施",
-    "gSession": "会话运行时"
+    "gSession": "会话运行时",
+    "warning": "{{n}} 项注意"
   }
 }

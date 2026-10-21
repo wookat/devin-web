@@ -16,7 +16,9 @@ const execFileP = promisify(execFile);
 interface Check {
   id: string;
   label: string;
-  ok: boolean;
+  /** ok = healthy · warn = expected transient/attention-only (drain during
+   * deploy, live turns, stale replays) · fail = actually broken */
+  level: 'ok' | 'warn' | 'fail';
   detail: string;
   group: 'service' | 'session'; // 服务设施层 vs 会话运行时层
   fix?: string; // repair action id that resolves this check
@@ -52,67 +54,92 @@ export async function diagnose(ctx: ApiContext): Promise<{ ok: boolean; checks: 
 
   // supervisor reachable (we're answering, but supervised flag tells the mode)
   const supervised = process.env.DEVIN_WEB_SUPERVISED === "1";
-  checks.push({ id: "supervisor", group: "service", label: "Supervisor", ok: supervised,
+  checks.push({ id: "supervisor", group: "service", label: "Supervisor", level: supervised ? "ok" : "fail",
     detail: supervised ? `pid ${process.ppid} · :7791 proxying :7792` : "bare backend — no supervisor/self-heal" });
 
-  // drain gate
+  // drain gate — expected transient during deploys, so warn not fail
   const draining = isDraining();
-  checks.push({ id: "drain", group: "service", label: "Drain (deploy gate)", ok: !draining,
-    detail: draining ? `draining ${Math.round((Date.now() - drainSince()) / 1000)}s — sends 503 until it clears` : "not draining",
+  checks.push({ id: "drain", group: "service", label: "Drain (deploy gate)", level: draining ? "warn" : "ok",
+    detail: draining ? `deploy in progress — waiting ${Math.round((Date.now() - drainSince()) / 1000)}s on in-flight turns; sends 503 until it clears` : "not draining",
     fix: draining ? "restart-now" : undefined });
 
-  // inflight turns — replays of huge logs look exactly like this and block sends
+  // inflight turns — live work, warn with a force-stop escape
   const inFl = [...inflight];
-  checks.push({ id: "inflight", group: "session", label: "In-flight turns", ok: inFl.length === 0,
+  checks.push({ id: "inflight", group: "session", label: "In-flight turns", level: inFl.length ? "warn" : "ok",
     detail: inFl.length ? `${inFl.length} running: ${inFl.join(", ")}` : "none",
     fix: inFl.length ? "stop-turns" : undefined });
 
   // acp host pool
   const procs = (ctx.manager.status() as { exited: boolean; busy: number }[]);
   const dead = procs.filter(p => p.exited).length;
-  checks.push({ id: "acp", group: "session", label: "Agent processes", ok: dead === 0,
+  checks.push({ id: "acp", group: "session", label: "Agent processes", level: dead ? "fail" : "ok",
     detail: `${procs.length} pooled · ${dead} exited · ${procs.reduce((a, p) => a + p.busy, 0)} busy` });
 
   // orphaned acp holding locks
   const orphans = await orphanAcps();
-  checks.push({ id: "orphans", group: "session", label: "Orphaned acp (lock holders)", ok: orphans.length === 0,
+  checks.push({ id: "orphans", group: "session", label: "Orphaned acp (lock holders)", level: orphans.length ? "fail" : "ok",
     detail: orphans.length ? `${orphans.length} zombie(s) holding session locks: ${orphans.join(",")}` : "none",
     fix: orphans.length ? "kill-orphans" : undefined });
 
-  // session locks held by other processes
+  // session locks held by other processes (desktop/CLI counts as legitimate holders → warn)
   let lockedIds: string[] = [];
   try {
     lockedIds = (await listLocalSessions(ctx)).filter(s => (s as { is_locked?: boolean }).is_locked).map(s => s.id);
   } catch {}
-  checks.push({ id: "locks", group: "session", label: "Session locks (other processes)", ok: lockedIds.length === 0,
+  checks.push({ id: "locks", group: "session", label: "Session locks (other processes)", level: lockedIds.length ? "warn" : "ok",
     detail: lockedIds.length ? `${lockedIds.length} locked: ${lockedIds.slice(0, 6).join(",")}${lockedIds.length > 6 ? "…" : ""}` : "none",
     fix: lockedIds.length ? "kill-orphans" : undefined });
 
-  // open-turns residue — entries here get auto-resumed (replayed) on next boot
-  const ot = Object.keys(openTurns(ctx));
-  checks.push({ id: "open-turns", group: "session", label: "Pending turn replays", ok: ot.length === 0,
-    detail: ot.length ? `${ot.length} will auto-resume: ${ot.join(", ")}` : "none",
-    fix: ot.length ? "clear-open-turns" : undefined });
+  // open-turns residue — entries whose resumeCount hit the cap (2) are stale
+  // and won't actually auto-resume: report each with its state.
+  const otMap = openTurns(ctx) as Record<string, { resumeCount?: number; text?: string }>;
+  const otEntries = Object.entries(otMap);
+  const pending = otEntries.filter(([, v]) => (v?.resumeCount ?? 0) < 2).map(([k]) => k);
+  const stale = otEntries.length - pending.length;
+  checks.push({ id: "open-turns", group: "session", label: "Pending turn replays",
+    level: pending.length ? "warn" : "ok",
+    detail: [
+      pending.length ? `${pending.length} will auto-resume: ${pending.join(", ")}` : "",
+      stale ? `${stale} stale (retry cap reached — won't resume)` : "",
+      !otEntries.length ? "none" : "",
+    ].filter(Boolean).join(" · "),
+    fix: pending.length ? "clear-open-turns" : undefined });
 
   // disk headroom on the data-dir volume
   try {
     const st = fs.statfsSync(ctx.store.dataDir);
     const freeGb = (st.bavail * st.bsize) / 1e9;
-    checks.push({ id: "disk", group: "service", label: "Disk free", ok: freeGb > 2,
+    checks.push({ id: "disk", group: "service", label: "Disk free", level: freeGb > 2 ? "ok" : "fail",
       detail: `${freeGb.toFixed(1)} GB free` });
   } catch {}
 
-  // public domain (best-effort — the box itself may lack outbound https)
-  try {
-    const r = await fetch("https://devin-web.zalize.com/api/health", { signal: AbortSignal.timeout(8000) });
-    checks.push({ id: "public", group: "service", label: "devin-web.zalize.com", ok: r.ok, detail: `HTTP ${r.status}` });
-  } catch (e) {
-    checks.push({ id: "public", group: "service", label: "devin-web.zalize.com", ok: false,
-      detail: `unreachable — ${e instanceof Error ? e.message : String(e)} (check cloudflared service)` });
+  // public reachability — the box itself often can't hairpin back through the
+  // tunnel, so check the LOCAL cloudflared daemon instead: it IS the tunnel.
+  if (process.platform === "win32") {
+    try {
+      const { stdout } = await execFileP("powershell", ["-NoProfile", "-Command",
+        "(Get-Service cloudflared -ErrorAction Stop).Status"], { timeout: 8000, windowsHide: true });
+      const running = /running/i.test(stdout.trim());
+      checks.push({ id: "public", group: "service", label: "Cloudflare tunnel (cloudflared)", level: running ? "ok" : "fail",
+        detail: running ? `cloudflared service Running → devin-web.zalize.com proxied here` : `cloudflared service ${stdout.trim() || "not found"} — public domain down` });
+    } catch {
+      checks.push({ id: "public", group: "service", label: "Cloudflare tunnel (cloudflared)", level: "fail",
+        detail: "cloudflared service missing — public domain down; site still works on :7791" });
+    }
+  } else {
+    try {
+      const r = await fetch("https://devin-web.zalize.com/api/health", { signal: AbortSignal.timeout(6000) });
+      checks.push({ id: "public", group: "service", label: "devin-web.zalize.com", level: r.ok ? "ok" : "warn", detail: `HTTP ${r.status}` });
+    } catch {
+      checks.push({ id: "public", group: "service", label: "devin-web.zalize.com", level: "warn",
+        detail: "unreachable from this box — may still work externally (hairpin)" });
+    }
   }
 
-  console.error(`[diagnose] ${checks.filter(c => !c.ok).length}/${checks.length} failing in ${Date.now() - t0}ms`);
-  return { ok: checks.every(c => c.ok), checks };
+  const fails = checks.filter(c => c.level === "fail").length;
+  const warns = checks.filter(c => c.level === "warn").length;
+  console.error(`[diagnose] ${fails} fail + ${warns} warn in ${Date.now() - t0}ms`);
+  return { ok: fails === 0, checks };
 }
 
 export async function repair(ctx: ApiContext, fixes: string[] | "all"): Promise<{ results: Record<string, string> }> {
