@@ -1048,7 +1048,13 @@ function dispatchPrompt(ctx: ApiContext, id: string, text: string, attachments: 
     .finally(() => {
       inflight.delete(id);
       ctx.hub.broadcast({ type: "session_status", sessionId: id, status: sessionStatus(ctx, id).status });
-      if (!gracefulExit && openTurns.delete(id)) openTurnsSave(ctx);
+      if (gracefulExit) {
+        // A deploy-killed resume never got a fair shot — refund the attempt.
+        // resumeCount only counts turns that failed NATURALLY; otherwise N
+        // restarts burn the cap and the entry parks as a forever tombstone.
+        const t = openTurns.get(id);
+        if (t?.resumeCount) { t.resumeCount--; openTurnsSave(ctx); }
+      } else if (openTurns.delete(id)) openTurnsSave(ctx);
       queueFlush(ctx, id);
     });
 }
