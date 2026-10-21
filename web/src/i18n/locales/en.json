@@ -1011,7 +1011,31 @@
     "verdictBlocked": "blocked",
     "lastErrRecent": "Recent send errors",
     "sendErrStage": "stage",
-    "diagFlow": "send path ↓ browser → ingress → dispatch → resolve → fan-out (per-agent lane: CLI/proc/auth) → merge → WS return"
+    "diagFlow": "send path ↓ browser → ingress → dispatch → resolve → fan-out (per-agent lane: CLI/proc/auth) → merge → WS return",
+    "tab": {
+      "general": "General",
+      "session": "Sessions",
+      "sidebar": "Sidebar",
+      "accounts": "Accounts",
+      "resources": "Agent resources",
+      "service": "Service",
+      "diag": "Diagnostics",
+      "logs": "Logs",
+      "about": "About"
+    },
+    "tabDesc": {
+      "general": "Send shortcut, theme, language",
+      "session": "Auto-resume interrupted turns",
+      "sidebar": "Session list grouping and display",
+      "accounts": "Devin account pool and rotation",
+      "resources": "Project/global rules and skills",
+      "service": "Service status, restart and rebuild",
+      "diag": "Chain doctor, module and send checks",
+      "logs": "Service logs",
+      "about": "Version and build info"
+    },
+    "hub": "Overview",
+    "hubDesc": "All settings for this local instance"
   },
   "as": {
     "resetConfirm": "Reset the share link? The old link stops working immediately.",

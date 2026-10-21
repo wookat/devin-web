@@ -1011,7 +1011,31 @@
     "verdictBlocked": "会被阻断",
     "lastErrRecent": "最近发送错误",
     "sendErrStage": "阶段",
-    "diagFlow": "链路方向 ↓ 浏览器 → 入口 → 派发 → 解析 → 扇出(每 agent 一支线:CLI/进程/凭证) → 汇合 → WS 回传"
+    "diagFlow": "链路方向 ↓ 浏览器 → 入口 → 派发 → 解析 → 扇出(每 agent 一支线:CLI/进程/凭证) → 汇合 → WS 回传",
+    "tab": {
+      "general": "通用",
+      "session": "会话",
+      "sidebar": "侧栏",
+      "accounts": "账号",
+      "resources": "Agent 资源",
+      "service": "服务",
+      "diag": "诊断",
+      "logs": "日志",
+      "about": "关于"
+    },
+    "tabDesc": {
+      "general": "发送快捷键、主题、语言",
+      "session": "会话中断后的自动继续策略",
+      "sidebar": "会话列表分组与显示",
+      "accounts": "Devin 账号池与轮换",
+      "resources": "项目/全局规则与技能",
+      "service": "服务状态、重启与构建",
+      "diag": "链路体检、模块与发送检查",
+      "logs": "服务运行日志",
+      "about": "版本与构建信息"
+    },
+    "hub": "总览",
+    "hubDesc": "本地实例的全部设置项"
   },
   "as": {
     "resetConfirm": "重置分享链接？旧链接将立即失效。",

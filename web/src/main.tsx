@@ -82,6 +82,7 @@ function mount(boot: RouteModule | null) {
         <Routes>
           <Route path="/" element={<LastOrNew />} />
           <Route path="/settings" element={<SettingsPage />} />
+          <Route path="/settings/:tab" element={<SettingsPage />} />
           <Route path="/admin/d/:hex" element={<MirrorResolvePage kind="session" />} />
           <Route path="/admin/review" element={<ReviewPage />} />
           <Route path="/admin/review/:owner/:repo/pull/:number" element={<ReviewPage />} />

@@ -2,7 +2,8 @@ import { useEffect, useState } from 'react'
 import { useTranslation } from 'react-i18next'
 import i18n from '@/i18n'
 import { Link } from 'react-router-dom'
-import { ArrowLeft, PanelLeft, Plus, RefreshCw, RotateCcw, ChevronDown, ChevronRight, FileText, BookOpen } from 'lucide-react'
+import { ArrowLeft, PanelLeft, Plus, RefreshCw, RotateCcw, ChevronDown, ChevronRight, FileText, BookOpen, SlidersHorizontal, MessagesSquare, PanelLeftClose, KeyRound, Wrench, Stethoscope, ScrollText, Info, Boxes } from 'lucide-react'
+import { useParams } from 'react-router-dom'
 import { Combo } from '@/components/ui'
 import { adminFetch } from '@/lib/api'
 import { getTheme, setTheme, type Theme } from '@/lib/theme'
@@ -28,8 +29,24 @@ interface Account {
 const TREE_PREFS_KEY = 'sidebar-sessions-prefs'
 const readTreePrefs = () => { try { return JSON.parse(localStorage.getItem(TREE_PREFS_KEY) || '{}') } catch { return {} } }
 
+// Tab config — official settings splits pages by responsibility into the left
+// rail (Personal group → Preferences…; org group → everything else). Ours maps:
+// personal: general/session/sidebar; local instance: accounts → about.
+const TABS: { key: string; group: 'personal' | 'instance'; icon: React.ReactNode }[] = [
+  { key: 'general', group: 'personal', icon: <SlidersHorizontal size={15} /> },
+  { key: 'session', group: 'personal', icon: <MessagesSquare size={15} /> },
+  { key: 'sidebar', group: 'personal', icon: <PanelLeftClose size={15} /> },
+  { key: 'accounts', group: 'instance', icon: <KeyRound size={15} /> },
+  { key: 'resources', group: 'instance', icon: <Boxes size={15} /> },
+  { key: 'service', group: 'instance', icon: <Wrench size={15} /> },
+  { key: 'diag', group: 'instance', icon: <Stethoscope size={15} /> },
+  { key: 'logs', group: 'instance', icon: <ScrollText size={15} /> },
+  { key: 'about', group: 'instance', icon: <Info size={15} /> },
+]
+
 export default function Settings() {
   const { t } = useTranslation()
+  const { tab } = useParams()
   const [autoResume, setAutoResume] = useState<boolean | null>(null)
   const [sendWith, setSendWith] = useState<'enter' | 'ctrlenter'>(() =>
     (localStorage.getItem('dw-send-with') === 'ctrlenter' ? 'ctrlenter' : 'enter'))
@@ -158,10 +175,17 @@ export default function Settings() {
           </Link>
         </div>
         <nav className="flex flex-col gap-0.5 p-2 text-[13px]">
-          <p className="px-2 pb-1 pt-2 text-[11px] text-muted-foreground">{t('set.personal')}</p>
-          <span className="flex h-[30px] items-center rounded-[6px] bg-tint-secondary px-2 font-medium text-foreground">{t('set.prefs')}</span>
-          <p className="px-2 pb-1 pt-3 text-[11px] text-muted-foreground">{t('set.org')}</p>
-          <span className="flex h-[30px] items-center rounded-[6px] px-2 text-muted-foreground">{t('set.localInstance')}</span>
+          {(['personal', 'instance'] as const).map(g => (
+            <div key={g}>
+              <p className="px-2 pb-1 pt-2 text-[11px] text-muted-foreground first:pt-0">{t(g === 'personal' ? 'set.personal' : 'set.localInstance')}</p>
+              {TABS.filter(x => x.group === g).map(x => (
+                <Link key={x.key} to={`/settings/${x.key}`}
+                  className={`flex h-[30px] items-center gap-2 rounded-[6px] px-2 ${tab === x.key ? 'bg-tint-secondary font-medium text-foreground' : 'text-muted-foreground hover:bg-tint-secondary hover:text-foreground'}`}>
+                  {x.icon} {t(`set.tab.${x.key}`)}
+                </Link>
+              ))}
+            </div>
+          ))}
         </nav>
       </aside>
       <div className="flex min-w-0 flex-1 flex-col">
@@ -172,7 +196,7 @@ export default function Settings() {
         </Link>
         <span className="text-[13px] text-muted-foreground">{t('set.settings')}</span>
         <span className="text-[13px] text-muted-foreground">/</span>
-        <span className="text-[13px] font-medium text-foreground">{t('set.prefs')}</span>
+        <span className="text-[13px] font-medium text-foreground">{tab ? t(`set.tab.${tab}`) : t('set.hub')}</span>
       </header>
       {/* Official main: scrollable body, content col max-w-700 gap-36 */}
       <main className="relative h-full min-h-0 min-w-0 flex-1 overflow-y-auto">
@@ -180,12 +204,24 @@ export default function Settings() {
           <div className="mx-auto flex h-fit w-full max-w-[700px] flex-col gap-[36px]">
             <div className="flex flex-wrap items-start justify-between gap-4">
               <div className="flex min-w-0 flex-1 basis-80 flex-col gap-1">
-                <h2 className="text-[17px] font-medium text-foreground">{t('set.prefs')}</h2>
-                <p className="text-[13px] text-muted-foreground">{t('set.prefsDesc')}</p>
+                <h2 className="text-[17px] font-medium text-foreground">{tab ? t(`set.tab.${tab}`) : t('set.hub')}</h2>
+                <p className="text-[13px] text-muted-foreground">{tab ? t(`set.tabDesc.${tab}`, { defaultValue: '' }) : t('set.hubDesc')}</p>
               </div>
             </div>
 
-            <Section title={t('set.general')}>
+            {!tab && TABS.map(x => (
+              <Link key={x.key} to={`/settings/${x.key}`}
+                className="group flex min-h-[60px] items-center gap-3 rounded-[10px] border border-border bg-card px-[12px] py-[10px] hover:bg-tint-tertiary">
+                <span className="flex size-8 shrink-0 items-center justify-center rounded-[8px] bg-tint-secondary text-muted-foreground">{x.icon}</span>
+                <span className="flex min-w-0 flex-1 flex-col gap-[2px]">
+                  <span className="text-[13px] font-medium text-foreground">{t(`set.tab.${x.key}`)}</span>
+                  <span className="truncate text-[13px] text-muted-foreground">{t(`set.tabDesc.${x.key}`, { defaultValue: '' })}</span>
+                </span>
+                <ChevronRight size={15} className="shrink-0 text-muted-foreground" />
+              </Link>
+            ))}
+
+            {tab === 'general' && <Section title={t('set.general')}>
               <Row title={t('set.sendShortcut')} desc={t('set.sendShortcutDesc')}>
                 <Sel value={sendWith} onPick={(v) => pickSend(v as 'enter' | 'ctrlenter')}
                   options={[{ v: 'enter', l: 'Enter' }, { v: 'ctrlenter', l: 'Ctrl+Enter' }]} />
@@ -198,15 +234,15 @@ export default function Settings() {
                 <Sel value={i18n.language.startsWith('zh') ? 'zh' : 'en'} onPick={(v) => void i18n.changeLanguage(v)}
                   options={[{ v: 'zh', l: '中文' }, { v: 'en', l: 'English' }]} />
               </Row>
-            </Section>
+            </Section>}
 
-            <Section title={t('set.devinSession')}>
+            {tab === 'session' && <Section title={t('set.devinSession')}>
               <Row title={t('set.autoResume')} desc={t('set.autoResumeDesc')}>
                 <Sw on={!!autoResume} onToggle={toggleAutoResume} busy={autoResume == null} />
               </Row>
-            </Section>
+            </Section>}
 
-            <Section title={t('set.accounts')}>
+            {tab === 'accounts' && <Section title={t('set.accounts')}>
               {accounts.length === 0 && (
                 <div className="px-[12px] py-[10px] text-[13px] text-muted-foreground">{t('set.noAccounts')}</div>
               )}
@@ -259,9 +295,9 @@ export default function Settings() {
                 )}
               </div>
               {prefsMsg && <div className="px-[12px] pb-2 text-[12px] text-amber-600">{prefsMsg}</div>}
-            </Section>
+            </Section>}
 
-            <Section title={t('set.sidebar')}>
+            {tab === 'sidebar' && <Section title={t('set.sidebar')}>
               <Row title={t('set.groupBy')} desc={t('set.groupByDesc')}>
                 <Sel value={groupBy} onPick={pickGroupBy}
                   options={[{ v: 'folders', l: t('set.foldersOpt') }, { v: 'project', l: t('set.projectOpt') }]} />
@@ -272,13 +308,13 @@ export default function Settings() {
               <Row title={t('set.showArchived')} desc={t('set.showArchivedDesc')}>
                 <Sw on={showArchived} onToggle={toggleArchived} />
               </Row>
-            </Section>
+            </Section>}
 
-            <Section title={t('set.agentRes')}>
+            {tab === 'resources' && <Section title={t('set.agentRes')}>
               <AgentResources />
-            </Section>
+            </Section>}
 
-            <Section title={t('set.service')}>
+            {tab === 'service' && <Section title={t('set.service')}>
               <ServiceStatus />
               <Row title={t('set.restart')} desc={t('set.restartDesc')}>
                 <Btn2 onClick={() => {
@@ -312,23 +348,23 @@ export default function Settings() {
                     .catch(() => setPrefsMsg(t('set.restartFail')))
                 }}>{t('set.svcStopBtn')}</Btn2>
               </Row>
-            </Section>
+            </Section>}
 
-            <Section title={t('set.diag')}>
+            {tab === 'diag' && <Section title={t('set.diag')}>
               <Row title={t('doc.entry')} desc={t('doc.rowDesc')}>
                 <Btn2 onClick={() => setDoctor(true)}>{t('doc.runBtn')}</Btn2>
               </Row>
               <ModulesPanel />
               <SendCheck />
-            </Section>
+            </Section>}
 
-            <Section title={t('set.logs')}>
+            {tab === 'logs' && <Section title={t('set.logs')}>
               <LogsPanel />
-            </Section>
+            </Section>}
 
-            <Section title={t('set.about')}>
+            {tab === 'about' && <Section title={t('set.about')}>
               <AboutPanel />
-            </Section>
+            </Section>}
           </div>
         </div>
       </main>
