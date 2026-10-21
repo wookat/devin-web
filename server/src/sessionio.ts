@@ -861,6 +861,16 @@ function isSessionNotFoundError(e: unknown): boolean {
   return /session not found|session_not_found/i.test(s);
 }
 
+/** The JSON-RPC transport died mid-call — the SDK rejects pending calls with
+ * "Connection closed" when the acp pipe breaks. The process can stay alive
+ * (alive per the process table, dead per the pipe): a half-dead host wedges a
+ * session into "loaded_here but every prompt dies" — the puzzling-tithonia
+ * loop. Killing and re-resolving is the only way out. */
+function isTransportDeadError(e: unknown): boolean {
+  const s = String((e as Error)?.message ?? e);
+  return /connection closed|write EPIPE|ERR_STREAM_DESTROYED|premature close|socket hang up/i.test(s);
+}
+
 /** Last streaming-update time per session — the turn silence watchdog reads
  * it (a live turn streams chunks; a wedged RPC is silent). Touched from the
  * onSessionUpdate path in index.ts. */
@@ -931,6 +941,20 @@ async function promptWithRetry<T>(
         loadedOn.get(acp)?.delete(id);
         if (sessionHost.get(id) === acp) sessionHost.delete(id);
         console.warn(`[session] ${id}: stale host mark — reloading onto a fresh acp (${msg})`);
+        continue;
+      }
+      // Transport died with the session pinned here — the host is a corpse
+      // regardless of `exited`. Recycle it (busy poolmates are spared via the
+      // same unpool+retire rule restartSession uses) and replay once on a
+      // fresh acp. `healed` bounds this to one shot; a still-broken session
+      // surfaces its next error unchanged.
+      if (isTransportDeadError(err) && !healed) {
+        healed = true;
+        loadedOn.get(acp)?.delete(id);
+        if (sessionHost.get(id) === acp) sessionHost.delete(id);
+        if (acp.busySessions.size) { ctx.manager.unpool(acp, id); acp.retireAfterIdle = true; }
+        else ctx.manager.killProcess(acp);
+        console.warn(`[session] ${id}: acp transport died (${msg.slice(0, 80)}) — recycled host, retrying on a fresh process`);
         continue;
       }
       if (!isRateLimitError(msg) || retried) throw err;

@@ -274,7 +274,11 @@ route code never changes.
   pin to that recorded host, never mark their own — a wrong mark makes every
   later op hit an acp that never opened the session ("Session not found").
   `promptWithRetry` self-heals `session_not_found` once (drops mark+pin,
-  re-resolves through loadOnce). /timeline kicks `ensureLoaded` without
+  re-resolves through loadOnce) AND transport-dead once (Connection closed /
+  EPIPE / destroyed stream — recycles the suspect host, sparing busy
+  poolmates via unpool+retire, then replays on a fresh acp; this is what
+  un-wedges "loaded_here but every prompt dies" half-dead hosts).
+  /timeline kicks `ensureLoaded` without
   awaiting (progressive fill, shows "Loading history…" via `loadInflight.has`).
   Only timeline/config/mutations trigger loads; detail/changes/messages/
   todos are memory-only.
