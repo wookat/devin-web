@@ -215,7 +215,7 @@ async function cmdUninstall() {
 }
 
 function cmdLogs(file) {
-  const name = ["supervisor", "server"].includes(file) ? file : "supervisor";
+  const name = ["supervisor", "server", "broker"].includes(file) ? file : "supervisor";
   const f = path.join(DATA, `${name}.log`);
   if (!fs.existsSync(f)) { console.log(`${f} missing`); return; }
   const buf = fs.readFileSync(f);
