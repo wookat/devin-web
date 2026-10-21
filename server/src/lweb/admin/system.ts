@@ -283,8 +283,9 @@ export async function handleSystem(ctx: ApiContext, req: IncomingMessage, res: S
   // picks) are traceable next to the backend's own events.
   if (p === "/api/admin/audit" && m === "POST") {
     const body = await readJson(req);
-    const action = String(body.action ?? "?").slice(0, 80);
-    const detail = String(body.detail ?? "").slice(0, 300);
+    // Strip newlines — a crafted body must not inject fake log lines.
+    const action = String(body.action ?? "?").replace(/[\r\n]+/g, " ").slice(0, 80);
+    const detail = String(body.detail ?? "").replace(/[\r\n]+/g, " ").slice(0, 300);
     console.error(`[audit] ${action}${detail ? ` — ${detail}` : ""}`);
     json(res, 200, { ok: true });
     return true;

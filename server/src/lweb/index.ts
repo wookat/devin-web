@@ -44,8 +44,11 @@ export async function handleLocalWb(ctx: ApiContext, req: IncomingMessage, res: 
       return true;
     }
 
-    // POST /api/session/:id/dashboard — dashboard writes (widget storage)
+    // POST /api/session/:id/dashboard — dashboard writes (widget storage).
+    // Outside /api/admin/* the auth seam doesn't reach it — but this writes
+    // dw.json, so with the admin key set it needs it too.
     if (parts[1] === "session" && parts[3] === "dashboard" && m === "POST") {
+      if (!requireAdmin(req)) { json(res, 401, { error: "unauthorized" }); return true; }
       const body = await readJson(req);
       loadReg(ctx).dashboards[decodeURIComponent(parts[2])] = body;
       saveReg();
