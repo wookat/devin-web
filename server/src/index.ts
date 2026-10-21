@@ -15,7 +15,7 @@ import { WebSocketServer } from "ws";
 import { SessionLog } from "./sessionlog.js";
 import { handleApi, type ApiContext } from "./routes.js";
 import { handleLocalWb } from "./localweb.js";
-import { recordTerminal, loadInflight, isReplayEcho, autoResumeInterrupted, sessionHost, markSubagentDead, touchSessionActivity, markGracefulExit, adoptBrokerAcps } from "./sessionio.js";
+import { recordTerminal, loadInflight, isReplayEcho, autoResumeInterrupted, sessionHost, markSubagentDead, touchSessionActivity, markGracefulExit, adoptBrokerAcps, setCfgCacheDir } from "./sessionio.js";
 import { brokerEnabled } from "./acpbroker.js";
 import { meta } from "./dwstore.js";
 import { sshInteractive } from "./ssh.js";
@@ -529,6 +529,10 @@ httpServer.listen(PORT, HOST, async () => {
   // rebuild the pool/session maps BEFORE anything else resolves sessions.
   // In-flight turns keep streaming (settle is silence-inferred); the orphan
   // sweep + auto-resume only handle what adoption couldn't (crashes).
+  // Restore the persisted agent-level model/mode/commands cache BEFORE
+  // adoption/resume — broker adoption skips session/load (the only writer),
+  // so without this every picker blanks until a lucky session reloads.
+  setCfgCacheDir(store.dataDir);
   const adopted = adoptBrokerAcps(ctx).catch((e) => { console.error("[adopt]", e); });
   // Auto-resume turns left open by a crashed/killed predecessor — gated by
   // the 会话自动继续 pref. Delayed so the acp pool settles first. Orphaned

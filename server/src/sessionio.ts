@@ -80,6 +80,36 @@ let lastAgentCfg: {
  * whose replay hasn't reached its commands_update yet still gets the list. */
 let lastAgentCommands: SessionConfig["commands"] | null = null;
 
+/** Persisted agent-level config — session/load responses are the ONLY source
+ *  of the model/mode option list, and broker adoption deliberately skips
+ *  load, so a restart used to blank every model picker until some session
+ *  happened to reload. Boot restores this file instead. */
+let cfgCacheDir = "";
+export function setCfgCacheDir(dir: string) {
+  cfgCacheDir = dir;
+  try {
+    const j = JSON.parse(fs.readFileSync(path.join(dir, "agent-cfg.json"), "utf8")) as {
+      configOptions?: ConfigOption[];
+      modes?: { currentModeId: string; availableModes?: { id: string; name?: string }[] };
+      commands?: SessionConfig["commands"];
+    };
+    if (j.configOptions?.length || j.modes) {
+      lastAgentCfg = {
+        ...(j.configOptions?.length ? { configOptions: j.configOptions } : {}),
+        ...(j.modes ? { modes: j.modes } : {}),
+      };
+    }
+    if (j.commands?.length) lastAgentCommands = j.commands;
+  } catch { /* cold start — no cache yet */ }
+}
+function persistAgentCfg() {
+  if (!cfgCacheDir) return;
+  try {
+    fs.writeFileSync(path.join(cfgCacheDir, "agent-cfg.json"),
+      JSON.stringify({ ...(lastAgentCfg ?? {}), commands: lastAgentCommands ?? undefined }));
+  } catch { /* best-effort */ }
+}
+
 function captureLoadResponse(id: string, r: unknown) {
   if (!r || typeof r !== "object") return;
   const res = r as { configOptions?: ConfigOption[]; modes?: { currentModeId: string; availableModes?: { id: string; name?: string }[] }; availableCommands?: SessionConfig["commands"] };
@@ -90,6 +120,7 @@ function captureLoadResponse(id: string, r: unknown) {
       ...(res.configOptions?.length ? { configOptions: res.configOptions } : {}),
       ...(res.modes ? { modes: res.modes } : {}),
     };
+    persistAgentCfg();
   }
 }
 
