@@ -18,6 +18,7 @@ import { streamScreen, injectInput } from "./screen.js";
 import zlib from "node:zlib";
 import { fileURLToPath } from "node:url";
 import { loadReg, saveReg, meta, noteLastUsed, type DwRegistry } from "./dwstore.js";
+import { remapLegacyCwd } from "./store.js";
 import {
   noteUpdate, persistTail, snapshotItems, buildMessages, buildTimeline,
   readDiskTail, tailSnapshot, tlCache, tlReset, snippet,
@@ -27,11 +28,17 @@ import {
   loadedOn, sessionHost, hostFor,
   isSessionPinned, captureLoadResponse, loadInflight, ensureLoaded, acpForId, restartSession,
   sessionConfig, recordTerminal, inflight, resolveUpload, dispatchPrompt,
+  beginDrain, isDraining,
   sessionStatus, interruptedTurn, listSubagents, subagentTimeline, subPingActive, listLocalSessions,
   snippetFromLog, responseCfg, terminalBuf, cloudVersionToModel,
   queueList, queueAdd, queueRemove, queueFlush,
   type ListedSession, type SessionConfig, type SubagentInfo, type ConfigOption,
 } from "./sessionio.js";
+import {
+  personaState, personaMode, askPersona, personaHumanMessage, decisionsTail,
+} from "./persona.js";
+import { agentById, listAgents, probeAgent, saveUserAgents } from "./agents.js";
+import { handlePrRoute } from "./pr.js";
 
 // ---------------------------------------------------------------------------
 // CLI proxy — spawn `devin <args>` with a hard whitelist (see /api/admin/cli/run)
@@ -250,6 +257,8 @@ function treeSession(ctx: ApiContext, s: ListedSession) {
     // this web (harmless) — otherwise it's another app (desktop/CLI).
     is_locked: s.locked,
     loaded_here: ctx.sessionLog.get(s.id).length > 0 || loadInflight.has(s.id) || inflight.has(s.id),
+    agent: s.agent ?? "devin",
+    persona: personaState(ctx, s.id),
     children: subs.map((a) => subTreeRow(ctx, s.id, s.cwd, a)),
     total_children: subs.length,
   };
@@ -270,10 +279,14 @@ const sessionSubs: Record<string, (ctx: ApiContext, id: string, req: IncomingMes
       ? body.attachments as { url: string; name?: string; mime?: string; size?: number }[]
       : [];
     if (!text && !attachments.length) { json(res, 400, { error: "empty message" }); return; }
+    if (isDraining()) { json(res, 503, { error: "server restarting" }); return; }
     // Official parity: a prompt sent while a turn is in flight goes onto the
     // queue — it flushes FIFO from dispatchPrompt's settle path. Concurrent
     // session/prompt calls race the acp (errors or lost turns), so never
     // dispatch on top of an in-flight turn.
+    // A human composer message resolves a pending persona escalation —
+    // sent or queued, it IS the boss speaking again.
+    personaHumanMessage(ctx, id);
     if (inflight.has(id) || queueList(id).length) {
       const m2 = queueAdd(ctx, id, text, attachments);
       if (!inflight.has(id)) queueFlush(ctx, id); // idle + stale queue → keep FIFO moving
@@ -679,14 +692,15 @@ export async function handleLocalWb(ctx: ApiContext, req: IncomingMessage, res: 
       }
 
       // POST /api/admin/restart — respawn the server as-is.
-      // POST /api/admin/redeploy — npm run build, THEN respawn. A process
-      // can't replace itself mid-flight, so both spawn a DETACHED helper
-      // (scripts/respawn.mjs, pure node — no cmd/start/powershell fragility)
-      // that waits for the port to free, cleans orphaned acp children, and
-      // starts a fresh node with logs in <dataDir>/. Build failure aborts the
-      // respawn so the old server keeps serving; before exiting it waits for
-      // in-flight prompts to drain — activity-aware: keeps waiting while a
-      // session still emits events, gives up after 60s quiet or 15min total.
+      // POST /api/admin/redeploy — npm run build, THEN respawn. When the
+      // supervisor owns the public port (DEVIN_WEB_SUPERVISED=1, production)
+      // a drained exit IS the restart — the supervisor respawns us. The
+      // unsupervised fallback spawns DETACHED scripts/respawn.mjs which now
+      // hands the port to the supervisor (migration path) — see supervisor.mjs.
+      // Build failure aborts the respawn so the old server keeps serving;
+      // before exiting it waits for in-flight prompts to drain — bounded by
+      // the sessionio turn-silence watchdog, and beginDrain() stops new
+      // dispatches from starving it.
       if ((p === "/api/admin/restart" || p === "/api/admin/redeploy") && m === "POST") {
         json(res, 202, { ok: true });
         // Repo root from the module path, not process.cwd() — the server may
@@ -695,14 +709,26 @@ export async function handleLocalWb(ctx: ApiContext, req: IncomingMessage, res: 
         const pi = process.argv.indexOf("--port");
         const port = pi > 0 ? process.argv[pi + 1] : "7791";
         const respawn = () => {
+          // Gate new dispatches first so the drain can only shrink.
+          beginDrain();
           // Graceful handoff: wait for in-flight prompts however long they
-          // take — a deploy must never cut a turn off mid-stream, and a wedged
-          // turn is the user's call to end (End session in the UI releases the
-          // drain), not ours to kill. Logs a heartbeat so the wait is visible.
+          // take — a deploy must never cut a turn off mid-stream. Bounded by
+          // the turn-silence watchdog in promptWithRetry (a wedged prompt
+          // settles within DEVIN_WEB_TURN_SILENCE_MS, default 15min), and by
+          // beginDrain() which stops NEW dispatches from starving the drain.
           const tick = () => {
             if (inflight.size) {
               console.error(`[respawn] waiting on ${inflight.size} inflight prompt(s): ${[...inflight].join(", ")}`);
               setTimeout(tick, 30_000);
+              return;
+            }
+            // Supervised mode (DEVIN_WEB_SUPERVISED=1): the supervisor owns the
+            // public port and respawns us on ANY exit — a plain exit IS the
+            // restart, no respawn helper needed. Unsupervised fallback keeps
+            // the detached respawn.mjs chain so manual `node index.js` runs
+            // still self-restart.
+            if (process.env.DEVIN_WEB_SUPERVISED) {
+              setTimeout(() => process.exit(0), 400);
               return;
             }
             spawn(process.execPath,
@@ -815,6 +841,43 @@ export async function handleLocalWb(ctx: ApiContext, req: IncomingMessage, res: 
         return true;
       }
 
+      // 分身 (persona): global default mode/webhook/cap + per-session override
+      // + manual ask. The persona session itself is created lazily on first ask.
+      if (p === "/api/admin/persona" && m === "GET") {
+        const r = loadReg(ctx);
+        json(res, 200, { cfg: r.prefs?.persona ?? {}, sessionId: r.persona?.sessionId ?? null, decisions: decisionsTail(ctx, 50) });
+        return true;
+      }
+      if (p === "/api/admin/persona" && m === "POST") {
+        const body = await readJson(req);
+        const r = loadReg(ctx);
+        const pcfg = (r.prefs ??= {}).persona ??= {};
+        if (body.mode === "off" || body.mode === "semi" || body.mode === "auto") pcfg.mode = body.mode;
+        if (typeof body.webhook === "string") pcfg.webhook = body.webhook;
+        if (typeof body.maxPerHour === "number" && body.maxPerHour > 0) pcfg.maxPerHour = Math.floor(body.maxPerHour);
+        saveReg();
+        json(res, 200, { ok: true, cfg: pcfg });
+        return true;
+      }
+      if (p === "/api/admin/session-persona" && m === "POST") {
+        const body = await readJson(req);
+        const id = String(body.id ?? "");
+        const mm = meta(ctx, id);
+        if (body.mode === "off" || body.mode === "semi" || body.mode === "auto") mm.personaMode = body.mode;
+        else if (body.mode === "inherit" || body.mode === null) delete mm.personaMode;
+        saveReg();
+        json(res, 200, { ok: true, persona: personaState(ctx, id) });
+        return true;
+      }
+      if (p === "/api/admin/session-persona-ask" && m === "POST") {
+        const body = await readJson(req);
+        const id = String(body.id ?? "");
+        if (!id || personaMode(ctx, id) === "off") { json(res, 400, { error: "persona_off" }); return true; }
+        const handled = await askPersona(ctx, id, "manual");
+        json(res, 200, { ok: true, handled });
+        return true;
+      }
+
       if (p === "/api/admin/mirror/indexed-paths" && m === "GET") {
         // @file mention source: index the session's workspace files. Bounded
         // BFS — heavy dirs skipped — cached briefly per workspace.
@@ -829,7 +892,36 @@ export async function handleLocalWb(ctx: ApiContext, req: IncomingMessage, res: 
         json(res, 200, { findings: [] });
         return true;
       }
-      if ((p === "/api/admin/mirror/transcribe" || p === "/api/admin/mirror/translate") && m === "POST") {
+      if (p === "/api/admin/mirror/transcribe" && m === "POST") {
+        // Voice input: proxy the multipart recording to Devin's real
+        // transcribe-audio endpoint (same contract as the official webapp:
+        // audio_file + start_time). The account session token rides Bearer;
+        // api.devin.ai 422-verified the route exists.
+        const key = ctx.accounts.apiKey();
+        if (!key) { json(res, 503, { text: null, error: "no devin account available" }); return true; }
+        try {
+          const body = await readBody(req);
+          const ct = req.headers["content-type"] ?? "multipart/form-data";
+          const r = await fetch("https://api.devin.ai/transcribe-audio", {
+            method: "POST",
+            headers: { authorization: `Bearer ${key}`, "content-type": ct },
+            body,
+            signal: AbortSignal.timeout(60_000),
+          });
+          const raw = await r.text();
+          try {
+            const j = JSON.parse(raw) as { text?: string; transcript?: string; detail?: unknown };
+            const text = j.text ?? j.transcript ?? null;
+            json(res, r.ok ? 200 : 502, { text, error: r.ok ? null : `upstream ${r.status}: ${raw.slice(0, 160)}` });
+          } catch {
+            json(res, r.ok ? 200 : 502, { text: r.ok ? raw : null, error: r.ok ? null : `upstream ${r.status}: ${raw.slice(0, 160)}` });
+          }
+        } catch (e) {
+          json(res, 502, { text: null, error: e instanceof Error ? e.message : String(e) });
+        }
+        return true;
+      }
+      if (p === "/api/admin/mirror/translate" && m === "POST") {
         json(res, 200, UNSUPPORTED);
         return true;
       }
@@ -864,12 +956,23 @@ export async function handleLocalWb(ctx: ApiContext, req: IncomingMessage, res: 
       }
 
       // POST /api/admin/sessions/new — create a local session (+ optional task)
+      // body.agent picks the ACP agent (devin default; user registry in
+      // agents.json adds generic CLIs). Agent is a session-lifetime property —
+      // persisted in dw.json meta so reloads route to the right process.
       if (p === "/api/admin/sessions/new" && m === "POST") {
+        if (isDraining()) { json(res, 503, { error: "server restarting" }); return true; }
         const body = await readJson(req);
         const cwd = String(body.cwd ?? ctx.primaryCwd);
-        const acp = await ctx.manager.get(cwd);
+        const agent = agentById(body.agent);
+        const acp = agent.multiSession
+          ? await ctx.manager.get(cwd, agent)
+          : await ctx.manager.startForSession(cwd, agent);
         const s = await acp.newSession(cwd);
-        ctx.sessionCwd.set(s.sessionId, cwd);
+        if (!agent.multiSession) {
+          ctx.manager.bindSession(s.sessionId, acp);
+          ctx.store.addAgentSession(s.sessionId, agent.id, cwd);
+        }
+        ctx.sessionCwd.set(s.sessionId, remapLegacyCwd(cwd));
         captureLoadResponse(s.sessionId, s);
         let nset = loadedOn.get(acp);
         if (!nset) loadedOn.set(acp, (nset = new Set()));
@@ -880,6 +983,7 @@ export async function handleLocalWb(ctx: ApiContext, req: IncomingMessage, res: 
         const mm = meta(ctx, s.sessionId);
         if (body.title) mm.title = String(body.title);
         if (body.folder) mm.folder = String(body.folder);
+        if (agent.id !== "devin") mm.agent = agent.id;
         saveReg();
         const task = String(body.task ?? "").trim();
         // apply last-used model/mode — desktop carries the pick into new sessions
@@ -957,7 +1061,38 @@ export async function handleLocalWb(ctx: ApiContext, req: IncomingMessage, res: 
         // /admin/new composer shows the real mode+model pills before any
         // session exists (same lastAgentCfg fallback sessionConfig uses).
         const cfg = sessionConfig(ctx, sessions[0]?.id ?? "");
-        json(res, 200, { commands, skills: scanLocalSkills(ctx), playbooks: [], secrets: [], macros: [], repos, sessions, primary_cwd: ctx.primaryCwd, cfg, last_config: loadReg(ctx).lastConfig ?? {} });
+        // Enabled agents for the draft picker's dropdown (disabled entries
+        // stay hidden — their existing sessions still run via meta.agent).
+        const agents = listAgents().filter((a) => !a.disabled).map((a) => ({ id: a.id, label: a.label }));
+        json(res, 200, { commands, skills: scanLocalSkills(ctx), playbooks: [], secrets: [], macros: [], repos, sessions, primary_cwd: ctx.primaryCwd, cfg, last_config: loadReg(ctx).lastConfig ?? {}, agents });
+        return true;
+      }
+
+      // Agent registry: GET lists every entry (builtin + user) with install
+      // probe status; PUT rewrites the user layer (agents.json) wholesale.
+      if (p === "/api/admin/agents" && m === "GET") {
+        const probe = url.searchParams.get("probe") === "1";
+        const rows = await Promise.all(listAgents().map(async (a) => ({
+          id: a.id,
+          label: a.label,
+          command: a.command,
+          args: a.args,
+          multiSession: a.multiSession,
+          versionArgs: a.versionArgs,
+          env: a.env,
+          shell: a.shell === true,
+          custom: !!a.custom,
+          enabled: !a.disabled,
+          installed: probe ? (await probeAgent(a)) : null,
+        })));
+        json(res, 200, { agents: rows });
+        return true;
+      }
+      if (p === "/api/admin/agents" && m === "PUT") {
+        const body = await readJson(req);
+        const list = Array.isArray(body?.agents) ? body.agents : [];
+        const r = saveUserAgents(list);
+        json(res, 200, r);
         return true;
       }
 
@@ -1063,6 +1198,13 @@ export async function handleLocalWb(ctx: ApiContext, req: IncomingMessage, res: 
           if (await handleSubSession(ctx, subRef, id, sub, m, req, res, url)) return true;
         }
 
+        // PR review endpoints (PrPanel) — GitHub data via `gh api`; the panel
+        // sends pr_url, not the session's repo, so this stays session-agnostic
+        // data plumbing inside the admin tree.
+        if (sub === "pr" || sub.startsWith("pr-")) {
+          if (await handlePrRoute(sub, m, req, res, url)) return true;
+        }
+
         // GET /api/admin/session/:id — detail (slim or full). Memory-only:
         // this is also hit by sidebar prefetch; triggering a history replay
         // here would bump the session's updatedAt on every hover.
@@ -1085,6 +1227,12 @@ export async function handleLocalWb(ctx: ApiContext, req: IncomingMessage, res: 
               is_locked: false,
               loaded_here: ctx.sessionLog.get(id).length > 0 || loadInflight.has(id) || inflight.has(id),
               context_usage: lastContextUsage(ctx, id),
+              // Owning ACP agent — the client degrades devin-private UI
+              // (share/end-session/subagents) for other agents' sessions.
+              agent: mm.agent ?? ctx.store.agentSession(id)?.agent ?? "devin",
+              // Fork = native session/fork or transcript-seed fallback; only
+              // dedicated single-session agents can't host a second session.
+              canFork: agentById(mm.agent ?? ctx.store.agentSession(id)?.agent).multiSession,
             },
             // Detail is polled every few seconds — the frontend only needs a
             // presence check / composer hint, not the whole transcript.
@@ -1222,6 +1370,7 @@ export async function handleLocalWb(ctx: ApiContext, req: IncomingMessage, res: 
             // A turn that died mid-flight (server crash / killed acp) — the
             // original message so the client can offer one-click resend.
             interrupted: interruptedTurn(ctx, id) ?? undefined,
+            persona: personaState(ctx, id),
           });
           return true;
         }
@@ -1278,6 +1427,7 @@ export async function handleLocalWb(ctx: ApiContext, req: IncomingMessage, res: 
           const body = (await readJson(req)) as { message?: string };
           const text = (body.message ?? "").trim();
           if (!text) { json(res, 400, { error: "empty message" }); return true; }
+          if (isDraining()) { json(res, 503, { error: "server restarting" }); return true; }
           if (!inflight.has(id) && !queueList(id).length) {
             dispatchPrompt(ctx, id, text, []);
             json(res, 200, { ok: true, sent: true });
@@ -1303,11 +1453,28 @@ export async function handleLocalWb(ctx: ApiContext, req: IncomingMessage, res: 
               break;
             }
             case "send_now": {
+              if (isDraining()) break;
+              // Two shapes: {id} pulls a queued row; {message} is the
+              // draft-free "send immediately" path. Busy → cancel the live
+              // turn so settle→queueFlush fires the front item right away
+              // ("立即发送" really interrupts); idle → dispatch directly.
               const i = q.findIndex((x) => x.id === body.id);
+              let armed = false;
               if (i >= 0) {
                 const [m2] = q.splice(i, 1);
-                // Busy → front of the queue (fires on settle); idle → send now.
-                if (inflight.has(id)) q.unshift(m2); else dispatchPrompt(ctx, id, m2.text, []);
+                q.unshift(m2);
+                armed = true;
+              } else if (typeof body.message === "string" && body.message.trim()) {
+                const m2 = queueAdd(ctx, id, body.message.trim());
+                q.splice(q.indexOf(m2), 1);
+                q.unshift(m2);
+                armed = true;
+              }
+              if (!armed) break;
+              if (inflight.has(id)) {
+                try { (await acpForId(ctx, id)).cancel(id); } catch { /* not running */ }
+              } else {
+                queueFlush(ctx, id);
               }
               break;
             }
@@ -1326,7 +1493,14 @@ export async function handleLocalWb(ctx: ApiContext, req: IncomingMessage, res: 
           return true;
         }
 
-        if (sub === "cancel" && m === "POST") {
+        // Wake/resume on a main session is a UI no-op — nothing sleeps
+        // server-side; the next message just dispatches on the live acp.
+        if (sub === "resume" && m === "POST") { await readBody(req); json(res, 200, { ok: true }); return true; }
+
+        // Stop button posts /pause, End session posts /end — locally both
+        // mean turn cancel (session/cancel settles the prompt RPC as
+        // outcome:cancelled; settle → inflight clear → queueFlush runs).
+        if ((sub === "cancel" || sub === "pause" || sub === "stop" || sub === "end") && m === "POST") {
           try { (await acpForId(ctx, id)).cancel(id); } catch { /* not running */ }
           json(res, 200, { ok: true });
           return true;
@@ -1405,6 +1579,7 @@ export async function handleLocalWb(ctx: ApiContext, req: IncomingMessage, res: 
             const body = await readJson(req);
             const text = String(body.message ?? body.text ?? "").trim();
             if (!text) { json(res, 400, { error: "empty message" }); return true; }
+            if (isDraining()) { json(res, 503, { error: "server restarting" }); return true; }
             if (agentId.startsWith("spawn:")) { json(res, 400, { error: "subagent transcript not replayed; cannot message" }); return true; }
             dispatchPrompt(ctx, id, text, [], agentId);
             json(res, 200, { ok: true });
@@ -1466,7 +1641,7 @@ export async function handleLocalWb(ctx: ApiContext, req: IncomingMessage, res: 
         // only waits for one already in flight, briefly, before falling back
         // to the agent-level config. POST /config does load — that's a real op.
         if (sub === "config" && m === "GET") {
-          await Promise.race([loadInflight.get(id) ?? Promise.resolve(), new Promise((r) => setTimeout(r, 2500))]);
+          await Promise.race([loadInflight.get(id)?.p ?? Promise.resolve(), new Promise((r) => setTimeout(r, 2500))]);
           const cfg = sessionConfig(ctx, id);
           if (url.searchParams.get("raw") === "1") {
             const cfgUpdates = ctx.sessionLog.get(id)
@@ -1567,6 +1742,75 @@ export async function handleLocalWb(ctx: ApiContext, req: IncomingMessage, res: 
         if (sub === "restart" && m === "POST") {
           restartSession(ctx, id);
           json(res, 200, { ok: true });
+          return true;
+        }
+
+        // POST .../fork — clone the session. Native ACP `session/fork` when the
+        // agent advertises sessionCapabilities.fork (opencode does); devin's
+        // local acp has no fork, so the fallback opens a new session on the
+        // same process and seeds it with the tail transcript as its first
+        // prompt — the fork continues the original task from there.
+        if (sub === "fork" && m === "POST") {
+          const body = await readJson(req);
+          // `anchor` = timeline item id ("e<seq>") to fork FROM that message.
+          // ACP session/fork only clones at head, so an anchored fork always
+          // takes the transcript-seed path (uniform across agents).
+          const anchor = typeof body.anchor === "string" && /^e\d+$/.test(body.anchor) ? Number(body.anchor.slice(1))
+            : typeof body.anchor === "number" ? body.anchor : null;
+          const { acp, cwd } = await hostFor(ctx, id);
+          const agent = agentById(ctx.store.agentSession(id)?.agent ?? meta(ctx, id).agent);
+          if (!agent.multiSession) {
+            json(res, 409, { error: "该 Agent 每进程仅承载一个会话，无法分叉" });
+            return true;
+          }
+          const srcTitle = meta(ctx, id).title ?? titleFromLog(ctx, id) ?? "Untitled session";
+          let newId: string | null = null;
+          let forkRes: unknown = null;
+          let transcriptPrompt = "";
+          if (anchor === null && acp.supportsFork) {
+            const r = (await acp.forkSession(id, cwd)) as { sessionId?: string } | null;
+            newId = r?.sessionId ?? null;
+            forkRes = r;
+          }
+          if (!newId) {
+            const s = await acp.newSession(cwd);
+            newId = s.sessionId;
+            forkRes = s;
+            // Transcript carryover: messages up to the anchor (or the whole
+            // tail when forking at head), bounded to the last ~6000 chars of
+            // user/agent text so the seed prompt stays usable.
+            const log = ctx.sessionLog.get(id);
+            const rows: { seq: number; text: string }[] = [];
+            for (const e of log) {
+              const u = e.update as { sessionUpdate?: string; content?: { type?: string; text?: string } };
+              if ((u.sessionUpdate === "user_message_chunk" || u.sessionUpdate === "agent_message_chunk") && u.content?.text) {
+                rows.push({ seq: e.seq ?? -1, text: (u.sessionUpdate === "user_message_chunk" ? "用户: " : "Devin: ") + u.content.text });
+              }
+            }
+            const picked = (anchor !== null ? rows.filter((r) => r.seq !== -1 && r.seq <= anchor) : rows).slice(-200);
+            if (anchor !== null && !picked.length) {
+              json(res, 409, { error: "该位置之前没有可分叉的消息" });
+              return true;
+            }
+            const joined = picked.map((r) => r.text).join("\n\n");
+            const bounded = joined.slice(-6000);
+            const where = anchor !== null ? `，截至第 ${picked.length} 条消息处` : "（仅尾部，可能截断）";
+            transcriptPrompt = bounded
+              ? `[分叉自会话「${srcTitle}」${where}] 以下是原会话的对话记录。请在此基础上继续完成相同任务：\n\n${bounded}`
+              : `[分叉自会话「${srcTitle}」] 请继续该会话的任务。`;
+          }
+          let nset = loadedOn.get(acp);
+          if (!nset) loadedOn.set(acp, (nset = new Set()));
+          nset.add(newId);
+          sessionHost.set(newId, acp);
+          ctx.sessionCwd.set(newId, cwd);
+          captureLoadResponse(newId, forkRes);
+          const mm = meta(ctx, newId);
+          mm.title = `${srcTitle} (fork)`;
+          if (agent.id !== "devin") mm.agent = agent.id;
+          saveReg();
+          if (transcriptPrompt) dispatchPrompt(ctx, newId, transcriptPrompt, []);
+          json(res, 200, { ok: true, id: newId, native: acp.supportsFork });
           return true;
         }
 
