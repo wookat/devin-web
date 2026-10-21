@@ -1,0 +1,112 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1040 700" font-family="system-ui,'Segoe UI','Microsoft YaHei',sans-serif">
+  <defs>
+    <marker id="arr" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse">
+      <path d="M0 0L10 5L0 10z" fill="#475569"/>
+    </marker>
+    <marker id="arrD" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse">
+      <path d="M0 0L10 5L0 10z" fill="#94a3b8"/>
+    </marker>
+  </defs>
+
+  <rect x="0" y="0" width="1040" height="700" fill="#f8fafc"/>
+
+  <text x="32" y="38" font-size="20" font-weight="700" fill="#0f172a">devin-web 部署架构</text>
+  <text x="32" y="60" font-size="12" fill="#64748b">devin-web.zalize.com → Cloudflare Tunnel → 本机 :7791 → devin acp → Cognition</text>
+
+  <!-- ============ 访问层 ============ -->
+  <rect x="60" y="78" width="230" height="58" rx="10" fill="#ffffff" stroke="#94a3b8" stroke-width="1.4"/>
+  <text x="175" y="101" font-size="13" font-weight="600" fill="#0f172a" text-anchor="middle">浏览器 · 公网访问</text>
+  <text x="175" y="121" font-size="11" fill="#475569" text-anchor="middle">https://devin-web.zalize.com</text>
+
+  <rect x="420" y="78" width="240" height="58" rx="10" fill="#ffffff" stroke="#94a3b8" stroke-width="1.4"/>
+  <text x="540" y="101" font-size="13" font-weight="600" fill="#0f172a" text-anchor="middle">浏览器 · 本机 / 局域网</text>
+  <text x="540" y="121" font-size="11" fill="#475569" text-anchor="middle">127.0.0.1:7791 · 192.168.6.251:7791</text>
+
+  <rect x="740" y="70" width="260" height="88" rx="10" fill="#fafafa" stroke="#94a3b8" stroke-width="1.4" stroke-dasharray="6 4"/>
+  <text x="870" y="94" font-size="13" font-weight="600" fill="#475569" text-anchor="middle">devin-workbench-v2 · 并行产品</text>
+  <text x="870" y="114" font-size="11" fill="#64748b" text-anchor="middle">devin2.zalize.com → CF Worker + D1</text>
+  <text x="870" y="132" font-size="11" fill="#64748b" text-anchor="middle">管理端 + HMAC 访客分享页</text>
+  <text x="870" y="150" font-size="10" fill="#94a3b8" text-anchor="middle">（云端 Devin 会话，非本机 acp）</text>
+
+  <!-- ============ Cloudflare 层 ============ -->
+  <rect x="60" y="196" width="300" height="76" rx="10" fill="#fff7ed" stroke="#f6821f" stroke-width="1.6"/>
+  <text x="210" y="219" font-size="13" font-weight="700" fill="#c2410c" text-anchor="middle">Cloudflare Edge</text>
+  <text x="210" y="239" font-size="11" fill="#9a3412" text-anchor="middle">DNS proxied CNAME → cfargotunnel</text>
+  <text x="210" y="257" font-size="11" fill="#9a3412" text-anchor="middle">TLS 终结 · 无需公网 IP / 入站端口</text>
+
+  <!-- ============ 本机 Windows ============ -->
+  <rect x="60" y="300" width="640" height="300" rx="14" fill="#f1f5f9" stroke="#cbd5e1" stroke-width="1.4"/>
+  <text x="78" y="326" font-size="12" font-weight="600" fill="#64748b">本机 Windows · D:\yotal\Documents\Projects\devin-web</text>
+
+  <rect x="100" y="346" width="220" height="64" rx="8" fill="#fff7ed" stroke="#f6821f" stroke-width="1.5"/>
+  <text x="210" y="369" font-size="13" font-weight="600" fill="#9a3412" text-anchor="middle">cloudflared（Windows 服务）</text>
+  <text x="210" y="388" font-size="11" fill="#b45309" text-anchor="middle">token 管理 · 隧道 devin-web</text>
+  <text x="210" y="404" font-size="10" fill="#b45309" text-anchor="middle">bin\cloudflared.exe tunnel run</text>
+
+  <rect x="350" y="346" width="220" height="64" rx="8" fill="#eef2ff" stroke="#6366f1" stroke-width="1.6"/>
+  <text x="460" y="369" font-size="13" font-weight="700" fill="#3730a3" text-anchor="middle">devin-web server · :7791</text>
+  <text x="460" y="388" font-size="11" fill="#4338ca" text-anchor="middle">node dist\server\index.js</text>
+  <text x="460" y="404" font-size="10" fill="#4338ca" text-anchor="middle">REST + WebSocket + SPA (dist/web)</text>
+
+  <rect x="350" y="442" width="220" height="52" rx="8" fill="#ffffff" stroke="#94a3b8" stroke-width="1.2"/>
+  <text x="460" y="463" font-size="12" font-weight="600" fill="#334155" text-anchor="middle">~/.devin-web 数据目录</text>
+  <text x="460" y="481" font-size="10" fill="#64748b" text-anchor="middle">dw.json · log/*.jsonl · uploads</text>
+
+  <rect x="350" y="526" width="260" height="60" rx="8" fill="#ecfdf5" stroke="#10b981" stroke-width="1.6"/>
+  <text x="480" y="549" font-size="13" font-weight="700" fill="#047857" text-anchor="middle">devin acp 进程池</text>
+  <text x="480" y="568" font-size="11" fill="#065f46" text-anchor="middle">按会话/cwd spawn · stdio JSON-RPC</text>
+
+  <rect x="100" y="466" width="220" height="64" rx="8" fill="#fffbeb" stroke="#f59e0b" stroke-width="1.5"/>
+  <text x="210" y="489" font-size="13" font-weight="600" fill="#92400e" text-anchor="middle">devin-rotate · 面板 :8399</text>
+  <text x="210" y="508" font-size="11" fill="#92400e" text-anchor="middle">accounts.toml 账号池</text>
+  <text x="210" y="524" font-size="10" fill="#92400e" text-anchor="middle">限速检测 → 轮换 WINDSURF_API_KEY</text>
+
+  <!-- ============ Cognition 云端 ============ -->
+  <rect x="780" y="500" width="230" height="90" rx="10" fill="#f5f3ff" stroke="#8b5cf6" stroke-width="1.6"/>
+  <text x="895" y="526" font-size="13" font-weight="700" fill="#5b21b6" text-anchor="middle">Cognition / Devin 云端</text>
+  <text x="895" y="546" font-size="11" fill="#6d28d9" text-anchor="middle">SWE Agent API</text>
+  <text x="895" y="564" font-size="10" fill="#6d28d9" text-anchor="middle">账号配额 · 限速 · 计费</text>
+
+  <!-- ============ 主链路箭头 ============ -->
+  <!-- ① 浏览器 → CF -->
+  <path d="M175 136 V192" fill="none" stroke="#475569" stroke-width="1.8" marker-end="url(#arr)"/>
+  <text x="187" y="168" font-size="11" fill="#475569">① HTTPS（国内经 Clash :7892）</text>
+
+  <!-- ② CF → cloudflared -->
+  <path d="M210 272 V342" fill="none" stroke="#475569" stroke-width="1.8" marker-end="url(#arr)"/>
+  <text x="222" y="310" font-size="11" fill="#475569">② Tunnel 出站长连回源</text>
+
+  <!-- ③ cloudflared → server -->
+  <path d="M320 378 H346" fill="none" stroke="#475569" stroke-width="1.8" marker-end="url(#arr)"/>
+  <text x="335" y="428" font-size="10" fill="#475569" text-anchor="middle">③ http://127.0.0.1:7791</text>
+
+  <!-- LAN 直连 -->
+  <path d="M540 136 V342" fill="none" stroke="#475569" stroke-width="1.8" marker-end="url(#arr)"/>
+  <text x="530" y="240" font-size="11" fill="#475569" text-anchor="end">LAN / 本机直连（不经 CF）</text>
+
+  <!-- server ↔ data -->
+  <path d="M430 410 V438" fill="none" stroke="#94a3b8" stroke-width="1.4" marker-end="url(#arrD)" marker-start="url(#arrD)"/>
+  <text x="440" y="430" font-size="10" fill="#64748b">读写</text>
+
+  <!-- ④ server → acp -->
+  <path d="M580 410 V522" fill="none" stroke="#475569" stroke-width="1.8" marker-end="url(#arr)"/>
+  <text x="592" y="470" font-size="11" fill="#475569">④ spawn·ACP</text>
+
+  <!-- ⑤ acp → Cognition -->
+  <path d="M610 556 L776 546" fill="none" stroke="#475569" stroke-width="1.8" marker-end="url(#arr)"/>
+  <text x="693" y="534" font-size="11" fill="#475569" text-anchor="middle">⑤ HTTPS</text>
+
+  <!-- rotate → acp (key 注入) -->
+  <path d="M320 515 H328 V545 H346" fill="none" stroke="#94a3b8" stroke-width="1.4" stroke-dasharray="5 4" marker-end="url(#arrD)"/>
+
+  <!-- rotate → server (state.json 冷却标记合并) -->
+  <path d="M320 498 H336 V400 H346" fill="none" stroke="#94a3b8" stroke-width="1.4" stroke-dasharray="5 4" marker-end="url(#arrD)"/>
+
+  <!-- v2 → Cognition -->
+  <path d="M870 158 V496" fill="none" stroke="#94a3b8" stroke-width="1.4" stroke-dasharray="5 4" marker-end="url(#arrD)"/>
+  <text x="882" y="340" font-size="10" fill="#94a3b8">Devin Cloud API（v1 接口）</text>
+
+  <!-- 脚注 -->
+  <text x="32" y="664" font-size="10" fill="#94a3b8">隧道 ingress：devin-web.zalize.com · devin.zalize.com（v1 死链保留）→ http://127.0.0.1:7791；devin-local.zalize.com 已于 10/20 摘除</text>
+  <text x="32" y="682" font-size="10" fill="#94a3b8">服务未鉴权 —— 持有 URL 即完全控制；Computer 页仅暴露只读桌面 + 隔离浏览器，未开放真实键鼠</text>
+</svg>

@@ -6,26 +6,58 @@ on top of local `devin acp` processes, with multi-account rotation on SWE rate l
 ## Build / run
 
 ```cmd
-npm run build                       :: vite + tsc → dist/
-deploy.bat                          :: build + free :7791 + clean orphan acp + start
-:: or manually:
-set DEVIN_WEB_ALLOWED_HOSTS=192.168.6.251:7791
-node dist\server\index.js --host 0.0.0.0 --port 7791
+node devin-web.mjs <cmd>            :: cross-platform service CLI (single entrypoint):
+::   run | start | stop | restart [--build] | status | install | uninstall | deploy | logs
+::   install → win32 Scheduled Tasks, linux systemd --user, darwin LaunchAgent
+deploy.bat                          :: thin wrapper → node devin-web.mjs deploy
+:: or manually (dev only — production should always go through the supervisor):
+node scripts\supervisor.mjs         :: :7791 BIOS → spawns backend on :7792
+node dist\server\index.js --host 0.0.0.0 --port 7791   :: bare, unsupervised
 ```
 
-Self-redeploy (once the new server is up — no more manual deploy.bat):
-`POST /api/admin/redeploy` runs `npm run build` (~1-3min), then respawns
-via the DETACHED `scripts/respawn.mjs` helper and exits.
+Production topology — `scripts/supervisor.mjs` is the BIOS: a ~250-line
+always-on process that owns :7791, serves `dist/web` itself, reverse-proxies
+`/api/*` + `/ws*` upgrades to the backend child on 127.0.0.1:7792, and
+health-probes `GET /api/health` every 4s. Backend exit OR 3 failed probes →
+clean orphaned acp children + respawn (>5 exits/5min → 60s backoff). So a
+hard crash, wedged event loop, or reboot self-heals — the static page stays
+up even while the backend is dead (APIs 502 `backend_unavailable` until it's
+back). Its own status/controls: `GET /api/_super/status`,
+`POST /api/_super/restart` (backend-only bounce), `POST /api/_super/stop`
+(intentional stop — writes `<dataDir>/supervisor.stopped` so the watchdog
+does NOT resurrect it; any fresh start clears the marker).
+Boot persistence via `devin-web.mjs install` (platform-native):
+win32 → Scheduled Tasks `devin-web-supervisor` (onlogon) +
+`devin-web-watchdog` (every minute → `scripts/watchdog.mjs`, revives the
+supervisor if :7791 is silent); linux → systemd --user unit
+(Restart=always + enable-linger); darwin → launchd LaunchAgent
+(RunAtLoad+KeepAlive).
+Supervisor injects a default `DEVIN_WEB_ALLOWED_HOSTS` (the tunnel hosts)
+when the environment lacks it — boot-time tasks have no shell env.
+`POST /api/_super/restart` vs the backend's own routes: prefer
+`/api/admin/restart` when the backend is up (it drains in-flight turns
+first); `/_super/restart` is the hard reset for a wedged backend — it kills
+mid-turn. Logs: `<dataDir>/supervisor.log` + `server.log`.
+
+Self-redeploy: `POST /api/admin/redeploy` runs `npm run build` (~1-3min).
 `POST /api/admin/restart` skips the build. UI: header `…` menu → 服务 →
 重启服务 / 重新构建并重启; the page then polls /api/accounts (down→up)
 and reloads — do NOT use a fixed sleep, the build window is
 unpredictable. Build failure keeps the old server alive. Agents can also
 `curl -X POST localhost:7791/api/admin/redeploy` — the call kills the
 caller's own acp along with the server; the session replays on next use.
+Under the supervisor (DEVIN_WEB_SUPERVISED=1) a drained exit IS the
+respawn — the supervisor restarts us; unsupervised runs still spawn the
+detached `scripts/respawn.mjs`, which itself now hands :7791 to the
+supervisor (set DEVIN_WEB_NO_SUPERVISOR=1 for the old bare respawn).
 Before exiting, the server drains in-flight prompts and waits as long as
-they take — a deploy NEVER kills an in-flight turn (a wedged prompt is
-ended via End session / Restart agent in the UI, which releases the drain);
-it logs a `waiting on N inflight` heartbeat every 30s meanwhile.
+they take — a deploy NEVER kills an in-flight turn. The drain is bounded by
+the turn-silence watchdog: a prompt that streams NOTHING for
+`DEVIN_WEB_TURN_SILENCE_MS` (default 15min) is declared wedged — its host
+acp is recycled and the RPC settles with an error, so `inflight` always
+clears eventually (a genuinely wedged prompt can still be ended sooner via
+End session / Restart agent in the UI); it logs a `waiting on N inflight`
+heartbeat every 30s meanwhile.
 Interrupted-turn recovery: `dispatchPrompt` records the outgoing message in
 `<dataDir>/open-turns.json` and clears it when the prompt settles — an entry
 surviving at boot means the server died mid-turn. A successful settle also
@@ -45,8 +77,10 @@ turns WITHOUT any tab open. `GET/POST /api/admin/prefs` backs the
 `/settings` page (official Preferences-style layout) whose send-shortcut /
 theme rows read the same localStorage keys the session page does.
 respawn.mjs is pure node: waits for the port via net.connect, cleans
-orphaned acp children, spawns the server detached with stdio →
-`<dataDir>/server.log` (4MB-rotated), its own steps →
+orphaned acp children, then spawns the SUPERVISOR detached (the migration
+hand-off from unsupervised → supervised); DEVIN_WEB_NO_SUPERVISOR=1 keeps
+the old behaviour of spawning the bare backend with stdio →
+`<dataDir>/server.log` (4MB-rotated). Its own steps →
 `<dataDir>/respawn.log`. If a respawn ever dies silently, read those two
 logs FIRST. `respawn.bat` is only a shim for the old build's
 `cmd /c respawn.bat` spawn.
@@ -63,6 +97,16 @@ powershell -File clean-orphans.ps1  :: kill acp processes with dead parents
 
 ## Gotchas
 
+- The pre-rename data dir was `~/.devin-remote` (upstream project name); the
+  rename to `~/.devin-web` did NOT carry data. `migrateLegacyDataDir()` in
+  store.ts runs at Store construction: copies missing log/uploads/tl files
+  (bigger `.jsonl` wins), deep-merges store.json/dw.json (pins/folders/titles)
+  /accounts-state.json, marks `.migrated-devin-remote`. Sessions' spawn-time
+  cwd inside devin's store still says `devin-workbench-local` —
+  `remapLegacyCwd()` (store.ts) rewrites that path segment on every
+  `sessionCwd.set` + `workspaces()` read.
+- i18next interpolation is `{{var}}` ONLY — single-brace `{name}` renders
+  literally. All locale keys must use `{{var}}`.
 - `session/load` locks a session to ONE acp process (`session_locked`,
   retryable). `sessionHost` in `server/src/sessionio.ts` pins ops to the host
   process — never re-resolve cwd for a loaded session (session/list rewrites
@@ -70,9 +114,12 @@ powershell -File clean-orphans.ps1  :: kill acp processes with dead parents
 - Server module map: `localweb.ts` = dw.json registry routes + workspace index
   + the big admin/share router; `sessionio.ts` = hostFor (the ONE session→acp
   resolver: dedicated → sessionHost pin → cwd pool), load/replay dedup, live
-  config, attachmentBlocks, promptWithRetry (the ONE rate-limit retry policy:
-  cool acp.account → rotate → resend once → status 429 when all cooling),
-  dispatchPrompt, subagents, session listing; `dwtimeline.ts` = log→DwItem
+  config, attachmentBlocks, promptWithRetry (the ONE retry policy: cool
+  acp.account → rotate → resend once → 429 when all cooling; also the
+  busy-tracking + turn-silence watchdog per attempt), dispatchPrompt,
+  beginDrain/isDraining (deploy drain gate — 503s new sends, no-ops
+  internal dispatchers, queue preserved), subagents, session listing;
+  `dwtimeline.ts` = log→DwItem
   builder + tlCache + noteUpdate deltas + tail snapshots; `dwstore.ts` =
   dw.json registry (meta/folders/pins/lastConfig). `sessionSubs` in localweb.ts
   is the shared admin/share subroute table — add identical-semantics subs there
@@ -127,11 +174,19 @@ powershell -File clean-orphans.ps1  :: kill acp processes with dead parents
   `session-archive|session-pin|session-folder`; no server change. Archiving
   a session from its page navigates here so archived rows stay discoverable.
   `text-text-orange`/`bg-accent-primary` tokens added for exact palette.
+- Any "复刻官方 X" / pixel-parity task MUST go through the `devin-parity`
+  skill (`.devin/skills/devin-parity/`): forensics capture against the live
+  official page first (`test/parity/capture-official.mjs`), spec gate via
+  `test/parity/diff-spec.mjs`. `_devin_assets/` bundles are for LOGIC
+  forensics only — never eyeball visuals from minified class names alone.
 - Header settings menu is LOCAL-only: Send-with (localStorage), Rename/Folder/
   Archive (dw.json), Copy link (`/s/<id>?t=local`), Share-to-cloud + End session
   (verified `_cognition.ai/*` ext), Restart agent process (`POST .../restart` →
   `restartSession` kills the hosting acp; next op respawns + replays — pooled
-  hosts shared by other sessions heal via hostFor's exited-pin check). The
+  hosts shared by other sessions heal via hostFor's exited-pin check. When
+  the host has OTHER sessions' turns in flight it is unpooled + retired on
+  idle instead of killed outright — otherwise an agent "restarting" a
+  poolmate kills its own process mid-turn). The
   cloud keep-alive/tags/reboot/reset-token entries were stubs — removed.
 - `ATTACH_URL_RE` (web/src/pages/mirror/attachments.ts) extracts attachment
   URLs from message text — uploads branch REQUIRES the `{uuid}-{name}` id
@@ -164,31 +219,60 @@ powershell -File clean-orphans.ps1  :: kill acp processes with dead parents
   unlocked session (`--id lucky-badger`).
 - Public access: Cloudflare Tunnel `devin-web` (id cb705fa8) runs as the
   `Cloudflared` Windows service (token-managed, survives reboots). Ingress maps
-  `devin-local.zalize.com` (+ `devin.zalize.com`) → http://127.0.0.1:7791. Any
+  `devin-web.zalize.com` (+ `devin.zalize.com`) → http://127.0.0.1:7791. Any
   new public hostname MUST also be added to DEVIN_WEB_ALLOWED_HOSTS.
   NOTE: the web has no auth — anyone with the URL has full control.
   `devin.zalize.com` itself 404s: its DNS is a read-only AAAA→100:: record
   managed by another CF product (undeletable via API key).
+  `devin-local.zalize.com` (pre-rename hostname) was removed from the tunnel
+  ingress and its DNS record deleted — do not re-add.
 - `session/load` counts as ACTIVITY — it bumps the session's `updatedAt` and
   replays the full history. Sidebar prefetch (`prefetchSession`) must only hit
   memory-only endpoints (slim detail); never prefetch timeline/config or every
   hover loads history + marks sessions "just now".
-- Load dedup: `loadInflight` in sessionio.ts shares one replay per session.
-  /timeline kicks `ensureLoaded` without awaiting (progressive fill, shows
-  "Loading history…" via `loadInflight.has`). Only timeline/config/mutations
-  trigger loads; detail/changes/messages/todos are memory-only.
-- Full history lives on DISK: `sessionLog` write-through appends every update
-  to `<dataDir>/log/<id>.jsonl` — the in-memory ring (5000) is only the live
-  window. `tlCache`/`buildTimeline` seeds from `readDisk` on cold start, log
+- Load dedup: `loadInflight` in sessionio.ts shares one replay per session —
+  the entry records the acp that STARTED the load; joiners resolving a
+  different pool (sessionCwd empty → primaryCwd fallback vs real cwd) MUST
+  pin to that recorded host, never mark their own — a wrong mark makes every
+  later op hit an acp that never opened the session ("Session not found").
+  `promptWithRetry` self-heals `session_not_found` once (drops mark+pin,
+  re-resolves through loadOnce). /timeline kicks `ensureLoaded` without
+  awaiting (progressive fill, shows "Loading history…" via `loadInflight.has`).
+  Only timeline/config/mutations trigger loads; detail/changes/messages/
+  todos are memory-only.
+- Full history lives in `<dataDir>/sessionlog.db` (node:sqlite, WAL) via
+  `SessionDb` (server/src/sessiondb.ts): `events(session_id,gen,seq,ts,kind,
+  bytes,data)` is the query side — `readDisk`/seq-resume/`diskSize`/`diskMtime`
+  go through it and serve only the MAX generation; `blobs(sha,data)` is a
+  content-addressed claim-check store — strings >16KB inside a >64KB update
+  persist as `{"$blob": sha}` refs and identical payloads dedup to ONE row.
+  Message text (user/agent/thought) NEVER offloads — the timeline renders
+  chat without blob reads; tool_call diffs are precomputed at store time
+  into `_dwFileUpdates` so `fileUpdates` needs no blobs either. Consumers
+  that genuinely need a payload call `sessionLog.resolveBlobs(update)`
+  (export, read/terminal text via `st.resolve` in dwtimeline).
+  Replay is GEN-ISOLATED: `clear()` only bumps `gens`, replayed appends
+  write the new gen alongside the old; `restoreFile` (failed load) deletes
+  the partial gen so the old resurfaces — no file dependency — and
+  `dropBackup` (success) deletes all older gens. A boot-time sweep +
+  lazy first-touch both import legacy `.jsonl` (`ensureImported`/
+  `importLegacy`), then DELETE the file — the DB is the history; new
+  appends re-create a fresh mirror. Subagent sidecars are built by a
+  seq-based DB scan (`scanSubsFromDb`, marker `.subscan` `{seq:N}`,
+  LIKE '%subagent%' prefilter); legacy byte-offset `{off}` markers and
+  the chunked file scan remain only as the `db==null` fallback. The
+  in-memory ring (5000) is still only the live window.
+  `tlCache`/`buildTimeline` seeds from `readDisk` on cold start, log
   `gen` bump (clear before re-replay), or an unconsumed-eviction gap
   (`headSeq > seenSeq+1`) — so /timeline backfill reaches the complete
-  history. Entries carry `seq` (per-session monotonic, resumes from the file
-  tail across restarts) → item ids are `e<seq>`, stable across rebuilds; the
+  history. Entries carry `seq` (per-session monotonic, resumes from the db
+  max/file tail across restarts) → item ids are `e<seq>`, stable across
+  rebuilds; the
   client cursor stays an index into the items array either way. `clear()`
-  does NOT truncate — it renames the file to `.jsonl.bak` before a re-replay:
-  `dropBackup` on success, `restoreFile`+`restoreMemory` on failure (a
-  `session_locked`/dead-acp load must not erase the transcript), and a
-  constructor sweep restores a fuller `.bak` after a mid-replay crash.
+  still renames the file to `.jsonl.bak` before a re-replay (file-level
+  mirror hygiene), and a
+  constructor sweep restores a fuller `.bak` after a mid-replay crash
+  (file side; the DB side self-heals via gens).
   After a successful replay, `doLoad` re-appends the unreplayed tail
   (anchor-matched past the last entry devin's store covered) so a just-
   finished exchange can't vanish on refresh. Devin ALSO re-pushes the last
@@ -250,7 +334,13 @@ powershell -File clean-orphans.ps1  :: kill acp processes with dead parents
   devin-rotate's own docs). Never skip `killPooled` on "next === from": after
   markLimited, pick() already returns the rotate target, so that comparison
   silently left the failed process alive while state said "switched".
-  `killPooled(agent, keep)` spares processes already on the target;
+  `killPooled(agent, keep)` spares processes already on the target AND
+  processes mid-turn (`acp.busySessions`, tracked per-attempt in
+  promptWithRetry) — a busy acp is unpooled + `retireAfterIdle` so its live
+  turns survive rotation, and releaseBusy kills it when the last one
+  settles. The failed acp's own busy mark releases in act's .finally BEFORE
+  the catch policy runs, so rotation still recycles it and the retry lands
+  on a fresh account.
   `acp.kill()` flips `exited` eagerly (the 'exit' event lags) so hostFor can
   never hand back a dying process. `onRateLimited` is gated by loadInflight —
   replayed agent-log lines must not mark accounts.
@@ -460,6 +550,73 @@ ports `\d+(:\d+)?`). Process lifetime = WS lifetime (close ⇒ kill ⇒ tunnel
 down). UI: LocalDock "云端会话" block — user pastes a cloud session id/URL,
 embedded TermPanel (extracted to web/src/components/TermPanel.tsx, shared by
 session Term tab + this block) gives the interactive shell.
+
+## Multi-agent ACP (server/src/agents.ts)
+
+Any ACP-capable CLI can host sessions, not just `devin acp`. Registry = two
+layers merged by `listAgents()`: builtins `AGENTS` (devin, prime) + user file
+`<dataDir>/agents.json` (`{agents:[{id,label,command,args,multiSession,
+versionArgs,env,shell,enabled}]}`, user entries override builtins by id —
+mtime-cached, so edits affect NEW spawns with no restart). `agentById()`
+falls back to devin; `disabled` entries hide from pickers but keep serving
+existing sessions.
+
+- **Process topology**: `manager.get(cwd, agent)` pools per
+  `${agent.id}:${cwd}`; `multiSession:false` agents get ONE dedicated process
+  per session (`startForSession` + `bindSession` + `store.addAgentSession`).
+  Dedicated agents can't `session/load` — `hostFor` 409s once the process is
+  gone (history stays readable from disk).
+- **Ownership**: pooled non-devin sessions persist `meta.agent` in dw.json;
+  dedicated ones live in `store.agentSessions`. `hostFor` resolves
+  dedicated-pin → store → meta → devin. BOTH creation paths write it
+  (`/api/admin/sessions/new`, native `POST /api/sessions`) — a missing
+  `meta.agent` routes pooled non-devin sessions to the devin pool = wrong
+  process.
+- **Windows**: npm-global CLIs are `.cmd`/`.ps1` shims Node ≥20.12 refuses to
+  spawn (EINVAL). Either `"shell": true` (routes through %ComSpec%,
+  `agentCommandLine` hand-quotes to dodge DEP0190) or point `command` at a
+  real `.exe`. The same flag is honored by `probeAgent` (registry ?probe=1)
+  and `agentCheck` in index.ts.
+- **Credentials**: `manager.envFor` injects `WINDSURF_API_KEY` (account pool)
+  ONLY for `agent.id === 'devin'` — rotation never touches other agents; any
+  agent's `env` map always merges into its child env.
+- **API**: `GET /api/admin/agents` (?probe=1 runs `versionArgs`) and `PUT`
+  (rewrites the user layer). `composer-meta` returns enabled agents for the
+  draft pill; session detail + tree rows carry `agent` so the client shows
+  the owner and hides `_cognition.ai`-only UI (share/end/subagent) on
+  non-devin sessions.
+- Verified live: OpenCode (`opencode.exe acp`, stdio) — initialize + new +
+  loadSession/list/resume + configOptions(model select) all answer.
+
+## 分身 persona (server/src/persona.ts)
+
+A dedicated `devin acp` session on cwd `<dataDir>/persona/` answers questions
+from working sessions on the user's behalf — its `AGENTS.md` skeleton is the
+owner-authored persona spec (principles / samples / red lines); `decisions.log`
+there is the append-only audit trail (`{ts,kind:answer|escalate|error,…}`).
+The persona session id lives in `dw.json` `persona.sessionId` and is created
+lazily via `ensurePersonaSession` (standard pool + sessionHost pin — never
+hand it a different cwd or the registry lookup misses).
+
+Modes (`off|semi|auto`): per-session override `meta.personaMode` > global
+`prefs.persona.mode`. Auto only fires from `dispatchPrompt`'s settle hook —
+`turnEndHooks` in sessionio.ts (persona registers on import; the direction is
+always persona→sessionio so no cycle). Detection = tail scan since the last
+user/boundary entry for `agent_message_chunk`s: ends `?`/`？` or matches the
+QUESTION_RE phrase list (请确认/需要你/should i/…). `personaLastSeq` dedupes
+re-detection of the same question; `maxPerHour` (default 4) caps asks and the
+`asking` set prevents concurrent asks per session.
+
+Answers go back through `dispatchPrompt` with the `[分身] ` prefix. `[升级]`
+(or an empty reply) sets `meta.personaEscalated` → amber UI row + optional
+`prefs.persona.webhook` POST (generic JSON, not DingTalk-bound). ANY human
+`message:POST` clears the escalation via `personaHumanMessage`. Routes:
+`GET/POST /api/admin/persona` (cfg + `decisions` tail),
+`POST /api/admin/session-persona` `{id,mode:'off'|'semi'|'auto'|'inherit'}`,
+`POST /api/admin/session-persona-ask` `{id}` (the semi-mode 问分身 button).
+Timeline responses carry `persona:{mode,escalated}`; tree rows too; ws event
+`persona_state` triggers the client's reload. Permission cards NEVER route to
+the persona — requestPermission stays human-only by design.
 
 ## Cloud-parity replication protocol (mandatory when copying app.devin.ai UI)
 

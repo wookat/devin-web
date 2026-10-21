@@ -23,3 +23,7 @@ child-page.png
 /_*  
 AGENTS_hivetix.md  
 _devin_assets/  
+
+# parity forensics: auth profile + captured evidence
+test/parity/.auth/
+docs/parity/
