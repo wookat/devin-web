@@ -125,6 +125,13 @@ powershell -File clean-orphans.ps1  :: kill acp processes with dead parents
   is the shared admin/share subroute table — add identical-semantics subs there
   (message/upload/file-contents/dashboard), keep sanitized share-only or
   admin-only subs in the branches.
+- `automations.ts` = local scheduled sessions (official "Automations" parity):
+  dw.json `automations` holds 5-field cron entries (Vixie dom/dow OR rule,
+  impossible exprs rejected at save); a 30s tick fires due ones via the
+  canonical sessions/new recipe — real session per run titled `⚙ <name>` in
+  `.automations` folder. REST: GET/POST `/api/admin/automations`, POST `/:id`
+  patch, DELETE `/:id`, POST `/:id/run`. `pr.ts` = gh-backed PR endpoints;
+  `pr-analyze` dispatches the diff to a persistent pr-review acp session.
 - Attachments are STRUCTURED: dispatchPrompt stores `attachments[]` on the
   `_local` log entry → `DwItem.attachments` → `TimelineItem.attachments`.
   Legacy `ATTACHMENT:"url"` marker lines in old persisted tails are still
