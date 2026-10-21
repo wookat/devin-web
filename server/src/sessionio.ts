@@ -622,6 +622,16 @@ let openTurnsLoaded = false;
 let gracefulExit = false;
 export function markGracefulExit() { gracefulExit = true; }
 
+/** Drop open-turn entries — all of them, or one id. The tombstone case: an
+ * entry that hit the resumeCount cap sits in the map forever otherwise
+ * (clearing only the file gets resurrected by the next openTurnsSave). */
+export function clearOpenTurns(ctx: ApiContext, id?: string): number {
+  const n = id ? (openTurns.delete(id) ? 1 : 0) : openTurns.size;
+  if (!id) openTurns.clear();
+  openTurnsSave(ctx);
+  return n;
+}
+
 function openTurnsLoad(ctx: ApiContext) {
   if (openTurnsLoaded) return;
   openTurnsLoaded = true;

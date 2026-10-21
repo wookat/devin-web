@@ -9,7 +9,7 @@ import path from "node:path";
 import { execFile } from "node:child_process";
 import { promisify } from "node:util";
 import type { ApiContext } from "./routes.js";
-import { isDraining, drainSince, inflight, restartSession, listLocalSessions, markGracefulExit } from "./sessionio.js";
+import { isDraining, drainSince, inflight, restartSession, listLocalSessions, markGracefulExit, clearOpenTurns } from "./sessionio.js";
 
 const execFileP = promisify(execFile);
 
@@ -167,9 +167,8 @@ export async function repair(ctx: ApiContext, fixes: string[] | "all"): Promise<
         for (const id of ids) restartSession(ctx, id);
         results[fix] = ids.length ? `stopped turn host(s) for: ${ids.join(", ")} — turns settle as errors` : "none in flight";
       } else if (fix === "clear-open-turns") {
-        const f = path.join(ctx.store.dataDir, "open-turns.json");
-        fs.writeFileSync(f, "{}");
-        results[fix] = "cleared — next boot won't replay them";
+        const n = clearOpenTurns(ctx);
+        results[fix] = `cleared ${n} entr${n === 1 ? "y" : "ies"} — next boot won't replay them`;
       } else if (fix === "restart-now") {
         results[fix] = "exiting — supervisor respawns immediately";
         setTimeout(() => {
