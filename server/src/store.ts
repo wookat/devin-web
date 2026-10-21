@@ -43,6 +43,9 @@ function readJson<T>(f: string): T | null {
   try { return JSON.parse(fs.readFileSync(f, "utf8")) as T; } catch { return null; }
 }
 
+// Bounded one-time migration — scheduled for removal in v0.6.0 once the
+// installed base has migrated. Removal = delete this function + its call
+// site in the Store constructor + the `.migrated-devin-remote` marker logic.
 /** One-shot merge of the pre-rename `~/.devin-remote` data dir into dataDir.
  * The rename switched DEVIN_WEB_HOME's default but never carried the data —
  * session logs, uploads, pins/folders (dw.json), workspaces and account

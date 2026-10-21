@@ -575,10 +575,12 @@ route code never changes.
 - `DEVIN_WEB_NO_AUTORESUME=1` disables the boot open-turns sweep —
   REQUIRED on second instances sharing the data dir, or each boot re-sends
   "继续" into sessions the primary already resumed (and burns GBs replaying).
-  Auto-resume also SKIPS sessions whose disk log exceeds 256MB (a
-  session/load replay of a 3.7GB log saturates the event loop for minutes)
-  and staggers remaining resumes 5s apart — the interrupted banner still
-  offers manual resume for skipped ones.
+  Auto-resume THROTTLES sessions whose disk log is ≥256MB (a session/load
+  replay of a 3.7GB log saturates the event loop for minutes): normal-size
+  turns dispatch 5s apart as before, then huge ones resume STRICTLY
+  SERIALLY — each waits for its turn to settle (open-turns/inflight
+  cleared or acp dead, 10min cap) before the next starts, ≤2 per boot.
+  Huge entries past the cap stay open for manual 继续 via the banner.
 
 ## Desktop-parity capability matrix (probed live against `devin acp`, v3.10.67 bundle)
 

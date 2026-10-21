@@ -554,21 +554,25 @@ export async function autoResumeInterrupted(ctx: ApiContext) {
   if (process.env.DEVIN_WEB_NO_AUTORESUME || !loadReg(ctx).prefs?.autoResume || !openTurns.size) return;
   // A resume triggers session/load, which replays the FULL transcript back
   // through the update stream — on multi-GB logs that replay alone saturates
-  // the loop and balloons the heap for minutes. Gate huge histories to
-  // manual resume (the interrupted banner still offers it), and stagger the
-  // rest so N replays never run at once.
+  // the loop and balloons the heap for minutes. Normal-size turns resume
+  // staggered so N replays never run at once; huge histories resume
+  // SERIALLY — one replay at a time, ≤2 per boot — so a pile of giant
+  // sessions can't OOM the backend. Entries past the cap stay in open-turns
+  // for manual 继续 via the interrupted banner.
   const HUGE = 256 << 20;
-  let first = true;
+  const normal: [string, OpenTurn][] = [];
+  const huge: { id: string; t: OpenTurn; size: number }[] = [];
   for (const [id, t] of [...openTurns]) {
     // Broker-adopted turns are still RUNNING on their original acp — the
     // settle watcher owns them; a "继续" here would double-prompt a live turn.
     if (adoptedTurns.has(id)) continue;
     if ((t.resumeCount ?? 0) >= 2) continue;
     const size = ctx.sessionLog.diskSize(id);
-    if (size > HUGE) {
-      console.error(`[auto-resume] ${id}: ${(size / (1 << 20)).toFixed(0)}MB log — skipping auto-resume (manual 继续 still works)`);
-      continue;
-    }
+    if (size >= HUGE) huge.push({ id, t, size });
+    else normal.push([id, t]);
+  }
+  let first = true;
+  for (const [id, t] of normal) {
     if (!first) await new Promise((r) => setTimeout(r, 5000));
     first = false;
     t.resumeCount = (t.resumeCount ?? 0) + 1;
@@ -578,6 +582,35 @@ export async function autoResumeInterrupted(ctx: ApiContext) {
     // to unhandledRejection (which used to kill the whole backend).
     try { void Promise.resolve(dispatchPrompt(ctx, id, "继续")).catch((e) => console.error(`[auto-resume] ${id} dispatch failed`, e)); }
     catch (e) { console.error(`[auto-resume] ${id} failed`, e); }
+  }
+  // Huge entries fire strictly one-at-a-time AFTER every normal dispatch is
+  // issued: dispatch → wait for the turn to settle (open-turns cleared OR
+  // inflight cleared OR host acp dead), 10min cap per entry, ≤2 per boot.
+  // Waiting on settle — not a fixed delay — is what actually bounds the
+  // replay heap: the next giant session/load can't start until this one's
+  // stream has drained.
+  const HUGE_CAP = 2, HUGE_WAIT_MS = 10 * 60_000;
+  let hugeN = 0;
+  for (const { id, t, size } of huge) {
+    if (hugeN >= HUGE_CAP) {
+      console.error(`[auto-resume] ${id}: over the ${HUGE_CAP}/boot huge-log resume cap — left for manual 继续`);
+      continue;
+    }
+    // The serial wait can span minutes — a manual resume/settle may have
+    // claimed the entry meanwhile, and a second "继续" would double-prompt
+    // a turn someone else already owns.
+    if (!openTurns.has(id) || inflight.has(id)) continue;
+    hugeN++;
+    t.resumeCount = (t.resumeCount ?? 0) + 1;
+    openTurnsSave(ctx);
+    console.error(`[auto-resume] ${id}: ${(size / (1 << 20)).toFixed(0)}MB log — throttled resume (serial)`);
+    try { void Promise.resolve(dispatchPrompt(ctx, id, "继续")).catch((e) => console.error(`[auto-resume] ${id} dispatch failed`, e)); }
+    catch (e) { console.error(`[auto-resume] ${id} failed`, e); }
+    const deadline = Date.now() + HUGE_WAIT_MS;
+    while (openTurns.has(id) && inflight.has(id) && !sessionHost.get(id)?.exited && Date.now() < deadline)
+      await new Promise((r) => setTimeout(r, 5000));
+    if (openTurns.has(id) && inflight.has(id) && !sessionHost.get(id)?.exited)
+      console.error(`[auto-resume] ${id}: still unsettled after ${HUGE_WAIT_MS / 60_000}min — moving on (turn keeps running)`);
   }
 }
 

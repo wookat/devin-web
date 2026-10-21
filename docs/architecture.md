@@ -120,5 +120,6 @@ into two `bind*Deps` calls at module-init in sessionload.
 - Queue-without-open-turn: persisted queue entries whose turn evidence is
   gone are never auto-replayed (queue non-empty implies a turn was in
   flight; that turn's settle path flushes it — correct but worth a proof).
-- Bounded legacy `~/.devin-remote` migration in store.ts — remove once the
-  installed base has all migrated.
+- Bounded legacy `~/.devin-remote` migration in store.ts — remove in v0.6.0
+  once the installed base has all migrated (function + call site + the
+  `.migrated-devin-remote` marker logic).
