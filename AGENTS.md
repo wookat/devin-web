@@ -58,11 +58,15 @@ acp is recycled and the RPC settles with an error, so `inflight` always
 clears eventually (a genuinely wedged prompt can still be ended sooner via
 End session / Restart agent in the UI); it logs a `waiting on N inflight
 for Ns` heartbeat every 30s meanwhile. Bounded escape:
-`DEVIN_WEB_DRAIN_TIMEOUT_MS` — the supervisor injects a 900s default
-(silence watchdog alone can't help: an auto-resumed replay of a huge
-session log streams continuously, never going "silent", so inflight never
-settles and restarts deadlock — that bit us for ~14h); set the env to `0`
-explicitly to restore wait-forever. Past the bound the server exits with
+`DEVIN_WEB_DRAIN_TIMEOUT_MS` — the supervisor injects a **30s** default
+grace, then the backend exits with turns still in flight: open-turns.json
+survives and `autoResumeInterrupted` replays them on the new backend (the
+same path as crash recovery), so waiting longer buys nothing. A 900s
+bound previously existed for a different reason — the silence watchdog
+can't help auto-resumed replays (a huge log's replay streams
+continuously, never "silent", so inflight never settled and restarts
+deadlocked ~14h). Set the env to `0` explicitly to restore wait-forever,
+or larger if you ever want a longer grace. Past the bound the server exits with
 turns still in flight; their open-turns.json entries survive and
 `autoResumeInterrupted` replays them on the new backend (the same path as
 crash recovery), so keep `prefs.autoResume` on.
@@ -169,13 +173,28 @@ powershell -File clean-orphans.ps1  :: kill acp processes with dead parents
 - New-session flow mirrors desktop: `/` redirects to `/admin/new`, which is the
   `id === 'new'` draft sentinel inside AdminMirror — centered composer
   (`mt-auto` empty state + `mb-auto` footer), no session endpoints fire, first
-  send POSTs `/api/admin/sessions/new` {task,folder,cwd} then `nav(replace)`
+  send POSTs `/api/admin/sessions/new` {task,folder,cwd,ssh?} then `nav(replace)`
   into `/admin/<id>`. Draft model/mode pills mutate `lastSeenLocalCfg` +
   `draftPicks` (replayed via /config after create); `dw-new-session-draft`
   sessionStorage hands text between pages. `composer-meta` response carries
-  `primary_cwd` for the draft workspace picker. `/admin/new` must stay out of
-  every session-scoped fetch (main.tsx boot prefetch excludes it — 'sessions'
-  too: `/admin/sessions` is the management page, not a session id).
+  `primary_cwd` for the draft workspace picker + `ssh_hosts` for the run-target
+  picker. `/admin/new` must stay out of every session-scoped fetch (main.tsx
+  boot prefetch excludes it — 'sessions' too: `/admin/sessions` is the
+  management page, not a session id). Draft layout: composer narrowed to
+  `max-w-[692px]` to line up with the cards below; run-target/workspace/model
+  live in the BeardBand chin (wax area), never inside the card.
+- `本地+SSH` run target (desktop local↔cloud parity, minus cloud): the draft
+  chin's LocalPicker lists `prefs.sshHosts` [{name?,target,cwd?}] (managed via
+  POST /api/admin/prefs — target must match ^[\w.@%:+-]{1,200}$). `sessions/new
+  {ssh: <target>}` REJECTS targets not in that list (unauthenticated web →
+  never accept arbitrary ssh). When set, the manager pools as
+  `agent:ssh:<target>:<cwd>` and spawns `ssh <target> <agentCmd>` (stdio = the
+  ACP pipe); `cwd` is a REMOTE path. ACP terminal/* calls route through the
+  same ssh via a per-process TerminalRunner(sshTarget); /ws/term for an ssh
+  session becomes `ssh -tt <target>`; meta.ssh persists so hostFor/sessionSsh
+  re-resolve the remote pool after restart. Local fs-dependent features
+  (workspace browse, @file index, upload resource paths) degrade on remote
+  sessions — they read the server fs, not the remote one.
 - `/admin/sessions` (`web/src/pages/SessionsPage.tsx`) = pixel-parity clone of
   the official sessions-management page (measured live on app.devin.ai):
   300px sidebar mounting the REAL SessionTree + LocalDock; h-12 header;
