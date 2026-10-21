@@ -28,12 +28,12 @@ import {
 import {
   hostFor,
   ensureLoaded, acpForId, restartSession,
-  sessionConfig, recordTerminal, resolveUpload, dispatchPrompt,
+  sessionConfig, recordTerminal,
   sessionStatus, interruptedTurn, listSubagents, subagentTimeline, subPingActive, listLocalSessions,
   snippetFromLog, terminalBuf, cloudVersionToModel,
-  sendPreflight,
   type ListedSession, type SubagentInfo,
 } from "./sessionio.js";
+import { resolveUpload, dispatchPrompt, sendPreflight } from "./sessionprompt.js";
 import { queueList, queueAdd, queueRemove, queueFlush } from "./sessionqueue.js";
 import { noteSendError, recentSendErrors } from "./sendhealth.js";
 import { loadedOn, sessionHost, loadInflight, isSessionPinned } from "./sessionplace.js";

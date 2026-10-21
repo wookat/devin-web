@@ -3,12 +3,8 @@
  * attachments, prompt dispatch, subagents, session listing.
  * Extracted from localweb.ts (mechanical move, behavior unchanged).
  */
-import fs from "node:fs";
-import path from "node:path";
 import type { ApiContext } from "./routes.js";
 import type { DevinAcp } from "./acp.js";
-import { uploadPath, MIME } from "./uploads.js";
-import { isRateLimitError, retryAfterSeconds } from "./accounts.js";
 import { catalogInfo } from "./modelcat.js";
 import { remapLegacyCwd } from "./store.js";
 import { agentById, DEFAULT_AGENT } from "./agents.js";
@@ -18,8 +14,9 @@ import {
   isSessionLocked, loadWithRetry, initCfgState, persistJson,
   type ConfigOption, type SessionConfig,
 } from "./sessioncfg.js";
-import { queueList, queueAdd, queueRemove, queueFlush, restoreQueues, bindQueueDeps, type QueuedMsg } from "./sessionqueue.js";
-import { noteSendError, lastSendError, recentSendErrors, restoreSendErrors, type SendCheckStep } from "./sendhealth.js";
+import { queueAdd, queueRemove, queueFlush, restoreQueues, bindQueueDeps, type QueuedMsg } from "./sessionqueue.js";
+import { recentSendErrors, restoreSendErrors } from "./sendhealth.js";
+import { dispatchPrompt, releaseBusy, bindPromptDeps } from "./sessionprompt.js";
 import { openTurns, openTurnsLoad, openTurnsSave, clearOpenTurns, type OpenTurn } from "./sessionturns.js";
 import { loadedOn, sessionHost, loadEpoch, loadInflight, isSessionPinned } from "./sessionplace.js";
 import { inflight, adoptedTurns, lastActivity, touchSessionActivity, beginDrain, isDraining, drainSince, markGracefulExit, isGracefulExit } from "./sessionlive.js";
@@ -466,6 +463,15 @@ bindQueueDeps({
   dispatch: (ctx, id, m) => dispatchPrompt(ctx, id, m.text, m.attachments ?? [], m.subagentId, m.respawnRow),
 });
 
+// sessionprompt needs three callbacks that live HERE (host resolver, the
+// status read behind its settle broadcast, and the subagent liveness ping) —
+// injected for the same reason: it must not import its consumer.
+bindPromptDeps({
+  resolveAcp: (ctx, id) => acpForId(ctx, id),
+  statusOf: (ctx, id) => sessionStatus(ctx, id),
+  pingSubagent: (aid) => { subPing.set(aid, Date.now()); },
+});
+
 // ---------------------------------------------------------------------------
 // interrupted-turn recovery — a prompt that never settled is recoverable
 // evidence, not silent loss. dispatchPrompt records the outgoing message in
@@ -480,71 +486,11 @@ bindQueueDeps({
  * liveness is that module's domain (it owns the offset journal write). */
 
 // ---------------------------------------------------------------------------
-// Send diagnostics — the error journal lives in sendhealth.ts (imported
-// above). sendPreflight stays HERE: it consumes sessionio state
-// (openTurns/sessionHost/inflight/draining), it's a consumer not storage.
+// Send pipeline (sendPreflight/attachments/promptWithRetry/dispatchPrompt)
+// lives in sessionprompt.ts — imported above. Its engine callbacks back into
+// this module's resolver/status/subagent-ping are injected below so the edge
+// stays one-directional.
 // ---------------------------------------------------------------------------
-
-/** Side-effect-free preflight of the whole send pipeline for one session —
- *  gate → registry → busy → host → account → store → last error. Never
- *  spawns a process or sends anything; it reports what a send WOULD hit. */
-function sendPreflight(ctx: ApiContext, id: string) {
-  openTurnsLoad(ctx);
-  const steps: SendCheckStep[] = [];
-  const rec = (id2: string, level: SendCheckStep["level"], detail: string) => steps.push({ id: id2, level, detail });
-
-  rec("gate", isDraining() ? "fail" : "ok",
-    isDraining() ? "server is draining for a restart — sends are refused until it is back" : "dispatch gate open");
-
-  const known = ctx.sessionCwd.has(id) || !!ctx.store.agentSession(id) || loadReg(ctx).sessions[id] != null;
-  rec("known", known ? "ok" : "warn",
-    known ? "session registered" : "unknown session id — a first send must carry cwd");
-
-  const flying = inflight.has(id);
-  const queued = queueList(id).length;
-  rec("busy", flying ? "warn" : "ok",
-    flying ? `turn in flight — a send now parks in the queue (depth ${queued})`
-      : queued ? `idle — ${queued} queued message(s)` : "idle");
-
-  const dedicated = ctx.manager.forSession(id);
-  const pinned = sessionHost.get(id);
-  if (dedicated) {
-    rec("host", "ok", `dedicated agent process pid ${dedicated.pid}`);
-  } else if (pinned) {
-    rec("host", pinned.exited ? "warn" : "ok",
-      pinned.exited
-        ? `pinned host pid ${pinned.pid} exited — next send re-resolves and replays`
-        : `pinned ${pinned.agent.id} process pid ${pinned.pid} (account ${pinned.account ?? "?"})`);
-  } else {
-    const dir = ctx.sessionCwd.get(id);
-    rec("host", dir ? "ok" : "warn",
-      dir ? `no live host — next send spawns/loads on cwd pool (${dir})`
-        : "no live host and no known cwd — a send will fail with 'unknown session'");
-  }
-
-  const healthy = ctx.accounts.healthy();
-  const acct = pinned?.account ?? dedicated?.account ?? ctx.accounts.pick() ?? ctx.accounts.accountForCredFile();
-  rec("account", acct ? "ok" : healthy.length ? "warn" : "fail",
-    acct ? `account: ${acct}${pinned?.exited ? " (host dead — respawn picks a healthy one)" : ""}`
-      : healthy.length ? `no spawn attribution — healthy pool: ${healthy.join(", ")}`
-        : "ALL accounts cooling — sends will fail 429");
-
-  const dbs = ctx.sessionLog.dbStats();
-  rec("store", dbs ? "ok" : "warn",
-    dbs ? `${dbs.events.toLocaleString()} events · ${dbs.blobs.toLocaleString()} blobs · ${(dbs.fileBytes / 1048576).toFixed(0)}MB`
-      : "sqlite store unavailable — file-mirror fallback only");
-
-  const open = openTurns.get(id);
-  if (open) rec("openTurn", "warn", `an earlier turn never settled (${new Date(open.ts).toLocaleTimeString()}) — it will auto-recover or resend`);
-
-  const last = lastSendError(id);
-  if (last) rec("lastError", "warn", `${new Date(last.ts).toLocaleTimeString()} [${last.stage}] ${last.message}`);
-
-  return {
-    steps,
-    verdict: steps.some((s) => s.level === "fail") ? "blocked" : steps.some((s) => s.level === "warn") ? "degraded" : "ok",
-  };
-}
 
 /** The session's last turn if it never reached a settled state and nothing
  * is running now: open-turns evidence first (process died mid-prompt), else
@@ -750,279 +696,6 @@ export async function autoResumeInterrupted(ctx: ApiContext) {
   }
 }
 
-const TEXTISH = /^text\/|\/(json|xml|javascript|typescript|x-yaml)$/i;
-const TEXT_EXT = new Set([".txt", ".md", ".json", ".jsonc", ".yaml", ".yml", ".xml", ".csv", ".tsv", ".log", ".js", ".jsx", ".ts", ".tsx", ".mjs", ".cjs", ".py", ".go", ".rs", ".java", ".c", ".h", ".cpp", ".hpp", ".cs", ".rb", ".php", ".sh", ".bash", ".zsh", ".ps1", ".bat", ".cmd", ".sql", ".html", ".htm", ".css", ".scss", ".less", ".vue", ".svelte", ".toml", ".ini", ".cfg", ".conf", ".env", ".gitignore", ".dockerfile", ".swift", ".kt", ".lua", ".r", ".dart", ".ex", ".exs", ".erl", ".hs", ".ml", ".clj", ".scala", ".gradle", ".cmake", ".proto", ".tf"]);
-
-/** Resolve a staged `/api/uploads/<id>` url to its on-disk file + mime. */
-function resolveUpload(ctx: ApiContext, url: string): { file: string; mime: string; name: string } | null {
-  const m = /^\/api\/uploads\/([^/?#]+)/.exec(url);
-  if (!m) return null;
-  const file = uploadPath(ctx.store, decodeURIComponent(m[1]));
-  if (!fs.existsSync(file)) return null;
-  const name = path.basename(file).replace(/^[0-9a-f-]{36}-/, "");
-  return { file, name, mime: MIME[path.extname(file).toLowerCase()] ?? "application/octet-stream" };
-}
-
-/** Turn staged uploads into real ACP prompt blocks: images inline as
- *  base64 (devin advertises image:true), readable text embedded as a
- *  `resource` (embeddedContext:true), everything else a `file://`
- *  resource_link the local agent can open itself. */
-async function attachmentBlocks(ctx: ApiContext, attachments: { url: string; name?: string }[]): Promise<Record<string, unknown>[]> {
-  const blocks: Record<string, unknown>[] = [];
-  for (const a of attachments) {
-    const r = resolveUpload(ctx, a.url);
-    if (!r) continue;
-    const uri = `file:///${r.file.replace(/\\/g, "/")}`;
-    try {
-      const stat = fs.statSync(r.file);
-      if (r.mime.startsWith("image/")) {
-        blocks.push({ type: "image", data: fs.readFileSync(r.file).toString("base64"), mimeType: r.mime, uri });
-      } else if ((TEXTISH.test(r.mime) || TEXT_EXT.has(path.extname(r.file).toLowerCase())) && stat.size <= 512 * 1024) {
-        blocks.push({ type: "resource", resource: { uri, mimeType: r.mime, text: fs.readFileSync(r.file, "utf8") } });
-      } else {
-        blocks.push({ type: "resource_link", uri, name: a.name ?? r.name, mimeType: r.mime, size: stat.size });
-      }
-    } catch { /* file vanished between stage and send — skip */ }
-  }
-  return blocks;
-}
-
-/** Fire-and-forget prompt with rate-limit → rotate → auto-resend recovery. */
-/** Send a prompt with ONE automatic rate-limit retry — the single retry policy
- * shared by the wb /message route and the native /prompt route: cool the
- * account the failing acp actually runs on, rotate (kills pooled processes so
- * the next spawn uses a fresh key), re-resolve the host via getAcp, resend.
- * Throws a status-429 error when every account is cooling. */
-/** devin's -32016: the session isn't open on the acp we resolved — the
- * loadedOn mark/pin went stale (cross-pool join race, lock stolen by
- * another app, or the acp silently dropped it). */
-function isSessionNotFoundError(e: unknown): boolean {
-  const kind = (e as { data?: Record<string, unknown> })?.data?.["cognition.ai/errorKind"];
-  if (kind === "session_not_found") return true;
-  const s = String((e as Error)?.message ?? e);
-  return /session not found|session_not_found/i.test(s);
-}
-
-/** The JSON-RPC transport died mid-call — the SDK rejects pending calls with
- * "Connection closed" when the acp pipe breaks. The process can stay alive
- * (alive per the process table, dead per the pipe): a half-dead host wedges a
- * session into "loaded_here but every prompt dies" — the puzzling-tithonia
- * loop. Killing and re-resolving is the only way out. */
-function isTransportDeadError(e: unknown): boolean {
-  const s = String((e as Error)?.message ?? e);
-  return /connection closed|write EPIPE|ERR_STREAM_DESTROYED|premature close|socket hang up/i.test(s);
-}
-
-/** Last streaming-update time per session — the turn silence watchdog reads
- * it (a live turn streams chunks; a wedged RPC is silent). Touched from the
- * onSessionUpdate path in index.ts. */
-// lastActivity map + touchSessionActivity live in sessionlive.ts — see imports.
-
-/** A prompt RPC can hang forever when the agent backend wedges — it used to
- * leave `inflight` set and stall the deploy drain indefinitely. A turn that
- * produced no output for this long is declared dead: the host acp is
- * recycled (its transport close rejects the pending RPC anyway; the race
- * below is the belt-and-braces settle) so dispatchPrompt's finally runs and
- * the drain can proceed. Env-tunable; default 15min of silence. */
-const TURN_SILENCE_MS = Number(process.env.DEVIN_WEB_TURN_SILENCE_MS ?? 15 * 60_000);
-
-/** Drop a session's busy mark on `acp` — when the acp was flagged for
- * retire-after-idle (rotation/restart while mid-turn), the last settle is
- * what actually recycles it. */
-function releaseBusy(ctx: ApiContext, acp: DevinAcp, id: string) {
-  acp.busySessions.delete(id);
-  if (acp.retireAfterIdle && !acp.busySessions.size && !acp.exited) {
-    ctx.manager.killProcess(acp);
-  }
-}
-
-async function promptWithRetry<T>(
-  ctx: ApiContext,
-  id: string,
-  getAcp: () => Promise<DevinAcp>,
-  act: (acp: DevinAcp) => Promise<T>,
-): Promise<T> {
-  for (let retried = false, healed = false; ;) {
-    const acp = await getAcp().catch((e: unknown) => {
-      (e as { stage?: string }).stage ??= "resolve";
-      throw e;
-    });
-    acp.busySessions.add(id);
-    // Busy is released in act's own .finally so the catch-policy below sees
-    // the failed acp already idle — a rate-limit killPooled must be able to
-    // recycle THIS process so the retry lands on a fresh account.
-    let wedgedReject: (e: Error) => void = () => {};
-    const wedged = new Promise<never>((_, rej) => { wedgedReject = rej; });
-    const t0 = Date.now();
-    const watchdog = setInterval(() => {
-      // Floor at t0: lastActivity may hold a PREVIOUS turn's timestamp —
-      // without the floor an idle-for-a-while session gets killed 60s into
-      // its next (healthy) turn.
-      const last = Math.max(lastActivity.get(id) ?? 0, t0);
-      if (Date.now() - last <= TURN_SILENCE_MS) return;
-      clearInterval(watchdog);
-      console.warn(`[session] ${id}: no output for ${Math.round(TURN_SILENCE_MS / 60000)}min — recycling wedged host acp`);
-      if (!acp.exited) ctx.manager.killProcess(acp);
-      wedgedReject(Object.assign(new Error(`turn produced no output for ${Math.round(TURN_SILENCE_MS / 60000)}min — wedged host process recycled`), { stage: "watchdog" }));
-    }, 60_000);
-    watchdog.unref();
-    try {
-      return await Promise.race([
-        act(acp).finally(() => { clearInterval(watchdog); releaseBusy(ctx, acp, id); }),
-        wedged,
-      ]);
-    } catch (err) {
-      const msg = err instanceof Error ? err.message : String(err);
-      (err as { stage?: string }).stage ??=
-        isSessionNotFoundError(err) ? "resolve" : isRateLimitError(msg) ? "rate-limit" : "prompt";
-      // The pin/mark lied — clear it and re-resolve once so loadOnce
-      // replays the session onto the acp the retry actually lands on.
-      if (isSessionNotFoundError(err) && !healed) {
-        healed = true;
-        loadedOn.get(acp)?.delete(id);
-        if (sessionHost.get(id) === acp) sessionHost.delete(id);
-        console.warn(`[session] ${id}: stale host mark — reloading onto a fresh acp (${msg})`);
-        continue;
-      }
-      // Transport died with the session pinned here — the host is a corpse
-      // regardless of `exited`. Recycle it (busy poolmates are spared via the
-      // same unpool+retire rule restartSession uses) and replay once on a
-      // fresh acp. `healed` bounds this to one shot; a still-broken session
-      // surfaces its next error unchanged.
-      if (isTransportDeadError(err) && !healed) {
-        healed = true;
-        loadedOn.get(acp)?.delete(id);
-        if (sessionHost.get(id) === acp) sessionHost.delete(id);
-        if (acp.busySessions.size) { ctx.manager.unpool(acp, id); acp.retireAfterIdle = true; }
-        else ctx.manager.killProcess(acp);
-        console.warn(`[session] ${id}: acp transport died (${msg.slice(0, 80)}) — recycled host, retrying on a fresh process`);
-        continue;
-      }
-      if (!isRateLimitError(msg) || retried) throw err;
-      retried = true;
-      // acp.account = the key injected at spawn (real attribution); the
-      // cred-file lookup covers keyless spawns (all accounts were cooling);
-      // pick() is the last resort only.
-      const name = acp.account ?? ctx.accounts.accountForCredFile() ?? ctx.accounts.pick();
-      if (name) {
-        ctx.accounts.markLimited(name, retryAfterSeconds(msg));
-        ctx.hub.broadcast({ type: "account_limited", account: name, sessionId: id, message: msg });
-      }
-      const next = ctx.rotate("rate-limit");
-      ctx.sessionLog.append(id, {
-        sessionUpdate: "dw_notice",
-        notice: next ? `已切换到账号 ${next}，重新发送` : "全部账号限速中",
-      });
-      noteUpdate(ctx, id);
-      if (!next) throw Object.assign(err instanceof Error ? err : new Error(msg), {
-        status: 429,
-        details: { rateLimited: true, limitedAccount: name, retryAfter: ctx.accounts.nextRecoveryAt() },
-      });
-    }
-  }
-}
-
-/** Post-settle delegates (persona 分身 registers here — keeps the import
- * one-directional: persona→sessionio, never the reverse). */
-const turnEndHooks = new Set<(ctx: ApiContext, id: string) => void>();
-
-function dispatchPrompt(ctx: ApiContext, id: string, text: string, attachments: { url: string; name?: string; mime?: string; size?: number }[] = [], subagentId?: string, respawnRow?: { title: string; task: string; profile: string }) {
-  // Drain gate: no new turns once a restart is draining — internal callers
-  // (queueFlush, auto-resume, subagent relays) no-op; HTTP send-paths were
-  // already 503'd before reaching here.
-  if (isDraining()) return;
-  // U+FFFD in the text means the body arrived corrupted (bad client encoding)
-  // or the source text was already broken — log so we can tell "browser-side
-  // corrupt" from "downstream corrupt" without reproducing.
-  if (text.includes("�")) {
-    console.warn(`[prompt] U+FFFD replacement chars in ${subagentId ? `subagent ${subagentId} relay` : `session ${id}`} text — input was already corrupted upstream: ${JSON.stringify(text.slice(0, 120))}`);
-  }
-  // Structured attachments ride on the log entry itself — the timeline item
-  // exposes them as item.attachments (legacy ATTACHMENT: markers in old
-  // persisted tails are still parsed client-side).
-  ctx.sessionLog.append(id, {
-    sessionUpdate: "user_message_chunk", content: { type: "text", text }, _local: true,
-    ...(attachments.length ? { attachments } : {}),
-    // A subagent-addressed message echoes into that agent's stream (same
-    // subagent_context tag as real events) so it stays out of the main flow.
-    ...(subagentId ? { _meta: { "cognition.ai/subagent_context": { parentAgentId: subagentId } } } : {}),
-  });
-  noteUpdate(ctx, id);
-  inflight.add(id);
-  // Sidebar rows poll /mirror/sessions only every 60s — push the status flip
-  // so other clients' trees turn "working" immediately.
-  ctx.hub.broadcast({ type: "session_status", sessionId: id, status: "working" });
-  openTurnsLoad(ctx);
-  openTurns.set(id, { text, ts: Date.now(), ...(attachments.length ? { attachments } : {}), resumeCount: openTurns.get(id)?.resumeCount ?? 0 });
-  openTurnsSave(ctx);
-  const run = async () => {
-    const blocks = await attachmentBlocks(ctx, attachments).catch((e: unknown) => {
-      throw Object.assign(e instanceof Error ? e : new Error(String(e)), { stage: "attachments" });
-    });
-    const ctxMeta = subagentId
-      ? {
-          "cognition.ai/subagent_context": { agentId: subagentId, parentAgentId: subagentId },
-          // A subagent's chain is keyed by its agent id (Chain::Side(id)) —
-          // without this the prompt lands on the main chain.
-          "cognition.ai/chain": { side: subagentId },
-        }
-      : undefined;
-    // There is no client→subagent prompt route on this agent build: chain/
-    // subagent_context prompt metas are ignored and the desktop only ever
-    // reaches a subagent through the lead — which resumes it via
-    // run_subagent(resume="<agentId>"). So a "message to subagent" is sent as
-    // an explicit relay instruction on the main chain; the lead performs the
-    // resume and the reply lands in the child stream. (A *running* subagent
-    // cannot be resumed — the lead reports that, same as desktop.)
-    // The wording is imperative and the user text is JSON-quoted: a loose
-    // "relay this" phrasing lets the lead misread the message body as a task
-    // for itself (observed: it went off debugging the content instead of
-    // calling the tool).
-    if (subagentId) subPing.set(subagentId, Date.now());
-    // respawnRow: the old handle is dead — the lead spawns a SUCCESSOR
-    // (fresh agent, same profile, prior task+tail as context) instead of
-    // resuming. The successor lands as a NEW child row; the dead one stays.
-    const tail = respawnRow ? ctx.sessionLog.subTailText(id, subagentId!).slice(-1500) : "";
-    const promptText = subagentId
-      ? respawnRow
-        ? `[Subagent relay] Subagent "${subagentId}" is permanently dead (its host process was recycled) — do NOT resume it. Call run_subagent(title=${JSON.stringify(respawnRow.title || "Subagent successor")}, profile=${JSON.stringify(respawnRow.profile || "subagent_general")}, task=<task>) now to spawn a SUCCESSOR agent — this is your ONLY task. Compose <task> as: "You continue the work of a previous subagent. Original task: ${JSON.stringify(respawnRow.task.slice(0, 600))}. Its last output before the handle died: ${JSON.stringify(tail)}. New instruction from the user: ${JSON.stringify(text)}"`
-        : `[Subagent relay] Call run_subagent(resume="${subagentId}", task=<message>) now and pass the user's message verbatim — this is your ONLY task, do not do anything else first. If the subagent is still running and cannot be resumed, just say so. User message: ${JSON.stringify(text)}`
-      : text;
-    const textBlock = ctxMeta ? { type: "text", text: promptText, _meta: ctxMeta } : { type: "text", text: promptText };
-    return promptWithRetry(ctx, id, () => acpForId(ctx, id), (acp) => acp.prompt(id, [textBlock, ...blocks] as never, ctxMeta));
-  };
-  void run()
-    .then(() => {
-      // Durable turn boundary — survives log replay via the tail re-append,
-      // so interruptedTurn can tell "finished turn" from "cut turn".
-      ctx.sessionLog.append(id, { sessionUpdate: "dw_turn_end" });
-      ctx.hub.broadcast({ type: "prompt_done", sessionId: id, result: null });
-      persistTail(ctx, id);
-      for (const h of turnEndHooks) { try { h(ctx, id); } catch { /* hooks never break a settle */ } }
-    })
-    .catch((err: unknown) => {
-      const msg = err instanceof Error ? err.message : String(err);
-      const stage = (err as { stage?: string })?.stage ?? "prompt";
-      noteSendError(id, stage, msg);
-      ctx.sessionLog.append(id, {
-        sessionUpdate: "dw_notice",
-        notice: `错误[${stage}]: ${msg.slice(0, 200)}`,
-      });
-      noteUpdate(ctx, id);
-    })
-    .finally(() => {
-      inflight.delete(id);
-      ctx.hub.broadcast({ type: "session_status", sessionId: id, status: sessionStatus(ctx, id).status });
-      if (isGracefulExit()) {
-        // A deploy-killed resume never got a fair shot — refund the attempt.
-        // resumeCount only counts turns that failed NATURALLY; otherwise N
-        // restarts burn the cap and the entry parks as a forever tombstone.
-        const t = openTurns.get(id);
-        if (t?.resumeCount) { t.resumeCount--; openTurnsSave(ctx); }
-      } else if (openTurns.delete(id)) openTurnsSave(ctx);
-      queueFlush(ctx, id);
-    });
-}
 
 function sessionStatus(ctx: ApiContext, id: string): { status: string; activity: string } {
   if (inflight.has(id)) return { status: "working", activity: "working" };
@@ -1340,9 +1013,7 @@ export {
   loadOnce, hostFor, loadCooldown,
   ensureLoaded, acpForId, restartSession,
   sessionConfig, cloudVersionToModel,
-  terminalBuf, recordTerminal, resolveUpload, attachmentBlocks,
-  promptWithRetry, dispatchPrompt, sessionStatus, turnEndHooks,
-  sendPreflight,
+  terminalBuf, recordTerminal, sessionStatus,
   type SubagentInfo, listSubagents, subagentTimeline, subPingActive,
   type ListedSession, listLocalSessions, snippetFromLog,
 };

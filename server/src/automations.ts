@@ -6,9 +6,7 @@
 import type { ApiContext } from "./routes.js";
 import { loadReg, saveReg, meta, type DwAutomation } from "./dwstore.js";
 import { agentById } from "./agents.js";
-import {
-  dispatchPrompt,
-} from "./sessionio.js";
+import { dispatchPrompt } from "./sessionprompt.js";
 import { captureLoadResponse } from "./sessioncfg.js";
 import { loadedOn, sessionHost } from "./sessionplace.js";
 import { isDraining } from "./sessionlive.js";

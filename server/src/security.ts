@@ -12,7 +12,7 @@ import type { IncomingMessage, ServerResponse } from "node:http";
 import type { ApiContext } from "./routes.js";
 import { loadReg, saveReg, meta, type DwSecurityScan, type DwSecurityFinding } from "./dwstore.js";
 import { agentById } from "./agents.js";
-import { dispatchPrompt } from "./sessionio.js";
+import { dispatchPrompt } from "./sessionprompt.js";
 import { isDraining } from "./sessionlive.js";
 import { captureLoadResponse } from "./sessioncfg.js";
 import { loadedOn, sessionHost } from "./sessionplace.js";
