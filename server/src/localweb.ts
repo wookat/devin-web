@@ -41,6 +41,8 @@ import {
 import { agentById, listAgents, probeAgent, saveUserAgents } from "./agents.js";
 import { handlePrRoute } from "./pr.js";
 import { cronNext, runAutomation } from "./automations.js";
+import { handleWikiRoute } from "./wiki.js";
+import { handleSecurityRoute, resumeScans } from "./security.js";
 import type { DwAutomation } from "./dwstore.js";
 
 // ---------------------------------------------------------------------------
@@ -824,6 +826,14 @@ export async function handleLocalWb(ctx: ApiContext, req: IncomingMessage, res: 
         json(res, 404, { error: "not found" });
         return true;
       }
+
+      // /api/admin/wiki/* — DeepWiki public-MCP backed wiki browser
+      // (server/src/wiki.ts): repos CRUD, structure, page, ask.
+      if (parts[2] === "wiki" && await handleWikiRoute(ctx, parts, m, req, res, url)) return true;
+
+      // /api/admin/security/* — local code scans (server/src/security.ts):
+      // scans run as real acp sessions; findings parsed from agent JSON.
+      if (parts[2] === "security" && await handleSecurityRoute(ctx, parts, m, req, res, url)) return true;
 
       // GET /api/admin/mirror/sessions — sidebar tree
       if (p === "/api/admin/mirror/sessions" && m === "GET") {

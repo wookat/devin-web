@@ -13,6 +13,8 @@ const SessionsPage = lazy(() => import('./pages/SessionsPage'))
 const ReviewPage = lazy(() => import('./pages/ReviewPage'))
 const StubPage = lazy(() => import('./pages/StubPage'))
 const AutomationsPage = lazy(() => import('./pages/AutomationsPage'))
+const WikiPage = lazy(() => import('./pages/WikiPage'))
+const SecurityPage = lazy(() => import('./pages/SecurityPage'))
 import { initTheme } from './lib/theme'
 import { initScrollReveal } from './lib/scrollReveal'
 import { prefetchAdmin, prefetchShare } from './lib/api'
@@ -84,8 +86,10 @@ function mount(boot: RouteModule | null) {
           <Route path="/admin/review" element={<ReviewPage />} />
           <Route path="/admin/review/:owner/:repo/pull/:number" element={<ReviewPage />} />
           <Route path="/admin/automations" element={<AutomationsPage />} />
-          <Route path="/admin/security" element={<StubPage surface="security" />} />
-          <Route path="/admin/wiki" element={<StubPage surface="wiki" />} />
+          <Route path="/admin/security" element={<SecurityPage />} />
+          <Route path="/admin/security/:scanId" element={<SecurityPage />} />
+          <Route path="/admin/wiki" element={<WikiPage />} />
+          <Route path="/admin/wiki/:owner/:repo" element={<WikiPage />} />
           <Route path="/admin/sessions" element={<SessionsPage />} />
           <Route path="/admin/:id" element={<Mirror />} />
           <Route path="/admin/:id/mirror" element={<Mirror />} />

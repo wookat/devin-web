@@ -20,7 +20,7 @@ function readTreePrefs(): TreePrefs {
  * LocalDock. Used by SessionsPage and the standalone review page.
  * `open` is controlled so the page header can render the expand trigger.
  */
-export default function AppSidebar({ open, onToggle, active, tree, archivedTree, activeDevinId = '', onOpen, onRefresh, onLoadMore, loadingMore, folderOrder, folderTotals, onSearch }: {
+export default function AppSidebar({ open, onToggle, active, tree, archivedTree, activeDevinId = '', onOpen, onRefresh, onLoadMore, loadingMore, folderOrder, folderTotals, onSearch, panel }: {
   open: boolean
   onToggle: (open: boolean) => void
   active: 'new' | 'sessions' | 'review' | 'automations' | 'security' | 'wiki' | ''
@@ -34,6 +34,9 @@ export default function AppSidebar({ open, onToggle, active, tree, archivedTree,
   folderOrder?: string[]
   folderTotals?: Record<string, number>
   onSearch?: () => void
+  /** Replaces the sessions region entirely (official wiki-reader swaps the
+   *  session tree for the repo TOC while keeping the header + nav). */
+  panel?: React.ReactNode
 }) {
   const { t } = useTranslation()
   const nav = useNavigate()
@@ -156,19 +159,21 @@ export default function AppSidebar({ open, onToggle, active, tree, archivedTree,
             </Link>
           </nav>
           <div className="min-h-0 flex-1 overflow-y-auto py-1">
-            <SessionTree
-              tree={tree}
-              archivedTree={archivedTree}
-              activeDevinId={activeDevinId}
-              onOpen={openSession}
-              onRefresh={onRefresh}
-              prefs={treePrefs}
-              onPrefs={updateTreePrefs}
-              folderOrder={folderOrder}
-              folderTotals={folderTotals}
-              onLoadMore={onLoadMore}
-              loadingMore={loadingMore}
-            />
+            {panel ?? (
+              <SessionTree
+                tree={tree}
+                archivedTree={archivedTree}
+                activeDevinId={activeDevinId}
+                onOpen={openSession}
+                onRefresh={onRefresh}
+                prefs={treePrefs}
+                onPrefs={updateTreePrefs}
+                folderOrder={folderOrder}
+                folderTotals={folderTotals}
+                onLoadMore={onLoadMore}
+                loadingMore={loadingMore}
+              />
+            )}
           </div>
           <LocalDock />
         </aside>

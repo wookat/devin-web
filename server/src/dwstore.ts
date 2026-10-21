@@ -45,6 +45,61 @@ interface DwRegistry {
   /** Scheduled sessions — 5-field cron entries fired by the automations
    *  scheduler (server/src/automations.ts). */
   automations?: Record<string, DwAutomation>;
+  /** Wiki home grid — public GitHub repos browsed via the DeepWiki MCP
+   *  (server/src/wiki.ts). Key: "owner/repo" lowercase. */
+  wikiRepos?: Record<string, DwWikiRepo>;
+  /** Security surface — local code scans + scan profiles
+   *  (server/src/security.ts). Field names mirror the official
+   *  /code-scans API (repo_name, status, severity, stage, finding_id). */
+  securityScans?: Record<string, DwSecurityScan>;
+  securityProfiles?: Record<string, DwSecurityProfile>;
+}
+
+export interface DwSecurityProfile {
+  id: string;
+  name: string;
+  prompt: string;
+  created_at: number;
+}
+
+export interface DwSecurityFinding {
+  finding_id: string;
+  title: string;
+  description: string;
+  file_path: string | null;
+  start_line: number | null;
+  severity: "critical" | "high" | "medium" | "low" | "info";
+  category: string | null;
+  cwe_id: string | null;
+  status: "open" | "resolved" | "ignored" | "false_positive";
+  stage: "unassigned" | "triaged" | "fixing" | "resolved";
+}
+
+export interface DwSecurityScan {
+  id: string;
+  repo_name: string;
+  cwd: string;
+  scan_type: "security";
+  status: "pending" | "running" | "done" | "failed" | "cancelled";
+  effort: "lite" | "standard";
+  profile_id: string | null;
+  session_id: string | null;
+  findings: DwSecurityFinding[];
+  summary: string;
+  created_at: number;
+  finished_at?: number;
+  archived?: boolean;
+}
+
+export interface DwWikiRepo {
+  repo: string;
+  pinned: boolean;
+  addedAt: number;
+  lastOpenedAt?: number;
+  /** Last successful structure probe. */
+  indexed?: boolean;
+  topicCount?: number;
+  topics?: { id: string; title: string; depth: number }[];
 }
 
 export interface DwAutomation {
