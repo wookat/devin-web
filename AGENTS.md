@@ -57,11 +57,15 @@ the turn-silence watchdog: a prompt that streams NOTHING for
 acp is recycled and the RPC settles with an error, so `inflight` always
 clears eventually (a genuinely wedged prompt can still be ended sooner via
 End session / Restart agent in the UI); it logs a `waiting on N inflight
-for Ns` heartbeat every 30s meanwhile. Optional hard bound:
-`DEVIN_WEB_DRAIN_TIMEOUT_MS` (default 0 = wait forever) — past it the
-server exits with turns still in flight; their open-turns.json entries
-survive and `autoResumeInterrupted` replays them on the new backend (the
-same path as crash recovery), so set `prefs.autoResume` on if you use it.
+for Ns` heartbeat every 30s meanwhile. Bounded escape:
+`DEVIN_WEB_DRAIN_TIMEOUT_MS` — the supervisor injects a 900s default
+(silence watchdog alone can't help: an auto-resumed replay of a huge
+session log streams continuously, never going "silent", so inflight never
+settles and restarts deadlock — that bit us for ~14h); set the env to `0`
+explicitly to restore wait-forever. Past the bound the server exits with
+turns still in flight; their open-turns.json entries survive and
+`autoResumeInterrupted` replays them on the new backend (the same path as
+crash recovery), so keep `prefs.autoResume` on.
 Interrupted-turn recovery: `dispatchPrompt` records the outgoing message in
 `<dataDir>/open-turns.json` and clears it when the prompt settles — an entry
 surviving at boot means the server died mid-turn. A successful settle also
