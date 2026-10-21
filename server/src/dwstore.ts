@@ -46,6 +46,9 @@ interface DwRegistry {
   persona?: { sessionId?: string };
   /** The persistent pr-review acp session (cwd=<dataDir>/pr-review). */
   prReview?: { sessionId?: string };
+  /** The persistent fork-handoff writer session — reads a source session's
+   * transcript and produces the handoff summary used as the fork seed. */
+  forkHandoff?: { sessionId?: string };
   /** Scheduled sessions — 5-field cron entries fired by the automations
    *  scheduler (server/src/automations.ts). */
   automations?: Record<string, DwAutomation>;

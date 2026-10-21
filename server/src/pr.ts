@@ -222,7 +222,7 @@ async function ensureReviewSession(ctx: ApiContext): Promise<string> {
 
 /** Fire one prompt at the review session, return joined agent text (mirrors
  * runPersona in persona.ts — dispatch logging + drain/inflight bookkeeping). */
-async function runReviewAgent(ctx: ApiContext, pid: string, prompt: string): Promise<string> {
+export async function runReviewAgent(ctx: ApiContext, pid: string, prompt: string): Promise<string> {
   if (isDraining()) throw new Error("server draining");
   ctx.sessionLog.append(pid, {
     sessionUpdate: "user_message_chunk",

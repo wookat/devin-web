@@ -39,7 +39,7 @@ import {
   personaState, personaMode, askPersona, personaHumanMessage, decisionsTail,
 } from "./persona.js";
 import { agentById, listAgents, probeAgent, saveUserAgents } from "./agents.js";
-import { handlePrRoute } from "./pr.js";
+import { handlePrRoute, runReviewAgent } from "./pr.js";
 import { cronNext, runAutomation } from "./automations.js";
 import { handleWikiRoute } from "./wiki.js";
 import { handleSecurityRoute, resumeScans } from "./security.js";
@@ -392,6 +392,61 @@ const UNSUPPORTED = { error: "not supported on local web" };
 
 /** file-git response cache — 8s per session. */
 const gitStatusCache = new Map<string, { at: number; body: unknown }>();
+
+// ── Fork handoff writer ─────────────────────────────────────────────────
+// Industry practice for session handoff (Claude Code /compact, Devin
+// handoffs) is a MODEL-WRITTEN structured summary, not a mechanical
+// transcript slice. A persistent hidden session does the writing; failure
+// falls back to the deterministic seed built inline in the /fork route.
+let handoffCreating: Promise<string> | null = null;
+async function ensureHandoffSession(ctx: ApiContext): Promise<string> {
+  const existing = loadReg(ctx).forkHandoff?.sessionId;
+  if (existing && ctx.sessionCwd.get(existing)) return existing;
+  if (handoffCreating) return handoffCreating;
+  handoffCreating = (async () => {
+    const acp = await ctx.manager.get(ctx.primaryCwd);
+    const s = await acp.newSession(ctx.primaryCwd);
+    ctx.sessionCwd.set(s.sessionId, ctx.primaryCwd);
+    captureLoadResponse(s.sessionId, s);
+    let n = loadedOn.get(acp);
+    if (!n) loadedOn.set(acp, (n = new Set()));
+    n.add(s.sessionId);
+    sessionHost.set(s.sessionId, acp);
+    const mm = meta(ctx, s.sessionId);
+    mm.title = "🍴 Fork 交接"; mm.folder = ".persona";
+    (loadReg(ctx).forkHandoff ??= {}).sessionId = s.sessionId;
+    saveReg();
+    return s.sessionId;
+  })().finally(() => { handoffCreating = null; });
+  return handoffCreating;
+}
+
+/** Feed the source session's transcript (bigger input budget than the seed
+ * itself — the writer compresses) to the handoff session and return the
+ * summary it writes; "" on any failure so callers can fall back. */
+async function summarizeForFork(ctx: ApiContext, id: string, anchor: number | null, srcTitle: string): Promise<string> {
+  try {
+    const pid = await ensureHandoffSession(ctx);
+    const rows: { seq: number; text: string }[] = [];
+    for (const e of ctx.sessionLog.get(id)) {
+      const u = e.update as { sessionUpdate?: string; content?: { text?: string }; title?: string };
+      if (u.sessionUpdate === "tool_call" && u.title) rows.push({ seq: e.seq ?? -1, text: `[操作] ${u.title}` });
+      else if ((u.sessionUpdate === "user_message_chunk" || u.sessionUpdate === "agent_message_chunk") && u.content?.text)
+        rows.push({ seq: e.seq ?? -1, text: (u.sessionUpdate === "user_message_chunk" ? "用户: " : "Devin: ") + u.content.text });
+    }
+    const transcript = (anchor !== null ? rows.filter(r => r.seq !== -1 && r.seq <= anchor) : rows)
+      .map(r => r.text).join("\n\n").slice(-40_000);
+    if (!transcript.trim()) return "";
+    const out = await runReviewAgent(ctx, pid, [
+      `你是会话交接撰写器。下面是会话「${srcTitle}」的对话与操作记录（可能截断）。`,
+      `写一份精炼的交接摘要（≤2000字），结构：`,
+      `1. 任务目标\n2. 已完成工作与关键决策\n3. 涉及的主要文件/代码\n4. 当前状态与未决问题\n5. 建议的下一步`,
+      `只输出摘要本身，不要寒暄、不要评论记录质量。`,
+      `\n=== 记录 ===\n${transcript}`,
+    ].join("\n"));
+    return out.slice(0, 3000);
+  } catch { return ""; }
+}
 
 /**
  * Sub-session dispatch — `sub:<parent>:<agentId>` resolves to a child agent's
@@ -2096,8 +2151,9 @@ export async function handleLocalWb(ctx: ApiContext, req: IncomingMessage, res: 
         // POST .../fork — clone the session. Native ACP `session/fork` when the
         // agent advertises sessionCapabilities.fork (opencode does); devin's
         // local acp has no fork, so the fallback opens a new session on the
-        // same process and seeds it with the tail transcript as its first
-        // prompt — the fork continues the original task from there.
+        // same process and seeds it with a handoff prompt (model-written
+        // summary when the handoff writer answers; mechanical transcript
+        // extract as fallback).
         if (sub === "fork" && m === "POST") {
           const body = await readJson(req);
           // `anchor` = timeline item id ("e<seq>") to fork FROM that message.
@@ -2111,50 +2167,31 @@ export async function handleLocalWb(ctx: ApiContext, req: IncomingMessage, res: 
             json(res, 409, { error: "该 Agent 每进程仅承载一个会话，无法分叉" });
             return true;
           }
+          // Anchored forks need source material at/before the anchor —
+          // validate BEFORE creating the child session so a 409 leaks nothing.
+          if (anchor !== null) {
+            let any = false;
+            for (const e of ctx.sessionLog.get(id)) {
+              const u = e.update as { sessionUpdate?: string; content?: { text?: string } };
+              if ((u.sessionUpdate === "user_message_chunk" || u.sessionUpdate === "agent_message_chunk")
+                && u.content?.text && (e.seq ?? -1) <= anchor) { any = true; break; }
+            }
+            if (!any) { json(res, 409, { error: "该位置之前没有可分叉的消息" }); return true; }
+          }
           const srcTitle = meta(ctx, id).title ?? titleFromLog(ctx, id) ?? "Untitled session";
           let newId: string | null = null;
           let forkRes: unknown = null;
-          let transcriptPrompt = "";
+          let native = false;
           if (anchor === null && acp.supportsFork) {
             const r = (await acp.forkSession(id, cwd)) as { sessionId?: string } | null;
             newId = r?.sessionId ?? null;
             forkRes = r;
+            native = !!newId;
           }
           if (!newId) {
             const s = await acp.newSession(cwd);
             newId = s.sessionId;
             forkRes = s;
-            // Transcript carryover: dense seed within the same ~6000-char
-            // budget — the ORIGINAL TASK always survives (a pure tail-slice
-            // dropped it on long sessions), plus a tool-call digest so the
-            // fork knows what was already done, then the tail transcript.
-            const log = ctx.sessionLog.get(id);
-            const rows: { seq: number; text: string }[] = [];
-            const ops: string[] = [];
-            let taskText = "";
-            for (const e of log) {
-              const u = e.update as { sessionUpdate?: string; content?: { type?: string; text?: string }; title?: string };
-              if (u.sessionUpdate === "tool_call" && u.title && ops[ops.length - 1] !== u.title) ops.push(u.title);
-              if ((u.sessionUpdate === "user_message_chunk" || u.sessionUpdate === "agent_message_chunk") && u.content?.text) {
-                if (!taskText && u.sessionUpdate === "user_message_chunk") taskText = u.content.text;
-                rows.push({ seq: e.seq ?? -1, text: (u.sessionUpdate === "user_message_chunk" ? "用户: " : "Devin: ") + u.content.text });
-              }
-            }
-            const picked = (anchor !== null ? rows.filter((r) => r.seq !== -1 && r.seq <= anchor) : rows).slice(-200);
-            if (anchor !== null && !picked.length) {
-              json(res, 409, { error: "该位置之前没有可分叉的消息" });
-              return true;
-            }
-            const parts: string[] = [];
-            if (taskText) parts.push(`## 原始任务\n${taskText.slice(0, 1500)}`);
-            if (ops.length) parts.push(`## 已执行的关键操作\n${ops.slice(-12).map((o) => `- ${o}`).join("\n")}`);
-            const head = parts.join("\n\n");
-            const tail = picked.map((r) => r.text).join("\n\n").slice(-Math.max(2000, 6000 - head.length));
-            const bounded = head ? `${head}\n\n## 最近对话\n${tail}` : tail;
-            const where = anchor !== null ? `，截至第 ${picked.length} 条消息处` : "（仅尾部，可能截断）";
-            transcriptPrompt = bounded
-              ? `[分叉自会话「${srcTitle}」${where}] 以下是原会话的上下文摘要。请在此基础上继续完成相同任务：\n\n${bounded}`
-              : `[分叉自会话「${srcTitle}」] 请继续该会话的任务。`;
           }
           let nset = loadedOn.get(acp);
           if (!nset) loadedOn.set(acp, (nset = new Set()));
@@ -2167,8 +2204,21 @@ export async function handleLocalWb(ctx: ApiContext, req: IncomingMessage, res: 
           (mm as Record<string, unknown>).forkedFrom = anchor !== null ? `${id}@${anchor}` : id;
           if (agent.id !== "devin") mm.agent = agent.id;
           saveReg();
-          if (transcriptPrompt) dispatchPrompt(ctx, newId, transcriptPrompt, []);
           json(res, 200, { ok: true, id: newId, native: acp.supportsFork });
+          // Handoff seed (fallback path only): the fork's first prompt is a
+          // MODEL-WRITTEN summary of the source transcript — task, decisions,
+          // files, state, next steps — the same practice as Claude Code
+          // /compact and Devin handoffs. Async: the client already routed to
+          // the new session. A dead writer degrades to a bare continue-task
+          // directive so the fork still works.
+          if (native) return true; // native clone needs no seed
+          const nid = newId;
+          void (async () => {
+            const summary = await summarizeForFork(ctx, id, anchor, srcTitle);
+            dispatchPrompt(ctx, nid, summary
+              ? `[分叉自会话「${srcTitle}」${anchor !== null ? "（锚点分叉）" : ""}] 以下是原会话的交接摘要。请在此基础上继续完成相同任务：\n\n${summary}`
+              : `[分叉自会话「${srcTitle}」] 请继续该会话的任务。`, []);
+          })().catch((e) => console.error(`[fork] handoff seed: ${e instanceof Error ? e.message : e}`));
           return true;
         }
 
