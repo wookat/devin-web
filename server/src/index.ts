@@ -18,6 +18,7 @@ import { handleLocalWb } from "./localweb.js";
 import { recordTerminal, loadInflight, isReplayEcho, autoResumeInterrupted, sessionHost, markSubagentDead, touchSessionActivity, markGracefulExit } from "./sessionio.js";
 import { meta } from "./dwstore.js";
 import { sshInteractive } from "./ssh.js";
+import { edition } from "./edition.js";
 import { startAutomations } from "./automations.js";
 import { resumeScans } from "./security.js";
 import { noteUpdate } from "./dwtimeline.js";
@@ -483,7 +484,7 @@ httpServer.on("request", (req, res) => {
       // Supervisor liveness probe — must be free of any store/acp/db touch so a
       // wedged subsystem can't make a live server look dead (or vice versa).
       if (url.pathname === "/api/health") {
-        res.writeHead(200, { "content-type": "application/json" }).end('{"ok":true}');
+        res.writeHead(200, { "content-type": "application/json" }).end(`{"ok":true,"edition":"${edition}"}`);
         return;
       }
       void (async () => {

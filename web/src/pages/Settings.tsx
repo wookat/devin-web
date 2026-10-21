@@ -5,7 +5,7 @@ import { Link } from 'react-router-dom'
 import { ArrowLeft, PanelLeft, Plus, RefreshCw, RotateCcw, ChevronDown, ChevronRight, FileText, BookOpen, SlidersHorizontal, KeyRound, Wrench, Stethoscope, Info, Boxes, Server, Trash2, Pencil } from 'lucide-react'
 import { useParams } from 'react-router-dom'
 import { Combo } from '@/components/ui'
-import { adminFetch } from '@/lib/api'
+import { adminFetch, adminKey, setAdminKey } from '@/lib/api'
 import { getTheme, setTheme, type Theme } from '@/lib/theme'
 import { CodeEditor } from '@/pages/mirror/WorkspacePanel'
 import DoctorDialog from '@/components/DoctorDialog'
@@ -370,11 +370,30 @@ export default function Settings() {
 
             {tab === 'service' && <Section title={t('set.service')}>
               <ServiceStatus />
+              <Row title={t('set.accessKey')} desc={t('set.accessKeyDesc')}>
+                <input
+                  type="password"
+                  defaultValue={adminKey()}
+                  placeholder={t('set.accessKeyPh')}
+                  onBlur={(e) => setAdminKey(e.target.value.trim())}
+                  className="h-7 w-[220px] rounded-[6px] border border-border bg-background px-2 text-[12px] outline-none focus:ring-1 focus:ring-ring"
+                />
+              </Row>
               <Row title={t('set.restart')} desc={t('set.restartDesc')}>
                 <Btn2 onClick={() => {
                   if (!confirm(t('set.restartConfirm'))) return
                   void adminFetch('/api/admin/restart', { method: 'POST', body: JSON.stringify({}) })
-                    .then(() => { setPrefsMsg(t('set.restarting')); setTimeout(() => location.reload(), 15000) })
+                    .then(() => {
+                      setPrefsMsg(t('set.restarting'))
+                      // Poll health until the new backend answers — never a
+                      // fixed sleep (restart is fast, build isn't).
+                      const t0 = Date.now()
+                      const tick = () => fetch('/api/health').then(r => {
+                        if (r.ok) location.reload()
+                        else if (Date.now() - t0 < 120_000) setTimeout(tick, 1500)
+                      }).catch(() => { if (Date.now() - t0 < 120_000) setTimeout(tick, 1500) })
+                      setTimeout(tick, 1500)
+                    })
                     .catch(() => setPrefsMsg(t('set.restartFail')))
                 }}><RotateCcw size={13} /> {t('set.restartBtn')}</Btn2>
               </Row>

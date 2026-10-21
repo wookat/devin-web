@@ -100,6 +100,17 @@ npm run typecheck                   :: server + web tsc
 powershell -File clean-orphans.ps1  :: kill acp processes with dead parents
 ```
 
+## Extension seams (edition-ready)
+
+`server/src/edition.ts` — `DEVIN_WEB_EDITION` (local/team/school/enterprise)
++ `featureEnabled()` gate table; feature code asks the table, never checks
+the edition name. `server/src/authn.ts` — `requireAdmin(req)` guards
+`/api/admin/*`: unset `DEVIN_WEB_ADMIN_KEY` = open local mode; set = the
+existing `x-admin-key` channel (frontend `dw_admin_key`, settable in
+Settings → 服务 → 访问密钥) becomes a real gate. `/api/health` reports
+`edition`. Team/school/enterprise swap requireAdmin + the FEATURES table —
+route code never changes.
+
 ## Gotchas
 
 - The pre-rename data dir was `~/.devin-remote` (upstream project name); the

@@ -45,6 +45,8 @@ import { handleWikiRoute } from "./wiki.js";
 import { handleSecurityRoute, resumeScans } from "./security.js";
 import type { DwAutomation } from "./dwstore.js";
 import { sshFs, sshHostFor, sshListDirs, sshTest, publicSshHost, setSshHostResolver, type SshHost } from "./ssh.js";
+import { requireAdmin } from "./authn.js";
+import { edition } from "./edition.js";
 
 // ---------------------------------------------------------------------------
 // CLI proxy — spawn `devin <args>` with a hard whitelist (see /api/admin/cli/run)
@@ -630,6 +632,11 @@ export async function handleLocalWb(ctx: ApiContext, req: IncomingMessage, res: 
   const isShare = parts[1] === "share";
   const isMedia = parts[1] === "media";
   if (!isAdmin && !isShare && !isMedia && !(p.startsWith("/api/session/") || p.startsWith("/api/devin-coach"))) return false;
+
+  // Auth seam — DEVIN_WEB_ADMIN_KEY unset → open local mode (today's
+  // behavior); set → /api/admin/* requires the x-admin-key header the
+  // frontend already sends. Share/media paths keep their own tokens.
+  if (isAdmin && !requireAdmin(req)) { json(res, 401, { error: "unauthorized" }); return true; }
 
   // SSH auth registry — acp/terminal/ws-term resolve credentials for a target
   // through ssh.ts; the resolver always reads the current dw.json prefs.
