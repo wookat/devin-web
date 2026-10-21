@@ -18,6 +18,7 @@ import {
   isSessionLocked, loadWithRetry, initCfgState, persistJson,
   type ConfigOption, type SessionConfig,
 } from "./sessioncfg.js";
+import { queueList, queueAdd, queueRemove, queueFlush, restoreQueues, bindQueueDeps, type QueuedMsg } from "./sessionqueue.js";
 import { loadReg, saveReg, meta, noteLastUsed } from "./dwstore.js";
 import {
   noteUpdate, persistTail, buildTimeline, buildTimelineFrom, snippet, tlCache,
@@ -66,13 +67,7 @@ function isSessionPinned(id: string): boolean {
  * the cfg file, then the queue/error files owned below. */
 export function setCfgCacheDir(dir: string) {
   initCfgState(dir);
-  try {
-    const q = JSON.parse(fs.readFileSync(path.join(dir, "queues.json"), "utf8")) as Record<string, QueuedMsg[]>;
-    for (const [sid, msgs] of Object.entries(q)) {
-      const ok = Array.isArray(msgs) ? msgs.filter((m) => m && typeof m.id === "string" && typeof m.text === "string") : [];
-      if (ok.length) promptQueues.set(sid, ok);
-    }
-  } catch { /* cold start */ }
+  restoreQueues(dir);
   try {
     const e = JSON.parse(fs.readFileSync(path.join(dir, "send-errors.json"), "utf8")) as Record<string, SendError>;
     for (const [sid, se] of Object.entries(e)) if (se && typeof se.ts === "number") sendErrors.set(sid, se);
@@ -496,67 +491,14 @@ function isDraining() { return draining; }
 function drainSince() { return draining ? drainStartedAt : 0; }
 
 // ---------------------------------------------------------------------------
-// Message queue — Ctrl+Enter while working parks a prompt here; the queue is
-// flushed FIFO in dispatchPrompt's settle path. Persisted to queues.json —
-// under the broker a restart is invisible, so queued user messages must
-// survive it too. They flush on the NEXT settle (adopted-turn watcher,
-// auto-resume replay, or the next manual send) — never on a blind boot
-// sweep: a non-empty queue always implies a turn was in flight when the
-// backend died, and that turn's own settle path is what drains it.
+// Message queue — module lives in sessionqueue.ts (imported above). The
+// flush's downstream needs (busy predicate + dispatchPrompt) are injected
+// here — storage must not import its consumers.
 // ---------------------------------------------------------------------------
-
-export interface QueuedMsg {
-  id: string;
-  text: string;
-  attachments?: { url: string; name?: string; mime?: string; size?: number }[];
-  /** Subagent relay context — queueing must not silently retarget the
-   * message to the main chain. */
-  subagentId?: string;
-  respawnRow?: { title: string; task: string; profile: string };
-}
-const promptQueues = new Map<string, QueuedMsg[]>();
-let queueSeq = 0;
-function saveQueues() { persistJson("queues.json", Object.fromEntries(promptQueues)); }
-
-export function queueList(id: string): QueuedMsg[] {
-  return promptQueues.get(id) ?? [];
-}
-
-/** Enqueue a message; callers GET the list back for the queue band. */
-export function queueAdd(ctx: ApiContext, id: string, text: string, attachments: QueuedMsg["attachments"] = [], extra?: Pick<QueuedMsg, "subagentId" | "respawnRow">): QueuedMsg {
-  const m: QueuedMsg = { id: `q${(++queueSeq).toString(36)}${Date.now().toString(36)}`, text, ...(attachments?.length ? { attachments } : {}), ...extra };
-  const q = promptQueues.get(id) ?? [];
-  q.push(m);
-  promptQueues.set(id, q);
-  saveQueues();
-  noteUpdate(ctx, id);
-  return m;
-}
-
-export function queueRemove(ctx: ApiContext, id: string, qid: string): boolean {
-  const q = promptQueues.get(id);
-  if (!q) return false;
-  const i = q.findIndex((m) => m.id === qid);
-  if (i < 0) return false;
-  q.splice(i, 1);
-  if (!q.length) promptQueues.delete(id);
-  saveQueues();
-  noteUpdate(ctx, id);
-  return true;
-}
-
-/** Dispatch the next queued prompt if nothing is in flight. */
-function queueFlush(ctx: ApiContext, id: string) {
-  // Leave the queue untouched during drain — dequeuing into a no-op
-  // dispatchPrompt would silently drop the message.
-  if (inflight.has(id) || draining) return;
-  const q = promptQueues.get(id);
-  const next = q?.shift();
-  if (!next) return;
-  if (q && !q.length) promptQueues.delete(id);
-  saveQueues();
-  dispatchPrompt(ctx, id, next.text, next.attachments ?? [], next.subagentId, next.respawnRow);
-}
+bindQueueDeps({
+  isBusy: (id) => inflight.has(id) || draining,
+  dispatch: (ctx, id, m) => dispatchPrompt(ctx, id, m.text, m.attachments ?? [], m.subagentId, m.respawnRow),
+});
 
 // ---------------------------------------------------------------------------
 // interrupted-turn recovery — a prompt that never settled is recoverable
@@ -1492,16 +1434,14 @@ function snippetFromLog(ctx: ApiContext, id: string): string {
 
 export {
   loadedOn, sessionHost, isSessionPinned,
-  responseCfg, lastAgentCfg, captureLoadResponse, isSessionLocked,
-  loadWithRetry, loadInflight, loadOnce, hostFor, loadCooldown,
+  loadInflight, loadOnce, hostFor, loadCooldown,
   touchSessionActivity,
   ensureLoaded, acpForId, restartSession,
-  type ConfigOption, type SessionConfig, sessionConfig, cloudVersionToModel,
+  sessionConfig, cloudVersionToModel,
   terminalBuf, recordTerminal, inflight, resolveUpload, attachmentBlocks,
   promptWithRetry, dispatchPrompt, sessionStatus, turnEndHooks,
   noteSendError, lastSendError, recentSendErrors, sendPreflight,
   beginDrain, isDraining, drainSince,
-  queueFlush,
   type SubagentInfo, listSubagents, subagentTimeline, subPingActive,
   type ListedSession, listLocalSessions, snippetFromLog,
 };

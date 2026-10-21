@@ -27,15 +27,16 @@ import {
 } from "./dwtimeline.js";
 import {
   loadedOn, sessionHost, hostFor,
-  isSessionPinned, captureLoadResponse, loadInflight, ensureLoaded, acpForId, restartSession,
+  isSessionPinned, loadInflight, ensureLoaded, acpForId, restartSession,
   sessionConfig, recordTerminal, inflight, resolveUpload, dispatchPrompt, drainSince,
   beginDrain, isDraining, markGracefulExit,
   sessionStatus, interruptedTurn, listSubagents, subagentTimeline, subPingActive, listLocalSessions,
-  snippetFromLog, responseCfg, terminalBuf, cloudVersionToModel,
-  queueList, queueAdd, queueRemove, queueFlush,
+  snippetFromLog, terminalBuf, cloudVersionToModel,
   noteSendError, recentSendErrors, sendPreflight,
-  type ListedSession, type SessionConfig, type SubagentInfo, type ConfigOption,
+  type ListedSession, type SubagentInfo,
 } from "./sessionio.js";
+import { queueList, queueAdd, queueRemove, queueFlush } from "./sessionqueue.js";
+import { responseCfg, captureLoadResponse, type SessionConfig, type ConfigOption } from "./sessioncfg.js";
 import {
   personaState, personaMode, askPersona, personaHumanMessage, decisionsTail,
 } from "./persona.js";

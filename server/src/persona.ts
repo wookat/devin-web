@@ -14,9 +14,10 @@ import type { ApiContext } from "./routes.js";
 import { loadReg, saveReg, meta } from "./dwstore.js";
 import {
   acpForId, dispatchPrompt, promptWithRetry, isDraining,
-  inflight, loadInflight, loadedOn, sessionHost, captureLoadResponse,
+  inflight, loadInflight, loadedOn, sessionHost,
   turnEndHooks,
 } from "./sessionio.js";
+import { captureLoadResponse } from "./sessioncfg.js";
 
 export type PersonaMode = "off" | "semi" | "auto";
 
