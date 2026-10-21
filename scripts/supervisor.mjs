@@ -109,6 +109,17 @@ function serverLogFd() {
   return fs.openSync(f, "a");
 }
 
+// Spawn-time rotation only covers restarts — a backend/broker up for months
+// otherwise grows its log unboundedly. Re-check every 60s.
+setInterval(() => {
+  for (const f of ["server.log", "broker.log", "supervisor.log"]) {
+    try {
+      const full = path.join(dataDir, f);
+      if (fs.statSync(full).size > 4 * 1024 * 1024) fs.renameSync(full, full + ".old");
+    } catch { /* missing/racing */ }
+  }
+}, 60_000).unref();
+
 function killOrphanAcps() {
   // Windows: acp children orphaned by a dead backend get reparented nowhere —
   // find devin.exe 'acp' processes whose parent no longer exists and kill them.
