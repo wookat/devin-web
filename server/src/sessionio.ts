@@ -13,6 +13,11 @@ import { catalogInfo } from "./modelcat.js";
 import { remapLegacyCwd } from "./store.js";
 import { agentById, DEFAULT_AGENT } from "./agents.js";
 import { brokerEnabled, brokerList, readOffsets, writeOffsets } from "./acpbroker.js";
+import {
+  responseCfg, lastAgentCfg, lastAgentCommands, setLastAgentCommands, captureLoadResponse,
+  isSessionLocked, loadWithRetry, initCfgState, persistJson,
+  type ConfigOption, type SessionConfig,
+} from "./sessioncfg.js";
 import { loadReg, saveReg, meta, noteLastUsed } from "./dwstore.js";
 import {
   noteUpdate, persistTail, buildTimeline, buildTimelineFrom, snippet, tlCache,
@@ -55,57 +60,12 @@ function isSessionPinned(id: string): boolean {
   return !!host && !host.exited;
 }
 
-/** sessionId → config returned in the session/new / session/load RESPONSE
- * (modes + configOptions). Devin emits these in the response, not always as
- * streamed notifications, so capture them here and merge into sessionConfig. */
-interface ResponseCfgEntry {
-  configOptions?: ConfigOption[] | null;
-  modes?: { currentModeId: string; availableModes?: { id: string; name?: string }[] } | null;
-  commands?: { name: string; description?: string; input?: { hint?: string } }[] | null;
-  /** Time of the most recent authoritative echo (load or setConfigOption).
-   * Logged config_option_update notifications older than this are stale. */
-  echoTs?: number;
-}
-const responseCfg = new Map<string, ResponseCfgEntry>();
-
-/** Last non-empty config seen from ANY session — model/mode option lists are
- * agent-level capabilities (identical for every session on the same CLI), so
- * old sessions whose loadSession response omits config can still show them. */
-let lastAgentCfg: {
-  configOptions?: ConfigOption[];
-  modes?: { currentModeId: string; availableModes?: { id: string; name?: string }[] };
-} | null = null;
-
-/** Last non-empty slash-command list seen from ANY session — the set is
- * agent-level (same CLI binary advertises the same commands), so a session
- * whose replay hasn't reached its commands_update yet still gets the list. */
-let lastAgentCommands: SessionConfig["commands"] | null = null;
-
-/** Persisted runtime state — ONE seam restores every piece of memory a
- *  restart used to silently drop. Broker adoption deliberately skips
- *  session/load (the only writer of the cfg caches), and a transparent
- *  restart must not eat user data (message queue) or diagnostics
- *  (sendErrors). All three files live in stateDir and write through on
- *  mutation; this runs BEFORE adoption/auto-resume in index.ts. */
-let stateDir = "";
+/** Config caches + durable-state primitives live in sessioncfg.ts — imported
+ * above as live bindings (responseCfg is shared state, lastAgentCfg a `let`).
+ * setCfgCacheDir stays sessionio's public boot hook: initCfgState restores
+ * the cfg file, then the queue/error files owned below. */
 export function setCfgCacheDir(dir: string) {
-  stateDir = dir;
-  try {
-    const j = JSON.parse(fs.readFileSync(path.join(dir, "agent-cfg.json"), "utf8")) as {
-      configOptions?: ConfigOption[];
-      modes?: { currentModeId: string; availableModes?: { id: string; name?: string }[] };
-      commands?: SessionConfig["commands"];
-      bySession?: Record<string, ResponseCfgEntry>;
-    };
-    if (j.configOptions?.length || j.modes) {
-      lastAgentCfg = {
-        ...(j.configOptions?.length ? { configOptions: j.configOptions } : {}),
-        ...(j.modes ? { modes: j.modes } : {}),
-      };
-    }
-    if (j.commands?.length) lastAgentCommands = j.commands;
-    for (const [sid, c] of Object.entries(j.bySession ?? {})) if (c && typeof c === "object") responseCfg.set(sid, c);
-  } catch { /* cold start — no cache yet */ }
+  initCfgState(dir);
   try {
     const q = JSON.parse(fs.readFileSync(path.join(dir, "queues.json"), "utf8")) as Record<string, QueuedMsg[]>;
     for (const [sid, msgs] of Object.entries(q)) {
@@ -117,56 +77,6 @@ export function setCfgCacheDir(dir: string) {
     const e = JSON.parse(fs.readFileSync(path.join(dir, "send-errors.json"), "utf8")) as Record<string, SendError>;
     for (const [sid, se] of Object.entries(e)) if (se && typeof se.ts === "number") sendErrors.set(sid, se);
   } catch { /* cold start */ }
-}
-function persistJson(file: string, data: unknown) {
-  if (!stateDir) return;
-  try { fs.writeFileSync(path.join(stateDir, file), JSON.stringify(data)); } catch { /* best-effort */ }
-}
-function persistAgentCfg() {
-  // Per-session entries ride the same file (LRU-capped) — a session's
-  // currentValue picks (its model/mode) differ from agent defaults.
-  const bySession = [...responseCfg.entries()].sort((a, b) => (b[1].echoTs ?? 0) - (a[1].echoTs ?? 0)).slice(0, 40);
-  persistJson("agent-cfg.json", {
-    ...(lastAgentCfg ?? {}),
-    commands: lastAgentCommands ?? undefined,
-    bySession: bySession.length ? Object.fromEntries(bySession) : undefined,
-  });
-}
-
-function captureLoadResponse(id: string, r: unknown) {
-  if (!r || typeof r !== "object") return;
-  const res = r as { configOptions?: ConfigOption[]; modes?: { currentModeId: string; availableModes?: { id: string; name?: string }[] }; availableCommands?: SessionConfig["commands"] };
-  responseCfg.set(id, { configOptions: res.configOptions ?? undefined, modes: res.modes ?? undefined, commands: res.availableCommands ?? undefined, echoTs: Date.now() });
-  if (res.availableCommands?.length) lastAgentCommands = res.availableCommands;
-  if (res.configOptions?.length || res.modes) {
-    lastAgentCfg = {
-      ...(res.configOptions?.length ? { configOptions: res.configOptions } : {}),
-      ...(res.modes ? { modes: res.modes } : {}),
-    };
-  }
-  persistAgentCfg();
-}
-
-/** devin returns errorKind `session_locked` when a session is still open in a
- * dying/other acp process. It advertises `retryable: true` — retry briefly to
- * ride out the lock release, then give up. */
-function isSessionLocked(e: unknown): boolean {
-  const s = String((e as Error)?.message ?? e);
-  return /already open in another process|session_locked/i.test(s);
-}
-
-async function loadWithRetry(acp: { loadSession(id: string, cwd: string): Promise<unknown> }, id: string, cwd: string, tries = 5): Promise<unknown> {
-  let lastErr: unknown;
-  for (let i = 0; i < tries; i++) {
-    try {
-      return await acp.loadSession(id, cwd);
-    } catch (e) {
-      lastErr = e;
-      if (!isSessionLocked(e) || i === tries - 1) throw e;
-      await new Promise((r) => setTimeout(r, 800 * (i + 1)));
-    }
-  }
-  throw lastErr;
 }
 
 /** sessionId → in-flight history replay + the acp ACTUALLY performing it.
@@ -455,14 +365,6 @@ function restartSession(ctx: ApiContext, id: string): void {
 // live session config (config_option_update / mode / commands / terminal)
 // ---------------------------------------------------------------------------
 
-interface ConfigOption { id?: string; name?: string; currentValue?: string; options?: { value: string; name?: string; description?: string }[] }
-interface SessionConfig {
-  options: ConfigOption[];
-  mode: string | null;
-  commands: { name: string; description?: string; input?: { hint?: string } }[];
-  model: { id: string; current: string; currentName: string; options: { value: string; name?: string; efforts?: string[]; effortCtl?: boolean; family?: string; fast?: boolean; ctx1m?: boolean; prices?: { input?: number; cached?: number; output?: number } }[] } | null;
-}
-
 function sessionConfig(ctx: ApiContext, id: string): SessionConfig {
   const out: SessionConfig = { options: [], mode: null, commands: [], model: null };
   // Base: config from this session's new|load response; fall back to the
@@ -504,7 +406,7 @@ function sessionConfig(ctx: ApiContext, id: string): SessionConfig {
   // Commands are agent-level: remember the newest non-empty set, fall back to
   // it (or this session's own load-response copy) when the replay window
   // hasn't delivered a commands_update yet.
-  if (out.commands.length) lastAgentCommands = out.commands;
+  if (out.commands.length) setLastAgentCommands(out.commands);
   else out.commands = (responseCfg.get(id)?.commands?.length ? responseCfg.get(id)!.commands! : lastAgentCommands ?? []);
   // Expose ACP modes as a synthetic `_mode` config group when the agent hasn't
   // already surfaced one itself.
