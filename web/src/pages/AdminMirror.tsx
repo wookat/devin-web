@@ -3321,7 +3321,12 @@ const groups = useMemo(() => groupItems(allItems, sessionWorking), [allItems, se
                 <button
                   role="menuitem"
                   onClick={() => {
-                    navigator.clipboard.writeText(window.location.origin + (detail.share_url || `/admin/${id}`))
+                    // share_url is null until the link is enabled — enabling
+                    // happens lazily here (opt-in is the point).
+                    void adminFetch<{ enabled: boolean; url: string | null }>(`/api/admin/session/${id}/share-link`, { method: 'POST', body: JSON.stringify({ enabled: true }) }).then((r) => {
+                      navigator.clipboard.writeText(window.location.origin + (r.url || `/admin/${id}`))
+                      reloadDetail()
+                    }).catch(() => navigator.clipboard.writeText(window.location.origin + `/admin/${id}`))
                     setCopied(true); setTimeout(() => setCopied(false), 1500)
                     setSettingsOpen(false); setSettingsSub('none')
                   }}

@@ -115,7 +115,11 @@ export default function AdminSessionPage() {
 
   function copyShare() {
     if (!detail) return
-    navigator.clipboard.writeText(location.origin + detail.share_url)
+    // Enable the share link lazily on copy (opt-in model — share_url is
+    // null until the admin share-link endpoint flags the session).
+    void adminFetch<{ enabled: boolean; url: string | null }>(`/api/admin/session/${id}/share-link`, { method: 'POST', body: JSON.stringify({ enabled: true }) })
+      .then((r) => { navigator.clipboard.writeText(location.origin + (r.url ?? detail.share_url ?? `/admin/${id}`)); load() })
+      .catch(() => navigator.clipboard.writeText(location.origin + `/admin/${id}`))
     setCopied(true)
     setTimeout(() => setCopied(false), 1500)
   }
