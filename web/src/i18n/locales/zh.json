@@ -1419,5 +1419,17 @@
       "resolved": "没有已解决发现",
       "dismissed": "没有已忽略发现"
     }
+  },
+  "doc": {
+    "entry": "体检",
+    "title": "链路体检",
+    "close": "关闭",
+    "running": "检查中…",
+    "fix": "修复",
+    "fixing": "修复中…",
+    "fixAll": "一键修复",
+    "recheck": "重新检查",
+    "allOk": "全部正常",
+    "failing": "{{n}} 项异常"
   }
 }

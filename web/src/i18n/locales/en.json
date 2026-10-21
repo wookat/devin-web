@@ -1419,5 +1419,17 @@
       "resolved": "No resolved findings",
       "dismissed": "No dismissed findings"
     }
+  },
+  "doc": {
+    "entry": "Doctor",
+    "title": "Service Doctor",
+    "close": "Close",
+    "running": "Checking…",
+    "fix": "Fix",
+    "fixing": "Fixing…",
+    "fixAll": "Fix all",
+    "recheck": "Re-check",
+    "allOk": "All checks pass",
+    "failing": "{{n}} failing"
   }
 }

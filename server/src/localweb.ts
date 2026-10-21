@@ -284,7 +284,7 @@ const sessionSubs: Record<string, (ctx: ApiContext, id: string, req: IncomingMes
       ? body.attachments as { url: string; name?: string; mime?: string; size?: number }[]
       : [];
     if (!text && !attachments.length) { json(res, 400, { error: "empty message" }); return; }
-    if (isDraining()) { noteSendError(id, "drain", "server restarting — send refused"); json(res, 503, { error: "server restarting" }); return; }
+    if (isDraining()) { noteSendError(id, "drain", "server restarting — send refused"); json(res, 503, { error: "server_restarting", drain: { waiting: [...inflight], elapsed_ms: Date.now() - drainSince() } }); return; }
     // Official parity: a prompt sent while a turn is in flight goes onto the
     // queue — it flushes FIFO from dispatchPrompt's settle path. Concurrent
     // session/prompt calls race the acp (errors or lost turns), so never
@@ -934,6 +934,43 @@ export async function handleLocalWb(ctx: ApiContext, req: IncomingMessage, res: 
           const r = await runCli(argv, ctx.primaryCwd);
           json(res, 200, r);
         } catch (e) { json(res, 200, { ok: false, output: "", error: e instanceof Error ? e.message : String(e) }); }
+        return true;
+      }
+
+      // GET /api/admin/drain — current deploy-drain state for the UI: whether
+      // we're gating new work, which sessions' turns we're waiting on, and how
+      // long it's been. Drives the "server restarting — waiting on X" message.
+      if (p === "/api/admin/drain" && m === "GET") {
+        json(res, 200, { draining: isDraining(), waiting: [...inflight], elapsed_ms: isDraining() ? Date.now() - drainSince() : 0 });
+        return true;
+      }
+
+      // GET /api/admin/diagnose — whole-chain probe: supervisor, drain,
+      // inflight turns, acp pool, lock-holding orphans, session locks,
+      // pending replays, disk, public domain. POST /api/admin/repair runs
+      // the fixable ones (kill-orphans / stop-turns / clear-open-turns /
+      // restart-now) — the "one button fixes it" escape hatch.
+      if (p === "/api/admin/diagnose" && m === "GET") {
+        const { diagnose } = await import("./diagnose.js");
+        json(res, 200, await diagnose(ctx));
+        return true;
+      }
+      if (p === "/api/admin/repair" && m === "POST") {
+        const body = await readJson(req);
+        const { repair } = await import("./diagnose.js");
+        json(res, 200, await repair(ctx, body.fixes === "all" ? "all" : Array.isArray(body.fixes) ? body.fixes.map(String) : []));
+        return true;
+      }
+
+      // POST /api/admin/audit — client-side action log appended to server.log
+      // so UI-initiated operations (restart clicks, send failures, config
+      // picks) are traceable next to the backend's own events.
+      if (p === "/api/admin/audit" && m === "POST") {
+        const body = await readJson(req);
+        const action = String(body.action ?? "?").slice(0, 80);
+        const detail = String(body.detail ?? "").slice(0, 300);
+        console.error(`[audit] ${action}${detail ? ` — ${detail}` : ""}`);
+        json(res, 200, { ok: true });
         return true;
       }
 

@@ -9,6 +9,7 @@ import { subscribeWs } from '@/lib/ws'
 import { cn } from '@/lib/utils'
 import { type MirrorTreeSession } from './mirror/treeCache'
 import AppSidebar from '@/components/AppSidebar'
+import DoctorDialog from '@/components/DoctorDialog'
 
 type Row = MirrorTreeSession
 
@@ -147,6 +148,7 @@ export default function SessionsPage() {
   const [showFolder, setShowFolder] = useState(false)
   const [sel, setSel] = useState<Set<string>>(new Set())
   const [menu, setMenu] = useState<{ kind: string; r: DOMRect } | null>(null)
+  const [doctor, setDoctor] = useState(false)
   const [sub, setSub] = useState<{ kind: 'status' | 'folder'; r: DOMRect } | null>(null)
   const [msg, setMsg] = useState('')
   const [sideOpen, setSideOpen] = useState(window.innerWidth >= 1024)
@@ -381,6 +383,9 @@ export default function SessionsPage() {
               />
               {q && <button onClick={() => setQ('')} className={cn('mr-1.5 flex size-4 shrink-0 cursor-pointer items-center justify-center rounded-[4px] text-muted-foreground hover:bg-tint-secondary hover:text-foreground', FOCUS_RING)} aria-label={t('sp.clearSearch')}><OX size={12} /></button>}
             </div>
+            <button onClick={() => setDoctor(true)} className={cn('flex h-7 cursor-pointer touch-manipulation select-none items-center gap-1 whitespace-nowrap rounded-[6px] border border-border bg-card px-[10px] text-[13px] font-medium leading-[18px] text-foreground hover:bg-tint-secondary', FOCUS_RING)}>
+              {t('doc.entry')}
+            </button>
             <button onClick={openMenu('display')} className={cn('flex h-7 cursor-pointer touch-manipulation select-none items-center gap-1 whitespace-nowrap rounded-[6px] border border-border bg-card px-[10px] text-[13px] font-medium leading-[18px] text-foreground hover:bg-tint-secondary', FOCUS_RING)}>
               {t('sp.display')} <OChevronDown size={16} className="shrink-0 text-muted-foreground" />
             </button>
@@ -520,6 +525,8 @@ export default function SessionsPage() {
           <button className={cn(menuItem, 'text-muted-foreground')} onClick={() => void bulkFolder(null)}>{t('sp.removeFolder')}</button>
         </Menu>
       )}
+
+      {doctor && <DoctorDialog onClose={() => setDoctor(false)} />}
     </div>
   )
 }
