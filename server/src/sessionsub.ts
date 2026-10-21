@@ -6,6 +6,7 @@
  * state comes from sessionplace, timelines from dwtimeline.
  */
 import type { ApiContext } from "./routes.js";
+import { isRateLimitError, retryAfterSeconds } from "./accounts.js";
 import { buildTimelineFrom, type DwItem, type LogEntry } from "./dwtimeline.js";
 import { loadInflight, loadEpoch, sessionHost } from "./sessionplace.js";
 
@@ -24,6 +25,45 @@ export function markSubagentDead(parent: string, aid: string) {
  *  subagent right before the relay so its status pill reads Working at
  *  once; injected into sessionprompt by sessionload's bindPromptDeps. */
 export function pingSubagent(aid: string) { subPing.set(aid, Date.now()); }
+
+/** toolCallId → {sessionId, resumeTarget} for live run_subagent calls — a
+ * failed tool_call_update can then be attributed back to the turn that
+ * spawned it, and a failed RESUME condemns its target handle. */
+const subCalls = new Map<string, { sid: string; aid?: string }>();
+
+/** Rate limits raised INSIDE a run_subagent resume arrive as an ordinary
+ * failed tool result — neither promptWithRetry (which only sees prompt-level
+ * HTTP errors) nor onAgentLog (session-level notices) ever observes them, so
+ * a limited account kept serving until this watcher existed. On a failed
+ * run_subagent update whose result text matches the limit patterns, cool the
+ * account the lead's host actually runs on and rotate — same attribution as
+ * a prompt-level 429. (Moved from index.ts — this is subagent domain.) */
+export function watchSubRateLimit(ctx: ApiContext, sessionId: string, u: Record<string, unknown>) {
+  const tc = String(u.toolCallId ?? "");
+  const m = u._meta as Record<string, unknown> | undefined;
+  if (u.sessionUpdate === "tool_call") {
+    if (m?.["cognition.ai/inferenceToolName"] === "run_subagent" && tc) {
+      if (subCalls.size > 4000) subCalls.clear();
+      const args = (u.rawInput ?? u.arguments ?? {}) as Record<string, unknown>;
+      subCalls.set(tc, { sid: sessionId, aid: typeof args.resume === "string" ? args.resume : undefined });
+    }
+    return;
+  }
+  if (u.sessionUpdate !== "tool_call_update" || !tc || u.status !== "failed" || subCalls.get(tc)?.sid !== sessionId) return;
+  const text = JSON.stringify(u.rawOutput ?? u.content ?? "");
+  // A failed resume means the registry dropped that handle — remember it so
+  // the child page stops offering (and charging for) relays that can't land.
+  const target = subCalls.get(tc)?.aid;
+  if (target && /doesn'?t exist|no longer found|no subagent found|not found/i.test(text)) markSubagentDead(sessionId, target);
+  if (!isRateLimitError(text)) return;
+  if (loadInflight.has(sessionId)) return; // replayed history must not cool accounts
+  const name = sessionHost.get(sessionId)?.account ?? ctx.accounts.accountForCredFile() ?? ctx.accounts.pick();
+  if (name) {
+    ctx.accounts.markLimited(name, retryAfterSeconds(text));
+    ctx.hub.broadcast({ type: "account_limited", account: name, sessionId, message: text.slice(0, 300) });
+  }
+  ctx.rotate("subagent-rate-limit");
+}
 
 // ---------------------------------------------------------------------------
 // subagents — events tagged cognition.ai/subagent_context.parentAgentId=agentId

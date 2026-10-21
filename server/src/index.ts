@@ -17,7 +17,7 @@ import { handleApi, type ApiContext } from "./routes.js";
 import { handleLocalWb } from "./lweb/index.js";
 import { recordTerminal } from "./sessionview.js";
 import { isReplayEcho, autoResumeInterrupted, adoptBrokerAcps, setCfgCacheDir } from "./sessionload.js";
-import { markSubagentDead } from "./sessionsub.js";
+import { watchSubRateLimit } from "./sessionsub.js";
 import { loadInflight, sessionHost } from "./sessionplace.js";
 import { touchSessionActivity, markGracefulExit } from "./sessionlive.js";
 import { brokerEnabled } from "./acpbroker.js";
@@ -316,7 +316,7 @@ const manager = new AcpManager({
   onSessionUpdate: (sessionId, update) => {
     if (isReplayEcho(sessionId, update as Record<string, unknown>)) return;
     sessionLog.append(sessionId, update as Record<string, unknown>);
-    watchSubRateLimit(sessionId, update as Record<string, unknown>);
+    watchSubRateLimit(ctx, sessionId, update as Record<string, unknown>);
     hub.broadcast({ type: "session_update", sessionId, update });
     touchSessionActivity(sessionId);
     noteUpdate(ctx, sessionId);
@@ -386,44 +386,8 @@ function rotate(reason: string, target?: string): string | null {
   return next;
 }
 
-/** toolCallId → {sessionId, resumeTarget} for live run_subagent calls — a
- * failed tool_call_update can then be attributed back to the turn that
- * spawned it, and a failed RESUME condemns its target handle. */
-const subCalls = new Map<string, { sid: string; aid?: string }>();
-
-/** Rate limits raised INSIDE a run_subagent resume arrive as an ordinary
- * failed tool result — neither promptWithRetry (which only sees prompt-level
- * HTTP errors) nor onAgentLog (session-level notices) ever observes them, so
- * a limited account kept serving until this watcher existed. On a failed
- * run_subagent update whose result text matches the limit patterns, cool the
- * account the lead's host actually runs on and rotate — same attribution as
- * a prompt-level 429. */
-function watchSubRateLimit(sessionId: string, u: Record<string, unknown>) {
-  const tc = String(u.toolCallId ?? "");
-  const m = u._meta as Record<string, unknown> | undefined;
-  if (u.sessionUpdate === "tool_call") {
-    if (m?.["cognition.ai/inferenceToolName"] === "run_subagent" && tc) {
-      if (subCalls.size > 4000) subCalls.clear();
-      const args = (u.rawInput ?? u.arguments ?? {}) as Record<string, unknown>;
-      subCalls.set(tc, { sid: sessionId, aid: typeof args.resume === "string" ? args.resume : undefined });
-    }
-    return;
-  }
-  if (u.sessionUpdate !== "tool_call_update" || !tc || u.status !== "failed" || subCalls.get(tc)?.sid !== sessionId) return;
-  const text = JSON.stringify(u.rawOutput ?? u.content ?? "");
-  // A failed resume means the registry dropped that handle — remember it so
-  // the child page stops offering (and charging for) relays that can't land.
-  const target = subCalls.get(tc)?.aid;
-  if (target && /doesn'?t exist|no longer found|no subagent found|not found/i.test(text)) markSubagentDead(sessionId, target);
-  if (!isRateLimitError(text)) return;
-  if (loadInflight.has(sessionId)) return; // replayed history must not cool accounts
-  const name = sessionHost.get(sessionId)?.account ?? accounts.accountForCredFile() ?? accounts.pick();
-  if (name) {
-    accounts.markLimited(name, retryAfterSeconds(text));
-    hub.broadcast({ type: "account_limited", account: name, sessionId, message: text.slice(0, 300) });
-  }
-  rotate("subagent-rate-limit");
-}
+// (subCalls + watchSubRateLimit moved to sessionsub.ts — the subagent
+//  domain module; index.ts only wires the call into onAgentLog.)
 
 const ctx: ApiContext = {
   store,
