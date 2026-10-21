@@ -14,7 +14,7 @@ import { WsHub } from "./ws.js";
 import { WebSocketServer } from "ws";
 import { SessionLog } from "./sessionlog.js";
 import { handleApi, type ApiContext } from "./routes.js";
-import { handleLocalWb } from "./localweb.js";
+import { handleLocalWb } from "./lweb/index.js";
 import { recordTerminal } from "./sessionview.js";
 import { isReplayEcho, autoResumeInterrupted, adoptBrokerAcps, setCfgCacheDir } from "./sessionload.js";
 import { markSubagentDead } from "./sessionsub.js";
