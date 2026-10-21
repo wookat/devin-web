@@ -105,7 +105,7 @@ const PR_QUERY = `query($o:String!,$r:String!,$n:Int!){
    labels(first:30){nodes{name color}}
    commits(last:100){nodes{commit{oid messageHeadline committedDate author{name user{login}}}}}
    comments(first:100){nodes{databaseId body createdAt url author{login avatarUrl} reactionGroups{content users{totalCount} viewerHasReacted}}}
-   reviewThreads(first:100){nodes{id isResolved isOutdated path line comments(first:50){nodes{databaseId body createdAt url author{login avatarUrl} reactionGroups{content users{totalCount} viewerHasReacted}}}}}
+   reviewThreads(first:100){nodes{id isResolved isOutdated path line comments(first:50){nodes{databaseId body createdAt url state author{login avatarUrl} reactionGroups{content users{totalCount} viewerHasReacted}}}}}
   }
  } }`;
 
@@ -136,7 +136,7 @@ async function fetchDetail(ref: PrRef) {
     comments: rg(pr.comments).map(cmOf),
     threads: rg(pr.reviewThreads).map((t: any) => ({
       id: t.id, path: t.path, line: t.line, is_resolved: !!t.isResolved, is_outdated: !!t.isOutdated,
-      comments: rg(t.comments).map(cmOf),
+      comments: rg(t.comments).map((c: any) => ({ ...cmOf(c), pending: c.state === "PENDING" })),
     })),
     commits: rg(pr.commits).map((n: any) => ({ sha: n.commit.oid, headline: n.commit.messageHeadline, author: n.commit.author?.user?.login ?? n.commit.author?.name ?? "", committed_at: n.commit.committedDate })),
     head_sha: pr.headRefOid,
@@ -378,7 +378,9 @@ export async function handlePrRoute(ctx: ApiContext, sub: string, m: string, req
       if (line != null) { decls.push("$l:Int!"); vars.l = line; }
       if (otherSide != null) { decls.push("$sl:Int!"); vars.sl = otherSide; }
       if (body.start_review) {
-        await ghGql(`mutation(${decls.join(",")}){addPullRequestReview(input:{pullRequestId:$p,event:PENDING,threads:[{${thread}}]}){pullRequestReview{id}}}`, vars);
+        // No `event:` — a review created without an event IS the pending review
+        // (PENDING is not a PullRequestReviewEvent; omitting it leaves it pending).
+        await ghGql(`mutation(${decls.join(",")}){addPullRequestReview(input:{pullRequestId:$p,threads:[{${thread}}]}){pullRequestReview{id}}}`, vars);
       } else {
         await ghGql(`mutation(${decls.join(",")}){addPullRequestReviewThread(input:{pullRequestId:$p,${thread}}){thread{id}}}`, vars);
       }
