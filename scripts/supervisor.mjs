@@ -163,7 +163,11 @@ function spawnBackend() {
     // Only the TRACKED child may clear state — an untracked loser of a spawn
     // race must not null `child` out from under the live tracked backend.
     if (child === c) { child = null; state = "down"; }
-    exits.push(Date.now());
+    // code 0 = the backend's own graceful restart path (markGracefulExit +
+    // process.exit(0)) — intentional, not a crash: fast respawn and don't
+    // feed the crash-loop backoff counter.
+    if (code === 0) intentionalExit = true;
+    else exits.push(Date.now());
     void respawnSoon();
   });
   log(`backend spawned pid=${child.pid} port=${BACK_PORT}`);
@@ -254,6 +258,9 @@ setInterval(async () => {
   if (!child) return; // respawn path owns state
   const ok = await probe();
   if (ok) { if (state !== "up") log(`backend healthy pid=${child.pid}`); state = "up"; healthFails = 0; return; }
+  // Boot grace: module init (sqlite/migration) + listen can exceed the
+  // 3-fail window on a cold box — don't count failures until 60s in.
+  if (state === "starting" && Date.now() - bootedAt < 60_000) return;
   healthFails++;
   if (healthFails >= 3) {
     log(`backend unresponsive (${healthFails} probes) — restarting pid=${child.pid}`);
