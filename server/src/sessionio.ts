@@ -677,6 +677,11 @@ function watchAdoptedTurn(ctx: ApiContext, id: string, acp: DevinAcp) {
  *  children are never orphans — their parent is alive). */
 export async function adoptBrokerAcps(ctx: ApiContext) {
   if (!brokerEnabled) return;
+  // openTurns is LAZY-loaded (sendPreflight/dispatch/autoResume trigger it) —
+  // without this the `openTurns.has(sid)` check below is permanently false,
+  // adopted in-flight turns get NO settle watcher, and their journal entries
+  // fossilize (the forever interrupted-banner bug).
+  openTurnsLoad(ctx);
   const list = await brokerList().catch(() => [] as Awaited<ReturnType<typeof brokerList>>);
   const alive = list.filter((a) => !a.exited);
   if (!alive.length) return;
