@@ -42,7 +42,7 @@ export class AcpManager {
 
   constructor(private ev: ManagerEvents) {}
 
-  private async spawn(cwd: string, agent: AgentDef, onExit: (code: number | null) => void, ssh: string | null = null): Promise<DevinAcp> {
+  private async spawn(cwd: string, agent: AgentDef, onExit: (code: number | null) => void, ssh: string | null = null, poolKey?: string): Promise<DevinAcp> {
     if (!ssh) await fs.mkdir(cwd, { recursive: true });
     let instance: DevinAcp | null = null;
     const inj = this.envFor?.(agent) ?? { env: {}, account: null };
@@ -72,8 +72,42 @@ export class AcpManager {
       inj.env,
       inj.account,
       ssh,
+      poolKey,
     );
     instance = acp;
+    return acp;
+  }
+
+  /** Adopt a broker acp that outlived a backend restart: attach its stream,
+   *  wire the same events a fresh spawn gets, and re-seat it in the pool
+   *  (pooled key) or dedicated map (sessions discovered via session/list). */
+  async adopt(cwd: string, agent: AgentDef, key: string | null, acpId: string, after: number): Promise<DevinAcp> {
+    let instance: DevinAcp | null = null;
+    const acp = await DevinAcp.adoptBrokered(cwd, this.terminal, {
+      ...this.ev,
+      onPermissionRequest: (requestId, sessionId, toolCall, options) => {
+        if (instance) this.ev.onPermissionOwner(requestId, instance);
+        this.ev.onPermissionRequest(requestId, sessionId, toolCall, options);
+      },
+      onAgentLog: (sessionId, channel, message, level) => {
+        if (isRateLimitError(message)) {
+          this.ev.onRateLimited?.(instance?.account ?? null, sessionId, message);
+        }
+        this.ev.onAgentLog(sessionId, channel, message, level);
+      },
+      onExit: (code) => {
+        // Identity check: a same-key acp adopted after us may have taken the
+        // pool slot — deleting unconditionally would evict the live one.
+        if (key && this.pooled.get(key)?.acp === acp) this.pooled.delete(key);
+        for (const [sid, m] of this.bySession) if (m.acp === acp) this.bySession.delete(sid);
+        this.ev.onExit(cwd, code, agent.id);
+      },
+    }, agent, acpId, after);
+    instance = acp;
+    // Only multi-session acp take pool slots — a dedicated key (bare agent.id)
+    // is an identity marker, not a pool slot; its sessions live in bySession
+    // via bindSession during session discovery.
+    if (key && agent.multiSession) this.pooled.set(key, { acp, cwd, startedAt: Date.now() });
     return acp;
   }
 
@@ -97,7 +131,7 @@ export class AcpManager {
         const acp = await this.spawn(cwd, agent, (code) => {
           this.pooled.delete(key);
           this.ev.onExit(cwd, code, agent.id);
-        }, ssh);
+        }, ssh, key);
         if (this.spawnGen === g) {
           this.pooled.set(key, { acp, cwd, startedAt: Date.now() });
           return acp;
@@ -125,7 +159,9 @@ export class AcpManager {
         }
       }
       this.ev.onExit(cwd, code, agent.id, sessionId);
-    }, ssh);
+    // key = bare agent.id: journaled through the broker so adoption knows the
+    // agent type — never seated in the pool (multiSession guard in adopt()).
+    }, ssh, agent.id);
     return acp;
   }
 
@@ -207,6 +243,18 @@ export class AcpManager {
     this.pooled.clear();
     for (const m of this.bySession.values()) m.acp.kill();
     this.bySession.clear();
+    this.killHelpers();
+  }
+
+  /** Every live acp (pooled + dedicated) — the graceful-exit offset journal
+   *  iterates this to snapshot broker stream positions. */
+  allAcps(): DevinAcp[] {
+    return [...this.pooled.values(), ...this.bySession.values()].map((m) => m.acp);
+  }
+
+  /** Kill only backend-local helper processes (terminal runners). Broker mode
+   *  exits with acp children ALIVE under the broker — only these die with us. */
+  killHelpers() {
     this.terminal.killAll();
     for (const t of this.sshTerminals) t.killAll();
     this.sshTerminals.clear();

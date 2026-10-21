@@ -15,7 +15,8 @@ import { WebSocketServer } from "ws";
 import { SessionLog } from "./sessionlog.js";
 import { handleApi, type ApiContext } from "./routes.js";
 import { handleLocalWb } from "./localweb.js";
-import { recordTerminal, loadInflight, isReplayEcho, autoResumeInterrupted, sessionHost, markSubagentDead, touchSessionActivity, markGracefulExit } from "./sessionio.js";
+import { recordTerminal, loadInflight, isReplayEcho, autoResumeInterrupted, sessionHost, markSubagentDead, touchSessionActivity, markGracefulExit, adoptBrokerAcps } from "./sessionio.js";
+import { brokerEnabled } from "./acpbroker.js";
 import { meta } from "./dwstore.js";
 import { sshInteractive } from "./ssh.js";
 import { edition } from "./edition.js";
@@ -516,12 +517,18 @@ httpServer.listen(PORT, HOST, async () => {
     const opener = process.platform === "darwin" ? "open" : "xdg-open";
     execFile(opener, [addr], () => {});
   }
+  // Broker mode: acp children survived under the broker — re-attach and
+  // rebuild the pool/session maps BEFORE anything else resolves sessions.
+  // In-flight turns keep streaming (settle is silence-inferred); the orphan
+  // sweep + auto-resume only handle what adoption couldn't (crashes).
+  const adopted = adoptBrokerAcps(ctx).catch((e) => { console.error("[adopt]", e); });
   // Auto-resume turns left open by a crashed/killed predecessor — gated by
   // the 会话自动继续 pref. Delayed so the acp pool settles first. Orphaned
   // acp children (SIGKILL/crash paths skip killAll) are swept FIRST so their
   // dead locks don't block the replays.
   setTimeout(() => {
-    void import("./diagnose.js").then(d => d.killOrphans())
+    void Promise.resolve(adopted) // adoption first — adoptedTurns must be populated before resume decides
+      .then(() => import("./diagnose.js")).then(d => d.killOrphans())
       .then(r => { if (r !== "none found") console.error(`[boot] orphan acp sweep: ${r}`); })
       .catch(() => {})
       .then(() => autoResumeInterrupted(ctx)) // AFTER the sweep — dead locks cleared first
@@ -554,8 +561,9 @@ httpServer.listen(PORT, HOST, async () => {
 
 for (const sig of ["SIGINT", "SIGTERM"] as const) {
   process.on(sig, () => {
-    markGracefulExit(); // keep open-turns entries → auto-resume on next boot
-    manager.killAll();
+    markGracefulExit(ctx); // keep open-turns entries → auto-resume on next boot
+    if (brokerEnabled) manager.killHelpers(); // acp live under the broker
+    else manager.killAll();
     store.flush();
     process.exit(0);
   });

@@ -19,6 +19,7 @@ import os from "node:os";
 import path from "node:path";
 import { spawn, execFile } from "node:child_process";
 import { fileURLToPath } from "node:url";
+import crypto from "node:crypto";
 import process from "node:process";
 
 const repoRoot = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..");
@@ -46,6 +47,54 @@ const log = (m) => {
   try { fs.appendFileSync(logFile, line); } catch {}
 };
 const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
+
+// ---- acp broker child -------------------------------------------------------
+// Long-lived owner of every agent (devin acp) child process. The backend
+// attaches over a local socket instead of spawning directly, so backend
+// restarts leave agents and in-flight turns untouched — the next backend
+// re-adopts them. A dead broker orphans its acp children (dead pipes) — its
+// own journal sweep kills them on the next boot; backend-side resumes cover
+// the gap like any crash.
+let broker = null;
+const BROKER_SOCK = process.platform === "win32"
+  ? `\\\\.\\pipe\\devin-web-acp-${crypto.createHash("sha1").update(dataDir).digest("hex").slice(0, 10)}`
+  : path.join(dataDir, "acp-broker.sock");
+
+function brokerLogFd() {
+  const f = path.join(dataDir, "broker.log");
+  try { if (fs.statSync(f).size > 4 * 1024 * 1024) fs.renameSync(f, f + ".old"); } catch {}
+  return fs.openSync(f, "a");
+}
+
+function spawnBroker() {
+  if (broker) return;
+  const fd = brokerLogFd();
+  broker = spawn(process.execPath, [path.join(repoRoot, "scripts", "acp-broker.mjs")], {
+    cwd: repoRoot, detached: process.platform !== "win32", windowsHide: true,
+    stdio: ["ignore", fd, fd],
+    env: { ...process.env, DEVIN_WEB_DATA_DIR: dataDir, DEVIN_WEB_ACP_BROKER: BROKER_SOCK },
+  });
+  const b = broker;
+  b.on("error", (e) => log(`broker spawn error: ${e.message}`));
+  b.on("exit", (code) => {
+    log(`broker exit pid=${b.pid} code=${code} — respawning (its acp orphans get swept at its boot)`);
+    if (broker === b) broker = null;
+    setTimeout(spawnBroker, 1500);
+  });
+  fs.closeSync(fd);
+  log(`broker spawned pid=${broker.pid} sock=${BROKER_SOCK}`);
+}
+
+function killBroker() {
+  const b = broker;
+  if (!b) return;
+  if (process.platform === "win32") {
+    spawn("taskkill", ["/pid", String(b.pid), "/t", "/f"], { stdio: "ignore", windowsHide: true });
+  } else {
+    try { process.kill(-b.pid, "SIGKILL"); } catch { try { b.kill("SIGKILL"); } catch {} }
+  }
+  broker = null;
+}
 
 // ---- backend child ---------------------------------------------------------
 let child = null;
@@ -99,6 +148,7 @@ function spawnBackend() {
       env: {
         ...process.env,
         DEVIN_WEB_SUPERVISED: "1",
+        DEVIN_WEB_ACP_BROKER: BROKER_SOCK,
         // Task-Scheduler/boot launches have no shell env — default the known
         // public hosts so the tunnel isn't 403'd after a cold boot. deploy.bat
         // can still override by exporting its own value first.
@@ -308,11 +358,11 @@ const server = http.createServer((req, res) => {
     }
     if (url.pathname === "/api/_super/stop" && req.method === "POST") {
       res.writeHead(202, { "content-type": "application/json" }).end('{"ok":true}');
-      log("stop requested — shutting down backend then supervisor");
+      log("stop requested — shutting down backend, broker, then supervisor");
       // Marker file: the scheduled watchdog respects an INTENTIONAL stop and
       // won't revive us. Cleared on next start (above).
       try { fs.writeFileSync(STOPPED, String(Date.now())); } catch {}
-      void killBackend().finally(() => process.exit(0));
+      void killBackend().finally(() => { killBroker(); process.exit(0); });
       return;
     }
     if (url.pathname.startsWith("/api/")) proxy(req, res);
@@ -342,12 +392,13 @@ server.on("upgrade", (req, socket, head) => {
 
 server.listen(PUB_PORT, "0.0.0.0", () => {
   log(`supervisor up on :${PUB_PORT} → backend :${BACK_PORT} (pid ${process.pid})`);
+  spawnBroker();          // acp owner must exist before the backend needs it
   void respawnSoon(true); // unified path — clears port squatters before spawn
 });
 server.on("error", (e) => { log(`listen failed :${PUB_PORT}: ${e.message}`); process.exit(1); });
 
 process.on("uncaughtException", (e) => log(`supervisor uncaught: ${e.stack || e}`));
 process.on("unhandledRejection", (e) => log(`supervisor unhandledRejection: ${e}`));
-process.on("SIGTERM", () => { killBackend().finally(() => process.exit(0)); });
-process.on("SIGINT", () => { killBackend().finally(() => process.exit(0)); });
+process.on("SIGTERM", () => { killBackend().finally(() => { killBroker(); process.exit(0); }); });
+process.on("SIGINT", () => { killBackend().finally(() => { killBroker(); process.exit(0); }); });
 

@@ -10,6 +10,7 @@ import { execFile } from "node:child_process";
 import { promisify } from "node:util";
 import type { ApiContext } from "./routes.js";
 import { isDraining, drainSince, inflight, restartSession, listLocalSessions, markGracefulExit, clearOpenTurns } from "./sessionio.js";
+import { brokerEnabled } from "./acpbroker.js";
 
 const execFileP = promisify(execFile);
 
@@ -173,8 +174,9 @@ export async function repair(ctx: ApiContext, fixes: string[] | "all"): Promise<
         results[fix] = "exiting — supervisor respawns immediately";
         setTimeout(() => {
           console.error("[repair] restart requested by user");
-          markGracefulExit();       // open-turns survive for auto-resume
-          ctx.manager.killAll();    // no orphaned acp holding session locks
+          markGracefulExit(ctx);    // open-turns survive for auto-resume
+          if (brokerEnabled) ctx.manager.killHelpers(); // acp live under the broker
+          else ctx.manager.killAll();                   // no orphaned acp holding session locks
           process.exit(0);
         }, 400);
       } else results[fix] = "unknown fix";

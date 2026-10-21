@@ -9,6 +9,7 @@ import * as acp from "@agentclientprotocol/sdk";
 import type { TerminalRunner } from "./terminal.js";
 import { DEFAULT_AGENT, agentCommandLine, type AgentDef } from "./agents.js";
 import { sshSpawn } from "./ssh.js";
+import { brokerEnabled, brokerSpawn, brokerAttach, brokerOnExit, type ProcHandle } from "./acpbroker.js";
 
 export interface DevinAcpEvents {
   onSessionUpdate: (sessionId: string, update: unknown) => void;
@@ -28,6 +29,17 @@ export interface DevinAcpEvents {
 
 let permissionSeq = 0;
 
+/** Pipe the broker's control-channel exit event into the fake proc's 'exit'
+ * so DevinAcp's real code + cleanup lands (socket 'close' also emits
+ * exit(null) — init's `finished` guard dedupes whichever arrives second). */
+async function wireBrokerExit(acpId: string, proc: ProcHandle): Promise<void> {
+  const off = await brokerOnExit((id, code) => {
+    if (id !== acpId) return;
+    proc.emit("exit", code);
+    off();
+  });
+}
+
 /**
  * One ACP agent child process (`devin acp`, `prime-agent --mode acp`, ...)
  * bound to a workspace directory, with a typed ACP client connection on top
@@ -39,13 +51,15 @@ type PendingPermission = {
 };
 
 export class DevinAcp {
-  private proc: ChildProcess;
+  private proc: ProcHandle;
   private conn: acp.ClientSideConnection;
   private pendingPermissions: Map<string, PendingPermission>;
   readonly cwd: string;
   readonly agent: AgentDef;
   capabilities: acp.InitializeResponse | null = null;
   exited = false;
+  /** Broker-owned acp id (DEVIN_WEB_ACP_BROKER mode); null for direct spawn. */
+  brokerId: string | null = null;
   /** Sessions with an in-flight prompt on this process. A pooled acp hosts
    * several sessions — rotation/restart must not hard-kill it while any are
    * mid-turn (that cuts every live turn, including the caller's own). */
@@ -57,7 +71,7 @@ export class DevinAcp {
   private constructor(
     cwd: string,
     agent: AgentDef,
-    proc: ChildProcess,
+    proc: ProcHandle,
     conn: acp.ClientSideConnection,
     pendingPermissions: Map<string, PendingPermission>,
   ) {
@@ -74,6 +88,10 @@ export class DevinAcp {
   /** OS pid of the wrapped child — diagnostics only. */
   get pid(): number { return this.proc.pid ?? 0; }
 
+  /** Broker-mode received-byte counter (0 for direct spawns) — persisted on
+   *  graceful exit so adoption resumes the stream exactly where it left. */
+  get bytesReceived(): number { return this.proc.bytesReceived?.() ?? 0; }
+
   static async start(
     cwd: string,
     terminal: TerminalRunner,
@@ -84,8 +102,17 @@ export class DevinAcp {
     /** user@host[:port] / ssh config alias — the agent CLI runs on the REMOTE
      *  host via `ssh <target> <agentLine>`; stdio is the same ACP pipe. */
     ssh: string | null = null,
+    /** Manager pool key — journaled through the broker so a post-restart
+     *  backend can re-map a surviving acp to its pool slot. */
+    poolKey?: string,
   ): Promise<DevinAcp> {
-    const pendingPermissions = new Map<string, PendingPermission>();
+    // Broker mode: the broker process owns the child — a backend restart
+    // leaves it alive and the next boot adopts it (see adoptBrokered). SSH
+    // agents stay direct: ssh2-shim channels are in-process objects, not
+    // child processes a broker can hold.
+    if (brokerEnabled && !ssh) {
+      return DevinAcp.startBrokered(cwd, terminal, ev, agent, extraEnv, account, poolKey);
+    }
     // Windows npm CLIs are .cmd/.ps1 shims — Node ≥20.12 refuses to spawn
     // them without a shell (EINVAL). agent.shell routes through %ComSpec%.
     const spawnOpts = {
@@ -106,6 +133,61 @@ export class DevinAcp {
       : agent.shell
         ? (spawn(agentCommandLine(agent), { ...spawnOpts, shell: true }) as ChildProcessByStdio<Writable, Readable, Readable>)
         : spawn(agent.command, agent.args, spawnOpts);
+    return DevinAcp.init(cwd, terminal, ev, agent, proc, account);
+  }
+
+  /** Broker-mode spawn: ctl spawn → data attach → shared init handshake. */
+  static async startBrokered(
+    cwd: string,
+    terminal: TerminalRunner,
+    ev: DevinAcpEvents,
+    agent: AgentDef,
+    extraEnv: Record<string, string>,
+    account: string | null,
+    poolKey?: string,
+  ): Promise<DevinAcp> {
+    const { acpId } = await brokerSpawn({
+      cwd, command: agent.command, args: agent.args, env: extraEnv,
+      shell: agent.shell === true, cmdline: agent.shell ? agentCommandLine(agent) : undefined, key: poolKey,
+    });
+    const { proc } = await brokerAttach(acpId, 0);
+    const self = await DevinAcp.init(cwd, terminal, ev, agent, proc, account);
+    self.brokerId = acpId;
+    void wireBrokerExit(acpId, proc).catch(() => {});
+    return self;
+  }
+
+  /** Re-attach to a broker acp that outlived a backend restart. The process
+   * is already initialized — a second initialize on the fresh byte stream may
+   * or may not answer, so tolerate its failure and degrade capabilities. */
+  static async adoptBrokered(
+    cwd: string,
+    terminal: TerminalRunner,
+    ev: DevinAcpEvents,
+    agent: AgentDef,
+    acpId: string,
+    after: number,
+  ): Promise<DevinAcp> {
+    const { proc } = await brokerAttach(acpId, after);
+    const self = await DevinAcp.init(cwd, terminal, ev, agent, proc, null, true);
+    self.brokerId = acpId;
+    void wireBrokerExit(acpId, proc).catch(() => {});
+    return self;
+  }
+
+  /** Shared wiring: client handlers → ndJson stream → conn → handshake →
+   * exit bookkeeping. `tolerateInit` lets adopted (already-handshaken) acp
+   * past a refused second initialize with null capabilities. */
+  private static async init(
+    cwd: string,
+    terminal: TerminalRunner,
+    ev: DevinAcpEvents,
+    agent: AgentDef,
+    proc: ProcHandle,
+    account: string | null,
+    tolerateInit = false,
+  ): Promise<DevinAcp> {
+    const pendingPermissions = new Map<string, PendingPermission>();
     proc.stderr?.on("data", () => { /* drain: see stdio note above */ });
     const spawnedAccount = account;
 
@@ -253,9 +335,16 @@ export class DevinAcp {
         startFailed,
       ]);
     } catch (err) {
-      // Never leave an orphaned child when the handshake fails.
-      self.kill();
-      throw err;
+      if (!tolerateInit) {
+        // Never leave an orphaned child when the handshake fails.
+        self.kill();
+        throw err;
+      }
+      // Adopted broker acp were initialized on their original byte stream —
+      // some agents refuse a second initialize. The connection still answers
+      // every other RPC, so degrade caps and carry on.
+      console.warn(`[acp] adopted ${agent.id} refused re-initialize (${String((err as Error)?.message ?? err).slice(0, 120)}) — running with cached/no capabilities`);
+      self.capabilities = null;
     }
     handshaken = true;
     return self;

@@ -15,17 +15,24 @@ node scripts\supervisor.mjs         :: :7791 BIOS → spawns backend on :7792
 node dist\server\index.js --host 0.0.0.0 --port 7791   :: bare, unsupervised
 ```
 
-Production topology — `scripts/supervisor.mjs` is the BIOS: a ~250-line
+Production topology — `scripts/supervisor.mjs` is the BIOS: a ~400-line
 always-on process that owns :7791, serves `dist/web` itself, reverse-proxies
 `/api/*` + `/ws*` upgrades to the backend child on 127.0.0.1:7792, and
-health-probes `GET /api/health` every 4s. Backend exit OR 3 failed probes →
-clean orphaned acp children + respawn (>5 exits/5min → 60s backoff). So a
-hard crash, wedged event loop, or reboot self-heals — the static page stays
-up even while the backend is dead (APIs 502 `backend_unavailable` until it's
-back). Its own status/controls: `GET /api/_super/status`,
-`POST /api/_super/restart` (backend-only bounce), `POST /api/_super/stop`
-(intentional stop — writes `<dataDir>/supervisor.stopped` so the watchdog
-does NOT resurrect it; any fresh start clears the marker).
+health-probes `GET /api/health` every 4s. It supervises TWO children:
+the backend (`dist/server/index.js` :7792) and the **acp broker**
+(`scripts/acp-broker.mjs` — the long-lived owner of every local
+`devin acp` child; injected into the backend as `DEVIN_WEB_ACP_BROKER`).
+Backend exit OR 3 failed probes → clean orphaned acp children + respawn
+(>5 exits/5min → 60s backoff). Broker exit → respawn after 1.5s; its own
+pid journal (`<dataDir>/broker-state.json`) sweeps acp it orphaned. So a
+hard crash, wedged event loop, or reboot self-heals — the static page
+stays up even while the backend is dead (APIs 502 `backend_unavailable`
+until it's back). Its own status/controls: `GET /api/_super/status`,
+`POST /api/_super/restart` (backend-only bounce — broker + acp survive,
+in-flight turns keep streaming), `POST /api/_super/stop`
+(intentional stop — kills backend AND broker — writes
+`<dataDir>/supervisor.stopped` so the watchdog does NOT resurrect it; any
+fresh start clears the marker).
 Boot persistence via `devin-web.mjs install` (platform-native):
 win32 → Scheduled Tasks `devin-web-supervisor` (onlogon) +
 `devin-web-watchdog` (every minute → `scripts/watchdog.mjs`, revives the
@@ -35,9 +42,11 @@ supervisor if :7791 is silent); linux → systemd --user unit
 Supervisor injects a default `DEVIN_WEB_ALLOWED_HOSTS` (the tunnel hosts)
 when the environment lacks it — boot-time tasks have no shell env.
 `POST /api/_super/restart` vs the backend's own routes: prefer
-`/api/admin/restart` when the backend is up; `/_super/restart` is the hard
-reset for a wedged backend — it kills mid-turn. Logs:
-`<dataDir>/supervisor.log` + `server.log`.
+`/api/admin/restart` when the backend is up (graceful marks + offset
+journal); `/_super/restart` is the hard reset for a wedged backend —
+still turn-safe under the broker (turns stream through it; only the
+offset journal is skipped → re-attach joins at live edge). Logs:
+`<dataDir>/supervisor.log` + `server.log` + `broker.log`.
 
 Self-redeploy: `POST /api/admin/redeploy` runs `npm run build` (~1-3min).
 `POST /api/admin/restart` skips the build. UI: Settings → 服务 →
@@ -50,19 +59,52 @@ caller's own acp along with the server; the session replays via auto-resume.
 RESTART IS IMMEDIATE — there is NO drain wait. `/api/admin/restart` and
 redeploy's post-build step do exactly this: `beginDrain()` (gates new sends
 for the ~400ms exit window only), `markGracefulExit()` (in-flight turns'
-open-turns entries survive — auto-resume replays them on the next backend),
-`ctx.manager.killAll()` (kills acp children so session locks can't orphan —
-this was THE cause of "hard restart → sends fail with session_locked"),
-then `process.exit(0)`. The supervisor sees the exit and respawns; the whole
-cycle is a few seconds. Bare dev runs (no DEVIN_WEB_SUPERVISED) spawn the
-detached supervisor on exit so :7791 always ends up supervised — there is
-no respawn.mjs/respawn.bat chain anymore (deleted). `markGracefulExit` is
+open-turns entries survive + broker stream offsets are journaled),
+then kill and `process.exit(0)`:
+  - **broker mode** (production): `ctx.manager.killHelpers()` — only the
+    backend's local terminal helpers die; acp children keep running under
+    the broker, in-flight turns stream straight through the restart.
+  - **direct mode** (`DEVIN_WEB_ACP_BROKER` unset — bare dev): the legacy
+    `ctx.manager.killAll()` — acp children die so session locks can't
+    orphan (the original "hard restart → session_locked" fix).
+The supervisor sees the exit and respawns; the whole cycle is a few
+seconds. Bare dev runs (no DEVIN_WEB_SUPERVISED) spawn the detached
+supervisor on exit so :7791 always ends up supervised — there is no
+respawn.mjs/respawn.bat chain anymore (deleted). `markGracefulExit` is
 also set by the SIGINT/SIGTERM handler for the same reason. The old
 drain-loop (wait for inflight, heartbeat every 30s, DEVIN_WEB_DRAIN_TIMEOUT_MS
 bound) is GONE — open-turns recovery made waiting worthless and replay-type
 turns deadlocked it for hours. `GET /api/admin/drain` still reports the
-brief gate state for diagnostics. Keep `prefs.autoResume` on — it is what
-makes instant restart safe.
+brief gate state for diagnostics. Keep `prefs.autoResume` on — it covers
+the crash path adoption can't (dead broker, dead acp).
+
+ACP BROKER + ADOPTION — `scripts/acp-broker.mjs` owns local acp children
+(short-lived control plane / long-lived worker, the pgbouncer-tmux-LSP-
+daemon pattern). Wire: ndjson ctl channel (spawn/kill/list + exit events)
+and one raw duplex data channel per acp (first line `{"attach":id,"after":N}`
+— the broker replays ring-buffered stdout frames newer than `after`, frames
+cut at line boundaries, ~4MB ring). Client side is `server/src/acpbroker.ts`:
+`brokerSpawn`/`brokerAttach` (a net.Socket posing as ChildProcess stdio via
+the `ProcHandle` structural type), `brokerList`, `brokerOnExit`, and the
+`<dataDir>/acp-offsets.json` journal `markGracefulExit` writes so the next
+backend re-attaches at the exact byte position (crash/no-offset → attach at
+live edge `MAX_SAFE_INTEGER` — never replays already-consumed history).
+`DevinAcp.start` branches: `brokerEnabled && !ssh` → `startBrokered` (ctl
+spawn + attach + shared init handshake); adoption uses `adoptBrokered`
+(tolerateInit — devin may refuse a second initialize on the same stdio;
+the connection still answers every other RPC). SSH agents stay direct —
+ssh2 channels are in-process objects, not children a broker can hold.
+Boot order in index.ts: `adoptBrokerAcps(ctx)` (broker list → per-acp
+attach + `session/list` → rebuild loadedOn/sessionHost/bySession; sessions
+with surviving open-turns get `watchAdoptedTurn` — pseudo-inflight +
+busySessions protection + a 90s-silence settle detector, since the turn's
+prompt response died on the old byte stream) is AWAITED before the orphan
+sweep + `autoResumeInterrupted` so resume never double-prompts a turn that
+is still running. `manager.adopt` re-seats pooled acp by their journaled
+pool `key` (spawn args thread it through); dedicated agents journal a bare
+`agent.id` key and are re-bound via `bindSession`. Exit-event dedup:
+broker ctl `ev:exit` → fake proc 'exit' AND socket 'close' → same 'exit' —
+init's `finished` guard takes the first.
 Interrupted-turn recovery: `dispatchPrompt` records the outgoing message in
 `<dataDir>/open-turns.json` and clears it when the prompt settles — an entry
 surviving at boot means the server died mid-turn. A successful settle also
@@ -96,6 +138,7 @@ stop-turns, clear-open-turns, restart-now) back Settings → 诊断.
 npm test                            :: read-only API smoke (test/api-smoke.mjs)
 node test/api-smoke.mjs --send      :: + real prompt round-trip (costs tokens)
 node test/api-smoke.mjs --id <sid>  :: target a specific session
+node test/broker-smoke.cjs          :: acp-broker wire smoke (spawn/attach/replay/exit)
 npm run typecheck                   :: server + web tsc
 powershell -File clean-orphans.ps1  :: kill acp processes with dead parents
 ```

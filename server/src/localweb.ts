@@ -13,6 +13,7 @@ import path from "node:path";
 import os from "node:os";
 import type { ApiContext } from "./routes.js";
 import type { DevinAcp } from "./acp.js";
+import { brokerEnabled } from "./acpbroker.js";
 import { stageUpload, uploadPath, MIME } from "./uploads.js";
 import { streamScreen, injectInput } from "./screen.js";
 import zlib from "node:zlib";
@@ -1061,12 +1062,15 @@ export async function handleLocalWb(ctx: ApiContext, req: IncomingMessage, res: 
         const repoRoot = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..", "..");
         const respawn = () => {
           beginDrain();
-          markGracefulExit();
+          markGracefulExit(ctx);
           if (!process.env.DEVIN_WEB_SUPERVISED && !process.env.DEVIN_WEB_NO_SUPERVISOR) {
             spawn(process.execPath, [path.join(repoRoot, "scripts", "supervisor.mjs")],
               { cwd: repoRoot, detached: true, stdio: "ignore", windowsHide: true }).unref();
           }
-          ctx.manager.killAll();
+          // Broker mode: acp children live under the broker — only the
+          // backend's own helpers die with it; turns keep streaming.
+          if (brokerEnabled) ctx.manager.killHelpers();
+          else ctx.manager.killAll();
           setTimeout(() => process.exit(0), 400);
         };
         if (p === "/api/admin/redeploy") {

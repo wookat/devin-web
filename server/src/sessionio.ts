@@ -11,7 +11,8 @@ import { uploadPath, MIME } from "./uploads.js";
 import { isRateLimitError, retryAfterSeconds } from "./accounts.js";
 import { catalogInfo } from "./modelcat.js";
 import { remapLegacyCwd } from "./store.js";
-import { agentById } from "./agents.js";
+import { agentById, DEFAULT_AGENT } from "./agents.js";
+import { brokerEnabled, brokerList, readOffsets, writeOffsets } from "./acpbroker.js";
 import { loadReg, saveReg, meta, noteLastUsed } from "./dwstore.js";
 import {
   noteUpdate, persistTail, buildTimeline, buildTimelineFrom, snippet, tlCache,
@@ -620,7 +621,19 @@ let openTurnsLoaded = false;
  * must NOT clear open-turns — the entries are what auto-resume replays on
  * the next backend. Crash paths never set this (they die before settling). */
 let gracefulExit = false;
-export function markGracefulExit() { gracefulExit = true; }
+export function markGracefulExit(ctx?: ApiContext) {
+  gracefulExit = true;
+  // Broker mode: snapshot each acp's consumed-byte offset so the next backend
+  // re-attaches at the exact stream position — its ring replay then covers
+  // only the death-gap frames (no duplicates, no skipped chunks).
+  if (ctx && brokerEnabled) {
+    const m: Record<string, number> = {};
+    for (const a of ctx.manager.allAcps()) {
+      if (a.brokerId) m[a.brokerId] = a.bytesReceived;
+    }
+    writeOffsets(ctx.store.dataDir, m);
+  }
+}
 
 /** Drop open-turn entries — all of them, or one id. The tombstone case: an
  * entry that hit the resumeCount cap sits in the map forever otherwise
@@ -779,6 +792,104 @@ export function interruptedTurn(ctx: ApiContext, id: string): OpenTurn | null {
  * resume it with "继续" — session/load replays the partial turn and the
  * agent picks the work back up. Gated by the 会话自动继续 pref and capped
  * at 2 attempts per turn (a resume that itself crashes can't loop). */
+/** Sessions whose in-flight turn SURVIVED a backend restart (broker mode):
+ * the acp kept running so the turn still streams — but its prompt response
+ * died on the old byte stream, so settle is inferred, not awaited. A turn's
+ * update stream goes silent the moment it ends; 90s of silence is declared
+ * settled (false-positive cost: a rare >90s-silent live turn looks idle —
+ * a follow-up prompt may then hit devin's busy error, recoverable). */
+const adoptedTurns = new Set<string>();
+const ADOPT_SILENCE_MS = 90_000;
+
+function watchAdoptedTurn(ctx: ApiContext, id: string, acp: DevinAcp) {
+  adoptedTurns.add(id);
+  inflight.add(id);
+  acp.busySessions.add(id); // same protection a real prompt gets — no hard
+                            // kill / unpool while the adopted turn streams
+  ctx.hub.broadcast({ type: "session_status", sessionId: id, status: sessionStatus(ctx, id).status });
+  const t0 = Date.now();
+  touchSessionActivity(id);
+  const iv = setInterval(() => {
+    const done = (err: boolean) => {
+      clearInterval(iv);
+      adoptedTurns.delete(id);
+      inflight.delete(id);
+      releaseBusy(ctx, acp, id);
+      if (err) {
+        // The host died mid-adopted-turn — keep the open-turns entry so the
+        // NEXT boot's auto-resume replays it (same contract as any crash).
+        noteUpdate(ctx, id);
+      } else {
+        ctx.sessionLog.append(id, { sessionUpdate: "dw_turn_end" });
+        if (openTurns.delete(id)) openTurnsSave(ctx);
+        persistTail(ctx, id);
+        noteUpdate(ctx, id);
+        queueFlush(ctx, id);
+      }
+      ctx.hub.broadcast({ type: "session_status", sessionId: id, status: sessionStatus(ctx, id).status });
+    };
+    if (acp.exited) return done(true);
+    const last = Math.max(lastActivity.get(id) ?? 0, t0);
+    if (Date.now() - last > ADOPT_SILENCE_MS) {
+      console.error(`[adopt] ${id}: turn silent ${Math.round((Date.now() - last) / 1000)}s — declaring settled`);
+      done(false);
+    }
+  }, 5000);
+  iv.unref();
+}
+
+/** Broker mode: re-attach to acp children that outlived the old backend,
+ *  rebuild the pool/session maps they host, and arm settle watchers on
+ *  their surviving in-flight turns. Runs before the orphan sweep (broker
+ *  children are never orphans — their parent is alive). */
+export async function adoptBrokerAcps(ctx: ApiContext) {
+  if (!brokerEnabled) return;
+  const list = await brokerList().catch(() => [] as Awaited<ReturnType<typeof brokerList>>);
+  const alive = list.filter((a) => !a.exited);
+  if (!alive.length) return;
+  const offsets = readOffsets(ctx.store.dataDir);
+  const SKIP = Number.MAX_SAFE_INTEGER; // crash path: no offset → skip replay
+  let adopted = 0, turns = 0;
+  for (const a of alive) {
+    const agentId = (a.key ?? "devin").split(":")[0];
+    const agent = agentById(agentId) ?? DEFAULT_AGENT;
+    try {
+      const acp = await ctx.manager.adopt(a.cwd, agent, a.key, a.acpId, offsets[a.acpId] ?? SKIP);
+      adopted++;
+      // Discover sessions this process still holds: devin stamps the holder
+      // pid on loaded sessions — our own acp is "locked" BY its own pid.
+      try {
+        let cursor: string | undefined;
+        do {
+          const page = await acp.listSessions(cursor);
+          for (const s of page.sessions) {
+            const lm = ((s as { _meta?: Record<string, unknown> })._meta ?? {}) as Record<string, unknown>;
+            const sid = (s as { sessionId?: string }).sessionId;
+            if (!sid) continue;
+            const holder = Number(lm["cognition.ai/lockHolderPid"] ?? 0);
+            if (holder === a.pid || holder === 0) {
+              // holder===0 also claims it when devin omits the pid — a
+              // session listed by this acp but held elsewhere is still safe:
+              // the next op's session/load is idempotent on the true owner.
+              if (!loadedOn.get(acp)) loadedOn.set(acp, new Set());
+              loadedOn.get(acp)!.add(sid);
+              sessionHost.set(sid, acp);
+              // Dedicated (single-session) agents resolve via bySession —
+              // the pool path is multi-session only.
+              if (!agent.multiSession) ctx.manager.bindSession(sid, acp);
+              if (openTurns.has(sid) && !adoptedTurns.has(sid)) { watchAdoptedTurn(ctx, sid, acp); turns++; }
+            }
+          }
+          cursor = page.nextCursor ?? undefined;
+        } while (cursor);
+      } catch { /* list failed — lazy reload covers unpinned sessions */ }
+    } catch (e) {
+      console.error(`[adopt] ${a.acpId} (${a.cmd}) failed:`, e);
+    }
+  }
+  console.error(`[adopt] ${adopted}/${alive.length} broker acp(s) re-attached, ${turns} in-flight turn(s) resumed-streaming`);
+}
+
 export async function autoResumeInterrupted(ctx: ApiContext) {
   openTurnsLoad(ctx);
   // DEVIN_WEB_NO_AUTORESUME: a second instance sharing the data dir must
@@ -793,6 +904,9 @@ export async function autoResumeInterrupted(ctx: ApiContext) {
   const HUGE = 256 << 20;
   let first = true;
   for (const [id, t] of [...openTurns]) {
+    // Broker-adopted turns are still RUNNING on their original acp — the
+    // settle watcher owns them; a "继续" here would double-prompt a live turn.
+    if (adoptedTurns.has(id)) continue;
     if ((t.resumeCount ?? 0) >= 2) continue;
     const size = ctx.sessionLog.diskSize(id);
     if (size > HUGE) {
