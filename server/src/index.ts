@@ -233,6 +233,16 @@ httpServer.on("upgrade", (req, socket, head) => {
   try { pathname = new URL(req.url ?? "", "http://x").pathname; } catch { socket.destroy(); return; }
   if (pathname !== "/ws/term" && pathname !== "/ws/browser") return;
   if (!isAllowedRequest(req)) { socket.destroy(); return; }
+  // Interactive endpoints are full-power surfaces (a shell in the session
+  // cwd, CDP control of a real browser) — when the admin key is set they
+  // must honor it too. Browsers can't send headers on WS, so the key also
+  // rides as ?key= (same channel the admin fetch header uses).
+  if (adminKeyRequired()) {
+    const q = new URL(req.url ?? "", "http://x").searchParams;
+    if (req.headers["x-admin-key"] !== process.env.DEVIN_WEB_ADMIN_KEY && q.get("key") !== process.env.DEVIN_WEB_ADMIN_KEY) {
+      socket.destroy(); return;
+    }
+  }
   const wss = pathname === "/ws/term" ? termWss : browserWss;
   wss.handleUpgrade(req, socket, head, (ws) => wss.emit("connection", ws, req));
 });

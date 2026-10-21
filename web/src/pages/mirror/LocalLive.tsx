@@ -2,6 +2,7 @@ import { useCallback, useEffect, useRef, useState, type FormEvent } from 'react'
 import { useTranslation } from 'react-i18next'
 import { Expand, Shrink, Monitor, Globe, Loader2, Power, ArrowRight, Eye } from 'lucide-react'
 import { cn } from '@/lib/utils'
+import { adminKey } from '@/lib/api'
 
 /**
  * LocalLive — the local replacement for the cloud noVNC LiveDesktop.
@@ -48,7 +49,7 @@ function LocalBrowser() {
     let ws: WebSocket | null = null
     let retry: ReturnType<typeof setTimeout> | undefined
     const connect = () => {
-      ws = new WebSocket(`${location.protocol === 'https:' ? 'wss' : 'ws'}://${location.host}/ws/browser`)
+      ws = new WebSocket(`${location.protocol === 'https:' ? 'wss' : 'ws'}://${location.host}/ws/browser${adminKey() ? `?key=${encodeURIComponent(adminKey())}` : ''}`)
       wsRef.current = ws
       ws.onmessage = (ev) => {
         let o: { t?: string; running?: boolean; exe?: boolean; url?: string; d?: string; error?: string }

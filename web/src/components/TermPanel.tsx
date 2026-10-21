@@ -1,4 +1,5 @@
 import { useEffect, useRef, useState } from 'react'
+import { adminKey } from '@/lib/api'
 
 /** Interactive shell — /ws/term spawns cmd/sh in the session cwd.
  * `run` optionally replaces the shell with `devin ssh`/`devin forward` args
@@ -15,7 +16,7 @@ export default function TermPanel({ id, run }: { id: string; run?: string }) {
     pendRef.current = ''
     setLines([])
     const proto = location.protocol === 'https:' ? 'wss' : 'ws'
-    const ws = new WebSocket(`${proto}://${location.host}/ws/term?session=${encodeURIComponent(id)}${run ? `&${run}` : ''}`)
+    const ws = new WebSocket(`${proto}://${location.host}/ws/term?session=${encodeURIComponent(id)}${run ? `&${run}` : ''}${adminKey() ? `&key=${encodeURIComponent(adminKey())}` : ''}`)
     wsRef.current = ws
     ws.onopen = () => setLive(true)
     ws.onmessage = (e) => {
