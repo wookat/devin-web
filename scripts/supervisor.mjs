@@ -149,6 +149,9 @@ function spawnBackend() {
         ...process.env,
         DEVIN_WEB_SUPERVISED: "1",
         DEVIN_WEB_ACP_BROKER: BROKER_SOCK,
+        // Explicit dataDir so the backend finds broker.token in the same
+        // place the broker wrote it (never rely on homedir resolution).
+        DEVIN_WEB_DATA_DIR: dataDir,
         // Task-Scheduler/boot launches have no shell env — default the known
         // public hosts so the tunnel isn't 403'd after a cold boot. deploy.bat
         // can still override by exporting its own value first.

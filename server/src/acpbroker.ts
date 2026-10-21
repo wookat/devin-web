@@ -20,6 +20,17 @@ import type { Writable, Readable } from "node:stream";
 const SOCK = process.env.DEVIN_WEB_ACP_BROKER || "";
 export const brokerEnabled = !!SOCK;
 
+/** Local trust token the broker requires on every connection — lives in
+ *  dataDir (0600) so only this user's processes can present it. */
+let brokerToken: string | null = null;
+function token(): string {
+  if (brokerToken !== null) return brokerToken;
+  try {
+    brokerToken = fs.readFileSync(path.join(process.env.DEVIN_WEB_DATA_DIR || path.join(process.env.HOME || process.env.USERPROFILE || "", ".devin-web"), "broker.token"), "utf8").trim();
+  } catch { brokerToken = ""; }
+  return brokerToken;
+}
+
 export function brokerSockPath(dataDir: string): string {
   return process.platform === "win32"
     ? `\\\\.\\pipe\\devin-web-acp-${crypto.createHash("sha1").update(dataDir).digest("hex").slice(0, 10)}`
@@ -51,7 +62,7 @@ function connectCtl(): Promise<Ctl | null> {
     const pending = new Map<number, { res: (v: Record<string, unknown>) => void; rej: (e: Error) => void }>();
     const exitFns = new Set<(acpId: string, code: number | null) => void>();
     let req = 0;
-    let buf = "";
+    let buf = Buffer.alloc(0);
     let ready = false;
     const fail = (e: Error) => {
       for (const p of pending.values()) p.rej(e);
@@ -61,15 +72,15 @@ function connectCtl(): Promise<Ctl | null> {
     // unsolicited — waiting for a first line deadlocks every call behind the
     // 5s timer and reports a live broker as "unavailable".
     sock.once("connect", () => {
-      sock.write(`${JSON.stringify({ ctl: 1 })}\n`);
+      sock.write(`${JSON.stringify({ ctl: 1, token: token() })}\n`);
       ready = true;
       resolve({ call, onExit, close });
     });
     sock.on("data", (d) => {
-      buf += d.toString("utf8");
+      buf = Buffer.concat([buf, d]);
       let i;
-      while ((i = buf.indexOf("\n")) >= 0) {
-        const l = buf.slice(0, i); buf = buf.slice(i + 1);
+      while ((i = buf.indexOf(0x0a)) >= 0) {
+        const l = buf.subarray(0, i).toString("utf8"); buf = buf.subarray(i + 1);
         let m: Record<string, unknown>; try { m = JSON.parse(l); } catch { continue; }
         if (m.ev === "exit") { for (const f of exitFns) f(String(m.acpId), m.code as number | null); continue; }
         const p = pending.get(m.req as number);
@@ -191,7 +202,7 @@ export async function brokerAttach(acpId: string, after: number): Promise<{ proc
     sock.on("data", onHead);
     sock.once("error", (e) => { reject(e); proc.emit("error", e); });
     sock.once("close", () => proc.emit("exit", null));
-    sock.write(`${JSON.stringify({ attach: acpId, after })}\n`);
+    sock.write(`${JSON.stringify({ attach: acpId, after, token: token() })}\n`);
   });
 }
 

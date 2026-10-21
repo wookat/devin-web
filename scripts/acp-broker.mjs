@@ -38,7 +38,7 @@ import net from "node:net";
 import fs from "node:fs";
 import path from "node:path";
 import os from "node:os";
-import { spawn } from "node:child_process";
+import { spawn, execSync } from "node:child_process";
 import crypto from "node:crypto";
 
 const dataDir = process.env.DEVIN_WEB_DATA_DIR || path.join(os.homedir(), ".devin-web");
@@ -46,6 +46,19 @@ const sockPath = process.platform === "win32"
   ? `\\\\.\\pipe\\devin-web-acp-${crypto.createHash("sha1").update(dataDir).digest("hex").slice(0, 10)}`
   : path.join(dataDir, "acp-broker.sock");
 const stateFile = path.join(dataDir, "broker-state.json");
+
+// Local trust token — the socket is a spawn-as-me surface: on a multi-user
+// box any local process could connect and run commands as this user. Every
+// header must carry this token; the file lives in dataDir (0600) so only
+// processes running as this user can read it.
+const TOKEN = (() => {
+  const f = path.join(dataDir, "broker.token");
+  try { return fs.readFileSync(f, "utf8").trim(); } catch {}
+  fs.mkdirSync(dataDir, { recursive: true });
+  const t = crypto.randomBytes(24).toString("hex");
+  try { fs.writeFileSync(f, t, { mode: 0o600 }); } catch { fs.writeFileSync(f, t); }
+  return t;
+})();
 
 const RING_CAP = 4 << 20;
 /** acpId → {proc, meta, ring: Buffer[], ringBytes, bytesOut, attached} */
@@ -79,12 +92,27 @@ function killTree(pid) {
     try { process.kill(pid, "SIGKILL"); } catch { /* already gone */ }
   }
 }
+/** The journal survives reboots — a recycled pid could belong to anything.
+ *  Verify the CommandLine actually looks like an acp process (or matches
+ *  the journaled cmd) before killing; unverifiable → leave it alone. */
+function pidIsAcp(pid, cmd) {
+  try {
+    const out = process.platform === "win32"
+      ? execSync(`powershell -NoProfile -Command "(Get-CimInstance Win32_Process -Filter 'ProcessId=${pid}').CommandLine"`, { stdio: ["ignore", "pipe", "ignore"] }).toString()
+      : execSync(`ps -p ${pid} -o args=`, { stdio: ["ignore", "pipe", "ignore"] }).toString();
+    return /\bacp\b/i.test(out) || (!!cmd && out.includes(cmd));
+  } catch { return false; }
+}
 // Sweep journal entries left by a previous broker life: if the pid still
 // exists it is an orphan (its parent — the old broker — is gone).
 for (const [id, rec] of Object.entries(journalLoad())) {
   if (rec?.pid && pidAlive(rec.pid)) {
-    console.error(`[acp-broker] killing orphan acp ${id} pid ${rec.pid} from previous broker`);
-    killTree(rec.pid);
+    if (pidIsAcp(rec.pid, rec.cmd)) {
+      console.error(`[acp-broker] killing orphan acp ${id} pid ${rec.pid} from previous broker`);
+      killTree(rec.pid);
+    } else {
+      console.error(`[acp-broker] pid ${rec.pid} (${id}) alive but does not look like an acp — leaving it (pid reuse?)`);
+    }
   }
 }
 
@@ -195,11 +223,14 @@ function killAcp(acpId) {
 function handleCtl(sock, head, rest) {
   ctls.add(sock);
   sock.on("close", () => ctls.delete(sock));
-  let buf = rest.toString("utf8");
+  // Buffer framing, NOT utf8-accumulate: a multi-byte char split across
+  // chunks corrupts the line → JSON.parse fails → the request silently
+  // drops and the caller's req-promise hangs (real bug on non-ASCII cwd).
+  let buf = rest;
   const drain = () => {
     let i;
-    while ((i = buf.indexOf("\n")) >= 0) {
-      const l = buf.slice(0, i); buf = buf.slice(i + 1);
+    while ((i = buf.indexOf(0x0a)) >= 0) {
+      const l = buf.subarray(0, i).toString("utf8"); buf = buf.subarray(i + 1);
       let m; try { m = JSON.parse(l); } catch { continue; }
       const req = m.req;
       const reply = (o) => sock.write(`${JSON.stringify({ req, ...o })}\n`);
@@ -218,7 +249,7 @@ function handleCtl(sock, head, rest) {
     }
   };
   drain(); // `rest` may already hold request lines that arrived with the header
-  sock.on("data", (d) => { buf += d.toString("utf8"); drain(); });
+  sock.on("data", (d) => { buf = Buffer.concat([buf, d]); drain(); });
 }
 
 function handleAttach(sock, head, rest) {
@@ -259,6 +290,9 @@ const server = net.createServer((sock) => {
     sock.removeListener("data", onHead);
     const rest = headBuf.subarray(nl + 1);
     let head; try { head = JSON.parse(headBuf.subarray(0, nl).toString("utf8")); } catch { sock.destroy(); return; }
+    // Every channel requires the local token — the socket is otherwise a
+    // spawn-as-me surface for any process on this machine.
+    if (head.token !== TOKEN) { sock.destroy(); return; }
     if (head.ctl) handleCtl(sock, head, rest);
     else if (head.attach) handleAttach(sock, head, rest);
     else sock.destroy();

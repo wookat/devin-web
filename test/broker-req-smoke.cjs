@@ -18,6 +18,7 @@ const broker = spawn(process.execPath, [path.join(__dirname, '..', 'scripts', 'a
   env: { ...process.env, DEVIN_WEB_DATA_DIR: dataDir },
   stdio: ['ignore', 'inherit', 'inherit'],
 });
+const token = () => fs.readFileSync(path.join(dataDir, 'broker.token'), 'utf8').trim();
 const fail = (m) => { console.log('FAIL:', m); broker.kill('SIGTERM'); process.exit(1); };
 const pass = (m) => console.log('PASS:', m);
 setTimeout(() => fail('timeout'), 15000);
@@ -31,7 +32,7 @@ const MOCK = `console.log(${JSON.stringify(JSON.stringify({ warm: 1 }))});`
 const attach = (after, onLine) => new Promise((resolve) => {
   const s = net.createConnection(sockPath);
   let buf = Buffer.alloc(0), head = false;
-  s.on('connect', () => s.write(JSON.stringify({ attach: attach.acpId, after }) + '\n'));
+  s.on('connect', () => s.write(JSON.stringify({ attach: attach.acpId, after, token: token() }) + '\n'));
   s.on('data', (d) => {
     buf = Buffer.concat([buf, d]);
     if (!head) {
@@ -54,7 +55,7 @@ const attach = (after, onLine) => new Promise((resolve) => {
 
 setTimeout(() => {
   const ctl = net.createConnection(sockPath);
-  ctl.on('connect', () => ctl.write(JSON.stringify({ ctl: 1 }) + '\n' + JSON.stringify({
+  ctl.on('connect', () => ctl.write(JSON.stringify({ ctl: 1, token: token() }) + '\n' + JSON.stringify({
     req: 1, op: 'spawn', cwd: __dirname, command: process.execPath,
     args: ['-e', MOCK], env: {}, shell: false, key: 'reqtest',
   }) + '\n'));

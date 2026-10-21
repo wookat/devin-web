@@ -12,10 +12,11 @@ const sockPath = process.platform === 'win32'
   ? `\\\\.\\pipe\\devin-web-acp-${crypto.createHash('sha1').update(dataDir).digest('hex').slice(0, 10)}`
   : path.join(dataDir, 'acp-broker.sock');
 
-const broker = spawn(process.execPath, [path.join(__dirname, 'scripts', 'acp-broker.mjs')], {
+const broker = spawn(process.execPath, [path.join(__dirname, '..', 'scripts', 'acp-broker.mjs')], {
   env: { ...process.env, DEVIN_WEB_DATA_DIR: dataDir },
   stdio: ['ignore', 'inherit', 'inherit'],
 });
+const token = () => fs.readFileSync(path.join(dataDir, 'broker.token'), 'utf8').trim();
 const fail = (m) => { console.log('FAIL:', m); broker.kill('SIGTERM'); process.exit(1); };
 setTimeout(() => fail('timeout'), 15000);
 
@@ -24,7 +25,7 @@ let acpId = null, attached = false, replayed = 0, sawExit = false;
 setTimeout(() => {
   const ctl = net.createConnection(sockPath);
   ctl.on('error', (e) => fail('ctl connect: ' + e.message));
-  ctl.on('connect', () => ctl.write('{"ctl":1}\n{"req":1,"op":"list"}\n'));
+  ctl.on('connect', () => ctl.write(JSON.stringify({ ctl: 1, token: token() }) + '\n{"req":1,"op":"list"}\n'));
   let buf = '';
   ctl.on('data', (d) => {
     buf += d.toString('utf8');
@@ -51,7 +52,7 @@ setTimeout(() => {
         // Attach after ~600ms — the warm line + ~2 ticks should replay from ring
         setTimeout(() => {
           const a = net.createConnection(sockPath);
-          a.on('connect', () => a.write(JSON.stringify({ attach: acpId, after: 0 }) + '\n'));
+          a.on('connect', () => a.write(JSON.stringify({ attach: acpId, after: 0, token: token() }) + '\n'));
           let ab = Buffer.alloc(0), headDone = false;
           a.on('data', (c) => {
             ab = Buffer.concat([ab, c]);
