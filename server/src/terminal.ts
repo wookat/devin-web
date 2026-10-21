@@ -4,6 +4,7 @@ import path from "node:path";
 import { existsSync } from "node:fs";
 import type { CreateTerminalRequest, CreateTerminalResponse, TerminalOutputResponse, WaitForTerminalExitResponse } from "@agentclientprotocol/sdk";
 import type { DevinAcpEvents } from "./acp.js";
+import { sshSpawn } from "./ssh.js";
 
 interface Terminal {
   id: string;
@@ -50,8 +51,19 @@ const GIT_BINS = gitBins();
  * No native pty dependency — agent commands are non-interactive, so piped
  * stdio is enough and `npx devin-web` stays build-free.
  */
+/** Quote one token for a remote POSIX shell line (ssh joins argv with
+ *  spaces; the remote shell re-parses, so every token must be quoted). */
+function shq(a: string): string {
+  return `'${a.replace(/'/g, `'\\''`)}'`;
+}
+
 export class TerminalRunner {
   private terminals = new Map<string, Terminal>();
+
+  /** `sshTarget` (user@host[:port] or an ssh config alias) routes every
+   *  terminal command through `ssh <target> 'cd <cwd> && <cmd> <args>'` —
+   *  used when the ACP agent itself runs on a remote host. */
+  constructor(private sshTarget: string | null = null) {}
 
   async create(
     defaultCwd: string,
@@ -60,22 +72,34 @@ export class TerminalRunner {
   ): Promise<CreateTerminalResponse> {
     const id = randomUUID();
     const limit = params.outputByteLimit ?? MAX_OUTPUT;
-    const env = {
-      ...process.env,
-      ...Object.fromEntries((params.env ?? []).map((e) => [e.name, e.value])),
-    };
-    if (GIT_BINS.length) {
-      const key = "Path" in env ? "Path" : "PATH";
-      env[key] = [...GIT_BINS, env[key] ?? ""].filter(Boolean).join(path.delimiter);
+    const cwd = params.cwd ?? defaultCwd;
+    let proc: ChildProcess;
+    if (this.sshTarget) {
+      const line = `cd ${shq(cwd)} 2>/dev/null; ${[params.command, ...(params.args ?? [])].map(shq).join(" ")}`;
+      // sshSpawn: OpenSSH for agent-auth hosts, ssh2 for password/key records.
+      proc = await sshSpawn(this.sshTarget, line, {
+        stdio: ["ignore", "pipe", "pipe"],
+        env: process.env,
+        windowsHide: true,
+      });
+    } else {
+      const env = {
+        ...process.env,
+        ...Object.fromEntries((params.env ?? []).map((e) => [e.name, e.value])),
+      };
+      if (GIT_BINS.length) {
+        const key = "Path" in env ? "Path" : "PATH";
+        env[key] = [...GIT_BINS, env[key] ?? ""].filter(Boolean).join(path.delimiter);
+      }
+      proc = spawn(params.command, params.args ?? [], {
+        cwd,
+        env,
+        stdio: ["ignore", "pipe", "pipe"],
+        // Windows: a bare spawn can't launch shell builtins (echo/cd), .cmd
+        // shims (npm), or whole-string commands — route through cmd.exe.
+        shell: process.platform === "win32",
+      });
     }
-    const proc = spawn(params.command, params.args ?? [], {
-      cwd: params.cwd ?? defaultCwd,
-      env,
-      stdio: ["ignore", "pipe", "pipe"],
-      // Windows: a bare spawn can't launch shell builtins (echo/cd), .cmd
-      // shims (npm), or whole-string commands — route through cmd.exe.
-      shell: process.platform === "win32",
-    });
 
     const term: Terminal = {
       id,

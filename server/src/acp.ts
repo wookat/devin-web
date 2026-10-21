@@ -3,10 +3,12 @@ import { Readable, Writable } from "node:stream";
 import type { ReadableStream, WritableStream } from "node:stream/web";
 import { EventEmitter } from "node:events";
 import path from "node:path";
+import os from "node:os";
 import fs from "node:fs/promises";
 import * as acp from "@agentclientprotocol/sdk";
 import type { TerminalRunner } from "./terminal.js";
 import { DEFAULT_AGENT, agentCommandLine, type AgentDef } from "./agents.js";
+import { sshSpawn } from "./ssh.js";
 
 export interface DevinAcpEvents {
   onSessionUpdate: (sessionId: string, update: unknown) => void;
@@ -79,12 +81,15 @@ export class DevinAcp {
     agent: AgentDef = DEFAULT_AGENT,
     extraEnv: Record<string, string> = {},
     account: string | null = null,
+    /** user@host[:port] / ssh config alias — the agent CLI runs on the REMOTE
+     *  host via `ssh <target> <agentLine>`; stdio is the same ACP pipe. */
+    ssh: string | null = null,
   ): Promise<DevinAcp> {
     const pendingPermissions = new Map<string, PendingPermission>();
     // Windows npm CLIs are .cmd/.ps1 shims — Node ≥20.12 refuses to spawn
     // them without a shell (EINVAL). agent.shell routes through %ComSpec%.
     const spawnOpts = {
-      cwd,
+      cwd: ssh ? os.homedir() : cwd,
       // devin's stderr is extremely verbose (chisel debug logs, tens of
       // thousands of lines per session load). Pipe + drain instead of
       // inheriting — console writes on Windows are slow and were measurable
@@ -93,9 +98,14 @@ export class DevinAcp {
       env: { ...process.env, ...extraEnv },
       windowsHide: true,
     };
-    const proc: ChildProcessByStdio<Writable, Readable, Readable> = agent.shell
-      ? (spawn(agentCommandLine(agent), { ...spawnOpts, shell: true }) as ChildProcessByStdio<Writable, Readable, Readable>)
-      : spawn(agent.command, agent.args, spawnOpts);
+    const proc: ChildProcessByStdio<Writable, Readable, Readable> = ssh
+      // sshSpawn: OpenSSH binary for agent-auth hosts (user's own keys/config),
+      // the ssh2 channel shim for password/key records — same ChildProcess
+      // shape, so the ndJson pipe wiring below is unchanged.
+      ? await sshSpawn(ssh, agentCommandLine(agent), spawnOpts)
+      : agent.shell
+        ? (spawn(agentCommandLine(agent), { ...spawnOpts, shell: true }) as ChildProcessByStdio<Writable, Readable, Readable>)
+        : spawn(agent.command, agent.args, spawnOpts);
     proc.stderr?.on("data", () => { /* drain: see stdio note above */ });
     const spawnedAccount = account;
 

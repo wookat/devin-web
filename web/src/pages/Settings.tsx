@@ -738,7 +738,7 @@ function LogsPanel() {
     <div className="px-[6px] py-[6px]">
       <div className="flex items-center gap-2 px-[6px] pb-2">
         <Combo className="w-fit" value={file} onPick={setFile}
-          options={[{ v: 'supervisor', l: 'supervisor.log' }, { v: 'server', l: 'server.log' }, { v: 'respawn', l: 'respawn.log' }]} />
+          options={[{ v: 'supervisor', l: 'supervisor.log' }, { v: 'server', l: 'server.log' }]} />
         <Combo className="w-fit" value={tail} onPick={setTail}
           options={[{ v: '100', l: '100' }, { v: '300', l: '300' }, { v: '1000', l: '1000' }]} />
         <button onClick={load} disabled={loading}

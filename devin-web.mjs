@@ -14,7 +14,7 @@
 //                                    win32  → Scheduled Tasks (onlogon + 1-min watchdog)
 //   node devin-web.mjs uninstall   remove persistence
 //   node devin-web.mjs deploy      build + install + restart (deploy.bat wraps this)
-//   node devin-web.mjs logs [file] tail supervisor.log / server.log / respawn.log
+//   node devin-web.mjs logs [file] tail supervisor.log / server.log
 import http from "node:http";
 import fs from "node:fs";
 import os from "node:os";
@@ -100,7 +100,7 @@ async function cmdRestart(build) {
     console.log("supervisor restarting backend (hard restart — prefer /api/admin/restart for graceful drain)");
   } else if (await probeBackend()) {
     await call("/api/admin/restart", "POST");
-    console.log("graceful drain sent — unsupervised backend exits then hands :", PUB, "to the supervisor (new respawn.mjs)");
+    console.log("restart sent — unsupervised backend exits and the supervisor respawns it on :", PUB);
   } else {
     console.log("nothing on :" + PUB + " — cold start");
     await cmdStart();
@@ -215,7 +215,7 @@ async function cmdUninstall() {
 }
 
 function cmdLogs(file) {
-  const name = ["supervisor", "server", "respawn"].includes(file) ? file : "supervisor";
+  const name = ["supervisor", "server"].includes(file) ? file : "supervisor";
   const f = path.join(DATA, `${name}.log`);
   if (!fs.existsSync(f)) { console.log(`${f} missing`); return; }
   const buf = fs.readFileSync(f);

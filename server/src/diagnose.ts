@@ -37,7 +37,7 @@ async function orphanAcps(): Promise<number[]> {
   } catch { return []; }
 }
 
-async function killOrphans(): Promise<string> {
+export async function killOrphans(): Promise<string> {
   const pids = await orphanAcps();
   for (const pid of pids) { try { process.kill(pid, "SIGTERM"); } catch {} }
   return pids.length ? `killed ${pids.join(",")}` : "none found";

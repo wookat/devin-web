@@ -27,6 +27,10 @@ interface DwSessionMeta {
   /** Which ACP agent owns this session (devin | prime | user-registered ids).
    *  Absent = devin. Read by hostFor to route ops to the right process. */
   agent?: string;
+  /** SSH target (user@host) when this session's agent runs on a remote host —
+   *  the cwd in sessionCwd is then a REMOTE path. Persisted so restarts keep
+   *  routing through ssh. */
+  ssh?: string;
 }
 
 interface DwRegistry {
@@ -37,7 +41,7 @@ interface DwRegistry {
   lastConfig?: Record<string, string>;
   /** Server-side web preferences — unlike browser localStorage these
    * act even with no tab open (auto-resume runs on boot). */
-  prefs?: { autoResume?: boolean; persona?: { mode?: string; webhook?: string; maxPerHour?: number } };
+  prefs?: { autoResume?: boolean; persona?: { mode?: string; webhook?: string; maxPerHour?: number }; sshHosts?: { name?: string; target: string; cwd?: string; auth?: "agent" | "password" | "key"; password?: string; keyPath?: string; passphrase?: string }[] };
   /** The persistent persona acp session (cwd=<dataDir>/persona). */
   persona?: { sessionId?: string };
   /** The persistent pr-review acp session (cwd=<dataDir>/pr-review). */

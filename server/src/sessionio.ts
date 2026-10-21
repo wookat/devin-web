@@ -328,8 +328,12 @@ async function hostFor(ctx: ApiContext, id: string, cwdHint?: string): Promise<{
       { status: 409 },
     );
   }
-  const cwd = remapLegacyCwd(dedicated?.cwd ?? pinned?.cwd ?? cwdHint ?? ctx.sessionCwd.get(id) ?? ctx.primaryCwd);
-  const acp = dedicated ?? pinned ?? await ctx.manager.get(cwd, agent);
+  // SSH-hosted sessions pool per `ssh:<target>:cwd` — resolve the target from
+  // the live map first, then persisted meta (survives restarts).
+  const ssh = ctx.sessionSsh.get(id) ?? meta(ctx, id).ssh ?? null;
+  if (ssh) ctx.sessionSsh.set(id, ssh);
+  const cwd = dedicated?.cwd ?? pinned?.cwd ?? cwdHint ?? ctx.sessionCwd.get(id) ?? ctx.primaryCwd;
+  const acp = dedicated ?? pinned ?? await ctx.manager.get(ssh ? cwd : remapLegacyCwd(cwd), agent, ssh);
   ctx.sessionCwd.set(id, cwd);
   let set = loadedOn.get(acp);
   if (!set) loadedOn.set(acp, (set = new Set()));
@@ -612,6 +616,11 @@ interface OpenTurn {
 
 const openTurns = new Map<string, OpenTurn>();
 let openTurnsLoaded = false;
+/** Set during a deliberate restart: turn settles caused by the acp killAll
+ * must NOT clear open-turns — the entries are what auto-resume replays on
+ * the next backend. Crash paths never set this (they die before settling). */
+let gracefulExit = false;
+export function markGracefulExit() { gracefulExit = true; }
 
 function openTurnsLoad(ctx: ApiContext) {
   if (openTurnsLoaded) return;
@@ -1029,7 +1038,7 @@ function dispatchPrompt(ctx: ApiContext, id: string, text: string, attachments: 
     .finally(() => {
       inflight.delete(id);
       ctx.hub.broadcast({ type: "session_status", sessionId: id, status: sessionStatus(ctx, id).status });
-      if (openTurns.delete(id)) openTurnsSave(ctx);
+      if (!gracefulExit && openTurns.delete(id)) openTurnsSave(ctx);
       queueFlush(ctx, id);
     });
 }

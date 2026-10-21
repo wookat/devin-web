@@ -28,6 +28,8 @@ export interface ApiContext {
   agentsCheck: () => Promise<unknown[]>;
   /** sessionId → workspace cwd (learned from list/new/load). */
   sessionCwd: Map<string, string>;
+  /** sessionId → ssh target (user@host) when the session's agent runs remote. */
+  sessionSsh: Map<string, string>;
   /** permission requestId → owning acp process. */
   permissionOwner: Map<string, DevinAcp>;
 }

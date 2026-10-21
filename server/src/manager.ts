@@ -33,18 +33,24 @@ export class AcpManager {
   /** sessionId → dedicated process (single-session agents). */
   private bySession = new Map<string, ManagedProcess>();
   readonly terminal = new TerminalRunner();
+  /** Per-process TerminalRunner for SSH-hosted agents — remote commands run
+   *  on the remote fs, so each ssh acp gets its own runner (tracked here so
+   *  killAll still sweeps them). */
+  private sshTerminals = new Set<TerminalRunner>();
   /** Supplies spawn-time env (e.g. WINDSURF_API_KEY) + which account it belongs to. */
   envFor: ((agent: AgentDef) => { env: Record<string, string>; account: string | null }) | null = null;
 
   constructor(private ev: ManagerEvents) {}
 
-  private async spawn(cwd: string, agent: AgentDef, onExit: (code: number | null) => void): Promise<DevinAcp> {
-    await fs.mkdir(cwd, { recursive: true });
+  private async spawn(cwd: string, agent: AgentDef, onExit: (code: number | null) => void, ssh: string | null = null): Promise<DevinAcp> {
+    if (!ssh) await fs.mkdir(cwd, { recursive: true });
     let instance: DevinAcp | null = null;
     const inj = this.envFor?.(agent) ?? { env: {}, account: null };
+    const term = ssh ? new TerminalRunner(ssh) : this.terminal;
+    if (ssh) this.sshTerminals.add(term);
     const acp = await DevinAcp.start(
       cwd,
-      this.terminal,
+      term,
       {
         ...this.ev,
         onPermissionRequest: (requestId, sessionId, toolCall, options) => {
@@ -57,22 +63,28 @@ export class AcpManager {
           }
           this.ev.onAgentLog(sessionId, channel, message, level);
         },
-        onExit,
+        onExit: (code) => {
+          if (ssh) this.sshTerminals.delete(term);
+          onExit(code);
+        },
       },
       agent,
       inj.env,
       inj.account,
+      ssh,
     );
     instance = acp;
     return acp;
   }
 
-  /** Get (or lazily start) the pooled process for a multi-session agent. */
-  async get(cwd: string, agent: AgentDef = DEFAULT_AGENT): Promise<DevinAcp> {
+  /** Get (or lazily start) the pooled process for a multi-session agent.
+   *  `ssh` (user@host) pools per remote target — a remote process never
+   *  shares a key with a local one even for the same cwd string. */
+  async get(cwd: string, agent: AgentDef = DEFAULT_AGENT, ssh: string | null = null): Promise<DevinAcp> {
     if (!agent.multiSession) {
       throw new Error(`${agent.label} runs one session per process — use startForSession`);
     }
-    const key = `${agent.id}:${cwd}`;
+    const key = `${agent.id}:${ssh ? `ssh:${ssh}:` : ""}${cwd}`;
     const existing = this.pooled.get(key);
     if (existing && !existing.acp.exited) return existing.acp;
 
@@ -85,7 +97,7 @@ export class AcpManager {
         const acp = await this.spawn(cwd, agent, (code) => {
           this.pooled.delete(key);
           this.ev.onExit(cwd, code, agent.id);
-        });
+        }, ssh);
         if (this.spawnGen === g) {
           this.pooled.set(key, { acp, cwd, startedAt: Date.now() });
           return acp;
@@ -103,7 +115,7 @@ export class AcpManager {
   }
 
   /** Spawn a dedicated process for one session of a single-session agent. */
-  async startForSession(cwd: string, agent: AgentDef): Promise<DevinAcp> {
+  async startForSession(cwd: string, agent: AgentDef, ssh: string | null = null): Promise<DevinAcp> {
     const acp = await this.spawn(cwd, agent, (code) => {
       let sessionId: string | undefined;
       for (const [sid, m] of this.bySession) {
@@ -113,7 +125,7 @@ export class AcpManager {
         }
       }
       this.ev.onExit(cwd, code, agent.id, sessionId);
-    });
+    }, ssh);
     return acp;
   }
 
@@ -196,5 +208,7 @@ export class AcpManager {
     for (const m of this.bySession.values()) m.acp.kill();
     this.bySession.clear();
     this.terminal.killAll();
+    for (const t of this.sshTerminals) t.killAll();
+    this.sshTerminals.clear();
   }
 }

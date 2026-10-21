@@ -28,7 +28,7 @@ import {
   loadedOn, sessionHost, hostFor,
   isSessionPinned, captureLoadResponse, loadInflight, ensureLoaded, acpForId, restartSession,
   sessionConfig, recordTerminal, inflight, resolveUpload, dispatchPrompt, drainSince,
-  beginDrain, isDraining,
+  beginDrain, isDraining, markGracefulExit,
   sessionStatus, interruptedTurn, listSubagents, subagentTimeline, subPingActive, listLocalSessions,
   snippetFromLog, responseCfg, terminalBuf, cloudVersionToModel,
   queueList, queueAdd, queueRemove, queueFlush,
@@ -44,6 +44,7 @@ import { cronNext, runAutomation } from "./automations.js";
 import { handleWikiRoute } from "./wiki.js";
 import { handleSecurityRoute, resumeScans } from "./security.js";
 import type { DwAutomation } from "./dwstore.js";
+import { sshFs, sshHostFor, sshListDirs, sshTest, publicSshHost, setSshHostResolver, type SshHost } from "./ssh.js";
 
 // ---------------------------------------------------------------------------
 // CLI proxy — spawn `devin <args>` with a hard whitelist (see /api/admin/cli/run)
@@ -243,6 +244,7 @@ function subTreeRow(ctx: ApiContext, rootId: string, cwd: string | undefined, a:
 
 function treeSession(ctx: ApiContext, s: ListedSession) {
   const m = meta(ctx, s.id);
+  if (m.ssh && !ctx.sessionSsh.has(s.id)) ctx.sessionSsh.set(s.id, m.ssh);
   const st = sessionStatus(ctx, s.id);
   const subs = subsAny(ctx, s.id, "root");
   return {
@@ -258,6 +260,9 @@ function treeSession(ctx: ApiContext, s: ListedSession) {
     is_pinned: !!m.pinned,
     // Project context for grouping + the header cwd chip.
     cwd: s.cwd,
+    // SSH-hosted session → the cwd is a remote path; hydrate the live map so
+    // /ws/term + hostFor keep routing through ssh after a restart.
+    ssh: m.ssh ?? null,
     // Lock: devin says some acp holds it; `loaded_here` means that holder is
     // this web (harmless) — otherwise it's another app (desktop/CLI).
     is_locked: s.locked,
@@ -569,6 +574,10 @@ export async function handleLocalWb(ctx: ApiContext, req: IncomingMessage, res: 
   const isShare = parts[1] === "share";
   const isMedia = parts[1] === "media";
   if (!isAdmin && !isShare && !isMedia && !(p.startsWith("/api/session/") || p.startsWith("/api/devin-coach"))) return false;
+
+  // SSH auth registry — acp/terminal/ws-term resolve credentials for a target
+  // through ssh.ts; the resolver always reads the current dw.json prefs.
+  setSshHostResolver(() => loadReg(ctx).prefs?.sshHosts ?? []);
 
   try {
     // ---- share-side media is cloud-only; nothing stored remotely ----
@@ -974,63 +983,24 @@ export async function handleLocalWb(ctx: ApiContext, req: IncomingMessage, res: 
         return true;
       }
 
-      // POST /api/admin/restart — respawn the server as-is.
-      // POST /api/admin/redeploy — npm run build, THEN respawn. When the
-      // supervisor owns the public port (DEVIN_WEB_SUPERVISED=1, production)
-      // a drained exit IS the restart — the supervisor respawns us. The
-      // unsupervised fallback spawns DETACHED scripts/respawn.mjs which now
-      // hands the port to the supervisor (migration path) — see supervisor.mjs.
-      // Build failure aborts the respawn so the old server keeps serving;
-      // before exiting it waits for in-flight prompts to drain — bounded by
-      // the sessionio turn-silence watchdog, and beginDrain() stops new
-      // dispatches from starving it.
+      // POST /api/admin/restart|redeploy — IMMEDIATE restart, no drain wait:
+      // beginDrain gates NEW sends for the ~400ms exit window, markGracefulExit
+      // keeps in-flight turns' open-turns entries (auto-resume replays them on
+      // the next backend), manager.killAll kills acp children (frees session
+      // locks — the orphan-lock send failure), then exit. The supervisor
+      // respawns us on exit; bare dev runs hand :7791 to it directly.
       if ((p === "/api/admin/restart" || p === "/api/admin/redeploy") && m === "POST") {
         json(res, 202, { ok: true });
-        // Repo root from the module path, not process.cwd() — the server may
-        // have been launched from any directory.
         const repoRoot = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..", "..");
-        const pi = process.argv.indexOf("--port");
-        const port = pi > 0 ? process.argv[pi + 1] : "7791";
         const respawn = () => {
-          // Gate new dispatches first so the drain can only shrink.
           beginDrain();
-          // Graceful handoff: wait for in-flight prompts however long they
-          // take — a deploy must never cut a turn off mid-stream. Bounded by
-          // the turn-silence watchdog in promptWithRetry (a wedged prompt
-          // settles within DEVIN_WEB_TURN_SILENCE_MS, default 15min), and by
-          // beginDrain() which stops NEW dispatches from starving the drain.
-          // Optional escape: DEVIN_WEB_DRAIN_TIMEOUT_MS bounds the wait —
-          // after it, exit anyway; open-turns.json survives and
-          // autoResumeInterrupted replays the cut turns on the new backend
-          // (same path as crash recovery). Default 0 = wait forever.
-          const drainLimit = Math.max(0, +(process.env.DEVIN_WEB_DRAIN_TIMEOUT_MS ?? 0) || 0);
-          const tick = () => {
-            if (inflight.size) {
-              const waited = Date.now() - drainSince();
-              if (drainLimit && waited > drainLimit) {
-                console.error(`[respawn] drain timeout ${Math.round(waited / 1000)}s > ${drainLimit}ms — exiting with ${inflight.size} inflight (${[...inflight].join(", ")}); auto-resume will replay them`);
-                inflight.clear();
-              } else {
-                console.error(`[respawn] waiting on ${inflight.size} inflight prompt(s) for ${Math.round(waited / 1000)}s: ${[...inflight].join(", ")}`);
-                setTimeout(tick, 30_000);
-                return;
-              }
-            }
-            // Supervised mode (DEVIN_WEB_SUPERVISED=1): the supervisor owns the
-            // public port and respawns us on ANY exit — a plain exit IS the
-            // restart, no respawn helper needed. Unsupervised fallback keeps
-            // the detached respawn.mjs chain so manual `node index.js` runs
-            // still self-restart.
-            if (process.env.DEVIN_WEB_SUPERVISED) {
-              setTimeout(() => process.exit(0), 400);
-              return;
-            }
-            spawn(process.execPath,
-              [path.join(repoRoot, "scripts", "respawn.mjs"), repoRoot, port, ctx.store.dataDir],
+          markGracefulExit();
+          if (!process.env.DEVIN_WEB_SUPERVISED && !process.env.DEVIN_WEB_NO_SUPERVISOR) {
+            spawn(process.execPath, [path.join(repoRoot, "scripts", "supervisor.mjs")],
               { cwd: repoRoot, detached: true, stdio: "ignore", windowsHide: true }).unref();
-            setTimeout(() => process.exit(0), 400);
-          };
-          tick();
+          }
+          ctx.manager.killAll();
+          setTimeout(() => process.exit(0), 400);
         };
         if (p === "/api/admin/redeploy") {
           const b = spawn("cmd.exe", ["/c", "npm", "run", "build"], {
@@ -1120,18 +1090,86 @@ export async function handleLocalWb(ctx: ApiContext, req: IncomingMessage, res: 
         return true;
       }
 
+      // GET /api/admin/ssh/dirs?target&path — REMOTE directory listing for the
+      // draft picker's ssh mode (sftp on the pooled control connection). The
+      // target must be a configured prefs.sshHosts entry.
+      if (p === "/api/admin/ssh/dirs" && m === "GET") {
+        const target = (url.searchParams.get("target") ?? "").trim();
+        if (!sshHostFor(target)) { json(res, 400, { error: "ssh target not configured" }); return true; }
+        try {
+          json(res, 200, await sshListDirs(target, url.searchParams.get("path") ?? ""));
+        } catch (e) {
+          json(res, 400, { error: e instanceof Error ? e.message : "ssh_list_failed" });
+        }
+        return true;
+      }
+
+      // POST /api/admin/ssh/test {target} — connectivity probe for the
+      // settings SSH panel (auth check + latency + remote whoami).
+      if (p === "/api/admin/ssh/test" && m === "POST") {
+        const body = await readJson(req);
+        const target = String(body.target ?? "").trim();
+        if (!sshHostFor(target)) { json(res, 400, { error: "ssh target not configured" }); return true; }
+        json(res, 200, await sshTest(target));
+        return true;
+      }
+
+      // POST /api/admin/ssh/fs {target, op, path, to?, content?} — remote file
+      // management: list / mkdir / rename / delete / write / read.
+      if (p === "/api/admin/ssh/fs" && m === "POST") {
+        const body = await readJson(req);
+        const target = String(body.target ?? "").trim();
+        if (!sshHostFor(target)) { json(res, 400, { error: "ssh target not configured" }); return true; }
+        try {
+          json(res, 200, await sshFs(target, body as Parameters<typeof sshFs>[1]));
+        } catch (e) {
+          json(res, 400, { error: e instanceof Error ? e.message : "ssh_fs_failed" });
+        }
+        return true;
+      }
+
       // GET/POST /api/admin/prefs — server-side web preferences
       // (dw.json `prefs`). autoResume drives the boot-time open-turns sweep.
+      // sshHosts ride prefs too; secrets (password/passphrase) are stripped on
+      // the way OUT — the UI only sees hasPassword/hasPassphrase flags.
       if (p === "/api/admin/prefs" && m === "GET") {
-        json(res, 200, { prefs: loadReg(ctx).prefs ?? {} });
+        const prefs = loadReg(ctx).prefs ?? {};
+        json(res, 200, { prefs: { ...prefs, sshHosts: (prefs.sshHosts ?? []).map(publicSshHost) } });
         return true;
       }
       if (p === "/api/admin/prefs" && m === "POST") {
         const body = await readJson(req);
         const r = loadReg(ctx);
         if (typeof body.autoResume === "boolean") (r.prefs ??= {}).autoResume = body.autoResume;
+        // SSH targets for the draft page's local/remote picker — shape
+        // [{name?, target: "user@host", cwd?}]; only these may be used by
+        // sessions/new (the web has no auth — never accept arbitrary targets).
+        if (Array.isArray(body.sshHosts)) {
+          const prev = new Map((r.prefs?.sshHosts ?? []).map((h) => [h.target, h]));
+          const hosts = (body.sshHosts as unknown[]).flatMap((h) => {
+            const r0 = h as { name?: unknown; target?: unknown; cwd?: unknown; auth?: unknown; password?: unknown; keyPath?: unknown; passphrase?: unknown };
+            const target = String(r0?.target ?? "").trim();
+            if (!/^[A-Za-z0-9_.@%:+-]{1,200}$/.test(target)) return [];
+            const old = prev.get(target);
+            // Secret merge: field absent → keep stored value; "" → cleared.
+            const secret = (v: unknown, keep: string | undefined) =>
+              v === undefined ? keep : typeof v === "string" ? v.slice(0, 300) || undefined : undefined;
+            const auth = r0.auth === "password" || r0.auth === "key" ? r0.auth : "agent";
+            const host: SshHost = {
+              name: typeof r0.name === "string" && r0.name.trim() ? r0.name.trim().slice(0, 60) : undefined,
+              target,
+              cwd: typeof r0.cwd === "string" && r0.cwd.trim() ? r0.cwd.trim().slice(0, 300) : undefined,
+              auth: auth === "agent" ? undefined : auth,
+              password: secret(r0.password, old?.password),
+              keyPath: typeof r0.keyPath === "string" && r0.keyPath.trim() ? r0.keyPath.trim().slice(0, 300) : undefined,
+              passphrase: secret(r0.passphrase, old?.passphrase),
+            };
+            return [host];
+          }).slice(0, 50);
+          (r.prefs ??= {}).sshHosts = hosts;
+        }
         saveReg();
-        json(res, 200, { ok: true, prefs: r.prefs });
+        json(res, 200, { ok: true, prefs: { ...r.prefs, sshHosts: (r.prefs?.sshHosts ?? []).map(publicSshHost) } });
         return true;
       }
 
@@ -1256,17 +1294,26 @@ export async function handleLocalWb(ctx: ApiContext, req: IncomingMessage, res: 
       if (p === "/api/admin/sessions/new" && m === "POST") {
         if (isDraining()) { json(res, 503, { error: "server restarting" }); return true; }
         const body = await readJson(req);
-        const cwd = String(body.cwd ?? ctx.primaryCwd);
+        // `ssh` runs the agent on a REMOTE host — only targets configured in
+        // prefs.sshHosts are accepted (the web has no auth). The cwd is then
+        // a path on the remote machine.
+        const sshReq = typeof body.ssh === "string" && body.ssh.trim() ? body.ssh.trim() : null;
+        const sshHosts = loadReg(ctx).prefs?.sshHosts ?? [];
+        const sshHost = sshReq ? sshHosts.find((h) => h.target === sshReq) ?? null : null;
+        if (sshReq && !sshHost) { json(res, 400, { error: "ssh target not configured — add it in the local/remote picker" }); return true; }
+        const ssh = sshHost?.target ?? null;
+        const cwd = ssh ? String(body.cwd ?? sshHost?.cwd ?? "~") : String(body.cwd ?? ctx.primaryCwd);
         const agent = agentById(body.agent);
         const acp = agent.multiSession
-          ? await ctx.manager.get(cwd, agent)
-          : await ctx.manager.startForSession(cwd, agent);
+          ? await ctx.manager.get(cwd, agent, ssh)
+          : await ctx.manager.startForSession(cwd, agent, ssh);
         const s = await acp.newSession(cwd);
         if (!agent.multiSession) {
           ctx.manager.bindSession(s.sessionId, acp);
           ctx.store.addAgentSession(s.sessionId, agent.id, cwd);
         }
-        ctx.sessionCwd.set(s.sessionId, remapLegacyCwd(cwd));
+        ctx.sessionCwd.set(s.sessionId, ssh ? cwd : remapLegacyCwd(cwd));
+        if (ssh) ctx.sessionSsh.set(s.sessionId, ssh);
         captureLoadResponse(s.sessionId, s);
         let nset = loadedOn.get(acp);
         if (!nset) loadedOn.set(acp, (nset = new Set()));
@@ -1278,6 +1325,7 @@ export async function handleLocalWb(ctx: ApiContext, req: IncomingMessage, res: 
         if (body.title) mm.title = String(body.title);
         if (body.folder) mm.folder = String(body.folder);
         if (agent.id !== "devin") mm.agent = agent.id;
+        if (ssh) mm.ssh = ssh;
         saveReg();
         const task = String(body.task ?? "").trim();
         // apply last-used model/mode — desktop carries the pick into new sessions
@@ -1358,7 +1406,7 @@ export async function handleLocalWb(ctx: ApiContext, req: IncomingMessage, res: 
         // Enabled agents for the draft picker's dropdown (disabled entries
         // stay hidden — their existing sessions still run via meta.agent).
         const agents = listAgents().filter((a) => !a.disabled).map((a) => ({ id: a.id, label: a.label }));
-        json(res, 200, { commands, skills: scanLocalSkills(ctx), playbooks: [], secrets: [], macros: [], repos, sessions, primary_cwd: ctx.primaryCwd, cfg, last_config: loadReg(ctx).lastConfig ?? {}, agents });
+        json(res, 200, { commands, skills: scanLocalSkills(ctx), playbooks: [], secrets: [], macros: [], repos, sessions, primary_cwd: ctx.primaryCwd, cfg, last_config: loadReg(ctx).lastConfig ?? {}, agents, ssh_hosts: (loadReg(ctx).prefs?.sshHosts ?? []).map(publicSshHost) });
         return true;
       }
 

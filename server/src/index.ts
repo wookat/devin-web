@@ -15,7 +15,9 @@ import { WebSocketServer } from "ws";
 import { SessionLog } from "./sessionlog.js";
 import { handleApi, type ApiContext } from "./routes.js";
 import { handleLocalWb } from "./localweb.js";
-import { recordTerminal, loadInflight, isReplayEcho, autoResumeInterrupted, sessionHost, markSubagentDead, touchSessionActivity } from "./sessionio.js";
+import { recordTerminal, loadInflight, isReplayEcho, autoResumeInterrupted, sessionHost, markSubagentDead, touchSessionActivity, markGracefulExit } from "./sessionio.js";
+import { meta } from "./dwstore.js";
+import { sshInteractive } from "./ssh.js";
 import { startAutomations } from "./automations.js";
 import { resumeScans } from "./security.js";
 import { noteUpdate } from "./dwtimeline.js";
@@ -181,6 +183,7 @@ const store = new Store();
 setAgentsDir(store.dataDir);
 const sessionLog = new SessionLog(path.join(store.dataDir, "log"));
 const sessionCwd = new Map<string, string>();
+const sessionSsh = new Map<string, string>();
 const permissionOwner = new Map<string, import("./acp.js").DevinAcp>();
 const primaryCwd = process.cwd();
 const accounts = new AccountPool(store.dataDir);
@@ -230,22 +233,53 @@ termWss.on("connection", (ws, req) => {
   const arg = (q.get("arg") ?? "").trim();
   let command = process.platform === "win32" ? "cmd.exe" : (process.env.SHELL ?? "sh");
   let args: string[] = process.platform === "win32" ? [] : ["-i"];
-  if (run === "ssh" && /^[A-Za-z0-9_.:/@-]{1,200}$/.test(arg)) {
+  // SSH-hosted session → the interactive shell IS an ssh login on the target.
+  const baseId = sid.startsWith("sub:") ? sid.slice(4).split(":")[0] : sid;
+  const sessSsh = (baseId && (sessionSsh.get(baseId) ?? meta(ctx, baseId).ssh)) || null;
+  const sshArgOk = /^[A-Za-z0-9_.:/@-]{1,200}$/.test(arg);
+  if (run === "ssh" && sshArgOk) {
     command = "devin"; args = ["ssh", arg];
-  } else if (run === "forward" && /^[A-Za-z0-9_.:/@-]{1,200}$/.test(arg)) {
+  } else if (!sessSsh && run === "forward" && sshArgOk) {
     const ports = (q.get("ports") ?? "").split(/[\s,]+/).filter((x) => /^\d{1,5}(:\d{1,5})?$/.test(x));
     if (ports.length) { command = "devin"; args = ["forward", arg, ...ports]; }
   }
-  const proc = child_process.spawn(command, args, { cwd, env: process.env });
   const send = (o: unknown) => { if (ws.readyState === ws.OPEN) ws.send(JSON.stringify(o)); };
-  proc.stdout.on("data", (d: Buffer) => send({ d: d.toString("utf8") }));
-  proc.stderr.on("data", (d: Buffer) => send({ d: d.toString("utf8") }));
-  proc.on("exit", (code) => { send({ exit: code }); try { ws.close(); } catch {} });
+  // proc may arrive async (ssh2 password/key hosts connect first) — buffer
+  // keystrokes sent before it exists and flush on wire().
+  const early: string[] = [];
+  let proc: child_process.ChildProcess | null = null;
+  let killed = false;
+  const wire = (p: child_process.ChildProcess) => {
+    proc = p;
+    p.stdout?.on("data", (d: Buffer) => send({ d: d.toString("utf8") }));
+    p.stderr?.on("data", (d: Buffer) => send({ d: d.toString("utf8") }));
+    p.stdin?.on("error", () => {});
+    p.on("exit", (code) => { send({ exit: code }); try { ws.close(); } catch {} });
+    for (const d of early.splice(0)) { try { p.stdin?.write(d); } catch {} }
+  };
   ws.on("message", (raw) => {
-    try { const m = JSON.parse(String(raw)); if (typeof m.d === "string") proc.stdin.write(m.d); if (m.kill) proc.kill(); } catch {}
+    try {
+      const m = JSON.parse(String(raw));
+      if (typeof m.d === "string") { if (proc) { try { proc.stdin?.write(m.d); } catch {} } else early.push(m.d); }
+      if (m.kill) { killed = true; try { proc?.kill(); } catch {} }
+    } catch {}
   });
-  ws.on("close", () => { try { proc.kill(); } catch {} });
+  ws.on("close", () => { killed = true; try { proc?.kill(); } catch {} });
   send({ d: `\x1b[90m[${cwd}]\x1b[0m\r\n` });
+  if (sessSsh && !(run === "ssh" && sshArgOk)) {
+    // sshInteractive: `ssh -tt` for agent-auth hosts, ssh2 pty for
+    // password/key records — same ChildProcess shape either way.
+    sshInteractive(String(sessSsh)).then((p) => {
+      if (killed || ws.readyState !== ws.OPEN) { try { p.kill(); } catch {} return; }
+      wire(p);
+    }).catch((e) => {
+      send({ d: `\r\n\x1b[31m[ssh] ${e instanceof Error ? e.message : e}\x1b[0m\r\n` });
+      try { ws.close(); } catch {}
+    });
+  } else {
+    try { wire(child_process.spawn(command, args, { cwd, env: process.env })); }
+    catch (e) { send({ d: `\r\n[spawn] ${e instanceof Error ? e.message : e}\r\n` }); try { ws.close(); } catch {} }
+  }
 });
 
 const manager = new AcpManager({
@@ -373,6 +407,7 @@ const ctx: ApiContext = {
   devinCheck,
   agentsCheck,
   sessionCwd,
+  sessionSsh,
   permissionOwner,
 };
 
@@ -480,8 +515,13 @@ httpServer.listen(PORT, HOST, async () => {
     execFile(opener, [addr], () => {});
   }
   // Auto-resume turns left open by a crashed/killed predecessor — gated by
-  // the 会话自动继续 pref. Delayed so the acp pool settles first.
+  // the 会话自动继续 pref. Delayed so the acp pool settles first. Orphaned
+  // acp children (SIGKILL/crash paths skip killAll) are swept FIRST so their
+  // dead locks don't block the replays.
   setTimeout(() => {
+    void import("./diagnose.js").then(d => d.killOrphans())
+      .then(r => { if (r !== "none found") console.error(`[boot] orphan acp sweep: ${r}`); })
+      .catch(() => {});
     void autoResumeInterrupted(ctx).catch((e) => console.error("[auto-resume]", e));
   }, 4000);
   startAutomations(ctx);
@@ -511,6 +551,7 @@ httpServer.listen(PORT, HOST, async () => {
 
 for (const sig of ["SIGINT", "SIGTERM"] as const) {
   process.on(sig, () => {
+    markGracefulExit(); // keep open-turns entries → auto-resume on next boot
     manager.killAll();
     store.flush();
     process.exit(0);

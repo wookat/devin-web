@@ -35,41 +35,34 @@ supervisor if :7791 is silent); linux → systemd --user unit
 Supervisor injects a default `DEVIN_WEB_ALLOWED_HOSTS` (the tunnel hosts)
 when the environment lacks it — boot-time tasks have no shell env.
 `POST /api/_super/restart` vs the backend's own routes: prefer
-`/api/admin/restart` when the backend is up (it drains in-flight turns
-first); `/_super/restart` is the hard reset for a wedged backend — it kills
-mid-turn. Logs: `<dataDir>/supervisor.log` + `server.log`.
+`/api/admin/restart` when the backend is up; `/_super/restart` is the hard
+reset for a wedged backend — it kills mid-turn. Logs:
+`<dataDir>/supervisor.log` + `server.log`.
 
 Self-redeploy: `POST /api/admin/redeploy` runs `npm run build` (~1-3min).
-`POST /api/admin/restart` skips the build. UI: header `…` menu → 服务 →
-重启服务 / 重新构建并重启; the page then polls /api/accounts (down→up)
-and reloads — do NOT use a fixed sleep, the build window is
+`POST /api/admin/restart` skips the build. UI: Settings → 服务 →
+重启服务 / 重新构建并重启 / 硬重启 / 停止; the page then polls until the
+backend is back and reloads — do NOT use a fixed sleep, the build window is
 unpredictable. Build failure keeps the old server alive. Agents can also
 `curl -X POST localhost:7791/api/admin/redeploy` — the call kills the
-caller's own acp along with the server; the session replays on next use.
-Under the supervisor (DEVIN_WEB_SUPERVISED=1) a drained exit IS the
-respawn — the supervisor restarts us; unsupervised runs still spawn the
-detached `scripts/respawn.mjs`, which itself now hands :7791 to the
-supervisor (set DEVIN_WEB_NO_SUPERVISOR=1 for the old bare respawn).
-Before exiting, the server drains in-flight prompts and waits as long as
-they take — a deploy NEVER kills an in-flight turn. The drain is bounded by
-the turn-silence watchdog: a prompt that streams NOTHING for
-`DEVIN_WEB_TURN_SILENCE_MS` (default 15min) is declared wedged — its host
-acp is recycled and the RPC settles with an error, so `inflight` always
-clears eventually (a genuinely wedged prompt can still be ended sooner via
-End session / Restart agent in the UI); it logs a `waiting on N inflight
-for Ns` heartbeat every 30s meanwhile. Bounded escape:
-`DEVIN_WEB_DRAIN_TIMEOUT_MS` — the supervisor injects a **30s** default
-grace, then the backend exits with turns still in flight: open-turns.json
-survives and `autoResumeInterrupted` replays them on the new backend (the
-same path as crash recovery), so waiting longer buys nothing. A 900s
-bound previously existed for a different reason — the silence watchdog
-can't help auto-resumed replays (a huge log's replay streams
-continuously, never "silent", so inflight never settled and restarts
-deadlocked ~14h). Set the env to `0` explicitly to restore wait-forever,
-or larger if you ever want a longer grace. Past the bound the server exits with
-turns still in flight; their open-turns.json entries survive and
-`autoResumeInterrupted` replays them on the new backend (the same path as
-crash recovery), so keep `prefs.autoResume` on.
+caller's own acp along with the server; the session replays via auto-resume.
+
+RESTART IS IMMEDIATE — there is NO drain wait. `/api/admin/restart` and
+redeploy's post-build step do exactly this: `beginDrain()` (gates new sends
+for the ~400ms exit window only), `markGracefulExit()` (in-flight turns'
+open-turns entries survive — auto-resume replays them on the next backend),
+`ctx.manager.killAll()` (kills acp children so session locks can't orphan —
+this was THE cause of "hard restart → sends fail with session_locked"),
+then `process.exit(0)`. The supervisor sees the exit and respawns; the whole
+cycle is a few seconds. Bare dev runs (no DEVIN_WEB_SUPERVISED) spawn the
+detached supervisor on exit so :7791 always ends up supervised — there is
+no respawn.mjs/respawn.bat chain anymore (deleted). `markGracefulExit` is
+also set by the SIGINT/SIGTERM handler for the same reason. The old
+drain-loop (wait for inflight, heartbeat every 30s, DEVIN_WEB_DRAIN_TIMEOUT_MS
+bound) is GONE — open-turns recovery made waiting worthless and replay-type
+turns deadlocked it for hours. `GET /api/admin/drain` still reports the
+brief gate state for diagnostics. Keep `prefs.autoResume` on — it is what
+makes instant restart safe.
 Interrupted-turn recovery: `dispatchPrompt` records the outgoing message in
 `<dataDir>/open-turns.json` and clears it when the prompt settles — an entry
 surviving at boot means the server died mid-turn. A successful settle also
@@ -88,14 +81,14 @@ turn, `resumeCount` carried through dispatchPrompt) — it resumes crashed
 turns WITHOUT any tab open. `GET/POST /api/admin/prefs` backs the
 `/settings` page (official Preferences-style layout) whose send-shortcut /
 theme rows read the same localStorage keys the session page does.
-respawn.mjs is pure node: waits for the port via net.connect, cleans
-orphaned acp children, then spawns the SUPERVISOR detached (the migration
-hand-off from unsupervised → supervised); DEVIN_WEB_NO_SUPERVISOR=1 keeps
-the old behaviour of spawning the bare backend with stdio →
-`<dataDir>/server.log` (4MB-rotated). Its own steps →
-`<dataDir>/respawn.log`. If a respawn ever dies silently, read those two
-logs FIRST. `respawn.bat` is only a shim for the old build's
-`cmd /c respawn.bat` spawn.
+Unsupervised boot: backend exits hand :7791 to a detached supervisor spawn
+(the migration hand-off from unsupervised → supervised);
+DEVIN_WEB_NO_SUPERVISOR=1 keeps the old bare-exit behaviour. Orphaned acp
+children (SIGKILL/crash paths skip killAll) are swept at boot BEFORE
+auto-resume so dead locks can't block replays; `clean-orphans.ps1` +
+`POST /api/admin/repair {fix:"kill-orphans"}` do it manually.
+`GET /api/admin/diagnose` + `/api/admin/repair` (fixes: kill-orphans,
+stop-turns, clear-open-turns, restart-now) back Settings → 诊断.
 
 ## Test
 

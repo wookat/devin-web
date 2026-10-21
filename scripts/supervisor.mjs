@@ -104,12 +104,6 @@ function spawnBackend() {
         // can still override by exporting its own value first.
         DEVIN_WEB_ALLOWED_HOSTS: process.env.DEVIN_WEB_ALLOWED_HOSTS
           || "192.168.6.251:7791,devin.zalize.com,devin-web.zalize.com",
-        // Short grace on deploy drain, then cut: open-turns.json + auto-resume
-        // already replays any turn we interrupt, so a long wait buys nothing —
-        // and auto-resumed replays of huge logs stream continuously (never
-        // "silent"), deadlocking restarts for ~14h before this bound existed.
-        // 30s default; set DEVIN_WEB_DRAIN_TIMEOUT_MS=0 for wait-forever.
-        DEVIN_WEB_DRAIN_TIMEOUT_MS: process.env.DEVIN_WEB_DRAIN_TIMEOUT_MS || "30000",
       },
     });
   const c = child;
@@ -293,7 +287,7 @@ const server = http.createServer((req, res) => {
     if (url.pathname === "/api/_super/log" && req.method === "GET") {
       // Whitelisted log tails — readable even while the backend is dead.
       const name = url.searchParams.get("file") ?? "supervisor";
-      const allowed = { supervisor: "supervisor.log", server: "server.log", respawn: "respawn.log" };
+      const allowed = { supervisor: "supervisor.log", server: "server.log" };
       const file = allowed[name];
       if (!file) { res.writeHead(400).end("{}"); return; }
       const lines = Math.min(Number(url.searchParams.get("tail")) || 300, 2000);

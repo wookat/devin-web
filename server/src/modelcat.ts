@@ -43,18 +43,26 @@ interface FamilyEntry {
   ctx1m: boolean;
 }
 
+export interface ModelPrices {
+  input?: number;
+  cached?: number;
+  output?: number;
+}
+
 export interface CatalogInfo {
   family: string;
   efforts: string[];
   effortCtl: boolean;
   fast: boolean;
   ctx1m: boolean;
+  prices?: ModelPrices;
 }
 
 let cache: {
   loadedAt: number;
   families: Map<string, FamilyEntry>;
   varToFam: Map<string, string>;
+  varPrices: Map<string, ModelPrices>;
 } | null = null;
 const CACHE_TTL = 60_000;
 
@@ -65,18 +73,21 @@ function cliDir(): string {
 }
 
 /** Extract printable ASCII runs ≥3 chars from the decoded protobuf payload. */
-function payloadStrings(buf: Buffer): string[] {
-  const out: string[] = [];
+function payloadStrings(buf: Buffer): { s: string; off: number }[] {
+  const out: { s: string; off: number }[] = [];
   let cur = "";
-  for (const b of buf) {
+  let start = 0;
+  for (let i = 0; i < buf.length; i++) {
+    const b = buf[i];
     if (b >= 0x20 && b < 0x7f) {
+      if (!cur) start = i;
       cur += String.fromCharCode(b);
     } else {
-      if (cur.length >= 3) out.push(cur);
+      if (cur.length >= 3) out.push({ s: cur, off: start });
       cur = "";
     }
   }
-  if (cur.length >= 3) out.push(cur);
+  if (cur.length >= 3) out.push({ s: cur, off: start });
   return out;
 }
 
@@ -92,6 +103,7 @@ function nameEffort(name: string): string | null {
 function ingestFile(
   families: Map<string, FamilyEntry>,
   varToFam: Map<string, string>,
+  varPrices: Map<string, ModelPrices>,
   raw: Buffer,
 ) {
   const strs = payloadStrings(raw);
@@ -101,7 +113,7 @@ function ingestFile(
   // 4 strings by its kebab-case variant id.
   const entries: { i: number; name: string; vid: string }[] = [];
   for (let i = 0; i < N - 1; i++) {
-    const s = strs[i];
+    const s = strs[i].s;
     if (
       /^[A-Z0-9]/.test(s) &&
       !KEBAB_RE.test(s) &&
@@ -111,7 +123,7 @@ function ingestFile(
     ) {
       let vid = "";
       for (let j = i + 1; j < Math.min(i + 5, N); j++) {
-        if (KEBAB_RE.test(strs[j])) { vid = strs[j]; break; }
+        if (KEBAB_RE.test(strs[j].s)) { vid = strs[j].s; break; }
       }
       if (vid) entries.push({ i, name: s, vid });
     }
@@ -120,7 +132,40 @@ function ingestFile(
   for (let k = 0; k < entries.length; k++) {
     const { i, name, vid } = entries[k];
     const end = k + 1 < entries.length ? entries[k + 1].i : Math.min(i + 60, N);
-    const block = strs.slice(i + 1, end);
+    const block = strs.slice(i + 1, end).map((x) => x.s);
+
+    // Per-variant pricing: the entry's byte span holds up to three
+    // `{name} <fixed32 price> "1M tokens" ...` sub-blocks, in Input →
+    // Cached input → Output order. The price is the float right after the
+    // label's length-delimited string field.
+    {
+      const spanStart = strs[i].off;
+      const spanEnd = k + 1 < entries.length ? strs[entries[k + 1].i].off : raw.length;
+      const prices: ModelPrices = {};
+      const grab = (label: string, key: keyof ModelPrices) => {
+        const p = raw.indexOf(label, spanStart);
+        if (p >= 0 && p + label.length < spanEnd) {
+          const v = raw.readFloatLE(p + label.length + 1);
+          if (v > 0 && v < 10000) prices[key] = v;
+        }
+      };
+      grab("Output", "output");
+      grab("Cached input", "cached");
+      // "Input" is a suffix of "Cached input" — scan for a standalone hit.
+      for (let p = spanStart; p < spanEnd;) {
+        const q = raw.indexOf("Input", p);
+        if (q < 0 || q >= spanEnd) break;
+        if (!raw.subarray(Math.max(spanStart, q - 12), q).toString().endsWith("Cached ")) {
+          const v = raw.readFloatLE(q + 5 + 1);
+          if (v > 0 && v < 10000) { prices.input = v; break; }
+        }
+        p = q + 5;
+      }
+      if (prices.input !== undefined || prices.cached !== undefined || prices.output !== undefined) {
+        varPrices.set(vid, prices);
+      }
+    }
+
     // Family id: longest kebab string in the block that is a strict prefix of vid.
     let fam = "";
     for (const t of block) {
@@ -156,18 +201,19 @@ function ingestFile(
 function load() {
   const families = new Map<string, FamilyEntry>();
   const varToFam = new Map<string, string>();
+  const varPrices = new Map<string, ModelPrices>();
   const dir = cliDir();
   let files: string[] = [];
   try {
     files = fs.readdirSync(dir).filter((f) => /^model_configs_v\d+\.[0-9a-f]+\.bin$/.test(f));
   } catch {
-    return { families, varToFam };
+    return { families, varToFam, varPrices };
   }
   for (const f of files) {
     try {
       const wrap = JSON.parse(fs.readFileSync(path.join(dir, f), "utf8")) as { payload?: string };
       if (!wrap.payload) continue;
-      ingestFile(families, varToFam, Buffer.from(wrap.payload, "base64"));
+      ingestFile(families, varToFam, varPrices, Buffer.from(wrap.payload, "base64"));
     } catch {
       /* corrupt/partial cache file — skip */
     }
@@ -195,7 +241,7 @@ function load() {
       changed = true;
     }
   }
-  return { families, varToFam };
+  return { families, varToFam, varPrices };
 }
 
 function maps() {
@@ -213,7 +259,7 @@ export const EFFORT_SUFFIX_RE = /-(none|min|minimal|low|medium|high|xhigh|max)$/
  * fall back to the agent-advertised groups as-is.
  */
 export function catalogInfo(modelValue: string): CatalogInfo | null {
-  const { families, varToFam } = maps();
+  const { families, varToFam, varPrices } = maps();
   // Longest family key that is a strict prefix (or exact) — groups flattened
   // variant entries under their family (glm-5-2-1m → glm-5-2).
   let fam = "";
@@ -231,7 +277,11 @@ export function catalogInfo(modelValue: string): CatalogInfo | null {
     const first = modelValue.slice(fam.length + 1).split("-")[0];
     if (EFFORT_LEVELS.has(first)) efforts.add(first);
   }
-  return { family: fam, efforts: [...efforts], effortCtl: e.effortCtl, fast: e.fast, ctx1m: e.ctx1m };
+  // Variant-specific prices win; the first priced variant in the family is
+  // the fallback for values that carry no price block of their own.
+  const variantPrices = varPrices.get(modelValue)
+    ?? (() => { for (const [v, fm] of varToFam) { if (fm === fam && varPrices.has(v)) return varPrices.get(v); } return undefined })();
+  return { family: fam, efforts: [...efforts], effortCtl: e.effortCtl, fast: e.fast, ctx1m: e.ctx1m, prices: variantPrices };
 }
 
 /** Effort levels the catalog lists for the family behind an ACP model value. */
