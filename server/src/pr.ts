@@ -128,7 +128,7 @@ async function fetchDetail(ref: PrRef) {
   let checks: any[] = [];
   try {
     const cr = await ghRest(`repos/${ref.owner}/${ref.repo}/commits/${pr.headRefOid}/check-runs?per_page=100`);
-    checks = (cr?.check_runs ?? []).map((c: any) => ({ name: c.name, status: c.status, conclusion: c.conclusion, description: c.output?.title ?? "", details_url: c.details_url ?? c.html_url ?? undefined, is_required: false }));
+    checks = (cr?.check_runs ?? []).map((c: any) => ({ name: c.name, status: c.status, conclusion: c.conclusion, description: c.output?.title ?? "", summary: c.output?.summary ? String(c.output.summary).slice(0, 4000) : undefined, details_url: c.details_url ?? c.html_url ?? undefined, is_required: false }));
   } catch { /* no checks */ }
   const pending = checks.some((c) => c.status !== "completed");
   const failing = checks.some((c) => ["failure", "cancelled", "timed_out", "action_required"].includes(c.conclusion));

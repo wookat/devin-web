@@ -723,7 +723,7 @@ function ReactionRow({ commentId, reactions, reacting, onToggle }: { commentId: 
  */
 function PrPanel({ id, prUrl }: { id: string; prUrl: string }) {
   const { t } = useTranslation()
-  const [data, setData] = useState<{ info: PrInfo | null; merge_status: Record<string, unknown> | null; checks: { checks?: { name: string; status?: string; conclusion?: string; description?: string; details_url?: string; is_required?: boolean }[] } | null; comments?: { id: string; body: string; login: string; avatar_url: string; is_bot: boolean; created_at: string; reactions?: { content: string; count: number; viewer_reacted: boolean }[]; url?: string }[]; threads?: { id: string; path: string; line: number; is_resolved: boolean; is_outdated: boolean; comments: { id: string; body: string; login: string; avatar_url: string; is_bot: boolean; created_at: string; reactions?: { content: string; count: number; viewer_reacted: boolean }[]; url?: string; pending?: boolean }[] }[]; commits?: { sha: string; headline: string; author: string; committed_at: string }[]; head_sha?: string; viewer_pending_review_id?: number | null; assignees?: { login: string; avatar_url: string }[]; requested_reviewers?: { login: string; avatar_url: string }[]; labels?: { name: string; color: string }[]; author?: { login: string; avatar_url: string; is_bot: boolean } | null } | null>(null)
+  const [data, setData] = useState<{ info: PrInfo | null; merge_status: Record<string, unknown> | null; checks: { checks?: { name: string; status?: string; conclusion?: string; description?: string; summary?: string; details_url?: string; is_required?: boolean }[] } | null; comments?: { id: string; body: string; login: string; avatar_url: string; is_bot: boolean; created_at: string; reactions?: { content: string; count: number; viewer_reacted: boolean }[]; url?: string }[]; threads?: { id: string; path: string; line: number; is_resolved: boolean; is_outdated: boolean; comments: { id: string; body: string; login: string; avatar_url: string; is_bot: boolean; created_at: string; reactions?: { content: string; count: number; viewer_reacted: boolean }[]; url?: string; pending?: boolean }[] }[]; commits?: { sha: string; headline: string; author: string; committed_at: string }[]; head_sha?: string; viewer_pending_review_id?: number | null; assignees?: { login: string; avatar_url: string }[]; requested_reviewers?: { login: string; avatar_url: string }[]; labels?: { name: string; color: string }[]; author?: { login: string; avatar_url: string; is_bot: boolean } | null } | null>(null)
   const [err, setErr] = useState<string | null>(null)
   const [sub, setSub] = useState<'changes' | 'bugs' | 'description' | 'discussion' | 'commits'>('changes')
   const [diffOpts, setDiffOpts] = useState<DiffOptsT>(readDiffOpts)
@@ -776,6 +776,7 @@ function PrPanel({ id, prUrl }: { id: string; prUrl: string }) {
   const [copiedBr, setCopiedBr] = useState(false)
   const [commentOpen, setCommentOpen] = useState(false)
   const [mergedOpen, setMergedOpen] = useState(false)
+  const [expandedCheck, setExpandedCheck] = useState(-1)
   const [cmtText, setCmtText] = useState('')
   const [discText, setDiscText] = useState('')
   const [posting, setPosting] = useState(false)
@@ -1086,19 +1087,29 @@ function PrPanel({ id, prUrl }: { id: string; prUrl: string }) {
                   {checks.length > 0 && (
                     <ul className="mt-2 space-y-1">
                       {checks.map((ck, i) => (
-                        <li key={i} className="flex items-center gap-2 text-[12px]">
-                          {(() => {
-                            const st = String(ck.conclusion || ck.status || '').toUpperCase()
-                            if (st === 'SUCCESS') return <CheckCircle2 size={12} className="shrink-0 text-emerald-500" />
-                            if (st === 'QUEUED' || st === 'IN_PROGRESS' || st === 'PENDING' || st === '') return <CircleDashed size={12} className="shrink-0 text-amber-500" />
-                            if (st === 'NEUTRAL' || st === 'SKIPPED') return <Circle size={12} className="shrink-0 text-muted-foreground" />
-                            return <XCircle size={12} className="shrink-0 text-red-500" />
-                          })()}
-                          {ck.details_url && /^https:\/\//.test(ck.details_url) ? (
-                            <a href={ck.details_url} target="_blank" rel="noreferrer" className="min-w-0 truncate hover:underline">{ck.name}</a>
-                          ) : <span className="min-w-0 truncate">{ck.name}</span>}
-                          {ck.is_required && <span className="rounded border border-border px-1 text-[10px] text-muted-foreground">{t('pr.required')}</span>}
-                          {ck.description && <span className="min-w-0 truncate text-muted-foreground">{ck.description}</span>}
+                        <li key={i} className="text-[12px]">
+                          <div className="flex items-center gap-2">
+                            {(() => {
+                              const st = String(ck.conclusion || ck.status || '').toUpperCase()
+                              if (st === 'SUCCESS') return <CheckCircle2 size={12} className="shrink-0 text-emerald-500" />
+                              if (st === 'QUEUED' || st === 'IN_PROGRESS' || st === 'PENDING' || st === '') return <CircleDashed size={12} className="shrink-0 text-amber-500" />
+                              if (st === 'NEUTRAL' || st === 'SKIPPED') return <Circle size={12} className="shrink-0 text-muted-foreground" />
+                              return <XCircle size={12} className="shrink-0 text-red-500" />
+                            })()}
+                            {ck.summary ? (
+                              <button onClick={() => setExpandedCheck(expandedCheck === i ? -1 : i)} className="flex min-w-0 cursor-pointer items-center gap-1 text-left hover:text-foreground">
+                                <ChevronDown size={11} className={cn('shrink-0 text-muted-foreground transition-transform', expandedCheck === i && 'rotate-180')} />
+                                <span className="min-w-0 truncate">{ck.name}</span>
+                              </button>
+                            ) : ck.details_url && /^https:\/\//.test(ck.details_url) ? (
+                              <a href={ck.details_url} target="_blank" rel="noreferrer" className="min-w-0 truncate hover:underline">{ck.name}</a>
+                            ) : <span className="min-w-0 truncate">{ck.name}</span>}
+                            {ck.is_required && <span className="rounded border border-border px-1 text-[10px] text-muted-foreground">{t('pr.required')}</span>}
+                            {ck.description && <span className="min-w-0 truncate text-muted-foreground">{ck.description}</span>}
+                          </div>
+                          {expandedCheck === i && ck.summary && (
+                            <pre className="mt-1 max-h-40 overflow-auto whitespace-pre-wrap rounded-md border border-border bg-muted/40 p-2 font-mono text-[11px] leading-snug">{ck.summary}</pre>
+                          )}
                         </li>
                       ))}
                     </ul>
