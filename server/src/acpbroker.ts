@@ -83,7 +83,11 @@ function connectCtl(): Promise<Ctl | null> {
     sock.once("close", dead);
     const call = (msg: Record<string, unknown>) => new Promise<Record<string, unknown>>((res, rej) => {
       const id = ++req;
-      pending.set(id, { res, rej });
+      // A dropped/mangled reply must not hang the caller forever — a wedged
+      // broker otherwise freezes adoption and the whole boot chain.
+      const t = setTimeout(() => { pending.delete(id); rej(new Error("broker call timeout")); }, 10_000);
+      t.unref();
+      pending.set(id, { res: (m) => { clearTimeout(t); res(m); }, rej: (e) => { clearTimeout(t); rej(e); } });
       sock.write(`${JSON.stringify({ req: id, ...msg })}\n`);
     });
     const onExit = (fn: (acpId: string, code: number | null) => void) => { exitFns.add(fn); return () => exitFns.delete(fn); };

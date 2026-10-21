@@ -38,6 +38,9 @@ async function wireBrokerExit(acpId: string, proc: ProcHandle): Promise<void> {
     proc.emit("exit", code);
     off();
   });
+  // The socket-close path can emit exit before the ctl event arrives — drop
+  // the ctl subscriber either way so it doesn't leak on the shared channel.
+  proc.on("exit", () => off());
 }
 
 /**
@@ -340,6 +343,13 @@ export class DevinAcp {
           clientInfo: { name: "devin-web", version: "0.1.0" },
         }),
         startFailed,
+        // An alive-but-unanswering acp (wedged devin) must not hang init —
+        // an unbounded handshake stalls adoption and pools the never-
+        // settling promise in manager.starting forever.
+        new Promise<never>((_, rej) => {
+          const t = setTimeout(() => rej(new Error("acp initialize timeout (30s)")), 30_000);
+          t.unref();
+        }),
       ]);
     } catch (err) {
       if (!tolerateInit) {

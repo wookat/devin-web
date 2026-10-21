@@ -350,7 +350,9 @@ export class SessionLog {
   private subScanning = new Set<string>();
 
   private sideFile(sessionId: string, aid: string) {
-    return this.file(sessionId) + ".sub." + aid + ".jsonl";
+    // aid comes from stream meta / URLs — encode or a crafted parentAgentId
+    // could steer the sidecar filename outside the log dir.
+    return this.file(sessionId) + ".sub." + encodeURIComponent(aid) + ".jsonl";
   }
   private subsJournalFile(sessionId: string) {
     return this.file(sessionId) + ".subs.jsonl";

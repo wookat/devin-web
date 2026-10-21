@@ -45,12 +45,19 @@ export function cwdFor(ctx: ApiContext, id: string): string {
 }
 
 /** Resolve a workspace-relative path strictly INSIDE cwd — rejects absolutes
- *  and `..` escapes. Returns the absolute path or null. */
+ *  and `..` escapes, then re-checks the REAL path: a symlink/junction inside
+ *  the workspace pointing outside must not escape (lexical resolve alone
+ *  doesn't chase links). Returns the absolute path or null. */
 export function confined(cwd: string, p: unknown): string | null {
   if (typeof p !== "string" || !p) return null;
   const full = path.resolve(cwd, p);
   const root = path.resolve(cwd);
-  return full === root || full.startsWith(root + path.sep) ? full : null;
+  if (full !== root && !full.startsWith(root + path.sep)) return null;
+  try {
+    const real = fs.realpathSync(full);
+    const realRoot = fs.realpathSync(root);
+    return real === realRoot || real.startsWith(realRoot + path.sep) ? real : null;
+  } catch { return null; /* doesn't exist — never read it */ }
 }
 
 export function subStatusEnum(a: { status: string; agentId?: string; resumable?: boolean } | undefined | null, aid: string): string {
@@ -202,7 +209,10 @@ export const sessionSubs: Record<string, (ctx: ApiContext, id: string, req: Inco
     const cwd = cwdFor(ctx, id);
     for (const k of keys ?? []) {
       const p = k.startsWith("path:") ? decodeURIComponent(k.slice(5)) : k;
-      const full = path.isAbsolute(p) ? p : path.join(cwd, p);
+      // sessionSubs is share-reachable → confine or a share link becomes an
+      // arbitrary host-file read (absolutes and .. were accepted verbatim).
+      const full = confined(cwd, p);
+      if (!full) { files[k] = ""; continue; }
       try {
         const data = fs.readFileSync(full);
         files[k] = data.length > 512 * 1024 ? data.subarray(0, 512 * 1024).toString("utf8") : data.toString("utf8");

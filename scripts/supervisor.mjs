@@ -321,6 +321,22 @@ function proxy(req, res) {
 const server = http.createServer((req, res) => {
   try {
     const url = new URL(req.url ?? "/", `http://${req.headers.host ?? "localhost"}`);
+    if (url.pathname.startsWith("/api/_super/")) {
+      // Supervisor controls are process-level powers (stop/restart/log-read)
+      // on a publicly-proxied port — they need BOTH gates the backend has:
+      // (a) Origin/Host match so a foreign web page can't drive the process
+      //     via DNS rebinding (non-browser clients send no Origin → pass);
+      // (b) the admin key when DEVIN_WEB_ADMIN_KEY is set — the key only
+      //     guarded /api/admin/* before, leaving /_super wide open.
+      const origin = req.headers.origin;
+      if (origin) {
+        let oh = "";
+        try { oh = new URL(origin).host; } catch {}
+        if (oh !== (req.headers.host ?? "")) { res.writeHead(403).end('{"error":"origin_mismatch"}'); return; }
+      }
+      const k = process.env.DEVIN_WEB_ADMIN_KEY;
+      if (k && req.headers["x-admin-key"] !== k) { res.writeHead(401).end('{"error":"unauthorized"}'); return; }
+    }
     if (url.pathname === "/api/_super/status") {
       let version = "?";
       try { version = JSON.parse(fs.readFileSync(path.join(repoRoot, "package.json"), "utf8")).version ?? "?"; } catch {}
