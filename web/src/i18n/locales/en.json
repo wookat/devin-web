@@ -934,7 +934,7 @@
     "showArchivedDesc": "Show archived sessions in the session list",
     "service": "Service",
     "restart": "Restart service",
-    "restartDesc": "Gracefully drain in-flight sessions, then restart the local server (~a few seconds)",
+    "restartDesc": "Restart the local server immediately — in-flight turns resume via auto-resume (~seconds)",
     "restarting": "Restarting… the page refreshes shortly",
     "restartFail": "Restart request failed",
     "restartBtn": " Restart",
@@ -1041,7 +1041,11 @@
     "hubDesc": "All settings for this local instance",
     "searchPh": "Search settings…",
     "personalDesc": "Interface and session preferences",
-    "instanceDesc": "Local instance configuration and service management"
+    "instanceDesc": "Local instance configuration and service management",
+    "workSend": "Send while working",
+    "workSendDesc": "Default action for the send key / Ctrl+Enter while a turn is running",
+    "wsQueue": "Add to queue (sent in order when the turn ends)",
+    "wsInterrupt": "Interrupt and send now"
   },
   "as": {
     "resetConfirm": "Reset the share link? The old link stops working immediately.",

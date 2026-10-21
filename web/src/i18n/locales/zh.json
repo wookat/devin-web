@@ -934,7 +934,7 @@
     "showArchivedDesc": "在会话列表中显示已归档的会话",
     "service": "服务",
     "restart": "重启服务",
-    "restartDesc": "优雅排空在途会话后重启本地 server（约几秒）",
+    "restartDesc": "立即重启本地 server——在途会话由自动续跑恢复（约几秒）",
     "restarting": "重启中…稍后自动刷新",
     "restartFail": "重启请求失败",
     "restartBtn": " 重启",
@@ -1041,7 +1041,11 @@
     "hubDesc": "本地实例的全部设置项",
     "searchPh": "搜索设置…",
     "personalDesc": "界面与会话偏好",
-    "instanceDesc": "本地实例配置与服务管理"
+    "instanceDesc": "本地实例配置与服务管理",
+    "workSend": "运行中发送方式",
+    "workSendDesc": "回合进行中，按发送键 / Ctrl+Enter 的默认行为",
+    "wsQueue": "加入队列（回合结束后依次发送）",
+    "wsInterrupt": "打断并立即发送"
   },
   "as": {
     "resetConfirm": "重置分享链接？旧链接将立即失效。",

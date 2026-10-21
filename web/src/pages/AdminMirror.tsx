@@ -27,6 +27,7 @@ import LocalDock from '@/components/LocalDock'
 import DwMark from '@/components/DwMark'
 import TermPanel from '@/components/TermPanel'
 import BeardBand, { BandItem } from '@/components/BeardBand'
+import { LightboxImage } from '@/components/Lightbox'
 import { filePillSvg } from '@/components/filePillIcons'
 import WakePersona from '@/components/WakePersona'
 import ThinkingPersona from '@/components/ThinkingPersona'
@@ -38,18 +39,20 @@ import { cn, fmtTime } from '@/lib/utils'
 import { ATTACH_MENU_ICONS, MODE_INFO_ICON, MODE_CHECK_ICON, MENU_CHEVRON_ICON } from '@/lib/officialMenuIcons'
 import { PanelAddTabIcon, PanelAttachmentsIcon, PanelCloseTabIcon, PanelFullWidthIcon, PanelHideTabsIcon, PanelPullRequestIcon } from '@/components/panelTabIcons'
 import { readTreeCache, type MirrorTreeSession, type TreeCachePayload, writeTreeCache } from './mirror/treeCache'
-import { prefetchSession, visitorTabs, type SessionDetail, tlSnapshots, messagesFromItems, type LocalCfg, type LocalCfgOption, EFFORT_SUFFIX_RE, modeOfVersion, speedOfVersion, type ShareMeta, defaultTabs, CommandPalette, TimelineSkeleton, LOCAL_MODE_ICONS, VERSION_LABEL, versionOf } from './mirror/pageBits'
+import { prefetchSession, visitorTabs, type SessionDetail, tlSnapshots, messagesFromItems, type LocalCfg, EFFORT_SUFFIX_RE, modeOfVersion, speedOfVersion, type ShareMeta, defaultTabs, CommandPalette, TimelineSkeleton, LOCAL_MODE_ICONS, VERSION_LABEL, versionOf } from './mirror/pageBits'
 import { type PanelKey, PANELS, findItemText, parseOfficialTab, serializeOfficialTab, useUrlParamSync, ADD_TAB_ORDER, prNumber, type PanelIcon } from './mirror/panelTabs'
 import { type TimelinePage, preview, mergeItems, groupItems, time, rowClock, clock, COACH_RECOMMENDATIONS, COACH_ACTIONS } from './mirror/timelineUtil'
 import { reduceStatus, stText } from './mirror/statusReduce'
 import { type ComposerMetaT, type SuggestItem, AT_CATEGORIES, QUEUE_DASHED_SVG, QUEUE_DRAG_SVG, QUEUE_PLACEHOLDER } from './mirror/composerMeta'
 import { type TreePrefs, TREE_PREFS_KEY, DEFAULT_TREE_PREFS, buildFilterQ, SessionTree } from './mirror/SessionTree'
 import DirPicker from './mirror/DirPicker'
+import LocalPicker, { type DraftTarget } from './mirror/LocalPicker'
 import CodeView from '@/components/CodeView'
 import { type WfAgentEventState, AgentsPanel } from './mirror/AgentsPanel'
 import { SessionSettingsGlyph, HeaderMenuPortal, AwaitingInstructionsGlyph, ApiOriginGlyph, OfficialGlyph, BubblePlusGlyph, CloseQuoteGlyph } from './mirror/glyphs'
 import { PermissionCard, PermissionSidebarPanel } from './mirror/Permission'
 import { EventRow, WorkGroup } from './mirror/TimelineRows'
+import ModelPicker from './mirror/ModelPicker'
 import { splitAttachments, isOwnUserMessage, indexPreview } from './mirror/attachments'
 import { ParticipantHeader, FileViewerPanel, ShellPanel, AttachmentsPanel } from './mirror/ViewerPanels'
 import { MessageToolbar, SidechatPanel } from './mirror/Sidechat'
@@ -62,6 +65,9 @@ import { WorkspacePanel, CtxMenu } from './mirror/WorkspacePanel'
 import { ResourcesPanel, SubagentsPanel } from './mirror/ResourcePanels'
 
 let lastSeenLocalCfg: LocalCfg | null = null
+// Per-session cfg cache — session A's config must never warm-start session B
+// (module-level sharing was the "previous model / Ultra" flash on navigation).
+const lastSeenCfgBySid = new Map<string, LocalCfg>()
 
 /* Official dark-quote tokens (verbatim from app.devin.ai .dark scope):
    wax bg rgb(31,31,31,.94)+blur, border white/.04, text white/.9, hint /.52. */
@@ -70,6 +76,22 @@ const QBORDER = 'rgb(255 255 255 / 0.04)'
 const QBORDER_FOCUS = 'rgb(255 255 255 / 0.08)'
 const QTEXT = 'rgb(255 255 255 / 0.9)'
 const QTINT = 'rgb(255 255 255 / 0.05)'
+
+/** Queue-row preview: stored queue text is the raw wire string — it can carry
+ *  <quoted_artifact …> XML wrappers, ATTACHMENT:"url" marker lines and multi-line
+ *  bodies. Render a readable one-line summary instead of raw markup. */
+function queuePreview(raw: string): string {
+  let s = raw
+  s = s.replace(/<quoted_artifact\b[^>]*>([\s\S]*?)<\/quoted_artifact>/g, (_m, inner: string) => {
+    const cap = inner.match(/<caption>([\s\S]*?)<\/caption>/)?.[1]?.trim()
+    const body = inner.match(/<content>([\s\S]*?)<\/content>/)?.[1]?.trim()
+    const excerpt = (cap || body || '').split('\n')[0].slice(0, 60)
+    return excerpt ? `❝${excerpt}❞` : ''
+  })
+  s = s.replace(/^ATTACHMENT:"?([^"\n]+)"?\s*$/gm, '[附件] $1')
+  s = s.replace(/<[^>]+>/g, '')
+  return s.replace(/\s+/g, ' ').trim()
+}
 
 /** Floating quote affordance — official SelectionQuoteAffordance, two states:
  *  minimal  = dark pill above the anchor, [bubble-plus=Add caption]
@@ -232,6 +254,70 @@ function QuotePill({ x, y, placement = 'above', hidden, startExpanded, quoteText
   )
 }
 
+// Official composer collapse (decoded from the deob'd bundle — kE/OE/DE):
+// the toolbar row reports clientWidth; the collapsible "leading" cluster
+// reports scrollWidth−clientWidth overflow. overflow>1 → level+1, recording
+// the width that level needed (hysteresis, so levels don't flicker); when the
+// row later has room for the recorded need → level−1. A 200ms cooldown
+// between escalations prevents thrash. RO watches the row, the cluster, and
+// every cluster child (MutationObserver keeps the child set current).
+function useCollapseLevel(toolbarEl: HTMLElement | null, leadingEl: HTMLElement | null, maxLevel = 3): number {
+  const [level, setLevel] = useState(0)
+  const st = useRef({ level: 0, requiredAt: [] as (number | undefined)[], cooldown: 0, timer: 0 })
+  const measureRef = useRef<() => void>(() => {})
+  useLayoutEffect(() => {
+    const s = st.current
+    if (!toolbarEl || !leadingEl) {
+      s.level = 0
+      s.requiredAt = []
+      setLevel(0)
+      return
+    }
+    const measure = () => {
+      const available = toolbarEl.clientWidth
+      if (available <= 0) return
+      const overflow = leadingEl.scrollWidth - leadingEl.clientWidth
+      const now = Date.now()
+      const cooling = now < s.cooldown
+      if (cooling) {
+        // During cooldown escalations are capped at the current level; a
+        // deferred re-measure runs right after the cooldown ends.
+        window.clearTimeout(s.timer)
+        s.timer = window.setTimeout(() => measureRef.current(), s.cooldown - now + 25)
+      }
+      const cap = cooling ? s.level : maxLevel
+      if (overflow > 1 && s.level < cap) {
+        s.requiredAt[s.level] = available + overflow
+        s.level += 1
+        s.cooldown = now + 200
+        setLevel(s.level)
+      } else if (s.level > 0) {
+        const need = s.requiredAt[s.level - 1]
+        if (need === undefined || available >= need) {
+          s.requiredAt[s.level - 1] = undefined
+          s.level -= 1
+          setLevel(s.level)
+        }
+      }
+    }
+    measureRef.current = measure
+    measure()
+    const ro = new ResizeObserver(measure)
+    ro.observe(toolbarEl)
+    ro.observe(leadingEl)
+    const seen = new Set<Element>()
+    const watchChildren = () => {
+      for (const el of seen) if (!leadingEl.contains(el)) { ro.unobserve(el); seen.delete(el) }
+      for (const el of Array.from(leadingEl.children)) if (!seen.has(el)) { ro.observe(el); seen.add(el) }
+    }
+    watchChildren()
+    const mo = new MutationObserver(() => { watchChildren(); measure() })
+    mo.observe(leadingEl, { childList: true })
+    return () => { ro.disconnect(); mo.disconnect(); window.clearTimeout(s.timer) }
+  }, [toolbarEl, leadingEl, maxLevel])
+  return level
+}
+
 export default function AdminMirrorPage() {
   const { t } = useTranslation()
   const { id = '' } = useParams()
@@ -249,6 +335,21 @@ export default function AdminMirrorPage() {
   const draftFolder = isDraft ? new URLSearchParams(routerLoc.search).get('folder') || '' : ''
   // Draft workspace pick (desktop parity: new session lets you choose the repo).
   const [draftCwd, setDraftCwd] = useState('')
+  // Draft run target — local or `本地+SSH` (agent CLI on a configured remote
+  // host). Persisted like the desktop target pick; remote cwd is free text
+  // (no remote fs browse).
+  const [draftTarget, setDraftTargetState] = useState<DraftTarget>(() => {
+    try {
+      const p = JSON.parse(localStorage.getItem('dw-draft-target') ?? 'null')
+      if (p?.kind === 'ssh' && typeof p.host?.target === 'string' && p.host.target) return p as DraftTarget
+    } catch { /* unavailable */ }
+    return { kind: 'local' }
+  })
+  const [draftSshCwd, setDraftSshCwd] = useState('')
+  const setDraftTarget = useCallback((v: DraftTarget) => {
+    setDraftTargetState(v)
+    try { localStorage.setItem('dw-draft-target', JSON.stringify(v)) } catch { /* unavailable */ }
+  }, [])
   const sessionSearch = useMemo(() => routerLoc.search, [id])
   const [visitorPerm, setVisitorPerm] = useState<SharePermission | null>(null)
   const vw = useMemo<Viewer>(
@@ -296,8 +397,6 @@ export default function AdminMirrorPage() {
   // 分身: per-session mode + escalation flag, ridden on the /timeline response.
   const [persona, setPersona] = useState<{ mode: string; escalated: boolean } | null>(null)
   const [personaBusy, setPersonaBusy] = useState(false)
-  // Draft tip bar — desktop "Tip: New space (Ctrl+N)" parity, dismiss persists.
-  const [draftTipGone, setDraftTipGone] = useState(() => { try { return localStorage.getItem('dw-draft-tip') === '1' } catch { return false } })
   const [draftAgent, setDraftAgent] = useState('devin')
   const [agentMenuOpen, setAgentMenuOpen] = useState(false)
   const [activity, setActivity] = useState<{ text: string } | null>(null)
@@ -537,6 +636,10 @@ export default function AdminMirrorPage() {
   // Desktop parity: composer send shortcut (Settings → "Send messages with").
   const [sendWith, setSendWith] = useState<'enter' | 'ctrlenter'>(() =>
     (localStorage.getItem('dw-send-with') === 'ctrlenter' ? 'ctrlenter' : 'enter'))
+  // While a turn is in flight: does Enter/Ctrl+Enter park the message in the
+  // queue ('queue', official default) or interrupt the live turn ('interrupt')?
+  const [workSend] = useState<'queue' | 'interrupt'>(() =>
+    (localStorage.getItem('dw-work-send') === 'interrupt' ? 'interrupt' : 'queue'))
   const [renameDraft, setRenameDraft] = useState('')
   const settingsButtonRef = useRef<HTMLButtonElement>(null)
   const headerMenuAnchorRef = useRef<HTMLButtonElement | null>(null)
@@ -564,22 +667,45 @@ export default function AdminMirrorPage() {
   }
   // Local ACP config: real model/mode options exposed by `devin acp` (when set,
   // the cloud version pill swaps to a local config menu).
-  const [localCfg, setLocalCfg] = useState<LocalCfg | null>(() => lastSeenLocalCfg)
-  const [cfgReady, setCfgReady] = useState<boolean>(() => lastSeenLocalCfg != null)
+  // The cfg carries the session id it was loaded for: navigation swaps `id`
+  // one render before the fetch effect can swap the cfg, and painting the old
+  // session's mode/model labels in that window is exactly the stale-model
+  // ("Ultra") flash. Draft sessions use the carried-forward lastSeen cfg.
+  const [localCfgState, setLocalCfgState] = useState<{ cfg: LocalCfg | null; sid: string | null }>(
+    () => ({ cfg: isDraft ? lastSeenLocalCfg : null, sid: isDraft ? 'draft' : (id || null) })
+  )
+  const setLocalCfg = (cfgOrFn: LocalCfg | null | ((p: LocalCfg | null) => LocalCfg | null), sid?: string | null) => {
+    const cur = isDraft ? 'draft' : (id || null)
+    setLocalCfgState((prev) => {
+      const base = prev.sid === cur ? prev.cfg : null
+      return { cfg: typeof cfgOrFn === 'function' ? cfgOrFn(base) : cfgOrFn, sid: sid === undefined ? cur : sid }
+    })
+  }
+  const localCfg = localCfgState.sid === (isDraft ? 'draft' : (id || null)) ? localCfgState.cfg : null
+  // Live /config arrived for THIS session — distinguishes the real config from
+  // a warm-start cache, so the cloud "Ultra" fallback can't flash while the
+  // real config is still loading.
+  const [cfgFetched, setCfgFetched] = useState(false)
   const [cfgTick, setCfgTick] = useState(0)
   useEffect(() => {
     let alive = true
-    if (isVisitor || !id) { setLocalCfg(null); setCfgReady(false); return }
+    if (isVisitor || !id) { setLocalCfg(null, id || null); setCfgFetched(false); return }
     // Draft mode: show the carried-forward pick — the server applies lastConfig
     // at creation, and draft picks are POSTed right after the session exists.
-    if (isDraft) { setLocalCfg(lastSeenLocalCfg); setCfgReady(true); return }
-    if (lastSeenLocalCfg) { setLocalCfg(lastSeenLocalCfg); setCfgReady(true) } else setCfgReady(false)
+    // cfgFetched only when the cache already carries a model group — otherwise
+    // hold "…" until composer-meta returns the real agent config (no "Ultra"
+    // flash on a model-less cached config).
+    if (isDraft) { setLocalCfg(lastSeenLocalCfg); setCfgFetched(lastSeenLocalCfg?.model != null); return }
+    // Warm-start ONLY from this session's own cached config — never from a
+    // different session the module-level cache happens to remember.
+    setLocalCfg(lastSeenCfgBySid.get(id) ?? null, id)
+    setCfgFetched(false)
     // GET /config never starts a session/load server-side — it only waits for
     // one already in flight. So this is free on a peeked session and picks up
     // the real config once the timeline graduates (cfgTick bump).
     sessionFetch<LocalCfg>('/config')
-      .then((c) => { if (alive) { lastSeenLocalCfg = c; setLocalCfg(c); setCfgReady(true) } })
-      .catch(() => { if (alive) setCfgReady(true) })
+      .then((c) => { if (alive) { lastSeenCfgBySid.set(id, c); lastSeenLocalCfg = c; setLocalCfg(c, id); setCfgFetched(true) } })
+      .catch(() => { if (alive) setCfgFetched(true) })
     return () => { alive = false }
   }, [id, isVisitor, cfgTick])
   // Draft mode: pull agent-level cfg + dw.json lastConfig via composer-meta so
@@ -603,7 +729,7 @@ export default function AdminMirrorPage() {
         }
         lastSeenLocalCfg = cfg
         setLocalCfg(cfg)
-        setCfgReady(true)
+        setCfgFetched(true)
       })
       .catch(() => {})
   }, [isDraft, isVisitor])
@@ -636,7 +762,7 @@ export default function AdminMirrorPage() {
     }
     void Promise.all(pairs.map((p) => sessionFetch('/config', { method: 'POST', body: JSON.stringify(p) }).catch(() => null)))
       .then(() => sessionFetch<LocalCfg>('/config'))
-      .then((c) => { lastSeenLocalCfg = c; setLocalCfg(c) })
+      .then((c) => { lastSeenLocalCfg = c; if (id) lastSeenCfgBySid.set(id, c); setLocalCfg(c) })
       .catch(() => {})
   }
   const chooseLocalOption = (configId: string, value: string) => chooseLocalOptions([{ configId, value }])
@@ -651,26 +777,6 @@ export default function AdminMirrorPage() {
   const localModeOpt = localModeGroup?.options?.find((o) => o.value === localModeCurrent)
   const effortCurName = effortGroup?.options?.find((o) => o.value === effortGroup.currentValue)?.name
   const speedCurName = speedGroup?.options?.find((o) => o.value === speedGroup.currentValue)?.name
-  const fusionModels = localCfg?.model?.options.filter((o) => o.value.startsWith('fusion-')) ?? []
-  const plainModels = localCfg?.model?.options.filter((o) => !o.value.startsWith('fusion-')) ?? []
-  // Desktop groups variants of one family into a single row — glm-5-2 +
-  // glm-5-2-1m are one "GLM-5.2" row whose flyout carries the extra toggles.
-  const familyRows = useMemo(() => {
-    const byFam = new Map<string, LocalCfgOption[]>()
-    for (const m of plainModels) {
-      const f = m.family ?? m.value
-      const arr = byFam.get(f) ?? []
-      arr.push(m)
-      byFam.set(f, arr)
-    }
-    const stripName = (n: string) => n.replace(/(\s+(none|min|minimal|low|medium|high|xhigh|max|thinking|fast|1m|priority|lightning))+$/i, '').trim()
-    return [...byFam.entries()].map(([f, ms]) => {
-      ms.sort((a, b) => a.value.length - b.value.length)
-      const base = ms[0]
-      const label = stripName(base.name ?? base.value) || base.name || base.value
-      return { key: f, label, base, siblings: ms.slice(1), known: ms.some((m) => m.family !== undefined) }
-    })
-  }, [plainModels])
   const modelPillLabel = localCfg?.model
     ? (localCfg.model.currentName || 'Model')
       + (EFFORT_SUFFIX_RE.test(localCfg.model.current) && effortCurName ? ` · ${effortCurName}` : '')
@@ -907,7 +1013,23 @@ export default function AdminMirrorPage() {
   const uploadsInFlight = useRef(0)
   const [attachOpen, setAttachOpen] = useState(false)
   const attachMenuRef = useRef<HTMLDivElement | null>(null)
+  // Composer pill collapse — official overflow-hysteresis (see useCollapseLevel):
+  //   0 full labels · 1 icons only · 2 mode+model move into the "+" menu ·
+  //   3 context meter joins them too (mirrors the mobile "+" menu).
+  const [pillRowEl, setPillRowEl] = useState<HTMLDivElement | null>(null)
+  const [pillGroupEl, setPillGroupEl] = useState<HTMLDivElement | null>(null)
+  const pillTier = useCollapseLevel(pillRowEl, pillGroupEl, 3)
   const attachBtnRef = useRef<HTMLButtonElement | null>(null)
+  // Pill menus portal to body (the pill group clips overflow for collapse
+  // measurement, so in-tree absolute menus would be cut off).
+  const sModeBtnRef = useRef<HTMLButtonElement | null>(null)
+  const modelBtnRef = useRef<HTMLButtonElement | null>(null)
+  const sendOptBtnRef = useRef<HTMLButtonElement | null>(null)
+  const agentBtnRef = useRef<HTMLButtonElement | null>(null)
+  // Card element for portaling popups that must paint above the card — the
+  // card is `overflow-hidden` AND lives under the BeardBand `relative z-30`
+  // stacking context, so any in-tree popup is both clipped and out-z'd.
+  const [cardEl, setCardEl] = useState<HTMLDivElement | null>(null)
 
   // Official keyboard semantics (sampled live): menu container takes focus on
   // open; Up/Down cycle menuitems; Right on "Actions" opens the submenu and
@@ -2230,6 +2352,24 @@ const groups = useMemo(() => groupItems(allItems, sessionWorking), [allItems, se
     }).join('\n\n') + (bodyText ? `\n\n${bodyText}` : '')
   }
 
+  // Central send-error surface: every composer catch routes here so failures
+  // get an audit trail in server.log, and the drain 503 becomes a readable
+  // "restarting — waiting on <sessions> · Ns" message instead of a raw string.
+  const reportSendError = (e: unknown, fallback: string) => {
+    const msg = e instanceof Error && e.message ? e.message : fallback
+    void adminFetch('/api/admin/audit', { method: 'POST', body: JSON.stringify({ action: 'send-error', detail: `${id} ${msg}`.slice(0, 280) }) }).catch(() => null)
+    if (msg === 'server_restarting' && !isVisitor) {
+      void adminFetch<{ draining: boolean; waiting: string[]; elapsed_ms: number }>('/api/admin/drain')
+        .then((d) => {
+          if (d.draining) setSendErr(t('composer.drainWait', { sessions: d.waiting.join(', ') || '—', elapsed: Math.max(1, Math.round(d.elapsed_ms / 1000)) }))
+          else setSendErr(t('composer.serverRestarting'))
+        })
+        .catch(() => setSendErr(t('composer.serverRestarting')))
+      return
+    }
+    setSendErr(msg)
+  }
+
   async function send(preset?: string, extraQuotes?: DraftQuote[]) {
     let text = (preset ?? input).trim()
     const quotesNow = extraQuotes ?? draftQuotes
@@ -2273,7 +2413,7 @@ const groups = useMemo(() => groupItems(allItems, sessionWorking), [allItems, se
         setDismissedQ(pending.id)
         setInput('')
       } catch (e) {
-        setSendErr(e instanceof Error && e.message ? e.message : 'Failed to send message. Try again.')
+        reportSendError(e, 'Failed to send message. Try again.')
       } finally { setSending(false) }
       return
     }
@@ -2281,13 +2421,29 @@ const groups = useMemo(() => groupItems(allItems, sessionWorking), [allItems, se
     // text as the task, replay draft config picks onto it, then swap in place
     // (desktop-parity new-session flow; server also applies lastConfig).
     if (isDraft) {
+      // SSH targets must exist server-side (composer-meta.ssh_hosts mirrors
+      // prefs.sshHosts). A stale pick on an older backend would otherwise be
+      // silently created as a LOCAL session in a mangled "~/…" dir.
+      if (draftTarget.kind === 'ssh' && !(composerMeta?.ssh_hosts ?? []).some((h) => h.target === draftTarget.host.target)) {
+        setSendErr(t('draft.sshSaveFail'))
+        return
+      }
       setSending(true)
       setSendErr(null)
       try {
         const task = text.startsWith('/queue ') ? text.slice(7).trim() : text
         const r = await adminFetch<{ ok: boolean; id?: string; error?: string }>('/api/admin/sessions/new', {
           method: 'POST',
-          body: JSON.stringify({ task, folder: draftFolder || undefined, cwd: draftCwd || undefined, agent: draftAgent, attachments: staged.map((f) => ({ url: f.url, name: f.name, size: f.size })) }),
+          body: JSON.stringify({
+            task,
+            folder: draftFolder || undefined,
+            // Local target → picked dir (empty = server default). SSH target →
+            // the remote dir (text input falls back to the host's default).
+            cwd: draftTarget.kind === 'ssh' ? (draftSshCwd.trim() || draftTarget.host.cwd || undefined) : (draftCwd || undefined),
+            ssh: draftTarget.kind === 'ssh' ? draftTarget.host.target : undefined,
+            agent: draftAgent,
+            attachments: staged.map((f) => ({ url: f.url, name: f.name, size: f.size })),
+          }),
         })
         if (!r.ok || !r.id) throw new Error(r.error || 'create failed')
         for (const pick of draftPicks.current) {
@@ -2297,7 +2453,7 @@ const groups = useMemo(() => groupItems(allItems, sessionWorking), [allItems, se
         setInput(''); setStaged([])
         nav(`/admin/${r.id}`, { replace: true })
       } catch (e) {
-        setSendErr(e instanceof Error && e.message ? e.message : t('menu.createFailed'))
+        reportSendError(e, t('menu.createFailed'))
       } finally { setSending(false) }
       return
     }
@@ -2362,7 +2518,7 @@ const groups = useMemo(() => groupItems(allItems, sessionWorking), [allItems, se
       pendingPreviewRef.current = []
       setItems((prev) => prev.filter((it) => it.id !== echo.id))
       if (preset === undefined && !messageSent) { setInput((cur) => cur || draft.input); setStaged((cur) => (cur.length ? cur : draft.staged)); setDraftQuotes((cur) => (cur.length ? cur : draft.quotes)) }
-      setSendErr(e instanceof Error && e.message ? e.message : 'Failed to send message. Try again.')
+      reportSendError(e, 'Failed to send message. Try again.')
     } finally { setSending(false) }
   }
 
@@ -2384,7 +2540,7 @@ const groups = useMemo(() => groupItems(allItems, sessionWorking), [allItems, se
       await reloadTl.current?.()
     } catch (e) {
       setInterrupted(it) // resend failed — put the banner back
-      setSendErr(e instanceof Error && e.message ? e.message : 'Failed to send message. Try again.')
+      reportSendError(e, 'Failed to send message. Try again.')
     }
   }
   const dismissInterrupted = () => {
@@ -2435,7 +2591,7 @@ const groups = useMemo(() => groupItems(allItems, sessionWorking), [allItems, se
       setInput('')
       setControlMsg(t('menu.successorSent'))
     } catch (e) {
-      setSendErr(e instanceof Error && e.message ? e.message : 'Failed to send message. Try again.')
+      reportSendError(e, 'Failed to send message. Try again.')
     } finally { setSending(false) }
   }
 
@@ -2467,7 +2623,7 @@ const groups = useMemo(() => groupItems(allItems, sessionWorking), [allItems, se
       })
       setDismissedQ(pending.id)
     } catch (e) {
-      setSendErr(e instanceof Error && e.message ? e.message : 'Failed to submit answer. Try again.')
+      reportSendError(e, 'Failed to submit answer. Try again.')
     } finally { setSending(false) }
   }
 
@@ -2582,6 +2738,151 @@ const groups = useMemo(() => groupItems(allItems, sessionWorking), [allItems, se
     })
   }
 
+  // Model pill — one render shared by the toolbar right cluster (sessions;
+  // collapse tiers drive icon/text) and the draft chin row (always text).
+  const modelPillEl = (alwaysText: boolean) => {
+    const iconMode = !alwaysText && pillTier >= 1
+    return (
+      <div className="relative">
+        <button
+          ref={modelBtnRef}
+          onClick={() => { setModeOpen((v) => !v); setSModeOpen(false) }}
+          aria-label="Select mode"
+          title={modelPillLabel ?? (cfgFetched ? (VERSION_LABEL[pillVersion] ?? pillVersion) : '…')}
+          className={cn('flex h-7 cursor-pointer items-center overflow-hidden whitespace-nowrap rounded-full text-[13px] leading-[18px] text-muted-foreground hover:bg-tint-secondary hover:text-foreground', iconMode ? 'size-7 justify-center' : 'max-w-[240px] gap-[3px] px-[6px]', modeOpen && 'bg-tint-secondary text-foreground')}
+        >
+          {iconMode && <Sparkles size={18} className="shrink-0" />}
+          {!iconMode && <span className="min-w-0 truncate">{modelPillLabel ?? (cfgFetched ? (VERSION_LABEL[pillVersion] ?? pillVersion) : '…')}</span>}
+        </button>
+        {modeOpen && <div className="fixed inset-0 z-10" onClick={() => setModeOpen(false)} />}
+        {modeOpen && modelBtnRef.current && createPortal(
+          <div role="menu" style={{ bottom: window.innerHeight - modelBtnRef.current.getBoundingClientRect().top + 6, right: window.innerWidth - modelBtnRef.current.getBoundingClientRect().right, maxHeight: modelBtnRef.current.getBoundingClientRect().top - 14 }} className={cn('fixed z-50 flex flex-col overflow-hidden rounded-[10px] bg-[rgba(255,255,255,0.94)] shadow-[0_10px_15px_-3px_rgba(0,0,0,0.1),0_4px_6px_-2px_rgba(0,0,0,0.05)] outline outline-1 outline-black/[0.06] backdrop-blur-[8px] dark:bg-[#1f1f1f]/[0.94] dark:outline-white/[0.06] [transition:transform_40ms_cubic-bezier(0.76,0,0.24,1),scale_40ms_cubic-bezier(0.76,0,0.24,1),opacity_40ms_cubic-bezier(0.76,0,0.24,1)]', localCfg?.model ? 'w-[248px] max-h-[70vh]' : 'w-[220px]', cfgFetched && !localCfg?.model ? 'h-[193px]' : '')}>
+            <div className={cn('min-h-0 flex-1', localCfg?.model ? 'overflow-y-auto' : 'overflow-hidden p-1')}>
+            {localCfg?.model ? (
+              <ModelPicker
+                model={localCfg.model}
+                effortGroup={effortGroup}
+                speedGroup={speedGroup}
+                extraGroups={extraGroups}
+                onPick={chooseLocalOption}
+                onPickMulti={chooseLocalOptions}
+                onClose={() => setModeOpen(false)}
+              />
+            ) : !cfgFetched ? (
+              <div className="flex h-[30px] items-center px-3 text-[13px] text-muted-foreground">{t('common.loading')}</div>
+            ) : (
+            <>
+            {/* Official mode menu: Fusion switch row, capability choices, and
+                Standard/Fast or Standard/Lightning speed submenus. */}
+            <button
+              role="menuitemcheckbox"
+              aria-checked={pillVersion.startsWith('devin-auto')}
+              onMouseEnter={() => setModeSub(null)}
+              onClick={() => { setSelectedVersion(pillVersion.startsWith('devin-auto') ? null : 'devin-auto'); setModeOpen(false) }}
+              className="flex h-[30px] w-full cursor-pointer select-none items-center gap-2 rounded-[6px] px-2 py-[5px] text-[13px] outline-none hover:bg-tint-secondary [&>svg]:size-4 [&>svg]:shrink-0"
+            >
+              <span className={cn('inline-flex h-4 w-[26px] shrink-0 items-center rounded-full border border-border px-px transition-colors', pillVersion.startsWith('devin-auto') ? 'justify-end bg-foreground' : 'justify-start bg-muted')}>
+                <span className="block size-3.5 rounded-full border-[0.5px] border-border bg-white shadow-sm" />
+              </span>
+              <span className="flex flex-1 items-center gap-1">Fusion <span className="cursor-pointer text-[13px] text-blue-500">{t('am.preview')}</span></span>
+            </button>
+            <div role="separator" className="mx-2 my-1 h-px bg-border" />
+            <div className="flex items-center gap-1.5 px-2 py-[5px] pl-[34px]">
+              <span className="flex-1 text-[12px] font-medium text-muted-foreground">{t('am.capability')}</span>
+              <OfficialGlyph svg={MODE_INFO_ICON} className="text-muted-foreground" />
+            </div>
+            {['Ultra', 'Normal', 'Lite', 'SWE-1.7'].map((m) => {
+              const hasSpeed = m === 'Normal' || m === 'SWE-1.7'
+              return (
+                <div key={m} className="relative" onMouseEnter={(e) => hasSpeed ? openModeSub(m, e.currentTarget) : setModeSub(null)} onMouseLeave={() => hasSpeed && closeModeSub()}>
+                  <button
+                    role={hasSpeed ? 'menuitem' : 'menuitemradio'}
+                    aria-checked={hasSpeed ? undefined : mode === m}
+                    aria-haspopup={hasSpeed ? 'menu' : undefined}
+                    onClick={() => { if (!hasSpeed) { setSelectedVersion(versionOf(m, 'Standard')); setModeOpen(false) } }}
+                    className="flex h-[30px] w-full cursor-pointer select-none items-center gap-2 rounded-[6px] px-2 py-[5px] text-[13px] outline-none hover:bg-tint-secondary [&>svg]:size-4 [&>svg]:shrink-0"
+                  >
+                    <span className="flex h-4 w-[18px] shrink-0 items-center justify-center text-muted-foreground">
+                      {mode === m && <OfficialGlyph svg={MODE_CHECK_ICON} />}
+                    </span>
+                    <span className="min-w-0 flex-1 text-left">{m}</span>
+                    {hasSpeed && <OfficialGlyph svg={MENU_CHEVRON_ICON} className="ml-auto text-muted-foreground" />}
+                  </button>
+                  {modeSub === m && modeSubPos && createPortal(
+                    <div role="menu" onMouseEnter={() => { if (modeSubTimer.current) { clearTimeout(modeSubTimer.current); modeSubTimer.current = null } }} onMouseLeave={closeModeSub} style={{ left: modeSubPos.left, top: modeSubPos.top, maxHeight: Math.max(160, window.innerHeight - modeSubPos.top - 8) }} className="fixed z-50 w-[220px] overflow-y-auto rounded-[10px] bg-[rgba(255,255,255,0.94)] p-1 shadow-[0_10px_15px_-3px_rgba(0,0,0,0.1),0_4px_6px_-2px_rgba(0,0,0,0.05)] outline outline-1 outline-black/[0.06] backdrop-blur-[8px] dark:bg-[#1f1f1f]/[0.94] dark:outline-white/[0.06]">
+                      {(m === 'SWE-1.7' ? ['Standard', 'Lightning'] : ['Standard', 'Fast']).map((sp) => (
+                        <button
+                          key={sp}
+                          role="menuitemradio"
+                          aria-checked={mode === m && speed === sp}
+                          onClick={() => { setSelectedVersion(versionOf(m, sp)); setModeSub(null); setModeOpen(false) }}
+                          className="flex h-[30px] w-full cursor-pointer select-none items-center gap-2 rounded-[6px] px-2 py-[5px] text-[13px] outline-none hover:bg-tint-secondary [&>svg]:size-4 [&>svg]:shrink-0"
+                        >
+                          <span className="flex h-4 w-[18px] shrink-0 items-center justify-center text-muted-foreground">
+                            {mode === m && speed === sp && <OfficialGlyph svg={MODE_CHECK_ICON} />}
+                          </span>
+                          <span className="min-w-0 flex-1 text-left">{sp}</span>
+                        </button>
+                      ))}
+                    </div>,
+                    document.body,
+                  )}
+                </div>
+              )
+            })}
+            </>
+            )}
+            </div>
+          </div>,
+          document.body,
+        )}
+      </div>
+    )
+  }
+
+  // Draft agent picker — the outermost layer's bottom-right control (chin),
+  // chromeless like the model pill per the official text-button treatment.
+  const agentPillEl = isDraft && !isVisitor ? (
+    <div className="relative shrink-0">
+      <button
+        ref={agentBtnRef}
+        onClick={() => setAgentMenuOpen((v) => !v)}
+        title={t('draft.agentPick')}
+        className={cn('flex h-7 shrink-0 cursor-pointer items-center gap-[3px] overflow-hidden whitespace-nowrap rounded-full px-[6px] text-[13px] leading-[18px] text-muted-foreground hover:bg-tint-secondary hover:text-foreground', agentMenuOpen && 'bg-tint-secondary text-foreground')}
+      >
+        <Sparkles size={14} className="shrink-0" />{composerMeta?.agents?.find((a) => a.id === draftAgent)?.label ?? draftAgent}
+        <ChevronDown size={11} className="shrink-0 opacity-60" />
+      </button>
+      {agentMenuOpen && agentBtnRef.current && (
+        <>
+          <div className="fixed inset-0 z-40" onClick={() => setAgentMenuOpen(false)} />
+          {createPortal(
+            <div role="menu" style={{ bottom: window.innerHeight - agentBtnRef.current.getBoundingClientRect().top + 8, right: window.innerWidth - agentBtnRef.current.getBoundingClientRect().right, maxHeight: agentBtnRef.current.getBoundingClientRect().top - 14 }} className="fixed z-50 w-[220px] overflow-y-auto rounded-[10px] bg-card shadow-[0_10px_15px_-3px_rgba(0,0,0,0.1)] outline outline-1 outline-black/[0.06] dark:outline-white/[0.06]">
+            <div className="p-1">
+              {(composerMeta?.agents ?? [{ id: 'devin', label: 'Devin Local' }]).map((a) => (
+                <button
+                  key={a.id}
+                  role="menuitem"
+                  onClick={() => { setDraftAgent(a.id); setAgentMenuOpen(false) }}
+                  className="flex w-full cursor-pointer select-none items-center gap-2 rounded-[6px] px-2 py-1.5 text-left text-[13px] hover:bg-accent"
+                >
+                  <Sparkles size={13} className="text-muted-foreground" />
+                  <span className="min-w-0 flex-1 truncate">{a.label}</span>
+                  {a.id === draftAgent && <Check size={13} className="shrink-0" />}
+                </button>
+              ))}
+            </div>
+            <p className="border-t border-border/40 px-3 py-1.5 text-[11px] leading-[14px] text-muted-foreground">
+              {t('draft.agentHint')}
+            </p>
+          </div>,
+          document.body,
+          )}
+        </>
+      )}
+    </div>
+  ) : null
+
   return (
     <div ref={rootRef} className="relative flex h-dvh overflow-hidden bg-background">
 
@@ -2633,11 +2934,11 @@ const groups = useMemo(() => groupItems(allItems, sessionWorking), [allItems, se
                       <Globe size={14} className="text-muted-foreground" /> {i18n.language.startsWith('zh') ? 'English' : '中文'}
                     </button>
                     <div role="separator" className="mx-2 h-[9px] bg-border bg-clip-content py-1" />
-                    <button role="menuitem" onClick={async () => { setOrgMenu(false); if (!confirm(t('menu.restartServiceConfirm'))) return; await adminFetch('/api/admin/restart', { method: 'POST', body: JSON.stringify({}) }).catch(() => null); waitForRestart() }}
+                    <button role="menuitem" onClick={async () => { setOrgMenu(false); if (!confirm(t('menu.restartServiceConfirm'))) return; void adminFetch('/api/admin/audit', { method: 'POST', body: JSON.stringify({ action: 'restart-request' }) }).catch(() => null); await adminFetch('/api/admin/restart', { method: 'POST', body: JSON.stringify({}) }).catch(() => null); waitForRestart() }}
                       className="flex w-full cursor-pointer select-none items-center gap-2 rounded-[6px] px-2 py-1.5 text-left text-[13px] leading-[18px] text-foreground outline-none hover:bg-tint-secondary">
                       <RotateCcw size={14} className="text-muted-foreground" /> {t('menu.restartService')}
                     </button>
-                    <button role="menuitem" onClick={async () => { setOrgMenu(false); if (!confirm(t('menu.redeployConfirm'))) return; await adminFetch('/api/admin/redeploy', { method: 'POST', body: JSON.stringify({}) }).catch(() => null); waitForRestart() }}
+                    <button role="menuitem" onClick={async () => { setOrgMenu(false); if (!confirm(t('menu.redeployConfirm'))) return; void adminFetch('/api/admin/audit', { method: 'POST', body: JSON.stringify({ action: 'redeploy-request' }) }).catch(() => null); await adminFetch('/api/admin/redeploy', { method: 'POST', body: JSON.stringify({}) }).catch(() => null); waitForRestart() }}
                       className="flex w-full cursor-pointer select-none items-center gap-2 rounded-[6px] px-2 py-1.5 text-left text-[13px] leading-[18px] text-foreground outline-none hover:bg-tint-secondary">
                       <RefreshCw size={14} className="text-muted-foreground" /> {t('menu.redeploy')}
                     </button>
@@ -3671,16 +3972,38 @@ const groups = useMemo(() => groupItems(allItems, sessionWorking), [allItems, se
           )}
           <BeardBand
             onBandHeight={setBandH}
-            chin={interrupted || subDead ? (
+            cardRef={setCardEl}
+            wrapClassName={isDraft ? 'max-w-[692px]' : undefined}
+            bareCard={isDraft}
+            chin={isDraft || interrupted || subDead || sendErr || controlMsg || (persona && !isVisitor && !isDraft && (persona.mode !== 'off' || persona.escalated)) || (() => {
+              if (isVisitor || envBannerGone) return false
+              const sug = items.find((it) => it.kind === 'env_suggestion')
+              if (!sug || sug.envSuggestion?.dismissed) return false
+              try { return localStorage.getItem(`env-banner-dismissed:${sug.id}`) !== '1' } catch { return true }
+            })() ? (
               <>
+                {sendErr && (
+                  <BandItem slot="chin">
+                    <div className="flex min-h-7 items-center gap-2 pl-3 pr-1 text-red-500">
+                      <AlertTriangle size={12} className="shrink-0" />
+                      <span className="min-w-0 flex-1 truncate text-[12px] leading-[16px]" title={sendErr}>{sendErr}</span>
+                      <button
+                        onClick={() => void send()}
+                        className="shrink-0 cursor-pointer rounded-[6px] px-1.5 py-0.5 text-[12px] font-medium hover:bg-accent"
+                      >
+                        {t('common.retry')}
+                      </button>
+                    </div>
+                  </BandItem>
+                )}
                 {interrupted && (
-                  <BandItem>
-                    <div className="flex min-h-8 items-center gap-2 py-1 pl-3.5 pr-1 text-amber-600 dark:text-amber-400">
-                      <AlertTriangle size={13} className="shrink-0" />
-                      <span className="min-w-0 flex-1 truncate text-[12px] leading-[16px]" title={interrupted.text}>{t('composer.resumeTurn')} {interrupted.text.slice(0, 80)}</span>
+                  <BandItem slot="chin">
+                    <div className="flex min-h-7 items-center gap-2 pl-3 pr-1 text-amber-600 dark:text-amber-400">
+                      <AlertTriangle size={12} className="shrink-0" />
+                      <span className="min-w-0 flex-1 truncate text-[12px] leading-[16px]" title={interrupted.text}>{t('composer.resumeTurn')}</span>
                       <button
                         onClick={() => void resumeInterrupted()}
-                        className="shrink-0 cursor-pointer rounded-[6px] px-2 py-0.5 text-[12px] font-medium hover:bg-accent"
+                        className="shrink-0 cursor-pointer rounded-[6px] px-1.5 py-0.5 text-[12px] font-medium hover:bg-accent"
                       >
                         {interrupted.kind === 'resend' ? t('common.resend') : t('common.continue')}
                       </button>
@@ -3690,22 +4013,145 @@ const groups = useMemo(() => groupItems(allItems, sessionWorking), [allItems, se
                         title={t('composer.resumeDismiss')}
                         className="flex size-6 shrink-0 cursor-pointer items-center justify-center rounded-[6px] hover:bg-accent"
                       >
-                        <X size={14} />
+                        <X size={13} />
                       </button>
                     </div>
                   </BandItem>
                 )}
                 {subDead && (
-                  <BandItem>
-                    <div className="flex min-h-8 items-center gap-2 py-1 pl-3.5 pr-1 text-muted-foreground">
-                      <AlertTriangle size={13} className="shrink-0" />
+                  <BandItem slot="chin">
+                    <div className="flex min-h-7 items-center gap-2 pl-3 pr-1 text-muted-foreground">
+                      <AlertTriangle size={12} className="shrink-0" />
                       <span className="min-w-0 flex-1 truncate text-[12px] leading-[16px]">{t('tree.handleDead')}</span>
                       <button
                         onClick={() => void respawnSub()}
-                        className="shrink-0 cursor-pointer rounded-[6px] px-2 py-0.5 text-[12px] font-medium hover:bg-accent"
+                        className="shrink-0 cursor-pointer rounded-[6px] px-1.5 py-0.5 text-[12px] font-medium hover:bg-accent"
                       >
                         {t('menu.spawnSuccessor')}
                       </button>
+                    </div>
+                  </BandItem>
+                )}
+                {controlMsg && (
+                  <BandItem slot="chin">
+                    <div className="flex min-h-7 items-center gap-2 pl-3 pr-1 text-muted-foreground">
+                      <span className="min-w-0 flex-1 truncate text-[12px] leading-[16px]" title={controlMsg}>{controlMsg}</span>
+                    </div>
+                  </BandItem>
+                )}
+                {persona && !isVisitor && !isDraft && (persona.mode !== 'off' || persona.escalated) && (
+                  <BandItem slot="chin">
+                    <div className="flex min-h-7 items-center gap-2 pl-3 pr-1 text-muted-foreground">
+                      <button
+                        onClick={() => void cyclePersonaMode()}
+                        title={t('persona.cycleTip')}
+                        className="shrink-0 cursor-pointer rounded-full border border-border px-2 py-0.5 text-[12px] leading-[16px] hover:bg-tint-secondary"
+                      >
+                        🎭 {t('persona.label')} · {t(`persona.${persona.mode}`)}
+                      </button>
+                      {persona.escalated && (
+                        <span className="flex min-w-0 items-center gap-1 text-amber-600 dark:text-amber-400">
+                          <AlertTriangle size={13} className="shrink-0" />
+                          <span className="truncate text-[12px] leading-[16px]">{t('persona.escalated')}</span>
+                        </span>
+                      )}
+                      {persona.mode === 'semi' && !persona.escalated && (
+                        <button
+                          onClick={() => void askPersonaNow()}
+                          disabled={personaBusy}
+                          className="shrink-0 cursor-pointer text-[12px] underline hover:opacity-80 disabled:opacity-50"
+                        >
+                          {personaBusy ? t('persona.asking') : t('persona.ask')}
+                        </button>
+                      )}
+                    </div>
+                  </BandItem>
+                )}
+                {(() => {
+                  if (isVisitor || envBannerGone) return null
+                  const sug = items.find((it) => it.kind === 'env_suggestion')
+                  if (!sug || sug.envSuggestion?.dismissed) return null
+                  let dismissed = false
+                  try { dismissed = localStorage.getItem(`env-banner-dismissed:${sug.id}`) === '1' } catch { /* unavailable */ }
+                  if (dismissed) return null
+                  return (
+                    <BandItem slot="chin">
+                      <div className="flex min-h-7 items-center gap-2 pl-3 pr-1">
+                        <Lightbulb size={13} className="shrink-0 text-muted-foreground" />
+                        <span className="min-w-0 flex-1 truncate text-[12px] leading-[16px]">
+                          <span className="sm:hidden">{t('am.envSuggested')}</span>
+                          <span className="hidden sm:inline">{t('am.envSuggestedLong')}</span>
+                        </span>
+                        <button
+                          type="button"
+                          onClick={() => {
+                            const node = document.querySelector(`[data-eid="${CSS.escape(sug.id)}"]`)
+                            node?.scrollIntoView({ block: 'center', behavior: 'smooth' })
+                          }}
+                          className="shrink-0 cursor-pointer rounded-[6px] px-1.5 py-0.5 text-[12px] font-medium text-blue-500 hover:bg-accent"
+                        >
+                          Review
+                        </button>
+                        <button
+                          type="button"
+                          disabled={!sug.envSuggestion?.contentsKey || envSaveState === 'sending' || envSaveState === 'done'}
+                          title={sug.envSuggestion?.contentsKey ? undefined : t('panel.eventNoContents')}
+                          onClick={() => {
+                            const es = sug.envSuggestion
+                            if (!es?.contentsKey || envSaveState === 'sending' || envSaveState === 'done') return
+                            setEnvSaveState('sending')
+                            adminFetch<{ ok: boolean; error: string | null }>(`/api/admin/session/${id}/env-suggestion-accept`, {
+                              method: 'POST',
+                              body: JSON.stringify({ event_id: sug.id, sink: es.sink, repo: es.repo, title: sug.title, summary: es.summary, contents_key: es.contentsKey, old_contents_key: es.oldContentsKey }),
+                            }).then((r) => setEnvSaveState(r.ok ? 'done' : 'error')).catch(() => setEnvSaveState('error'))
+                          }}
+                          className={cn('shrink-0 rounded-[6px] px-1.5 py-0.5 text-[12px] font-medium', envSaveState === 'error' ? 'cursor-pointer text-red-500 hover:bg-accent' : 'text-blue-500', sug.envSuggestion?.contentsKey && envSaveState === 'idle' ? 'cursor-pointer hover:bg-accent' : envSaveState !== 'error' && 'opacity-50')}
+                        >
+                          {envSaveState === 'sending' ? t('common.saving') : envSaveState === 'done' ? t('menu.savedEnv') : envSaveState === 'error' ? t('menu.retrySaveEnv') : <>{t('common.save')}<span className="hidden sm:inline"> {t('menu.saveToEnvSuffix')}</span></>}
+                        </button>
+                        <button
+                          type="button"
+                          aria-label="Dismiss"
+                          onClick={() => dismissEnvBanner(sug.id)}
+                          className="flex size-6 shrink-0 cursor-pointer items-center justify-center rounded-[6px] text-muted-foreground hover:bg-accent hover:text-foreground"
+                        >
+                          <X size={13} />
+                        </button>
+                      </div>
+                    </BandItem>
+                  )
+                })()}
+                {isDraft && !isVisitor && (
+                  // Draft chin row — official Ask-page bottom strip: run target
+                  // (本地 / SSH host) + workspace picker | agent pill. Lives in
+                  // the wax area, not inside the card (no divider).
+                  <BandItem slot="chin">
+                    <div className="flex min-h-7 w-full min-w-0 items-center gap-2 pl-2 pr-0.5">
+                      <LocalPicker
+                        target={draftTarget}
+                        hosts={composerMeta?.ssh_hosts ?? []}
+                        onChange={setDraftTarget}
+                        onHosts={(h) => setComposerMeta((m) => (m ? { ...m, ssh_hosts: h } : m))}
+                      />
+                      {draftTarget.kind === 'ssh' ? (
+                        <DirPicker
+                          ssh={draftTarget.host.target}
+                          value={draftSshCwd}
+                          onChange={setDraftSshCwd}
+                          repos={[]}
+                          recents={[]}
+                          primaryCwd={draftTarget.host.cwd || '~'}
+                        />
+                      ) : (
+                        <DirPicker
+                          value={draftCwd}
+                          onChange={setDraftCwd}
+                          repos={composerMeta?.repos ?? []}
+                          recents={recentCwds}
+                          primaryCwd={composerMeta?.primary_cwd}
+                        />
+                      )}
+                      <div className="ml-auto flex shrink-0 items-center">{agentPillEl}</div>
                     </div>
                   </BandItem>
                 )}
@@ -3742,7 +4188,7 @@ const groups = useMemo(() => groupItems(allItems, sessionWorking), [allItems, se
                   >
                     <span className="flex size-6 shrink-0 items-center justify-center text-muted-foreground group-hover:hidden" dangerouslySetInnerHTML={{ __html: QUEUE_DASHED_SVG }} />
                     <span className="hidden size-6 shrink-0 items-center justify-center text-muted-foreground group-hover:flex" dangerouslySetInnerHTML={{ __html: QUEUE_DRAG_SVG }} />
-                    <span className="min-w-0 flex-1 truncate">{q.text}</span>
+                    <span className="min-w-0 flex-1 truncate">{queuePreview(q.text)}</span>
                     <button
                       onClick={() => void queueEditStart(q.id, q.text)}
                       aria-label="Edit message"
@@ -3786,8 +4232,8 @@ const groups = useMemo(() => groupItems(allItems, sessionWorking), [allItems, se
               </>
             ) : undefined}
           >
-            {(suggestions.length > 0 || (atCat && trigger?.char === '@')) && (
-              <div role="listbox" className="absolute bottom-full left-0 z-30 mb-1 max-h-[400px] w-[300px] overflow-y-auto rounded-[10px] border border-border bg-card p-1 shadow-lg">
+            {(suggestions.length > 0 || (atCat && trigger?.char === '@')) && cardEl && createPortal(
+              <div role="listbox" style={{ bottom: window.innerHeight - cardEl.getBoundingClientRect().top + 4, left: cardEl.getBoundingClientRect().left, maxHeight: Math.min(400, cardEl.getBoundingClientRect().top - 12) }} className="fixed z-50 w-[300px] overflow-y-auto rounded-[10px] border border-border bg-card p-1 shadow-lg">
                 {atCat && trigger?.char === '@' && (
                   <div className="flex items-baseline justify-between gap-2 px-2 py-1">
                     <span className="text-[12px] font-medium text-muted-foreground">
@@ -3811,10 +4257,11 @@ const groups = useMemo(() => groupItems(allItems, sessionWorking), [allItems, se
                     {s.sub && <span className="truncate text-[12px] text-muted-foreground">{s.sub}</span>}
                   </div>
                 ))}
-              </div>
+              </div>,
+              document.body,
             )}
-            {findings.length > 0 && suggestions.length === 0 && !(atCat && trigger?.char === '@') && (
-              <div className="pointer-events-none absolute left-0 right-0 z-10 flex flex-col items-center gap-2 px-2" style={{ bottom: 'calc(100% + 8px)' }}>
+            {findings.length > 0 && suggestions.length === 0 && !(atCat && trigger?.char === '@') && cardEl && createPortal(
+              <div className="pointer-events-none fixed z-50 flex flex-col items-center gap-2 px-2" style={{ bottom: window.innerHeight - cardEl.getBoundingClientRect().top + 8, left: cardEl.getBoundingClientRect().left, width: cardEl.getBoundingClientRect().width }}>
                 <div className="pointer-events-auto flex max-w-full items-center gap-1.5 rounded-full bg-foreground px-3 py-1.5 text-background shadow-lg">
                   <span className="flex min-w-0 items-center gap-1">
                     <span className="truncate text-[12px] leading-4">
@@ -3909,7 +4356,8 @@ const groups = useMemo(() => groupItems(allItems, sessionWorking), [allItems, se
                     </button>
                   ) : null}
                 </div>
-              </div>
+              </div>,
+              document.body,
             )}
             {confirmSendOpen && (
               /* Official (bundle-sampled): warning_and_modal precheck mode opens a confirm
@@ -3986,19 +4434,6 @@ const groups = useMemo(() => groupItems(allItems, sessionWorking), [allItems, se
                 </div>
               </div>
             )}
-            {isDraft && !draftTipGone && (
-              // Desktop "Tip: New space (Ctrl+N)" — plain text row, no icon.
-              <div className="mb-2 flex w-full items-center gap-2 text-[12px] leading-[16px] text-muted-foreground">
-                <span className="min-w-0 flex-1 text-left">{t('draft.tip')}</span>
-                <button
-                  onClick={() => { try { localStorage.setItem('dw-draft-tip', '1') } catch { /* unavailable */ } setDraftTipGone(true) }}
-                  aria-label="Dismiss tip"
-                  className="shrink-0 cursor-pointer rounded p-0.5 hover:bg-accent hover:text-foreground"
-                >
-                  <X size={13} />
-                </button>
-              </div>
-            )}
             {draftQuotes.length > 0 && (
               <div className="flex flex-wrap gap-1.5 px-1 pt-1">
                 {draftQuotes.map((q, i) => (
@@ -4020,7 +4455,7 @@ const groups = useMemo(() => groupItems(allItems, sessionWorking), [allItems, se
                 {staged.map((f) => (
                   isStagedImage(f) ? (
                     <div key={f.url} className="group/attachment relative size-9 shrink-0">
-                      <img
+                      <LightboxImage
                         src={f.preview || attachmentUrl(id, f.url, mediaTok)}
                         alt={f.name}
                         className="size-9 rounded-[6px] object-cover"
@@ -4048,15 +4483,15 @@ const groups = useMemo(() => groupItems(allItems, sessionWorking), [allItems, se
                 ))}
               </div>
             )}
-            {/* Desktop New-Space parity: inner composer card nested inside the
-                outer card (tip + controls are the outer card's rows). */}
+            {/* Draft is two layers only: the gray wax + this one inner surface
+                (the outer card renders bare via BeardBand bareCard). */}
             <div className={cn(isDraft && 'rounded-[14px] border border-border bg-background p-1.5')}>
             {caps.canSendMessage ? (<>
             <ComposerEditor
               ref={editorRef}
               className={cn('bg-transparent', isDraft && 'min-h-[44px]')}
               disabled={statusState.inputDisabled || sending}
-              placeholder={pending ? t('composer.respondPending') : isDraft ? t('st.message') : stText(t, statusState.placeholder)}
+              placeholder={pending ? t('composer.respondPending') : isDraft ? t('draft.message') : stText(t, statusState.placeholder)}
               placeholderNode={!pending && statusState.enum === 'working' && !isVisitor ? QUEUE_PLACEHOLDER : undefined}
               value={input}
               onChange={setInput}
@@ -4079,13 +4514,25 @@ const groups = useMemo(() => groupItems(allItems, sessionWorking), [allItems, se
                   e.preventDefault()
                   const text = input.trim()
                   setInput('')
-                  void queueSend(text)
+                  // workSend 'interrupt': Ctrl+Enter sends NOW (cancels the live
+                  // turn, settle→flush fires it); 'queue' parks it (default).
+                  if (workSend === 'interrupt') void queueOpReq({ op: 'send_now', message: text })
+                  else void queueSend(text)
                   return
                 }
                 if (e.key === 'Enter' && !e.shiftKey && !e.nativeEvent.isComposing) {
                   const mod = e.ctrlKey || e.metaKey
                   // sendWith 'ctrlenter': Enter inserts a newline, Ctrl+Enter sends.
-                  if (sendWith === 'ctrlenter' ? mod : !mod) { e.preventDefault(); void send() }
+                  if (sendWith === 'ctrlenter' ? mod : !mod) {
+                    e.preventDefault()
+                    // workSend 'interrupt' reroutes the normal send to send_now
+                    // while a turn is live (plain /message would auto-queue).
+                    if (statusState.enum === 'working' && workSend === 'interrupt' && input.trim()) {
+                      const text = input.trim()
+                      setInput('')
+                      void queueOpReq({ op: 'send_now', message: text })
+                    } else void send()
+                  }
                 }
               }}
             />
@@ -4093,8 +4540,8 @@ const groups = useMemo(() => groupItems(allItems, sessionWorking), [allItems, se
                 glyphs, mode pill h-7 rounded-full 1px border px-1.5 13/18, right cluster gap-1 with mic +
                 a rounded-full foreground send group (opacity .5 when disabled) whose ⌄ split segment only
                 expands once there is text. */}
-            <div className="relative flex min-h-7 items-center justify-between gap-2">
-              <div className={cn('flex min-w-0 flex-1 items-center gap-px', voiceRecording && 'invisible')}>
+            <div ref={setPillRowEl} className="relative flex min-h-7 items-center justify-between gap-2">
+              <div className={cn('flex shrink-0 items-center gap-px', voiceRecording && 'invisible')}>
               {!isVisitor && <div className="relative">
                 <button
                   ref={attachBtnRef}
@@ -4102,19 +4549,21 @@ const groups = useMemo(() => groupItems(allItems, sessionWorking), [allItems, se
                   disabled={uploading}
                   aria-label="Attach or mention"
                   title="Attach or mention"
-                  className="flex size-7 cursor-pointer items-center justify-center rounded-full text-muted-foreground hover:bg-accent hover:text-foreground disabled:opacity-50"
+                  className="flex size-7 cursor-pointer items-center justify-center rounded-full text-muted-foreground hover:bg-tint-secondary hover:text-foreground disabled:opacity-50"
                 >
                   {uploading ? <Loader2 size={18} className="animate-spin" /> : <Plus size={18} />}
                 </button>
                 {attachOpen && (
                   <>
                     <div className="fixed inset-0 z-10" onClick={() => setAttachOpen(false)} />
+                    {attachBtnRef.current && createPortal(
                     <div
                       role="menu"
                       tabIndex={-1}
                       ref={(el) => { attachMenuRef.current = el; el?.focus() }}
                       onKeyDown={attachMenuKeyDown}
-                      className="absolute bottom-8 left-0 z-20 flex max-h-[min(var(--available-height),400px)] w-[220px] flex-col overflow-hidden rounded-[10px] bg-[rgba(255,255,255,0.94)] shadow-[0_10px_15px_-3px_rgba(0,0,0,0.1),0_4px_6px_-2px_rgba(0,0,0,0.05)] outline outline-1 outline-black/[0.06] backdrop-blur-[8px] focus:outline-none dark:bg-[#1f1f1f]/[0.94] dark:outline-white/[0.06] [transition:transform_40ms_cubic-bezier(0.76,0,0.24,1),scale_40ms_cubic-bezier(0.76,0,0.24,1),opacity_40ms_cubic-bezier(0.76,0,0.24,1)]"
+                      style={{ bottom: window.innerHeight - attachBtnRef.current.getBoundingClientRect().top + 6, left: attachBtnRef.current.getBoundingClientRect().left, maxHeight: Math.min(400, attachBtnRef.current.getBoundingClientRect().top - 14) }}
+                      className="fixed z-50 flex w-[220px] flex-col overflow-hidden rounded-[10px] bg-[rgba(255,255,255,0.94)] shadow-[0_10px_15px_-3px_rgba(0,0,0,0.1),0_4px_6px_-2px_rgba(0,0,0,0.05)] outline outline-1 outline-black/[0.06] backdrop-blur-[8px] focus:outline-none dark:bg-[#1f1f1f]/[0.94] dark:outline-white/[0.06] [transition:transform_40ms_cubic-bezier(0.76,0,0.24,1),scale_40ms_cubic-bezier(0.76,0,0.24,1),opacity_40ms_cubic-bezier(0.76,0,0.24,1)]"
                     >
                       <div className="min-h-0 flex-1 overflow-hidden p-1">
                         {/* Official Attach or mention menu (sampled live 2026-08-31): Upload attachment + 8 mention categories. */}
@@ -4147,14 +4596,15 @@ const groups = useMemo(() => groupItems(allItems, sessionWorking), [allItems, se
                             {label}
                           </button>
                         ))}
-                        {/* On mobile the mode/model pills are hidden for width —
-                            their menus open from here instead. */}
-                        <div role="separator" className="mx-2 h-[9px] bg-border bg-clip-content py-1 md:hidden" />
-                        {localModeGroup && (localModeGroup.options?.length ?? 0) > 0 && (
+                        {/* When the pills collapse into this menu (narrow composer
+                            — pillTier≥2, or any sub-md width) their entries open
+                            the same dropdowns from here. */}
+                        {pillTier >= 2 && <div role="separator" className="mx-2 h-[9px] bg-border bg-clip-content py-1" />}
+                        {pillTier >= 2 && localModeGroup && (localModeGroup.options?.length ?? 0) > 0 && (
                           <button
                             role="menuitem"
                             onClick={() => { setAttachOpen(false); setSModeOpen(true) }}
-                            className="flex w-full cursor-pointer select-none items-center gap-2 rounded-[6px] px-2 py-1.5 text-left text-[13px] leading-[18px] outline-none hover:bg-tint-secondary md:hidden [&>svg]:size-4 [&>svg]:shrink-0"
+                            className="flex w-full cursor-pointer select-none items-center gap-2 rounded-[6px] px-2 py-1.5 text-left text-[13px] leading-[18px] outline-none hover:bg-tint-secondary [&>svg]:size-4 [&>svg]:shrink-0"
                           >
                             <span className="flex size-4 shrink-0 items-center justify-center text-muted-foreground">
                               {LOCAL_MODE_ICONS[String(localModeOpt?._meta?.['cognition.ai/icon'] ?? '')] ?? <Settings2 size={16} />}
@@ -4163,17 +4613,30 @@ const groups = useMemo(() => groupItems(allItems, sessionWorking), [allItems, se
                             <span className="ml-auto truncate text-[11px] text-muted-foreground">{localModeOpt?.name ?? localModeCurrent}</span>
                           </button>
                         )}
-                        <button
-                          role="menuitem"
-                          onClick={() => { setAttachOpen(false); setModeOpen(true) }}
-                          className="flex w-full cursor-pointer select-none items-center gap-2 rounded-[6px] px-2 py-1.5 text-left text-[13px] leading-[18px] outline-none hover:bg-tint-secondary md:hidden [&>svg]:size-4 [&>svg]:shrink-0"
-                        >
-                          <Settings2 size={16} className="text-muted-foreground" />
-                          Model
-                          <span className="ml-auto truncate text-[11px] text-muted-foreground">{modelPillLabel ?? (cfgReady ? (VERSION_LABEL[pillVersion] ?? pillVersion) : '…')}</span>
-                        </button>
+                        {pillTier >= 2 && (
+                          <button
+                            role="menuitem"
+                            onClick={() => { setAttachOpen(false); setModeOpen(true) }}
+                            className="flex w-full cursor-pointer select-none items-center gap-2 rounded-[6px] px-2 py-1.5 text-left text-[13px] leading-[18px] outline-none hover:bg-tint-secondary [&>svg]:size-4 [&>svg]:shrink-0"
+                          >
+                            <Sparkles size={16} className="text-muted-foreground" />
+                            Model
+                            <span className="ml-auto truncate text-[11px] text-muted-foreground">{modelPillLabel ?? (cfgFetched ? (VERSION_LABEL[pillVersion] ?? pillVersion) : '…')}</span>
+                          </button>
+                        )}
+                        {pillTier >= 3 && detail?.session.context_usage?.used != null && detail.session.context_usage.size ? (
+                          <div className="flex w-full select-none items-center gap-2 rounded-[6px] px-2 py-1.5 text-left text-[13px] leading-[18px] text-muted-foreground">
+                            <span className="inline-block h-1.5 w-8 shrink-0 overflow-hidden rounded-full bg-muted">
+                              <span className="block h-full rounded-full bg-emerald-500" style={{ width: `${Math.min(100, Math.round((detail.session.context_usage.used! / detail.session.context_usage.size!) * 100))}%` }} />
+                            </span>
+                            Context
+                            <span className="ml-auto truncate text-[11px] text-muted-foreground">{detail.session.context_usage.used!.toLocaleString()}/{detail.session.context_usage.size!.toLocaleString()}</span>
+                          </div>
+                        ) : null}
                       </div>
-                    </div>
+                    </div>,
+                    document.body,
+                    )}
                   </>
                 )}
                 <input
@@ -4197,7 +4660,7 @@ const groups = useMemo(() => groupItems(allItems, sessionWorking), [allItems, se
                     disabled={uploading}
                     aria-label="Upload attachment"
                     title="Upload attachment"
-                    className="flex size-7 cursor-pointer items-center justify-center rounded-full text-muted-foreground hover:bg-accent hover:text-foreground disabled:opacity-50"
+                    className="flex size-7 cursor-pointer items-center justify-center rounded-full text-muted-foreground hover:bg-tint-secondary hover:text-foreground disabled:opacity-50"
                   >
                     {uploading ? <Loader2 size={18} className="animate-spin" /> : <Plus size={18} />}
                   </button>
@@ -4209,22 +4672,29 @@ const groups = useMemo(() => groupItems(allItems, sessionWorking), [allItems, se
                   />
                 </div>
               )}
-              {!isVisitor && localModeGroup && (localModeGroup.options?.length ?? 0) > 0 && (
+              </div>
+              <div className="flex min-w-0 items-center gap-1">
+                <div ref={setPillGroupEl} className="flex min-w-0 items-center gap-px overflow-hidden [&>*]:!shrink-0">
+              {!isVisitor && localModeGroup && (localModeGroup.options?.length ?? 0) > 0 && pillTier < 2 && (
                 <div className="relative">
                   <button
+                    ref={sModeBtnRef}
                     onClick={() => { setSModeOpen((v) => !v); setModeOpen(false) }}
                     aria-label="Session mode"
-                    title="Session mode"
-                    className={cn('hidden h-7 max-w-full cursor-pointer items-center gap-1 overflow-hidden whitespace-nowrap rounded-full px-1.5 text-[13px] leading-[18px] md:flex', sModeOpen ? 'bg-accent text-foreground' : 'text-muted-foreground hover:bg-accent hover:text-foreground')}
+                    title={localModeOpt?.name ?? localModeCurrent ?? 'Session mode'}
+                    className={cn('flex h-7 cursor-pointer items-center overflow-hidden whitespace-nowrap rounded-full text-[13px] leading-[18px] text-muted-foreground hover:bg-tint-secondary hover:text-foreground', pillTier >= 1 ? 'size-7 justify-center' : 'max-w-[220px] gap-1 px-[6px]', sModeOpen && 'bg-tint-secondary text-foreground')}
                   >
-                    <span className="flex size-4 shrink-0 items-center justify-center">
-                      {LOCAL_MODE_ICONS[String(localModeOpt?._meta?.['cognition.ai/icon'] ?? '')] ?? <Settings2 size={16} />}
-                    </span>
-                    <span className="min-w-0 truncate">{localModeOpt?.name ?? localModeCurrent ?? 'Mode'}</span>
+                    {pillTier >= 1 ? (
+                      <span className="flex size-[18px] shrink-0 items-center justify-center">
+                        {LOCAL_MODE_ICONS[String(localModeOpt?._meta?.['cognition.ai/icon'] ?? '')] ?? <Settings2 size={18} />}
+                      </span>
+                    ) : (
+                      <span className="min-w-0 truncate">{localModeOpt?.name ?? localModeCurrent ?? 'Mode'}</span>
+                    )}
                   </button>
                   {sModeOpen && <div className="fixed inset-0 z-10" onClick={() => setSModeOpen(false)} />}
-                  {sModeOpen && (
-                    <div role="menu" className="absolute bottom-8 left-0 z-20 flex w-[260px] flex-col overflow-hidden rounded-[10px] bg-[rgba(255,255,255,0.94)] shadow-[0_10px_15px_-3px_rgba(0,0,0,0.1),0_4px_6px_-2px_rgba(0,0,0,0.05)] outline outline-1 outline-black/[0.06] backdrop-blur-[8px] dark:bg-[#1f1f1f]/[0.94] dark:outline-white/[0.06]">
+                  {sModeOpen && sModeBtnRef.current && createPortal(
+                    <div role="menu" style={{ bottom: window.innerHeight - sModeBtnRef.current.getBoundingClientRect().top + 6, right: window.innerWidth - sModeBtnRef.current.getBoundingClientRect().right, maxHeight: sModeBtnRef.current.getBoundingClientRect().top - 14 }} className="fixed z-50 flex w-[260px] flex-col overflow-hidden rounded-[10px] bg-[rgba(255,255,255,0.94)] shadow-[0_10px_15px_-3px_rgba(0,0,0,0.1),0_4px_6px_-2px_rgba(0,0,0,0.05)] outline outline-1 outline-black/[0.06] backdrop-blur-[8px] dark:bg-[#1f1f1f]/[0.94] dark:outline-white/[0.06]">
                       <div className="min-h-0 flex-1 overflow-y-auto p-1">
                         <div className="px-2 py-[5px] text-[11px] font-medium uppercase tracking-wide text-muted-foreground">{localModeGroup.name ?? 'Session Mode'}</div>
                         {localModeGroup.options!.map((opt) => {
@@ -4251,326 +4721,22 @@ const groups = useMemo(() => groupItems(allItems, sessionWorking), [allItems, se
                           )
                         })}
                       </div>
-                    </div>
+                    </div>,
+                    document.body,
                   )}
                 </div>
               )}
-              {!isVisitor && <div className="relative">
-                <button
-                  onClick={() => { setModeOpen((v) => !v); setSModeOpen(false) }}
-                  aria-label="Select mode"
-                  className={cn('hidden h-7 max-w-full cursor-pointer items-center gap-[3px] overflow-hidden whitespace-nowrap rounded-full px-1.5 text-[13px] leading-[18px] md:flex', modeOpen ? 'bg-accent text-foreground' : 'text-muted-foreground hover:bg-accent hover:text-foreground')}
-                >
-                  <span className="min-w-0 truncate">{modelPillLabel ?? (cfgReady ? (VERSION_LABEL[pillVersion] ?? pillVersion) : '…')}</span>
-                </button>
-                {modeOpen && <div className="fixed inset-0 z-10" onClick={() => setModeOpen(false)} />}
-                {modeOpen && (
-                  <div role="menu" className={cn('absolute bottom-8 left-0 z-20 flex w-[220px] flex-col overflow-hidden rounded-[10px] bg-[rgba(255,255,255,0.94)] shadow-[0_10px_15px_-3px_rgba(0,0,0,0.1),0_4px_6px_-2px_rgba(0,0,0,0.05)] outline outline-1 outline-black/[0.06] backdrop-blur-[8px] dark:bg-[#1f1f1f]/[0.94] dark:outline-white/[0.06] [transition:transform_40ms_cubic-bezier(0.76,0,0.24,1),scale_40ms_cubic-bezier(0.76,0,0.24,1),opacity_40ms_cubic-bezier(0.76,0,0.24,1)]', localCfg?.model ? 'max-h-[70vh]' : cfgReady ? 'h-[193px]' : '')}>
-                    <div className={cn('min-h-0 flex-1 p-1', localCfg?.model ? 'overflow-y-auto' : 'overflow-hidden')}>
-                    {localCfg?.model ? (
-                      /* Desktop capability picker: model families in the left
-                         column; effort-capable rows open a "Reasoning Effort" +
-                         "Speed" flyout (ACP thought_level/speed groups), Fusion
-                         combos collapse into one row like the capability card. */
-                      <>
-                        {familyRows.map((row) => {
-                          const famOpts = [row.base, ...row.siblings]
-                          const isCur = famOpts.some((m) => localCfg.model!.current === m.value)
-                          const supportsImg = famOpts.some((m) => m._meta?.['cognition.ai/supportsImages'] === true)
-                          const subKey = `model:${row.key}`
-                          // Per-family data from the catalog: effort levels are
-                          // the family set ∩ agent thought_level; Speed shows
-                          // only when the family really has Fast Mode — e.g.
-                          // gemini/glm/deepseek/grok/nemotron do NOT.
-                          const famEfforts = new Set(famOpts.flatMap((m) => m.efforts ?? []))
-                          // effortCtl=false on a catalog-known family means the
-                          // family really has no effort control (kimi-k2-*) —
-                          // hide the section instead of offering global levels.
-                          const famEffortCtl = !row.known || famOpts.some((m) => m.effortCtl)
-                          const effortOpts = famEffortCtl
-                            ? (effortGroup?.options ?? []).filter((o) => !famEfforts.size || famEfforts.has(o.value))
-                            : []
-                          const showSpeed = (speedGroup?.options?.length ?? 0) > 0 && (!row.known || famOpts.some((m) => m.fast))
-                          // `-fast` sibling variants duplicate what the Speed
-                          // section already offers — don't list them twice.
-                          const sibOpts = showSpeed ? row.siblings.filter((v) => !/-fast$/.test(v.value)) : row.siblings
-                          const hasSub = (effortOpts.length > 0 || showSpeed || sibOpts.length > 0)
-                            && (row.known || EFFORT_SUFFIX_RE.test(row.base.value))
-                          return (
-                            <div
-                              key={row.key}
-                              onMouseEnter={(e) => { if (hasSub) openModeSub(subKey, e.currentTarget); else setModeSub(null) }}
-                              onMouseLeave={closeModeSub}
-                            >
-                              <button
-                                role={hasSub ? 'menuitem' : 'menuitemradio'}
-                                aria-checked={hasSub ? undefined : isCur}
-                                aria-haspopup={hasSub ? 'menu' : undefined}
-                                onClick={(e) => { if (hasSub) openModeSub(subKey, e.currentTarget.parentElement ?? e.currentTarget); else chooseLocalOption(localCfg.model!.id, row.base.value) }}
-                                className="flex h-[30px] w-full cursor-pointer select-none items-center gap-2 rounded-[6px] px-2 py-[5px] text-[13px] outline-none hover:bg-tint-secondary"
-                              >
-                                <span className="flex h-4 w-[18px] shrink-0 items-center justify-center text-muted-foreground">
-                                  {isCur && <OfficialGlyph svg={MODE_CHECK_ICON} />}
-                                </span>
-                                <span className="min-w-0 flex-1 truncate text-left">{row.label}</span>
-                                {supportsImg && <ImageIcon size={13} className="shrink-0 text-muted-foreground" />}
-                                {hasSub && <OfficialGlyph svg={MENU_CHEVRON_ICON} className="ml-auto shrink-0 text-muted-foreground" />}
-                              </button>
-                              {modeSub === subKey && modeSubPos && createPortal(
-                                <div
-                                  role="menu"
-                                  onMouseEnter={() => { if (modeSubTimer.current) { clearTimeout(modeSubTimer.current); modeSubTimer.current = null } }}
-                                  onMouseLeave={closeModeSub}
-                                  style={{ left: modeSubPos.left, top: modeSubPos.top, maxHeight: Math.max(160, window.innerHeight - modeSubPos.top - 8) }}
-                                  className="fixed z-50 w-[220px] overflow-y-auto rounded-[10px] bg-[rgba(255,255,255,0.94)] p-1 shadow-[0_10px_15px_-3px_rgba(0,0,0,0.1),0_4px_6px_-2px_rgba(0,0,0,0.05)] outline outline-1 outline-black/[0.06] backdrop-blur-[8px] dark:bg-[#1f1f1f]/[0.94] dark:outline-white/[0.06]"
-                                >
-                                  {effortOpts.length > 0 && (
-                                    <>
-                                      <div className="px-2 py-[5px] text-[11px] font-medium uppercase tracking-wide text-muted-foreground">{t('am.reasoningEffort')}</div>
-                                      {effortOpts.map((lvl) => (
-                                        <button
-                                          key={lvl.value}
-                                          role="menuitemradio"
-                                          aria-checked={effortGroup!.currentValue === lvl.value}
-                                          onClick={() => chooseLocalOptions([
-                                            { configId: localCfg.model!.id, value: row.base.value },
-                                            { configId: String(effortGroup!.id), value: lvl.value },
-                                          ])}
-                                          className="flex h-[30px] w-full cursor-pointer select-none items-center gap-2 rounded-[6px] px-2 py-[5px] text-[13px] outline-none hover:bg-tint-secondary [&>svg]:size-4 [&>svg]:shrink-0"
-                                        >
-                                          <span className="flex h-4 w-[18px] shrink-0 items-center justify-center text-muted-foreground">
-                                            {effortGroup!.currentValue === lvl.value && <OfficialGlyph svg={MODE_CHECK_ICON} />}
-                                          </span>
-                                          <span className="min-w-0 flex-1 truncate text-left">{lvl.name || lvl.value}</span>
-                                        </button>
-                                      ))}
-                                    </>
-                                  )}
-                                  {sibOpts.length > 0 && (
-                                    <>
-                                      {effortOpts.length > 0 && <div role="separator" className="mx-2 my-1 h-px bg-border" />}
-                                      <div className="px-2 py-[5px] text-[11px] font-medium uppercase tracking-wide text-muted-foreground">{t('am.variants')}</div>
-                                      {[row.base, ...sibOpts].map((v) => (
-                                        <button
-                                          key={v.value}
-                                          role="menuitemradio"
-                                          aria-checked={localCfg.model!.current === v.value}
-                                          onClick={() => chooseLocalOption(localCfg.model!.id, v.value)}
-                                          className="flex h-[30px] w-full cursor-pointer select-none items-center gap-2 rounded-[6px] px-2 py-[5px] text-[13px] outline-none hover:bg-tint-secondary [&>svg]:size-4 [&>svg]:shrink-0"
-                                        >
-                                          <span className="flex h-4 w-[18px] shrink-0 items-center justify-center text-muted-foreground">
-                                            {localCfg.model!.current === v.value && <OfficialGlyph svg={MODE_CHECK_ICON} />}
-                                          </span>
-                                          <span className="min-w-0 flex-1 truncate text-left">{v === row.base ? 'Standard' : (v.name ?? v.value).replace(row.label, '').replace(/\b(none|min|minimal|low|medium|high|xhigh|max)\b/gi, '').trim() || v.name || v.value}</span>
-                                        </button>
-                                      ))}
-                                    </>
-                                  )}
-                                  {showSpeed && (
-                                    <>
-                                      {(effortOpts.length > 0 || sibOpts.length > 0) && <div role="separator" className="mx-2 my-1 h-px bg-border" />}
-                                      <div className="px-2 py-[5px] text-[11px] font-medium uppercase tracking-wide text-muted-foreground">{t('am.speed')}</div>
-                                      {speedGroup!.options!.map((sp) => (
-                                        <button
-                                          key={sp.value}
-                                          role="menuitemradio"
-                                          aria-checked={speedGroup!.currentValue === sp.value}
-                                          onClick={() => chooseLocalOptions([
-                                            { configId: localCfg.model!.id, value: row.base.value },
-                                            { configId: String(speedGroup!.id), value: sp.value },
-                                          ])}
-                                          className="flex h-[30px] w-full cursor-pointer select-none items-center gap-2 rounded-[6px] px-2 py-[5px] text-[13px] outline-none hover:bg-tint-secondary [&>svg]:size-4 [&>svg]:shrink-0"
-                                        >
-                                          <span className="flex h-4 w-[18px] shrink-0 items-center justify-center text-muted-foreground">
-                                            {speedGroup!.currentValue === sp.value && <OfficialGlyph svg={MODE_CHECK_ICON} />}
-                                          </span>
-                                          <span className="min-w-0 flex-1 truncate text-left">{sp.name || sp.value}</span>
-                                        </button>
-                                      ))}
-                                    </>
-                                  )}
-                                </div>,
-                                document.body,
-                              )}
-                            </div>
-                          )
-                        })}
-                        {fusionModels.length > 0 && (
-                          <div
-                            onMouseEnter={(e) => openModeSub('fusion', e.currentTarget)}
-                            onMouseLeave={closeModeSub}
-                          >
-                            <div role="separator" className="mx-2 my-1 h-px bg-border" />
-                            <button
-                              role="menuitem"
-                              aria-haspopup="menu"
-                              onClick={(e) => openModeSub('fusion', e.currentTarget.parentElement ?? e.currentTarget)}
-                              className="flex h-[30px] w-full cursor-pointer select-none items-center gap-2 rounded-[6px] px-2 py-[5px] text-[13px] outline-none hover:bg-tint-secondary"
-                            >
-                              <span className="flex h-4 w-[18px] shrink-0 items-center justify-center text-muted-foreground">
-                                {localCfg.model!.current.startsWith('fusion-') && <OfficialGlyph svg={MODE_CHECK_ICON} />}
-                              </span>
-                              <span className="min-w-0 flex-1 truncate text-left">Fusion</span>
-                              <OfficialGlyph svg={MENU_CHEVRON_ICON} className="ml-auto shrink-0 text-muted-foreground" />
-                            </button>
-                            {modeSub === 'fusion' && modeSubPos && createPortal(
-                              <div
-                                role="menu"
-                                onMouseEnter={() => { if (modeSubTimer.current) { clearTimeout(modeSubTimer.current); modeSubTimer.current = null } }}
-                                onMouseLeave={closeModeSub}
-                                style={{ left: modeSubPos.left, top: modeSubPos.top, maxHeight: Math.max(160, window.innerHeight - modeSubPos.top - 8) }}
-                                className="fixed z-50 w-[300px] overflow-y-auto rounded-[10px] bg-[rgba(255,255,255,0.94)] p-1 shadow-[0_10px_15px_-3px_rgba(0,0,0,0.1),0_4px_6px_-2px_rgba(0,0,0,0.05)] outline outline-1 outline-black/[0.06] backdrop-blur-[8px] dark:bg-[#1f1f1f]/[0.94] dark:outline-white/[0.06]"
-                              >
-                                <div className="px-2 py-[5px] text-[11px] font-medium uppercase tracking-wide text-muted-foreground">Fusion</div>
-                                {fusionModels.map((opt) => (
-                                  <button
-                                    key={opt.value}
-                                    role="menuitemradio"
-                                    aria-checked={localCfg.model!.current === opt.value}
-                                    onClick={() => chooseLocalOption(localCfg.model!.id, opt.value)}
-                                    className="flex h-[30px] w-full cursor-pointer select-none items-center gap-2 rounded-[6px] px-2 py-[5px] text-[13px] outline-none hover:bg-tint-secondary [&>svg]:size-4 [&>svg]:shrink-0"
-                                  >
-                                    <span className="flex h-4 w-[18px] shrink-0 items-center justify-center text-muted-foreground">
-                                      {localCfg.model!.current === opt.value && <OfficialGlyph svg={MODE_CHECK_ICON} />}
-                                    </span>
-                                    <span className="min-w-0 flex-1 truncate text-left">{(opt.name || opt.value).replace(/^Fusion\s*\((.*)\)$/, '$1')}</span>
-                                  </button>
-                                ))}
-                              </div>,
-                              document.body,
-                            )}
-                          </div>
-                        )}
-                        {extraGroups.map((o) => {
-                          const gid = String(o.id ?? '')
-                          const current = String(o.currentValue ?? '')
-                          const currentName = o.options!.find((x) => x.value === current)?.name ?? current
-                          return (
-                            <div
-                              key={gid}
-                              onMouseEnter={(e) => openModeSub(`grp:${gid}`, e.currentTarget)}
-                              onMouseLeave={closeModeSub}
-                            >
-                              <div role="separator" className="mx-2 my-1 h-px bg-border" />
-                              <button
-                                role="menuitem"
-                                aria-haspopup="menu"
-                                onClick={(e) => openModeSub(`grp:${gid}`, e.currentTarget.parentElement ?? e.currentTarget)}
-                                className="flex h-[30px] w-full cursor-pointer select-none items-center gap-2 rounded-[6px] px-2 py-[5px] text-[13px] outline-none hover:bg-tint-secondary"
-                              >
-                                <span className="flex h-4 w-[18px] shrink-0 items-center justify-center" />
-                                <span className="flex min-w-0 flex-1 items-baseline gap-2 text-left">
-                                  <span className="shrink-0">{o.name ?? gid}</span>
-                                  <span className="min-w-0 truncate text-[12px] text-muted-foreground">{currentName || '—'}</span>
-                                </span>
-                                <OfficialGlyph svg={MENU_CHEVRON_ICON} className="ml-auto shrink-0 text-muted-foreground" />
-                              </button>
-                              {modeSub === `grp:${gid}` && modeSubPos && createPortal(
-                                <div
-                                  role="menu"
-                                  onMouseEnter={() => { if (modeSubTimer.current) { clearTimeout(modeSubTimer.current); modeSubTimer.current = null } }}
-                                  onMouseLeave={closeModeSub}
-                                  style={{ left: modeSubPos.left, top: modeSubPos.top, maxHeight: Math.max(160, window.innerHeight - modeSubPos.top - 8) }}
-                                  className="fixed z-50 w-[240px] overflow-y-auto rounded-[10px] bg-[rgba(255,255,255,0.94)] p-1 shadow-[0_10px_15px_-3px_rgba(0,0,0,0.1),0_4px_6px_-2px_rgba(0,0,0,0.05)] outline outline-1 outline-black/[0.06] backdrop-blur-[8px] dark:bg-[#1f1f1f]/[0.94] dark:outline-white/[0.06]"
-                                >
-                                  <div className="px-2 py-[5px] text-[11px] font-medium uppercase tracking-wide text-muted-foreground">{o.name ?? gid}</div>
-                                  {o.options!.map((opt) => (
-                                    <button
-                                      key={opt.value}
-                                      role="menuitemradio"
-                                      aria-checked={current === opt.value}
-                                      onClick={() => chooseLocalOption(gid, opt.value)}
-                                      className="flex h-[30px] w-full cursor-pointer select-none items-center gap-2 rounded-[6px] px-2 py-[5px] text-[13px] outline-none hover:bg-tint-secondary [&>svg]:size-4 [&>svg]:shrink-0"
-                                    >
-                                      <span className="flex h-4 w-[18px] shrink-0 items-center justify-center text-muted-foreground">
-                                        {current === opt.value && <OfficialGlyph svg={MODE_CHECK_ICON} />}
-                                      </span>
-                                      <span className="min-w-0 flex-1 truncate text-left">{opt.name || opt.value}</span>
-                                    </button>
-                                  ))}
-                                </div>,
-                                document.body,
-                              )}
-                            </div>
-                          )
-                        })}
-                      </>
-                    ) : !cfgReady ? (
-                      <div className="flex h-[30px] items-center px-3 text-[13px] text-muted-foreground">{t('common.loading')}</div>
-                    ) : (
-                    <>
-                    {/* Official mode menu: Fusion switch row, capability choices, and
-                        Standard/Fast or Standard/Lightning speed submenus. */}
-                    <button
-                      role="menuitemcheckbox"
-                      aria-checked={pillVersion.startsWith('devin-auto')}
-                      onMouseEnter={() => setModeSub(null)}
-                      onClick={() => { setSelectedVersion(pillVersion.startsWith('devin-auto') ? null : 'devin-auto'); setModeOpen(false) }}
-                      className="flex h-[30px] w-full cursor-pointer select-none items-center gap-2 rounded-[6px] px-2 py-[5px] text-[13px] outline-none hover:bg-tint-secondary [&>svg]:size-4 [&>svg]:shrink-0"
-                    >
-                      <span className={cn('inline-flex h-4 w-[26px] shrink-0 items-center rounded-full border border-border px-px transition-colors', pillVersion.startsWith('devin-auto') ? 'justify-end bg-foreground' : 'justify-start bg-muted')}>
-                        <span className="block size-3.5 rounded-full border-[0.5px] border-border bg-white shadow-sm" />
-                      </span>
-                      <span className="flex flex-1 items-center gap-1">Fusion <span className="cursor-pointer text-[13px] text-blue-500">{t('am.preview')}</span></span>
-                    </button>
-                    <div role="separator" className="mx-2 my-1 h-px bg-border" />
-                    <div className="flex items-center gap-1.5 px-2 py-[5px] pl-[34px]">
-                      <span className="flex-1 text-[12px] font-medium text-muted-foreground">{t('am.capability')}</span>
-                      <OfficialGlyph svg={MODE_INFO_ICON} className="text-muted-foreground" />
-                    </div>
-                    {['Ultra', 'Normal', 'Lite', 'SWE-1.7'].map((m) => {
-                      const hasSpeed = m === 'Normal' || m === 'SWE-1.7'
-                      return (
-                        <div key={m} className="relative" onMouseEnter={(e) => hasSpeed ? openModeSub(m, e.currentTarget) : setModeSub(null)} onMouseLeave={() => hasSpeed && closeModeSub()}>
-                          <button
-                            role={hasSpeed ? 'menuitem' : 'menuitemradio'}
-                            aria-checked={hasSpeed ? undefined : mode === m}
-                            aria-haspopup={hasSpeed ? 'menu' : undefined}
-                            onClick={() => { if (!hasSpeed) { setSelectedVersion(versionOf(m, 'Standard')); setModeOpen(false) } }}
-                            className="flex h-[30px] w-full cursor-pointer select-none items-center gap-2 rounded-[6px] px-2 py-[5px] text-[13px] outline-none hover:bg-tint-secondary [&>svg]:size-4 [&>svg]:shrink-0"
-                          >
-                            <span className="flex h-4 w-[18px] shrink-0 items-center justify-center text-muted-foreground">
-                              {mode === m && <OfficialGlyph svg={MODE_CHECK_ICON} />}
-                            </span>
-                            <span className="min-w-0 flex-1 text-left">{m}</span>
-                            {hasSpeed && <OfficialGlyph svg={MENU_CHEVRON_ICON} className="ml-auto text-muted-foreground" />}
-                          </button>
-                          {modeSub === m && modeSubPos && createPortal(
-                            <div role="menu" onMouseEnter={() => { if (modeSubTimer.current) { clearTimeout(modeSubTimer.current); modeSubTimer.current = null } }} onMouseLeave={closeModeSub} style={{ left: modeSubPos.left, top: modeSubPos.top, maxHeight: Math.max(160, window.innerHeight - modeSubPos.top - 8) }} className="fixed z-50 w-[220px] overflow-y-auto rounded-[10px] bg-[rgba(255,255,255,0.94)] p-1 shadow-[0_10px_15px_-3px_rgba(0,0,0,0.1),0_4px_6px_-2px_rgba(0,0,0,0.05)] outline outline-1 outline-black/[0.06] backdrop-blur-[8px] dark:bg-[#1f1f1f]/[0.94] dark:outline-white/[0.06]">
-                              {(m === 'SWE-1.7' ? ['Standard', 'Lightning'] : ['Standard', 'Fast']).map((sp) => (
-                                <button
-                                  key={sp}
-                                  role="menuitemradio"
-                                  aria-checked={mode === m && speed === sp}
-                                  onClick={() => { setSelectedVersion(versionOf(m, sp)); setModeSub(null); setModeOpen(false) }}
-                                  className="flex h-[30px] w-full cursor-pointer select-none items-center gap-2 rounded-[6px] px-2 py-[5px] text-[13px] outline-none hover:bg-tint-secondary [&>svg]:size-4 [&>svg]:shrink-0"
-                                >
-                                  <span className="flex h-4 w-[18px] shrink-0 items-center justify-center text-muted-foreground">
-                                    {mode === m && speed === sp && <OfficialGlyph svg={MODE_CHECK_ICON} />}
-                                  </span>
-                                  <span className="min-w-0 flex-1 text-left">{sp}</span>
-                                </button>
-                              ))}
-                            </div>,
-                            document.body,
-                          )}
-                        </div>
-                      )
-                    })}
-                    </>
-                    )}
-                    </div>
-                  </div>
-                )}
-              </div>}
-              {/* Context window fill — latest root-chain usage_update. */}
-              {detail?.session.context_usage?.used != null && detail.session.context_usage.size ? (() => {
+              {!isVisitor && pillTier < 2 && modelPillEl(false)}
+              {/* Context window fill — latest root-chain usage_update. Collapses
+                  to the bare bar at tier≥1 and leaves the row at tier 3 (it then
+                  shows inside the "+" menu instead). */}
+              {detail?.session.context_usage?.used != null && detail.session.context_usage.size && pillTier < 3 ? (() => {
                 const cu = detail.session.context_usage
                 const pctUse = Math.min(100, Math.round(((cu.used ?? 0) / cu.size!) * 100))
                 const fmt = (n: number) => (n >= 1000 ? `${(n / 1000).toFixed(n >= 10000 ? 0 : 1)}k` : String(n))
                 return (
                   <span
-                    className="ml-1 inline-flex shrink-0 cursor-default items-center gap-1 rounded-full px-1.5 py-0.5 text-[11px] tabular-nums text-muted-foreground"
+                    className="inline-flex h-7 shrink-0 cursor-default items-center gap-1 rounded-full px-[6px] text-[11px] tabular-nums text-muted-foreground"
                     title={t('visitor.contextTip', { used: cu.used!.toLocaleString(), size: cu.size!.toLocaleString(), pct: pctUse, input: cu.inputTokens?.toLocaleString() ?? '—', output: cu.outputTokens?.toLocaleString() ?? '—', cached: cu.cachedReadTokens?.toLocaleString() ?? '—' })}
                   >
                     <span className="inline-block h-1.5 w-8 overflow-hidden rounded-full bg-muted">
@@ -4579,50 +4745,11 @@ const groups = useMemo(() => groupItems(allItems, sessionWorking), [allItems, se
                         style={{ width: `${pctUse}%` }}
                       />
                     </span>
-                    {fmt(cu.used!)}/{fmt(cu.size!)}
+                    {pillTier < 1 && `${fmt(cu.used!)}/${fmt(cu.size!)}`}
                   </span>
                 )
               })() : null}
-              </div>
-              <div className="flex shrink-0 items-center gap-1">
-                {isDraft && !isVisitor && (
-                  // Desktop toolbar right side: the agent pill — a real picker.
-                  // Options come from composer-meta agents (builtin + agents.json).
-                  <div className="relative">
-                    <button
-                      onClick={() => setAgentMenuOpen((v) => !v)}
-                      title={t('draft.agentPick')}
-                      className="mr-0.5 flex h-7 shrink-0 cursor-pointer items-center gap-1 rounded-full border border-border px-2 text-[12px] leading-[16px] text-muted-foreground hover:bg-accent hover:text-foreground"
-                    >
-                      <Sparkles size={13} />{composerMeta?.agents?.find((a) => a.id === draftAgent)?.label ?? draftAgent}
-                      <ChevronDown size={11} className="opacity-60" />
-                    </button>
-                    {agentMenuOpen && (
-                      <>
-                        <div className="fixed inset-0 z-10" onClick={() => setAgentMenuOpen(false)} />
-                        <div role="menu" className="absolute bottom-9 right-0 z-20 w-[220px] overflow-hidden rounded-[10px] bg-card shadow-[0_10px_15px_-3px_rgba(0,0,0,0.1)] outline outline-1 outline-black/[0.06] dark:outline-white/[0.06]">
-                          <div className="p-1">
-                            {(composerMeta?.agents ?? [{ id: 'devin', label: 'Devin Local' }]).map((a) => (
-                              <button
-                                key={a.id}
-                                role="menuitem"
-                                onClick={() => { setDraftAgent(a.id); setAgentMenuOpen(false) }}
-                                className="flex w-full cursor-pointer select-none items-center gap-2 rounded-[6px] px-2 py-1.5 text-left text-[13px] hover:bg-accent"
-                              >
-                                <Sparkles size={13} className="text-muted-foreground" />
-                                <span className="min-w-0 flex-1 truncate">{a.label}</span>
-                                {a.id === draftAgent && <Check size={13} className="shrink-0" />}
-                              </button>
-                            ))}
-                          </div>
-                          <p className="border-t border-border/40 px-3 py-1.5 text-[11px] leading-[14px] text-muted-foreground">
-                            {t('draft.agentHint')}
-                          </p>
-                        </div>
-                      </>
-                    )}
-                  </div>
-                )}
+                </div>
                 {/* Open sessions show their owning agent read-only (desktop
                     parity) — the pick happens at draft time only. */}
                 {!isDraft && !isVisitor && sessionAgent !== 'devin' && (
@@ -4645,7 +4772,7 @@ const groups = useMemo(() => groupItems(allItems, sessionWorking), [allItems, se
                     {controlling ? <Loader2 size={16} className="animate-spin" /> : <Square size={12} fill="currentColor" />}
                   </button>
                 ) : null}
-                {(status !== 'working' || input.trim().length > 0) && <div className={cn('relative flex items-stretch', voiceRecording && 'invisible')}>
+                {(status !== 'working' || input.trim().length > 0) && <div className={cn('relative flex shrink-0 items-stretch', voiceRecording && 'invisible')}>
                   <div role="group" className={cn(
                     'inline-flex shrink-0 items-stretch overflow-hidden rounded-full transition-colors',
                     input.trim() ? 'bg-foreground text-background' : 'bg-tint-secondary text-muted-foreground',
@@ -4658,23 +4785,26 @@ const groups = useMemo(() => groupItems(allItems, sessionWorking), [allItems, se
                     >
                       {sending ? <Loader2 size={16} className="animate-spin" /> : <ArrowUp size={18} />}
                     </button>
-                    {!isVisitor && <div className={cn('flex items-stretch overflow-hidden transition-[width,opacity] duration-150', input.trim() ? 'w-[21px] opacity-100' : 'w-0 opacity-0')}>
+                    {/* Queue affordances exist only while a turn runs — idle
+                        sends go straight through, so the split menu hides. */}
+                    {!isVisitor && statusState.enum === 'working' && <div className={cn('flex items-stretch overflow-hidden transition-[width,opacity] duration-150', input.trim() ? 'w-[26px] opacity-100' : 'w-0 opacity-0')}>
                       <span className="w-px shrink-0 self-stretch bg-white/[0.08]" />
                       <button
+                        ref={sendOptBtnRef}
                         onClick={() => setSendOptOpen((v) => !v)}
                         disabled={!input.trim()}
                         tabIndex={input.trim() ? 0 : -1}
                         aria-label="More send options"
                         title="More send options"
-                        className={cn('flex w-5 cursor-pointer items-center justify-center hover:bg-white/10', sendOptOpen && 'bg-white/10')}
+                        className={cn('flex w-[25px] shrink-0 cursor-pointer items-center justify-center hover:bg-white/10', sendOptOpen && 'bg-white/10')}
                       >
                         <ChevronDown size={14} />
                       </button>
                     </div>}
                   </div>
                   {sendOptOpen && <div className="fixed inset-0 z-10" onClick={() => setSendOptOpen(false)} />}
-                  {sendOptOpen && (
-                    <div role="menu" className="absolute bottom-8 right-0 z-20 w-[270px] overflow-hidden rounded-[10px] bg-[rgba(255,255,255,0.94)] shadow-[0_10px_15px_-3px_rgba(0,0,0,0.1),0_4px_6px_-2px_rgba(0,0,0,0.05)] outline outline-1 outline-black/[0.06] backdrop-blur-[8px] dark:bg-[#1f1f1f]/[0.94] dark:outline-white/[0.06] [transition:transform_40ms_cubic-bezier(0.76,0,0.24,1),scale_40ms_cubic-bezier(0.76,0,0.24,1),opacity_40ms_cubic-bezier(0.76,0,0.24,1)]">
+                  {sendOptOpen && sendOptBtnRef.current && createPortal(
+                    <div role="menu" style={{ bottom: window.innerHeight - sendOptBtnRef.current.getBoundingClientRect().top + 6, right: window.innerWidth - sendOptBtnRef.current.getBoundingClientRect().right, maxHeight: sendOptBtnRef.current.getBoundingClientRect().top - 14 }} className="fixed z-50 w-[270px] overflow-y-auto rounded-[10px] bg-[rgba(255,255,255,0.94)] shadow-[0_10px_15px_-3px_rgba(0,0,0,0.1),0_4px_6px_-2px_rgba(0,0,0,0.05)] outline outline-1 outline-black/[0.06] backdrop-blur-[8px] dark:bg-[#1f1f1f]/[0.94] dark:outline-white/[0.06] [transition:transform_40ms_cubic-bezier(0.76,0,0.24,1),scale_40ms_cubic-bezier(0.76,0,0.24,1),opacity_40ms_cubic-bezier(0.76,0,0.24,1)]">
                       <div className="p-1">
                         {/* Official More send options menu (sampled live): Add to queue · Ctrl ⏎; width w-[270px] per bundle */}
                         {/* Working-session escape: interrupts the live turn and
@@ -4705,7 +4835,8 @@ const groups = useMemo(() => groupItems(allItems, sessionWorking), [allItems, se
                           <span className="ml-auto text-[11px] text-muted-foreground">Ctrl ⏎</span>
                         </button>
                       </div>
-                    </div>
+                    </div>,
+                    document.body,
                   )}
                 </div>}
               </div>
@@ -4714,7 +4845,6 @@ const groups = useMemo(() => groupItems(allItems, sessionWorking), [allItems, se
               <p className="flex min-h-7 items-center px-1 text-[13px] leading-[16px] text-muted-foreground">{t('menu.readonlyBanner')}</p>
             )}
             </div>
-            {controlMsg && <div className="px-1 pt-1 text-[12px] leading-[16px] text-muted-foreground">{controlMsg}</div>}
             {/* Floating quote form over a text selection inside a message —
                 official SelectionQuoteAffordance mini-form: [✏ Add caption]
                 [⏎ Add to chat]; typing while open starts a caption, Enter
@@ -4743,113 +4873,7 @@ const groups = useMemo(() => groupItems(allItems, sessionWorking), [allItems, se
                 onClose={() => setSelQuote(null)}
               />
             )}
-            {persona && !isVisitor && !isDraft && (persona.mode !== 'off' || persona.escalated) && (
-              <div className="flex items-center gap-2 px-1 pt-1 text-[12px] leading-[16px] text-muted-foreground">
-                <button
-                  onClick={() => void cyclePersonaMode()}
-                  title={t('persona.cycleTip')}
-                  className="shrink-0 cursor-pointer rounded-full border border-border px-2 py-0.5 hover:bg-tint-secondary"
-                >
-                  🎭 {t('persona.label')} · {t(`persona.${persona.mode}`)}
-                </button>
-                {persona.escalated && (
-                  <span className="flex min-w-0 items-center gap-1 text-amber-600 dark:text-amber-400">
-                    <AlertTriangle size={13} className="shrink-0" />
-                    <span className="truncate">{t('persona.escalated')}</span>
-                  </span>
-                )}
-                {persona.mode === 'semi' && !persona.escalated && (
-                  <button
-                    onClick={() => void askPersonaNow()}
-                    disabled={personaBusy}
-                    className="shrink-0 cursor-pointer underline hover:opacity-80 disabled:opacity-50"
-                  >
-                    {personaBusy ? t('persona.asking') : t('persona.ask')}
-                  </button>
-                )}
-              </div>
-            )}
-            {sendErr && (
-              <div className="flex items-center gap-2 px-1 pt-1 text-[12px] leading-[16px] text-red-500">
-                <span className="min-w-0 truncate">{sendErr}</span>
-                <button onClick={() => void send()} className="shrink-0 cursor-pointer underline hover:text-red-400">{t('common.retry')}</button>
-              </div>
-            )}
-            {isDraft && (
-              // Desktop card bottom row: Local · Choose folder | sessions ↗
-              <div className="mt-2 flex items-center gap-3 border-t border-border/40 px-1 pt-2 text-[12px] leading-[16px] text-muted-foreground">
-                <span className="flex shrink-0 items-center gap-1.5"><Laptop size={13} />{t('draft.local')}</span>
-                <DirPicker
-                  value={draftCwd}
-                  onChange={setDraftCwd}
-                  repos={composerMeta?.repos ?? []}
-                  recents={recentCwds}
-                  primaryCwd={composerMeta?.primary_cwd}
-                />
-                <button onClick={() => nav('/admin/sessions')} className="ml-auto flex shrink-0 cursor-pointer items-center gap-1 hover:text-foreground">
-                  {t('draft.sessionsLink')}<ArrowUpRight size={12} />
-                </button>
-              </div>
-            )}
           </BeardBand>
-          {(() => {
-            // Official env-suggestion banner below the composer (sampled live 2026-08-31).
-            const sug = items.find((it) => it.kind === 'env_suggestion')
-            if (isVisitor || !sug || envBannerGone || sug.envSuggestion?.dismissed) return null
-            let dismissed = false
-            try { dismissed = localStorage.getItem(`env-banner-dismissed:${sug.id}`) === '1' } catch { /* unavailable */ }
-            if (dismissed) return null
-            return (
-              <div className="mt-2 flex min-h-[34px] items-center gap-1 rounded-lg border border-border bg-card py-1 pl-3 pr-1">
-                <div className="flex min-h-6 min-w-0 flex-1 items-center justify-between gap-3 overflow-hidden">
-                  <div className="flex min-w-0 flex-auto items-center gap-1.5">
-                    <Lightbulb size={15} className="shrink-0 text-muted-foreground" />
-                    <span className="line-clamp-1 text-start text-[13px] leading-4">
-                      <span className="sm:hidden">{t('am.envSuggested')}</span>
-                      <span className="hidden sm:inline">{t('am.envSuggestedLong')}</span>
-                    </span>
-                  </div>
-                  <div className="flex shrink-0 items-center gap-3">
-                    <button
-                      type="button"
-                      onClick={() => {
-                        const node = document.querySelector(`[data-eid="${CSS.escape(sug.id)}"]`)
-                        node?.scrollIntoView({ block: 'center', behavior: 'smooth' })
-                      }}
-                      className="min-w-0 cursor-pointer truncate text-[13px] font-medium text-blue-500 hover:text-blue-500/80"
-                    >
-                      Review
-                    </button>
-                    <button
-                      type="button"
-                      disabled={!sug.envSuggestion?.contentsKey || envSaveState === 'sending' || envSaveState === 'done'}
-                      title={sug.envSuggestion?.contentsKey ? undefined : t('panel.eventNoContents')}
-                      onClick={() => {
-                        const es = sug.envSuggestion
-                        if (!es?.contentsKey || envSaveState === 'sending' || envSaveState === 'done') return
-                        setEnvSaveState('sending')
-                        adminFetch<{ ok: boolean; error: string | null }>(`/api/admin/session/${id}/env-suggestion-accept`, {
-                          method: 'POST',
-                          body: JSON.stringify({ event_id: sug.id, sink: es.sink, repo: es.repo, title: sug.title, summary: es.summary, contents_key: es.contentsKey, old_contents_key: es.oldContentsKey }),
-                        }).then((r) => setEnvSaveState(r.ok ? 'done' : 'error')).catch(() => setEnvSaveState('error'))
-                      }}
-                      className={cn('min-w-0 truncate text-[13px] font-medium', envSaveState === 'error' ? 'text-red-500' : 'text-blue-500', sug.envSuggestion?.contentsKey && envSaveState === 'idle' ? 'cursor-pointer hover:text-blue-500/80' : envSaveState !== 'error' && 'opacity-50')}
-                    >
-                      <span>{envSaveState === 'sending' ? t('common.saving') : envSaveState === 'done' ? t('menu.savedEnv') : envSaveState === 'error' ? t('menu.retrySaveEnv') : <>{t('common.save')}<span className="hidden sm:inline"> {t('menu.saveToEnvSuffix')}</span></>}</span>
-                    </button>
-                  </div>
-                </div>
-                <button
-                  type="button"
-                  aria-label="Dismiss"
-                  onClick={() => dismissEnvBanner(sug.id)}
-                  className="inline-flex size-7 shrink-0 cursor-pointer items-center justify-center rounded-full text-muted-foreground hover:bg-accent hover:text-foreground"
-                >
-                  <X size={16} />
-                </button>
-              </div>
-            )
-          })()}
         </footer>
         {isDraft && loaded && (
           // Desktop New-Space lower segment: Local env · Choose folder ·
