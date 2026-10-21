@@ -16,7 +16,7 @@ import { isDraining } from "../../sessionlive.js";
 import { captureLoadResponse } from "../../sessioncfg.js";
 import { agentById, listAgents, probeAgent, saveUserAgents } from "../../agents.js";
 import { publicSshHost } from "../../ssh.js";
-import { json, readJson } from "../common.js";
+import { json, readJson } from "../../httputil.js";
 import { scanLocalSkills } from "../admin.js";
 
 export async function handleNewSession(ctx: ApiContext, req: IncomingMessage, res: ServerResponse, url: URL, m: string, p: string, parts: string[]): Promise<boolean> {

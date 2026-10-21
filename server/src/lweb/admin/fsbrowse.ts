@@ -9,7 +9,7 @@ import path from "node:path";
 import os from "node:os";
 import type { ApiContext } from "../../routes.js";
 import { sshFs, sshHostFor, sshListDirs, sshTest } from "../../ssh.js";
-import { json, readJson } from "../common.js";
+import { json, readJson } from "../../httputil.js";
 
 export async function handleFsBrowse(ctx: ApiContext, req: IncomingMessage, res: ServerResponse, url: URL, m: string, p: string, parts: string[]): Promise<boolean> {
   // GET /api/admin/fs/dirs?path= — directory browser for the new-session

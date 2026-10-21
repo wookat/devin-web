@@ -344,7 +344,7 @@ export function dispatchPrompt(ctx: ApiContext, id: string, text: string, attach
     // respawnRow: the old handle is dead — the lead spawns a SUCCESSOR
     // (fresh agent, same profile, prior task+tail as context) instead of
     // resuming. The successor lands as a NEW child row; the dead one stays.
-    const tail = respawnRow ? ctx.sessionLog.subTailText(id, subagentId!).slice(-1500) : "";
+    const tail = respawnRow ? ctx.sessionLog.sidecars.subTailText(id, subagentId!).slice(-1500) : "";
     const promptText = subagentId
       ? respawnRow
         ? `[Subagent relay] Subagent "${subagentId}" is permanently dead (its host process was recycled) — do NOT resume it. Call run_subagent(title=${JSON.stringify(respawnRow.title || "Subagent successor")}, profile=${JSON.stringify(respawnRow.profile || "subagent_general")}, task=<task>) now to spawn a SUCCESSOR agent — this is your ONLY task. Compose <task> as: "You continue the work of a previous subagent. Original task: ${JSON.stringify(respawnRow.task.slice(0, 600))}. Its last output before the handle died: ${JSON.stringify(tail)}. New instruction from the user: ${JSON.stringify(text)}"`

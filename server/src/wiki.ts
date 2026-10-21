@@ -13,6 +13,7 @@
 //   GET    /page?repo=&page=<id>      → {title, markdown}  (full-doc split)
 //   POST   /ask          {repo,question} → {answer}
 import fs from "node:fs";
+import { json, readJson } from "./httputil.js";
 import path from "node:path";
 import type { IncomingMessage, ServerResponse } from "node:http";
 import type { ApiContext } from "./routes.js";
@@ -21,16 +22,6 @@ import { loadReg, saveReg } from "./dwstore.js";
 const MCP_URL = "https://mcp.deepwiki.com/mcp";
 const CACHE_TTL_MS = 24 * 3600_000;
 
-function json(res: ServerResponse, code: number, body: unknown) {
-  const s = JSON.stringify(body);
-  res.writeHead(code, { "content-type": "application/json; charset=utf-8", "content-length": Buffer.byteLength(s) });
-  res.end(s);
-}
-async function readJson(req: IncomingMessage): Promise<any> {
-  const chunks: Buffer[] = [];
-  for await (const c of req) chunks.push(c as Buffer);
-  try { return JSON.parse(Buffer.concat(chunks).toString("utf8") || "{}"); } catch { return {}; }
-}
 
 let rpcId = 0;
 /** One JSON-RPC call over MCP streamable-HTTP. The server replies as an SSE

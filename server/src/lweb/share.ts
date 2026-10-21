@@ -11,7 +11,7 @@ import { ensureLoaded } from "../sessionload.js";
 import { sessionStatus } from "../sessionview.js";
 import { queueList } from "../sessionqueue.js";
 import { loadInflight } from "../sessionplace.js";
-import { json, UNSUPPORTED } from "./common.js";
+import { json, UNSUPPORTED } from "../httputil.js";
 import { sessionSubs, titleFromLog } from "./session.js";
 
 export async function handleShareTree(ctx: ApiContext, req: IncomingMessage, res: ServerResponse, url: URL): Promise<boolean> {

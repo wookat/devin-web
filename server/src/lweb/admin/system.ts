@@ -18,7 +18,7 @@ import { inflight, beginDrain, isDraining, drainSince, markGracefulExit } from "
 import { openTurns, openTurnsLoad } from "../../sessionturns.js";
 import { handleWikiRoute } from "../../wiki.js";
 import { handleSecurityRoute } from "../../security.js";
-import { json, readJson } from "../common.js";
+import { json, readJson } from "../../httputil.js";
 import { runCli } from "../admin.js";
 
 let restartPending = false; // serialized restart/redeploy — see /api/admin/restart

@@ -22,11 +22,14 @@ import { responseCfg, captureLoadResponse, type ConfigOption } from "../../sessi
 import { personaState } from "../../persona.js";
 import { agentById } from "../../agents.js";
 import { handlePrRoute } from "../../pr.js";
-import { json, readBody, readJson, UNSUPPORTED, gitStatusCache } from "../common.js";
+import { json, readBody, readJson, UNSUPPORTED } from "../../httputil.js";
 import {
   sessionSubs, handleSubSession, parseSubId, cwdFor, confined,
   subsAny, summarizeForFork, titleFromLog, lastContextUsage,
 } from "../session.js";
+
+/** file-git response cache — 8s per session (was lweb/common). */
+const gitStatusCache = new Map<string, { at: number; body: unknown }>();
 
 export async function handlePerSession(ctx: ApiContext, req: IncomingMessage, res: ServerResponse, url: URL, m: string, p: string, parts: string[]): Promise<boolean> {
   // ======================= per-session routes =======================

@@ -23,7 +23,7 @@ import { inflight, isDraining, drainSince } from "../sessionlive.js";
 import { captureLoadResponse } from "../sessioncfg.js";
 import { personaState, personaHumanMessage } from "../persona.js";
 import { runReviewAgent } from "../pr.js";
-import { json, readBody, readJson } from "./common.js";
+import { json, readBody, readJson } from "../httputil.js";
 
 // ---------------------------------------------------------------------------
 // sub:<rootSessionId>:<agentId> — a subagent presented as a first-class child
@@ -90,9 +90,9 @@ export function subsAny(ctx: ApiContext, id: string, scope?: string): SubagentIn
   // nothing was evicted. A truncated window misses early spawn events and
   // must be unioned with the journal (dedupe on seq).
   if (mem.length && mem[0].seq === 0) return listSubagents(ctx, id, scope);
-  if (ctx.sessionLog.subFilesStale(id)) ctx.sessionLog.ensureSubFiles(id);
+  if (ctx.sessionLog.sidecars.subFilesStale(id)) ctx.sessionLog.sidecars.ensureSubFiles(id);
   const key = `${id}${scope ?? ""}`;
-  const im = ctx.sessionLog.subsJournalMtime(id);
+  const im = ctx.sessionLog.sidecars.subsJournalMtime(id);
   const lastSeq = mem.length ? mem[mem.length - 1].seq ?? -1 : -1;
   // `resumable` ages out WITHOUT new log events (a replay bumps the epoch,
   // a failed resume fills deadSubs) — so the cache must not live longer
@@ -100,13 +100,13 @@ export function subsAny(ctx: ApiContext, id: string, scope?: string): SubagentIn
   // events land; for a quiet log, cache only up to one heartbeat.
   const hit = subListCache.get(key);
   if (hit && hit.m === im && im != null && hit.lastSeq === lastSeq && Date.now() - hit.at < 15_000) return hit.rows;
-  const idx = ctx.sessionLog.readSubsJournal(id) ?? [];
+  const idx = ctx.sessionLog.sidecars.readSubsJournal(id) ?? [];
   const seen = new Set(idx.map((e) => e.seq));
   const rows = listSubagents(ctx, id, scope, mem.length ? [...idx, ...mem.filter((e) => !seen.has(e.seq))] : idx);
   // The journal carries no content lines, so cold rows lack a last-text
   // snippet — recover it from a bounded tail read of the child's sidechain.
   for (const r of rows) {
-    if (!r.lastText && !r.agentId.startsWith("spawn:")) r.lastText = ctx.sessionLog.subTailText(id, r.agentId);
+    if (!r.lastText && !r.agentId.startsWith("spawn:")) r.lastText = ctx.sessionLog.sidecars.subTailText(id, r.agentId);
   }
   if (im != null) subListCache.set(key, { m: im, lastSeq, rows, at: Date.now() });
   return rows;

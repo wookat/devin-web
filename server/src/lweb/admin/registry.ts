@@ -11,7 +11,7 @@ import { listLocalSessions } from "../../sessionview.js";
 import { personaState, personaMode, askPersona, decisionsTail } from "../../persona.js";
 import { cronNext, runAutomation } from "../../automations.js";
 import { publicSshHost, type SshHost } from "../../ssh.js";
-import { json, readBody, readJson, UNSUPPORTED } from "../common.js";
+import { json, readBody, readJson, UNSUPPORTED } from "../../httputil.js";
 import { parseSubId, cwdFor, subsAny, subTreeRow, treeSession, titleFromLog } from "../session.js";
 import { indexWorkspace } from "../admin.js";
 

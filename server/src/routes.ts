@@ -1,4 +1,5 @@
 import type { IncomingMessage, ServerResponse } from "node:http";
+import { json, readBody, readJson } from "./httputil.js";
 import type { ContentBlock } from "@agentclientprotocol/sdk";
 import type { AcpManager } from "./manager.js";
 import { remapLegacyCwd, type Store } from "./store.js";
@@ -37,27 +38,6 @@ export interface ApiContext {
   permissionOwner: Map<string, DevinAcp>;
 }
 
-function json(res: ServerResponse, status: number, body: unknown) {
-  const data = JSON.stringify(body);
-  res.writeHead(status, { "content-type": "application/json" }).end(data);
-}
-
-async function readBody(req: IncomingMessage, limit = 10 * 1024 * 1024): Promise<Buffer> {
-  const chunks: Buffer[] = [];
-  let size = 0;
-  for await (const chunk of req) {
-    size += (chunk as Buffer).length;
-    if (size > limit) throw Object.assign(new Error("body too large"), { status: 413 });
-    chunks.push(chunk as Buffer);
-  }
-  return Buffer.concat(chunks);
-}
-
-async function readJson(req: IncomingMessage): Promise<Record<string, unknown>> {
-  const buf = await readBody(req);
-  if (buf.length === 0) return {};
-  return JSON.parse(buf.toString("utf8"));
-}
 
 /** Resolve staged-upload references (`uploadId` or `/api/uploads/<id>` url)
  * into real ACP content blocks via the canonical attachmentBlocks path —

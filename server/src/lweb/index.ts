@@ -14,7 +14,7 @@ import type { ApiContext } from "../routes.js";
 import { loadReg, saveReg } from "../dwstore.js";
 import { setSshHostResolver } from "../ssh.js";
 import { requireAdmin } from "../authn.js";
-import { json, readJson } from "./common.js";
+import { json, readJson } from "../httputil.js";
 import { handleAdminTree } from "./admin.js";
 import { handleShareTree } from "./share.js";
 

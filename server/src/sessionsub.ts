@@ -245,12 +245,12 @@ export function subagentTimeline(ctx: ApiContext, id: string, agentId: string): 
   // Cold parent → serve from the child's sidechain file. Cache keyed on the
   // SIDECAR's mtime (the main log's mtime churns during live writes and would
   // defeat the cache, re-parsing the stream on every poll).
-  const im = ctx.sessionLog.subStreamMtime(id, agentId);
+  const im = ctx.sessionLog.sidecars.subStreamMtime(id, agentId);
   const lastSeq = mem.length ? mem[mem.length - 1].seq ?? -1 : -1;
   const hit = subTlCache.get(key);
   if (hit && hit.m === im && im != null && hit.lastSeq === lastSeq) return hit.items;
-  if (ctx.sessionLog.subFilesStale(id)) ctx.sessionLog.ensureSubFiles(id);
-  const idx = ctx.sessionLog.readSubStream(id, agentId) ?? [];
+  if (ctx.sessionLog.sidecars.subFilesStale(id)) ctx.sessionLog.sidecars.ensureSubFiles(id);
+  const idx = ctx.sessionLog.sidecars.readSubStream(id, agentId) ?? [];
   const seen = new Set(idx.map((e) => e.seq));
   const items = buildTimelineFrom((mem.length ? [...idx, ...mem.filter((e) => !seen.has(e.seq))] : idx).filter(forAgent), agentId, id, resolve);
   // Cache only a settled read — a missing stream means the scan is still
