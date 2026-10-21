@@ -19,6 +19,14 @@ interface DwSessionMeta {
   /** last real updatedAt seen from session/list — survives restarts so the
    * sidebar never has to fall back to "now". */
   updatedAt?: string;
+  // persona 分身: per-session mode override ('off'|'semi'|'auto'), the
+  // escalation flag (amber banner) and the last handled question seq.
+  personaMode?: string;
+  personaEscalated?: boolean;
+  personaLastSeq?: number;
+  /** Which ACP agent owns this session (devin | prime | user-registered ids).
+   *  Absent = devin. Read by hostFor to route ops to the right process. */
+  agent?: string;
 }
 
 interface DwRegistry {
@@ -29,7 +37,11 @@ interface DwRegistry {
   lastConfig?: Record<string, string>;
   /** Server-side web preferences — unlike browser localStorage these
    * act even with no tab open (auto-resume runs on boot). */
-  prefs?: { autoResume?: boolean };
+  prefs?: { autoResume?: boolean; persona?: { mode?: string; webhook?: string; maxPerHour?: number } };
+  /** The persistent persona acp session (cwd=<dataDir>/persona). */
+  persona?: { sessionId?: string };
+  /** The persistent pr-review acp session (cwd=<dataDir>/pr-review). */
+  prReview?: { sessionId?: string };
 }
 
 let reg: DwRegistry | null = null;

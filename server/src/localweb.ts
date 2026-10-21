@@ -32,6 +32,7 @@ import {
   sessionStatus, interruptedTurn, listSubagents, subagentTimeline, subPingActive, listLocalSessions,
   snippetFromLog, responseCfg, terminalBuf, cloudVersionToModel,
   queueList, queueAdd, queueRemove, queueFlush,
+  noteSendError, recentSendErrors, sendPreflight,
   type ListedSession, type SessionConfig, type SubagentInfo, type ConfigOption,
 } from "./sessionio.js";
 import {
@@ -279,7 +280,7 @@ const sessionSubs: Record<string, (ctx: ApiContext, id: string, req: IncomingMes
       ? body.attachments as { url: string; name?: string; mime?: string; size?: number }[]
       : [];
     if (!text && !attachments.length) { json(res, 400, { error: "empty message" }); return; }
-    if (isDraining()) { json(res, 503, { error: "server restarting" }); return; }
+    if (isDraining()) { noteSendError(id, "drain", "server restarting — send refused"); json(res, 503, { error: "server restarting" }); return; }
     // Official parity: a prompt sent while a turn is in flight goes onto the
     // queue — it flushes FIFO from dispatchPrompt's settle path. Concurrent
     // session/prompt calls race the acp (errors or lost turns), so never
@@ -589,6 +590,180 @@ export async function handleLocalWb(ctx: ApiContext, req: IncomingMessage, res: 
 
     // ============================ admin tree ============================
     if (isAdmin) {
+      // GET /api/admin/modules — per-module health for the settings page.
+      // Each check is isolated+timed; one bad module can't fail the rest.
+      if (p === "/api/admin/modules" && m === "GET") {
+        type Lev = "ok" | "warn" | "fail";
+        interface ModRow { name: string; value: string; level?: Lev }
+        interface Mod { id: string; level: Lev; detail: string; ms: number; rows?: ModRow[]; lane?: "trunk" | "branch" }
+        const mods: Mod[] = [];
+        const timed = async (id: string, fn: () => { level?: Lev; detail: string; rows?: ModRow[] } | Promise<{ level?: Lev; detail: string; rows?: ModRow[] }>) => {
+          const t0 = Date.now();
+          try {
+            const r = await fn();
+            mods.push({ id, level: r.level ?? "ok", detail: r.detail, ms: Date.now() - t0, rows: r.rows });
+          } catch (e) {
+            mods.push({ id, level: "fail", detail: e instanceof Error ? e.message : String(e), ms: Date.now() - t0 });
+          }
+        };
+        // Ordered as the actual send pipeline traverses them, top→down:
+        // ingress → api → gate → persist → resolve → host → spawn → return.
+        await timed("supervisor", () => process.env.DEVIN_WEB_SUPERVISED
+          ? {
+              detail: "supervised — auto-restart + drain-restart active",
+              rows: [{ name: "DEVIN_WEB_SUPERVISED", value: process.env.DEVIN_WEB_SUPERVISED }],
+            }
+          : { level: "warn", detail: "unsupervised bare process — no auto-restart" });
+        await timed("backend", () => ({
+          detail: `pid ${process.pid} · up ${Math.round(process.uptime())}s · v${ctx.appVersion}`,
+          rows: [
+            { name: "pid", value: String(process.pid) },
+            { name: "uptime", value: `${Math.round(process.uptime())}s` },
+            { name: "node", value: process.version },
+            { name: "version", value: ctx.appVersion },
+            { name: "platform", value: `${process.platform}/${process.arch}` },
+            { name: "dataDir", value: ctx.store.dataDir },
+          ],
+        }));
+        await timed("dispatch", () => {
+          let open = 0;
+          const openIds: string[] = [];
+          try {
+            const raw = JSON.parse(fs.readFileSync(path.join(ctx.store.dataDir, "open-turns.json"), "utf8")) as Record<string, { ts?: number }>;
+            for (const k of Object.keys(raw)) { open++; openIds.push(k); }
+          } catch {}
+          return {
+            level: isDraining() ? "warn" : "ok",
+            detail: `${isDraining() ? "DRAINING · " : ""}${inflight.size} in flight · ${open} interrupted`,
+            rows: [
+              { name: "draining", value: String(isDraining()), level: isDraining() ? "warn" : "ok" },
+              { name: "in flight", value: [...inflight].join(", ") || "0" },
+              { name: "interrupted", value: openIds.join(", ") || "0", level: open ? "warn" : "ok" },
+            ],
+          };
+        });
+        await timed("sessiondb", () => {
+          const s = ctx.sessionLog.dbStats();
+          if (!s) return { level: "warn" as const, detail: "sqlite store not open — file-mirror only" };
+          return {
+            detail: `${s.events.toLocaleString()} events · ${(s.fileBytes / 1048576).toFixed(0)}MB`,
+            rows: [
+              { name: "sessions", value: String(s.sessions) },
+              { name: "events", value: s.events.toLocaleString() },
+              { name: "blobs", value: s.blobs.toLocaleString() },
+              { name: "logical", value: `${(s.storedBytes / 1048576).toFixed(0)}MB` },
+              { name: "file", value: `${(s.fileBytes / 1048576).toFixed(0)}MB` },
+            ],
+          };
+        });
+        await timed("uploads", () => {
+          const probe = path.join(ctx.store.uploadsDir, `.probe-${process.pid}`);
+          fs.writeFileSync(probe, "ok");
+          fs.unlinkSync(probe);
+          const n = fs.readdirSync(ctx.store.uploadsDir).length;
+          return {
+            detail: `writable · ${n} staged file(s)`,
+            rows: [
+              { name: "dir", value: ctx.store.uploadsDir },
+              { name: "writable", value: "yes", level: "ok" as const },
+              { name: "staged", value: String(n) },
+            ],
+          };
+        });
+        await timed("store", () => {
+          const r = loadReg(ctx);
+          const folders = new Set(Object.values(r.sessions).map((s) => (s as { folder?: string }).folder).filter(Boolean));
+          return {
+            detail: `${Object.keys(r.sessions).length} registry entries · ${ctx.store.workspaces().length} workspaces`,
+            rows: [
+              { name: "registry", value: String(Object.keys(r.sessions).length) },
+              { name: "agent sessions", value: String(Object.keys(ctx.store.agentSessions()).length) },
+              { name: "workspaces", value: ctx.store.workspaces().join(" · ") || "0" },
+              { name: "folders", value: String(folders.size) },
+            ],
+          };
+        });
+        // Fan-out: resolution lands on ONE branch per registered agent — each
+        // carries its own CLI, process pool and credential pool (the account
+        // pool is Devin-scoped today; other agents self-manage auth).
+        {
+          const t0 = Date.now();
+          const agentRows = (await ctx.agentsCheck()) as { id: string; label: string; installed: boolean; authed: boolean; version: string | null; detail: string }[];
+          const procs = ctx.manager.status() as { agent: string; exited: boolean; sessionId?: string; cwd: string; pid: number; account: string | null; busy: number; startedAt: number }[];
+          const acctRows = ctx.accounts.status();
+          const picked = ctx.accounts.pick();
+          const recovery = ctx.accounts.nextRecoveryAt();
+          for (const a of agentRows) {
+            const myProcs = procs.filter((r) => r.agent === a.id);
+            const dead = myProcs.filter((r) => r.exited).length;
+            const rows: ModRow[] = [{
+              name: "CLI",
+              value: a.installed ? `${a.version ?? "?"}${a.authed ? " · authed" : " · NOT authed"}` : `missing — ${a.detail.slice(0, 80)}`,
+              level: !a.installed ? "warn" : a.authed ? "ok" : "warn",
+            }];
+            for (const r of myProcs) rows.push({
+              name: `proc pid ${r.pid}`,
+              value: `${r.exited ? "EXITED" : "alive"} · busy ${r.busy} · ${r.account ?? "no-acct"} · ${r.cwd}`,
+              level: r.exited ? "fail" : r.busy ? "warn" : "ok",
+            });
+            if (a.id === "devin") {
+              if (!picked && recovery) rows.push({ name: "accounts recover", value: new Date(recovery * 1000).toLocaleString(), level: "warn" });
+              for (const r of acctRows) rows.push({
+                name: `acct ${r.name}`,
+                value: `${r.current ? "active" : r.picked ? "picked" : "idle"}${r.cooling ? ` · cooling until ${new Date(r.limitedUntil * 1000).toLocaleTimeString()}` : ""}`,
+                level: r.cooling ? "warn" : "ok",
+              });
+            }
+            const level: Lev = !a.installed
+              ? (a.id === "devin" ? "fail" : "warn")
+              : dead ? "warn" : "ok";
+            mods.push({
+              id: `agent-${a.id}`,
+              level,
+              lane: "branch",
+              detail: `${a.label} — ${a.installed ? (a.version ?? "?") : "missing"} · ${myProcs.length} proc(s)${a.id === "devin" ? ` · ${acctRows.length} acct(s)` : " · self-managed auth"}`,
+              ms: Date.now() - t0,
+              rows,
+            });
+          }
+        }
+        await timed("ws", () => ({
+          detail: `${ctx.hub.clients()} client(s) — return channel`,
+          rows: [{ name: "clients", value: String(ctx.hub.clients()) }],
+        }));
+        await timed("disk", () => {
+          const probe = path.join(ctx.store.dataDir, `.probe-${process.pid}`);
+          fs.writeFileSync(probe, "ok");
+          fs.unlinkSync(probe);
+          try {
+            const st = fs.statfsSync(ctx.store.dataDir);
+            const gb = (st.bavail * st.bsize) / 1073741824;
+            return {
+              level: gb < 1 ? "warn" as const : "ok" as const,
+              detail: `writable · ${gb.toFixed(1)}GB free`,
+              rows: [
+                { name: "writable", value: "yes", level: "ok" as const },
+                { name: "free", value: `${gb.toFixed(1)}GB`, level: gb < 1 ? "warn" as const : "ok" as const },
+                { name: "path", value: ctx.store.dataDir },
+              ],
+            };
+          } catch {
+            return { detail: "writable", rows: [{ name: "writable", value: "yes", level: "ok" as const }] };
+          }
+        });
+        json(res, 200, { ts: Date.now(), modules: mods, recentSendErrors: recentSendErrors() });
+        return true;
+      }
+
+      // GET /api/admin/send-check?session=<id> — per-stage send preflight:
+      // gate → known → busy → host → account → store → last error.
+      if (p === "/api/admin/send-check" && m === "GET") {
+        const id = url.searchParams.get("session") ?? "";
+        if (!id) { json(res, 400, { error: "missing session" }); return true; }
+        json(res, 200, { session: id, ...sendPreflight(ctx, id) });
+        return true;
+      }
+
       // GET /api/admin/mirror/sessions — sidebar tree
       if (p === "/api/admin/mirror/sessions" && m === "GET") {
         const sessions = (await listLocalSessions(ctx)).map((s) => treeSession(ctx, s));
@@ -1202,7 +1377,7 @@ export async function handleLocalWb(ctx: ApiContext, req: IncomingMessage, res: 
         // sends pr_url, not the session's repo, so this stays session-agnostic
         // data plumbing inside the admin tree.
         if (sub === "pr" || sub.startsWith("pr-")) {
-          if (await handlePrRoute(sub, m, req, res, url)) return true;
+          if (await handlePrRoute(ctx, sub, m, req, res, url)) return true;
         }
 
         // GET /api/admin/session/:id — detail (slim or full). Memory-only:
