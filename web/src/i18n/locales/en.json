@@ -1038,7 +1038,10 @@
       "about": "Version and build info"
     },
     "hub": "Overview",
-    "hubDesc": "All settings for this local instance"
+    "hubDesc": "All settings for this local instance",
+    "searchPh": "Search settings…",
+    "personalDesc": "Interface and session preferences",
+    "instanceDesc": "Local instance configuration and service management"
   },
   "as": {
     "resetConfirm": "Reset the share link? The old link stops working immediately.",

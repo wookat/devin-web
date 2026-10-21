@@ -1038,7 +1038,10 @@
       "about": "版本与构建信息"
     },
     "hub": "总览",
-    "hubDesc": "本地实例的全部设置项"
+    "hubDesc": "本地实例的全部设置项",
+    "searchPh": "搜索设置…",
+    "personalDesc": "界面与会话偏好",
+    "instanceDesc": "本地实例配置与服务管理"
   },
   "as": {
     "resetConfirm": "重置分享链接？旧链接将立即失效。",

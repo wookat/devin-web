@@ -2,7 +2,7 @@ import { useEffect, useState } from 'react'
 import { useTranslation } from 'react-i18next'
 import i18n from '@/i18n'
 import { Link } from 'react-router-dom'
-import { ArrowLeft, PanelLeft, Plus, RefreshCw, RotateCcw, ChevronDown, ChevronRight, FileText, BookOpen, SlidersHorizontal, MessagesSquare, PanelLeftClose, KeyRound, Wrench, Stethoscope, ScrollText, Info, Boxes } from 'lucide-react'
+import { ArrowLeft, PanelLeft, Plus, RefreshCw, RotateCcw, ChevronDown, ChevronRight, FileText, BookOpen, SlidersHorizontal, KeyRound, Wrench, Stethoscope, Info, Boxes } from 'lucide-react'
 import { useParams } from 'react-router-dom'
 import { Combo } from '@/components/ui'
 import { adminFetch } from '@/lib/api'
@@ -32,13 +32,23 @@ const readTreePrefs = () => { try { return JSON.parse(localStorage.getItem(TREE_
 // Tab config — official settings splits pages by responsibility into the left
 // rail (Personal group → Preferences…; org group → everything else). Ours maps:
 // personal: general/session/sidebar; local instance: accounts → about.
-const TABS: { key: string; group: 'personal' | 'instance'; icon: React.ReactNode }[] = [
-  { key: 'preferences', group: 'personal', icon: <SlidersHorizontal size={15} /> },
-  { key: 'accounts', group: 'instance', icon: <KeyRound size={15} /> },
-  { key: 'resources', group: 'instance', icon: <Boxes size={15} /> },
-  { key: 'service', group: 'instance', icon: <Wrench size={15} /> },
-  { key: 'diag', group: 'instance', icon: <Stethoscope size={15} /> },
-  { key: 'about', group: 'instance', icon: <Info size={15} /> },
+// Official category → icon-tile colors (route-org-settings-hub.js):
+//   organization/enterprise → bg-tint-secondary text-text-primary
+//   products → bg-tint-blue text-blue · resources → bg-tint-purple text-purple
+//   administration → bg-tint-green text-green
+const CAT_CLS: Record<string, string> = {
+  organization: 'bg-tint-secondary text-text-primary',
+  products: 'bg-tint-blue text-blue',
+  resources: 'bg-tint-purple text-purple',
+  administration: 'bg-tint-green text-green',
+}
+const TABS: { key: string; group: 'personal' | 'instance'; cat: string; icon: React.ReactNode }[] = [
+  { key: 'preferences', group: 'personal', cat: 'organization', icon: <SlidersHorizontal size={16} /> },
+  { key: 'accounts', group: 'instance', cat: 'administration', icon: <KeyRound size={16} /> },
+  { key: 'resources', group: 'instance', cat: 'resources', icon: <Boxes size={16} /> },
+  { key: 'service', group: 'instance', cat: 'administration', icon: <Wrench size={16} /> },
+  { key: 'diag', group: 'instance', cat: 'administration', icon: <Stethoscope size={16} /> },
+  { key: 'about', group: 'instance', cat: 'organization', icon: <Info size={16} /> },
 ]
 
 export default function Settings() {
@@ -57,6 +67,7 @@ export default function Settings() {
   const [compact, setCompact] = useState<boolean>(() => !!readTreePrefs().compact)
   const [showArchived, setShowArchived] = useState<boolean>(() => !!readTreePrefs().showArchived)
   const [doctor, setDoctor] = useState(false)
+  const [sq, setSq] = useState('')
 
   const loadAccounts = () => {
     void adminFetch<{ accounts: Account[] }>('/api/accounts')
@@ -171,18 +182,32 @@ export default function Settings() {
             <ArrowLeft size={14} /> Back to app
           </Link>
         </div>
-        <nav className="flex flex-col gap-0.5 p-2 text-[13px]">
-          {(['personal', 'instance'] as const).map(g => (
-            <div key={g}>
-              <p className="px-2 pb-1 pt-2 text-[11px] text-muted-foreground first:pt-0">{t(g === 'personal' ? 'set.personal' : 'set.localInstance')}</p>
-              {TABS.filter(x => x.group === g).map(x => (
-                <Link key={x.key} to={`/settings/${x.key}`}
-                  className={`flex h-[30px] items-center gap-2 rounded-[6px] px-2 ${tab === x.key ? 'bg-tint-secondary font-medium text-foreground' : 'text-muted-foreground hover:bg-tint-secondary hover:text-foreground'}`}>
-                  {x.icon} {t(`set.tab.${x.key}`)}
-                </Link>
-              ))}
-            </div>
-          ))}
+        {/* official "Search settings…" — filters nav rows live */}
+        <div className="px-2 pt-2">
+          <input
+            value={sq}
+            onChange={(e) => setSq(e.target.value)}
+            placeholder={t('set.searchPh')}
+            className="h-[30px] w-full rounded-[6px] border border-border-secondary bg-card px-2 text-[13px] text-foreground outline-none placeholder:text-muted-foreground focus:border-accent-primary"
+          />
+        </div>
+        <nav className="flex flex-col gap-0.5 overflow-y-auto p-2 text-[13px]">
+          {(['personal', 'instance'] as const).map(g => {
+            const items = TABS.filter(x => x.group === g &&
+              (!sq || t(`set.tab.${x.key}`).toLowerCase().includes(sq.toLowerCase()) || t(`set.tabDesc.${x.key}`, { defaultValue: '' }).toLowerCase().includes(sq.toLowerCase())))
+            if (!items.length) return null
+            return (
+              <div key={g}>
+                <p className="px-2 pb-1 pt-2 text-[11px] text-muted-foreground first:pt-0">{t(g === 'personal' ? 'set.personal' : 'set.localInstance')}</p>
+                {items.map(x => (
+                  <Link key={x.key} to={`/settings/${x.key}`}
+                    className={`flex h-[30px] items-center gap-2 rounded-[6px] px-2 ${tab === x.key ? 'bg-tint-secondary font-medium text-foreground' : 'text-muted-foreground hover:bg-tint-secondary hover:text-foreground'}`}>
+                    {x.icon} {t(`set.tab.${x.key}`)}
+                  </Link>
+                ))}
+              </div>
+            )
+          })}
         </nav>
       </aside>
       <div className="flex min-w-0 flex-1 flex-col">
@@ -206,17 +231,34 @@ export default function Settings() {
               </div>
             </div>
 
-            {!tab && TABS.map(x => (
-              <Link key={x.key} to={`/settings/${x.key}`}
-                className="group flex min-h-[60px] items-center gap-3 rounded-[10px] border border-border bg-card px-[12px] py-[10px] hover:bg-tint-tertiary">
-                <span className="flex size-8 shrink-0 items-center justify-center rounded-[8px] bg-tint-secondary text-muted-foreground">{x.icon}</span>
-                <span className="flex min-w-0 flex-1 flex-col gap-[2px]">
-                  <span className="text-[13px] font-medium text-foreground">{t(`set.tab.${x.key}`)}</span>
-                  <span className="truncate text-[13px] text-muted-foreground">{t(`set.tabDesc.${x.key}`, { defaultValue: '' })}</span>
-                </span>
-                <ChevronRight size={15} className="shrink-0 text-muted-foreground" />
-              </Link>
-            ))}
+            {/* official hub: flex-col gap-10; row = focus-ring-inset
+                hover:bg-tint-tertiary min-h-[60px] gap-3 rounded-[6px] px-[12px]
+                py-[10px]; icon tile size-7 rounded-md category-colored */}
+            {!tab && (['personal', 'instance'] as const).map(g => {
+              const items = TABS.filter(x => x.group === g)
+              return (
+                <div key={g} className="flex flex-col">
+                  <div className="flex flex-col gap-[2px] pb-3">
+                    <h3 className="text-[14px] font-medium text-foreground">{t(g === 'personal' ? 'set.personal' : 'set.localInstance')}</h3>
+                    <p className="text-[13px] text-muted-foreground">{t(g === 'personal' ? 'set.personalDesc' : 'set.instanceDesc')}</p>
+                  </div>
+                  <div className="overflow-hidden rounded-[10px] bg-tint-tertiary">
+                    <div className="flex flex-col gap-[2px] rounded-[10px] border border-border bg-card p-[6px]">
+                      {items.map(x => (
+                        <Link key={x.key} to={`/settings/${x.key}`}
+                          className="focus-ring-inset flex min-h-[60px] items-center gap-3 rounded-[6px] px-[12px] py-[10px] hover:bg-tint-tertiary">
+                          <span className={`flex size-7 shrink-0 items-center justify-center rounded-md ${CAT_CLS[x.cat]}`}>{x.icon}</span>
+                          <span className="flex min-w-0 flex-1 items-center gap-2">
+                            <span className="text-[13px] font-medium text-foreground">{t(`set.tab.${x.key}`)}</span>
+                          </span>
+                          <ChevronRight size={16} className="shrink-0 text-muted-foreground" />
+                        </Link>
+                      ))}
+                    </div>
+                  </div>
+                </div>
+              )
+            })}
 
             {tab === 'preferences' && <>
             <Section title={t('set.general')}>
