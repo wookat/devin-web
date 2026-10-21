@@ -12,7 +12,7 @@ import fs from "node:fs";
 import path from "node:path";
 import type { ApiContext } from "./routes.js";
 import { loadReg, saveReg, meta } from "./dwstore.js";
-import { acpForId } from "./sessionio.js";
+import { acpForId } from "./sessionload.js";
 import { dispatchPrompt, promptWithRetry, turnEndHooks } from "./sessionprompt.js";
 import { inflight, isDraining } from "./sessionlive.js";
 import { captureLoadResponse } from "./sessioncfg.js";

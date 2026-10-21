@@ -7,7 +7,7 @@ import path from "node:path";
 import type { IncomingMessage, ServerResponse } from "node:http";
 import type { ApiContext } from "./routes.js";
 import { loadReg, saveReg, meta } from "./dwstore.js";
-import { acpForId } from "./sessionio.js";
+import { acpForId } from "./sessionload.js";
 import { promptWithRetry } from "./sessionprompt.js";
 import { isDraining, inflight } from "./sessionlive.js";
 import { captureLoadResponse } from "./sessioncfg.js";

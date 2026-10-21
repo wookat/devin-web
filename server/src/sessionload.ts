@@ -1,48 +1,27 @@
 /**
- * sessionio — session→acp resolution, history loading, live config,
- * attachments, prompt dispatch, subagents, session listing.
- * Extracted from localweb.ts (mechanical move, behavior unchanged).
+ * sessionload — the load/recovery engine: session→acp resolution (hostFor),
+ * session/load with replay dedup (doLoad/loadOnce/replayGuard), placement
+ * marks, the interrupted-turn evidence reader, broker adoption + adopted-turn
+ * watchers, auto-resume, and the durable-state boot hook. This is the top of
+ * the session module stack: it binds the queue/prompt injections so no leaf
+ * ever imports a consumer.
  */
 import type { ApiContext } from "./routes.js";
 import type { DevinAcp } from "./acp.js";
-import { catalogInfo } from "./modelcat.js";
-import { remapLegacyCwd } from "./store.js";
+import { brokerEnabled, brokerList, readOffsets } from "./acpbroker.js";
 import { agentById, DEFAULT_AGENT } from "./agents.js";
-import { brokerEnabled, brokerList, readOffsets, writeOffsets } from "./acpbroker.js";
-import {
-  responseCfg, lastAgentCfg, lastAgentCommands, setLastAgentCommands, captureLoadResponse,
-  isSessionLocked, loadWithRetry, initCfgState, persistJson,
-  type ConfigOption, type SessionConfig,
-} from "./sessioncfg.js";
-import { queueAdd, queueRemove, queueFlush, restoreQueues, bindQueueDeps, type QueuedMsg } from "./sessionqueue.js";
-import { recentSendErrors, restoreSendErrors } from "./sendhealth.js";
+import { remapLegacyCwd } from "./store.js";
+import { loadReg, meta, noteLastUsed } from "./dwstore.js";
+import { noteUpdate, persistTail, tlCache, tailSnapshot, type LogEntry } from "./dwtimeline.js";
+import { initCfgState, isSessionLocked, loadWithRetry, captureLoadResponse } from "./sessioncfg.js";
+import { queueFlush, restoreQueues, bindQueueDeps } from "./sessionqueue.js";
+import { restoreSendErrors } from "./sendhealth.js";
 import { dispatchPrompt, releaseBusy, bindPromptDeps } from "./sessionprompt.js";
-import { openTurns, openTurnsLoad, openTurnsSave, clearOpenTurns, type OpenTurn } from "./sessionturns.js";
-import { loadedOn, sessionHost, loadEpoch, loadInflight, isSessionPinned } from "./sessionplace.js";
-import { inflight, adoptedTurns, lastActivity, touchSessionActivity, beginDrain, isDraining, drainSince, markGracefulExit, isGracefulExit } from "./sessionlive.js";
-import { loadReg, saveReg, meta, noteLastUsed } from "./dwstore.js";
-import {
-  noteUpdate, persistTail, buildTimeline, buildTimelineFrom, snippet, tlCache,
-  tailSnapshot,
-  type DwItem, type LogEntry,
-} from "./dwtimeline.js";
-
-// ---------------------------------------------------------------------------
-// session helpers
-// ---------------------------------------------------------------------------
-
-/** Placement state (loadedOn/sessionHost/loadEpoch/loadInflight/
- * isSessionPinned) lives in sessionplace.ts — a leaf module imported above.
- * Server boot — the acp subagent registry is process-local, so any agent
- * spawned before this process started has no live handle by definition. */
-const BOOT_TS = Date.now();
-/** `parent:agentId` — a resume already failed with a missing-handle error
- * for these; short-circuits further relays instead of burning a turn each
- * time the user retries a dead child. */
-const deadSubs = new Set<string>();
-export function markSubagentDead(parent: string, aid: string) {
-  deadSubs.add(`${parent}:${aid}`);
-}
+import { openTurns, openTurnsLoad, openTurnsSave, type OpenTurn } from "./sessionturns.js";
+import { loadedOn, sessionHost, loadEpoch, loadInflight } from "./sessionplace.js";
+import { inflight, adoptedTurns, lastActivity, touchSessionActivity, isDraining } from "./sessionlive.js";
+import { pingSubagent } from "./sessionsub.js";
+import { sessionStatus } from "./sessionview.js";
 
 /** Config caches + durable-state primitives live in sessioncfg.ts — imported
  * above as live bindings (responseCfg is shared state, lastAgentCfg a `let`).
@@ -218,7 +197,7 @@ async function doLoad(ctx: ApiContext, acp: DevinAcp, id: string, cwd: string): 
 /** Await the shared replay for `id`; resolves to the acp that ran it — not
  * necessarily the `acp` arg (a concurrent caller may have started the load
  * on another pool). */
-function loadOnce(ctx: ApiContext, acp: DevinAcp, id: string, cwd: string): Promise<DevinAcp> {
+export function loadOnce(ctx: ApiContext, acp: DevinAcp, id: string, cwd: string): Promise<DevinAcp> {
   let rec = loadInflight.get(id);
   if (!rec) {
     // A replay is live work too — mark the acp busy so rotation/restart
@@ -248,7 +227,7 @@ function markLoadedOn(id: string, host: DevinAcp): DevinAcp {
  * canonical resolver shared by every route layer. Order: dedicated
  * single-session process → sessionHost pin for loaded sessions → cwd-keyed
  * pool. `cwdHint` lets the native API disambiguate never-seen sessions. */
-async function hostFor(ctx: ApiContext, id: string, cwdHint?: string): Promise<{ acp: DevinAcp; set: Set<string>; cwd: string }> {
+export async function hostFor(ctx: ApiContext, id: string, cwdHint?: string): Promise<{ acp: DevinAcp; set: Set<string>; cwd: string }> {
   const dedicated = ctx.manager.forSession(id);
   const host = sessionHost.get(id);
   const pinned = host && !host.exited ? host : undefined;
@@ -276,11 +255,11 @@ async function hostFor(ctx: ApiContext, id: string, cwdHint?: string): Promise<{
 /** Failed replays get a cooldown — sessions locked by desktop/CLI
  * (`session_locked`) would otherwise burn a 5-attempt loadWithRetry on every
  * background poll, forever. Real ops go through acpForId and always retry. */
-const loadCooldown = new Map<string, number>();
+export const loadCooldown = new Map<string, number>();
 
 /** Kick off / await a history replay. Safe to call from any endpoint; read
  * endpoints call this without awaiting so pages fill progressively. */
-async function ensureLoaded(ctx: ApiContext, id: string): Promise<void> {
+export async function ensureLoaded(ctx: ApiContext, id: string): Promise<void> {
   const { acp, set, cwd } = await hostFor(ctx, id);
   if (set.has(id)) return;
   const cool = loadCooldown.get(id);
@@ -296,7 +275,7 @@ async function ensureLoaded(ctx: ApiContext, id: string): Promise<void> {
   }
 }
 
-async function acpForId(ctx: ApiContext, id: string) {
+export async function acpForId(ctx: ApiContext, id: string) {
   const { acp, set, cwd } = await hostFor(ctx, id);
   if (!set.has(id)) {
     // Same cross-pool guard: the load may have lived on another acp — pin to
@@ -311,7 +290,7 @@ async function acpForId(ctx: ApiContext, id: string) {
  * replays history via session/load. Other sessions pinned to a killed pooled
  * process heal automatically — hostFor's `!pinned.exited` check re-pools them.
  * No-op when the session has no live host. */
-function restartSession(ctx: ApiContext, id: string): void {
+export function restartSession(ctx: ApiContext, id: string): void {
   const acp = sessionHost.get(id) ?? ctx.manager.forSession(id);
   sessionHost.delete(id);
   if (!acp || acp.exited) return;
@@ -327,127 +306,6 @@ function restartSession(ctx: ApiContext, id: string): void {
     return;
   }
   ctx.manager.killProcess(acp);
-}
-
-// ---------------------------------------------------------------------------
-// live session config (config_option_update / mode / commands / terminal)
-// ---------------------------------------------------------------------------
-
-function sessionConfig(ctx: ApiContext, id: string): SessionConfig {
-  const out: SessionConfig = { options: [], mode: null, commands: [], model: null };
-  // Base: config from this session's new|load response; fall back to the
-  // agent-level config last seen (old sessions get no config on load).
-  const base = responseCfg.get(id) ?? lastAgentCfg ?? undefined;
-  const own = responseCfg.get(id);
-  const echoTs = own?.echoTs ?? 0;
-  if (base?.configOptions) out.options = base.configOptions;
-  // Mode is per-session — only trust this session's own response/log, never the
-  // agent-level fallback's currentModeId (that's another session's mode).
-  if (own?.modes) out.mode = own.modes.currentModeId ?? null;
-  // Overlay: latest streamed config updates win. Scan newest→oldest but only
-  // take option ids a newer event hasn't already covered — otherwise the
-  // oldest logged update (e.g. the load-time push) would clobber fresh
-  // setSessionConfigOption echoes stored in responseCfg.
-  const log = ctx.sessionLog.get(id);
-  const cfgCovered = new Set<string>();
-  for (let i = log.length - 1; i >= 0; i--) {
-    const u = log[i].update as Record<string, unknown>;
-    const k = u.sessionUpdate;
-    if (k === "config_option_update") {
-      if (log[i].ts < echoTs) continue; // predates the authoritative write echo
-      const upd = (u.configOptions as ConfigOption[]) ?? [];
-      // Merge by id — an update may carry only the changed option(s).
-      const byId = new Map(out.options.map((o) => [String(o.id ?? ""), o]));
-      for (const o of upd) {
-        const oid = String(o.id ?? "");
-        if (cfgCovered.has(oid)) continue;
-        byId.set(oid, o);
-        cfgCovered.add(oid);
-      }
-      out.options = [...byId.values()];
-    } else if (k === "current_mode_update" && !out.mode) {
-      out.mode = (u.currentModeId as string) ?? null;
-    } else if (k === "available_commands_update" && !out.commands.length) {
-      out.commands = (u.availableCommands as SessionConfig["commands"]) ?? [];
-    }
-  }
-  // Commands are agent-level: remember the newest non-empty set, fall back to
-  // it (or this session's own load-response copy) when the replay window
-  // hasn't delivered a commands_update yet.
-  if (out.commands.length) setLastAgentCommands(out.commands);
-  else out.commands = (responseCfg.get(id)?.commands?.length ? responseCfg.get(id)!.commands! : lastAgentCommands ?? []);
-  // Expose ACP modes as a synthetic `_mode` config group when the agent hasn't
-  // already surfaced one itself.
-  const hasModeOpt = out.options.some((o) => o.id === "mode" || /mode/i.test(String(o.id ?? "")));
-  if (!hasModeOpt && base?.modes?.availableModes?.length) {
-    out.options.push({
-      id: "_mode",
-      name: "Mode",
-      currentValue: out.mode ?? "",
-      options: base.modes.availableModes.map((m) => ({ value: m.id, name: m.name ?? m.id })),
-    });
-  }
-  const modelOpt = out.options.find((o) => o.id === "model" || /model/i.test(String(o.id ?? "")));
-  if (modelOpt) {
-    const cur = String(modelOpt.currentValue ?? "");
-    const name = modelOpt.options?.find((o) => o.value === cur)?.name ?? cur;
-    out.model = {
-      id: String(modelOpt.id ?? "model"),
-      current: cur,
-      currentName: name,
-      options: (modelOpt.options ?? []).map((o) => {
-        // Per-family data decoded from the local model catalog — ACP only
-        // exposes global thought_level/speed groups; fast/ctx1m gate whether
-        // the desktop-style flyout shows Speed / 1M Context sections.
-        const info = catalogInfo(o.value);
-        return {
-          value: o.value,
-          name: o.name,
-          efforts: info?.efforts ?? [],
-          effortCtl: info?.effortCtl ?? false,
-          family: info?.family,
-          fast: info?.fast ?? false,
-          ctx1m: info?.ctx1m ?? false,
-          prices: info?.prices,
-        };
-      }),
-    };
-  }
-  return out;
-}
-
-/** cloud version pill strings → local model config values */
-function cloudVersionToModel(version: string, opts: { value: string; name?: string }[]): string | null {
-  const has = (v: string) => opts.some((o) => o.value === v);
-  const pick = (...cands: string[]) => cands.find(has) ?? null;
-  switch (version) {
-    case "devin-auto":
-    case "devin-auto-fast":
-      return pick("adaptive", "swe-2-high");
-    case "devin-ultra":
-      return pick("swe-2-high", "adaptive");
-    case "devin-2-5":
-      return pick("swe-1-7-medium", "swe-2-high", "adaptive");
-    case "devin-fast-opus":
-      return pick("swe-1-7-lightning-medium", "swe-1-7-medium");
-    case "devin_lite":
-      return pick("swe-1-7-lightning-medium", "swe-1-7-medium");
-    case "devin-swe-1-7":
-      return pick("swe-1-7-medium");
-    case "devin-swe-1-7-lightning":
-      return pick("swe-1-7-lightning-medium");
-    default:
-      return has(version) ? version : pick("adaptive");
-  }
-}
-
-/** terminalId → accumulated output (fed by index.ts onTerminalOutput). */
-const terminalBuf = new Map<string, { sessionId: string; text: string }>();
-function recordTerminal(terminalId: string, sessionId: string, data: string) {
-  const e = terminalBuf.get(terminalId) ?? { sessionId, text: "" };
-  e.sessionId = sessionId;
-  e.text = (e.text + data).slice(-512 * 1024);
-  terminalBuf.set(terminalId, e);
 }
 
 /** Liveness state (inflight/draining/adoptedTurns/lastActivity/gracefulExit)
@@ -469,7 +327,7 @@ bindQueueDeps({
 bindPromptDeps({
   resolveAcp: (ctx, id) => acpForId(ctx, id),
   statusOf: (ctx, id) => sessionStatus(ctx, id),
-  pingSubagent: (aid) => { subPing.set(aid, Date.now()); },
+  pingSubagent: (aid) => { pingSubagent(aid); },
 });
 
 // ---------------------------------------------------------------------------
@@ -697,323 +555,3 @@ export async function autoResumeInterrupted(ctx: ApiContext) {
 }
 
 
-function sessionStatus(ctx: ApiContext, id: string): { status: string; activity: string } {
-  if (inflight.has(id)) return { status: "working", activity: "working" };
-  // 'blocked' = "awaiting instructions" with an enabled composer; the
-  // web treats 'waiting' as a transient "reverting checkpoint" state.
-  return { status: "blocked", activity: "idle" };
-}
-
-// ---------------------------------------------------------------------------
-// subagents — events tagged cognition.ai/subagent_context.parentAgentId=agentId
-// ---------------------------------------------------------------------------
-
-interface SubagentInfo {
-  /** real agentId when known; `spawn:<toolCallId>` pseudo-id for replayed
-   * spawns whose lifecycle meta was stripped — those can't be messaged or
-   * controlled (`live:false`). */
-  agentId: string;
-  /** whether direct message/control calls are possible (real agentId seen live) */
-  live: boolean;
-  title: string;
-  task: string;
-  profile: string;
-  model: string;
-  isBackground: boolean;
-  depth: number;
-  status: "running" | "completed" | "failed";
-  summary: string | null;
-  startedAt: string | null;
-  finishedAt: string | null;
-  /** count of that agent's own stream events (thoughts/messages/tool calls) */
-  updates: number;
-  lastText: string;
-  /** ts of the event proving CURRENT-registry membership (spawn call /
-   * subagent_started / completed resume), as the event's cognition.ai
-   * timestamp — replayed copies keep their original stamp so a replay can
-   * never fake liveness. Internal; feeds `resumable`. */
-  liveTs?: number;
-  /** Minted by a run_subagent(resume=…) call for an agent no row owns —
-   * the registry may already have dropped it, so it is NOT resumable until
-   * a lifecycle/result event re-proves it. */
-  resumeMinted?: boolean;
-  /** false once the process/registry holding the handle is gone (server
-   * restart, session replay, exited host) or a resume already failed —
-   * the UI greys the row and the message endpoint refuses the relay
-   * instead of burning a lead turn to learn "doesn't exist". */
-  resumable?: boolean;
-}
-
-/** Fresh-ping window: a "message subagent" relay makes the sub page's status
- * pill read Working immediately, before the resumed agent's own
- * subagent_started echo arrives. Cleared by subagent_completed. */
-const subPing = new Map<string, number>();
-function subPingActive(aid: string): boolean {
-  const t = subPing.get(aid) ?? 0;
-  if (Date.now() - t > 60_000) { subPing.delete(aid); return false; }
-  return true;
-}
-
-function listSubagents(ctx: ApiContext, id: string, scope?: string, entries?: LogEntry[]): SubagentInfo[] {
-  // Rows keyed by real agentId (live) or `spawn:<toolCallId>` (replay —
-  // lifecycle meta is stripped so the real id never shows). A live
-  // subagent_started adopts the oldest unclaimed spawn row FIFO — spawns and
-  // starts arrive in matching order. `scope` restricts to agents spawned
-  // inside one stream ('root' = the lead stream, an agentId = nested children
-  // of that agent) — the sub-session page uses it for its own child list.
-  const rows: (SubagentInfo & { toolId?: string; originTag?: string })[] = [];
-  const byAgent = new Map<string, SubagentInfo & { toolId?: string; originTag?: string }>();
-  const blank = (agentId: string, toolId?: string): SubagentInfo & { toolId?: string; originTag?: string } => ({
-    agentId, live: !agentId.startsWith("spawn:"), title: "", task: "", profile: "", model: "",
-    isBackground: false, depth: 1, status: "running", summary: null,
-    startedAt: null, finishedAt: null, updates: 0, lastText: "", toolId,
-  });
-  const add = (r: SubagentInfo & { toolId?: string; originTag?: string }) => { rows.push(r); if (!r.agentId.startsWith("spawn:")) byAgent.set(r.agentId, r); };
-  for (const e of entries ?? ctx.sessionLog.get(id)) {
-    const u = e.update;
-    const m = (u._meta ?? {}) as Record<string, unknown>;
-    // The stream an event belongs to: "root" = the lead agent, an agentId =
-    // that agent's own stream. NOTE an agent's lifecycle events are tagged
-    // with ITS OWN id — parentage comes from the spawn call's tag below.
-    const tag = (m["cognition.ai/subagent_context"] as { parentAgentId?: string } | undefined)?.parentAgentId ?? "root";
-    const iso = new Date(e.ts).toISOString();
-    // The event's ORIGINAL creation stamp — cognition.ai/timestamp survives
-    // replays, while e.ts is our append time (fresh on every re-replay and
-    // would fake liveness). Unstamped lines arriving DURING a replay can't
-    // prove anything → 0.
-    const ct = m["cognition.ai/timestamp"];
-    const evTs = typeof ct === "number" ? ct : (loadInflight.has(id) ? 0 : e.ts);
-    const toolId = String(u.toolCallId ?? "");
-    const isSpawn = m?.["cognition.ai/inferenceToolName"] === "run_subagent";
-    const st = m["cognition.ai/subagent_started"] as Record<string, unknown> | undefined;
-    const dn = m["cognition.ai/subagent_completed"] as Record<string, unknown> | undefined;
-
-    // Seed from the spawn call itself — its rawInput survives replays. The
-    // same tool_call can re-arrive (ACP resends it mid-call): reuse the row.
-    if (isSpawn && u.sessionUpdate === "tool_call" && toolId) {
-      const args = (u.rawInput ?? u.arguments ?? {}) as Record<string, unknown>;
-      const resumeId = typeof args.resume === "string" ? args.resume : "";
-      // Resume calls belong to the existing agent — merge, don't mint a row.
-      // A resume of an agent no row owns mints a TENTATIVE one (liveTs=0 —
-      // the handle may be gone; only its own result/started can re-prove it).
-      const cur = resumeId
-        ? (byAgent.get(resumeId) ?? (() => {
-            const r = blank(resumeId, toolId);
-            r.live = false;
-            r.resumeMinted = true;
-            r.title = String(args.title ?? `Resumed subagent ${resumeId}`);
-            add(r);
-            return r;
-          })())
-        : (rows.find((r) => r.toolId === toolId) ?? (() => { const r = blank(`spawn:${toolId}`, toolId); rows.push(r); return r })());
-      cur.originTag ??= tag;
-      cur.title = String(args.title ?? cur.title);
-      cur.task = String(args.task ?? cur.task);
-      cur.profile = String(args.profile ?? cur.profile);
-      cur.isBackground = Boolean(args.is_background);
-      cur.startedAt ??= iso;
-      // A spawn call means the agent is being registered NOW; a resume call
-      // proves nothing until it succeeds.
-      if (!resumeId) cur.liveTs ??= evTs;
-    }
-    // Lifecycle meta (live only, toolCallId = agentId — NOT the spawn's id).
-    if (st) {
-      const aid = String(st.agentId ?? toolId);
-      // Resume re-emits subagent_started for an existing agent — merge by id
-      // first, else it would adopt a stale spawn row into a duplicate row.
-      // Otherwise adopt the NEWEST unclaimed spawn row within a freshness
-      // window: harness-internal spawns (READY pings) never emit lifecycle
-      // meta, so their rows would sit unclaimed forever and steal the
-      // adoption meant for the spawn that actually precedes this started.
-      const spawnRow = [...rows].reverse().find((r) => r.agentId.startsWith("spawn:") && r.startedAt && Math.abs(Date.parse(iso) - Date.parse(r.startedAt)) < 60_000);
-      const cur = byAgent.get(aid) ?? spawnRow ?? (() => { const r = blank(aid, toolId || undefined); add(r); return r })();
-      if (cur.agentId.startsWith("spawn:")) { cur.agentId = aid; byAgent.set(aid, cur); }
-      cur.live = true;
-      cur.liveTs = evTs; // started re-emits on a successful resume — that IS current-registry proof
-      cur.title = String(st.title ?? cur.title);
-      cur.task = String(st.task ?? cur.task);
-      cur.profile = String(st.profile ?? cur.profile);
-      cur.model = String(st.model ?? cur.model);
-      cur.isBackground = Boolean(st.isBackground);
-      cur.depth = Number(st.depth ?? 1);
-      cur.startedAt ??= iso;
-      cur.status = "running";
-    }
-    if (dn) {
-      const aid = String(dn.agentId ?? toolId);
-      subPing.delete(aid);
-      const cur = byAgent.get(aid);
-      if (cur) {
-        cur.status = dn.success === false ? "failed" : "completed";
-        cur.summary = String(dn.summary ?? "");
-        cur.finishedAt = iso;
-      }
-    }
-    // A spawn call's own update completing — only meaningful for replayed
-    // rows; a live row's real status comes from subagent_completed (a
-    // background spawn call returns while the agent is still running).
-    if (isSpawn && u.sessionUpdate === "tool_call_update" && toolId && !dn) {
-      const cur = rows.find((r) => r.toolId === toolId && (r.agentId.startsWith("spawn:") || r.resumeMinted));
-      if (cur) {
-        const s2 = String(u.status ?? "");
-        if (s2 === "completed") {
-          cur.status = "completed"; cur.finishedAt ??= iso;
-          // A resume call that completed proves the handle existed — the
-          // resumed agent is registered in the CURRENT process.
-          if (cur.resumeMinted) cur.liveTs = evTs;
-        } else if (s2 === "failed") {
-          cur.status = "failed"; cur.finishedAt ??= iso;
-          // A failed resume means the handle is gone — refuse future relays.
-          const text = JSON.stringify(u.rawOutput ?? u.content ?? "");
-          if (/doesn'?t exist|no longer found|no subagent found|not found/i.test(text)) deadSubs.add(`${id}:${cur.agentId}`);
-        }
-      }
-    }
-    const cx = (m["cognition.ai/subagent_context"] as { parentAgentId?: string } | undefined)?.parentAgentId;
-    if (cx && cx !== "root") {
-      const cur = byAgent.get(cx) ?? (() => { const r = blank(cx); add(r); return r })();
-      cur.updates++;
-      const text = (u.content as { text?: string } | undefined)?.text;
-      if (text) cur.lastText = text.replace(/\s+/g, " ").slice(0, 160);
-    }
-  }
-  // Replay strips lifecycle meta, so a reloaded session leaves `spawn:` orphan
-  // rows for agents whose real id arrived in an earlier generation. An orphan
-  // sharing a live row's title is that agent's earlier-generation spawn card —
-  // drop the duplicate (a wrong title match only hides a cosmetic extra row).
-  // Resumability: the acp registry is process-local and emptied by every
-  // session/load replay — only an agent whose registering event is newer
-  // than the last epoch (and whose host process is alive, and which no
-  // failed resume already condemned) can take run_subagent(resume=…).
-  const epoch = loadEpoch.get(id) ?? BOOT_TS;
-  const hostDead = (() => { const h = sessionHost.get(id); return !h || h.exited; })();
-  for (const r of rows) {
-    r.resumable = !r.agentId.startsWith("spawn:")
-      && !hostDead
-      && !deadSubs.has(`${id}:${r.agentId}`)
-      && (r.liveTs ?? 0) >= epoch;
-  }
-  const liveTitles = new Set(rows.filter((r) => !r.agentId.startsWith("spawn:")).map((r) => r.title));
-  return rows
-    // scope = "children of stream S": the spawn call must originate in S's
-    // stream (originTag), and the agent itself is never its own child.
-    .filter((r) => scope === undefined || ((r.originTag ?? "root") === scope && r.agentId !== scope))
-    .filter((r) => !r.agentId.startsWith("spawn:") || !liveTitles.has(r.title))
-    .sort((a, b) => (a.startedAt ?? "").localeCompare(b.startedAt ?? ""));
-}
-
-/** The subagent's own event stream as a timeline — same item shape as the
- * main /timeline endpoint so the frontend can reuse its rendering. The disk
- * log holds the full history when the memory window has already evicted it.
- * Disk reads use a substring needle (the agentId appears in every event of
- * its stream) and an mtime cache — a full parse of a 500MB log per poll
- * would OOM the process. */
-const subTlCache = new Map<string, { m: number | null; lastSeq: number; items: DwItem[] }>();
-function subagentTimeline(ctx: ApiContext, id: string, agentId: string): DwItem[] {
-  const key = `${id}${agentId}`;
-  const mem = ctx.sessionLog.get(id);
-  const forAgent = (e: LogEntry) => {
-    const c = (e.update._meta as Record<string, unknown> | undefined)?.["cognition.ai/subagent_context"] as { parentAgentId?: string } | undefined;
-    return c?.parentAgentId === agentId || e.update.toolCallId === agentId;
-  };
-  const resolve = (u: Record<string, unknown>) => ctx.sessionLog.resolveBlobs(u);
-  // Full coverage test: replay restarts seq at 0, so a ring whose first
-  // entry is seq 0 was never truncated. A truncated window must be unioned
-  // with the disk index or early subagent events vanish.
-  if (mem.length && mem[0].seq === 0) return buildTimelineFrom(mem.filter(forAgent), agentId, id, resolve);
-  // Cold parent → serve from the child's sidechain file. Cache keyed on the
-  // SIDECAR's mtime (the main log's mtime churns during live writes and would
-  // defeat the cache, re-parsing the stream on every poll).
-  const im = ctx.sessionLog.subStreamMtime(id, agentId);
-  const lastSeq = mem.length ? mem[mem.length - 1].seq ?? -1 : -1;
-  const hit = subTlCache.get(key);
-  if (hit && hit.m === im && im != null && hit.lastSeq === lastSeq) return hit.items;
-  if (ctx.sessionLog.subFilesStale(id)) ctx.sessionLog.ensureSubFiles(id);
-  const idx = ctx.sessionLog.readSubStream(id, agentId) ?? [];
-  const seen = new Set(idx.map((e) => e.seq));
-  const items = buildTimelineFrom((mem.length ? [...idx, ...mem.filter((e) => !seen.has(e.seq))] : idx).filter(forAgent), agentId, id, resolve);
-  // Cache only a settled read — a missing stream means the scan is still
-  // running and the empty result must not stick or the transcript never fills.
-  if (im != null) subTlCache.set(key, { m: im, lastSeq, items });
-  return items;
-}
-
-interface ListedSession {
-  id: string;
-  title: string;
-  updated: string;
-  cwd: string;
-  /** devin's `_meta["cognition.ai/isLocked"]` — held open by SOME acp
-   *  process (ours included). Pair with `loaded_here` to tell "在别处占用"
-   *  apart from "本工作台已加载". */
-  locked: boolean;
-  created: string | null;
-  /** Owning agent id (devin default; custom agents from agents.json). */
-  agent?: string;
-}
-
-async function listLocalSessions(ctx: ApiContext): Promise<ListedSession[]> {
-  const out: ListedSession[] = [];
-  let dirty = false;
-  try {
-    const acp = await ctx.manager.get(ctx.primaryCwd);
-    let cursor: string | undefined;
-    do {
-      const page = await acp.listSessions(cursor);
-      for (const s of page.sessions) {
-        // Pinned sessions keep their loaded host — session/list reporting a
-        // different cwd must not bounce them to another pooled process.
-        if (!isSessionPinned(s.sessionId)) ctx.sessionCwd.set(s.sessionId, remapLegacyCwd(s.cwd));
-        const m = meta(ctx, s.sessionId);
-        // devin returns camelCase `updatedAt` (may be absent) — persist it so
-        // restarts/list outages keep real times; NEVER fall back to now(),
-        // which made every session look freshly updated on each poll.
-        const seen = (s as { updatedAt?: string; updated_at?: string }).updatedAt
-          ?? (s as { updated_at?: string }).updated_at ?? null;
-        if (seen && seen !== m.updatedAt) { m.updatedAt = seen; dirty = true; }
-        const lm = ((s as { _meta?: Record<string, unknown> })._meta ?? {}) as Record<string, unknown>;
-        out.push({
-          id: s.sessionId,
-          title: m.title ?? s.title ?? "Untitled session",
-          updated: seen ?? m.updatedAt ?? "1970-01-01T00:00:00.000Z",
-          cwd: remapLegacyCwd(s.cwd),
-          locked: lm["cognition.ai/isLocked"] === true,
-          created: (lm["cognition.ai/createdAt"] as string | undefined) ?? null,
-          agent: m.agent ?? "devin",
-        });
-      }
-      cursor = page.nextCursor ?? undefined;
-    } while (cursor && out.length < 2000);
-  } catch { /* devin list may be down; show registry-only */ }
-  if (dirty) saveReg();
-  const known = new Set(out.map((s) => s.id));
-  for (const [id, m] of Object.entries(loadReg(ctx).sessions)) {
-    if (!known.has(id) && !m.archived) {
-      out.push({ id, title: m.title ?? "Untitled session", updated: m.updatedAt ?? "1970-01-01T00:00:00.000Z", cwd: remapLegacyCwd(ctx.sessionCwd.get(id) ?? ctx.primaryCwd), locked: false, created: null, agent: m.agent ?? ctx.store.agentSession(id)?.agent });
-    }
-  }
-  return out;
-}
-
-/** Last message text, scanning only the tail of the log — the sidebar list
- * calls this for every session on every poll, so it must not buildTimeline. */
-function snippetFromLog(ctx: ApiContext, id: string): string {
-  const log = ctx.sessionLog.get(id);
-  for (let i = log.length - 1; i >= 0 && i > log.length - 100; i--) {
-    const u = log[i].update as { sessionUpdate?: string; content?: { text?: string } };
-    if ((u.sessionUpdate === "agent_message_chunk" || u.sessionUpdate === "user_message_chunk") && u.content?.text) {
-      return u.content.text.replace(/\s+/g, " ").slice(0, 140);
-    }
-  }
-  return "";
-}
-
-
-export {
-  loadOnce, hostFor, loadCooldown,
-  ensureLoaded, acpForId, restartSession,
-  sessionConfig, cloudVersionToModel,
-  terminalBuf, recordTerminal, sessionStatus,
-  type SubagentInfo, listSubagents, subagentTimeline, subPingActive,
-  type ListedSession, listLocalSessions, snippetFromLog,
-};
