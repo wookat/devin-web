@@ -5,7 +5,7 @@
  */
 import type { IncomingMessage, ServerResponse } from "node:http";
 import type { ApiContext } from "../routes.js";
-import { meta } from "../dwstore.js";
+import { meta, loadReg } from "../dwstore.js";
 import { snapshotItems, buildMessages, buildTimeline, tlReset } from "../dwtimeline.js";
 import { ensureLoaded } from "../sessionload.js";
 import { sessionStatus } from "../sessionview.js";
@@ -20,6 +20,12 @@ export async function handleShareTree(ctx: ApiContext, req: IncomingMessage, res
 
       const id = decodeURIComponent(parts[2]);
       const sub = parts[3] ?? "";
+
+      // Share access is opt-in — a session id is NOT a capability token by
+      // default (ids are enumerable via /ws + the sessions list). The admin
+      // share-link toggle sets meta.shared. Read the raw registry, NOT
+      // meta() — auto-creating an entry per probed id would pollute dw.json.
+      if (!loadReg(ctx).sessions[id]?.shared) { json(res, 404, { error: "not_shared" }); return true; }
 
       // Enforce the visitor permission tier server-side — the UI caps alone
       // are cosmetic; anyone with the share URL can call these directly.

@@ -84,7 +84,7 @@ export async function handlePerSession(ctx: ApiContext, req: IncomingMessage, re
         // Detail is polled every few seconds — the frontend only needs a
         // presence check / composer hint, not the whole transcript.
         messages: buildMessages(items.slice(-60)),
-        share_url: `/s/${id}?t=local`,
+        share_url: mm.shared ? `/s/${id}?t=local` : null,
         dashboard_url: `/api/session/${id}/dashboard?token=local`,
         media_token: "local",
       });
@@ -591,6 +591,19 @@ export async function handlePerSession(ctx: ApiContext, req: IncomingMessage, re
         const r = await acp.extMethod(id, "_cognition.ai/session/share", { sessionId: id }) as Record<string, unknown> | undefined;
         json(res, 200, { ok: true, url: String(r?.url ?? ""), shareId: String(r?.shareId ?? ""), truncated: !!r?.truncated });
       } catch (e) { json(res, 200, { ok: false, error: e instanceof Error ? e.message : String(e) }); }
+      return true;
+    }
+
+    // POST .../share-link {enabled} — toggles the LOCAL share link
+    // (/s/<id> via /api/share/*): sets/clears meta.shared. Distinct from
+    // cloud `share` above (uploads to app.devin.ai). The link is live only
+    // while enabled; share_url in payloads is null otherwise.
+    if (sub === "share-link" && m === "POST") {
+      const body = (await readJson(req)) as { enabled?: boolean };
+      const mm2 = meta(ctx, id);
+      mm2.shared = !!body?.enabled;
+      saveReg();
+      json(res, 200, { ok: true, enabled: mm2.shared, url: mm2.shared ? `/s/${id}?t=local` : null });
       return true;
     }
 

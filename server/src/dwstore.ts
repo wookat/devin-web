@@ -31,6 +31,11 @@ interface DwSessionMeta {
    *  the cwd in sessionCwd is then a REMOTE path. Persisted so restarts keep
    *  routing through ssh. */
   ssh?: string;
+  /** Local share-link opt-in: /api/share/<id>/* answers only while set.
+   *  Without the flag every session id is an ambient capability URL — ids
+   *  are enumerable via /ws and the sessions list. Toggled by the admin
+   *  share-link endpoint. */
+  shared?: boolean;
 }
 
 interface DwRegistry {

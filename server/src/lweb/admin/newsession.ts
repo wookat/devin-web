@@ -31,7 +31,7 @@ export async function handleNewSession(ctx: ApiContext, req: IncomingMessage, re
         permission: m2.permission ?? "detailed", archived: m2.archived ? 1 : 0, pinned: m2.pinned ? 1 : 0,
         created_at: s.updated, status: sessionStatus(ctx, s.id).status,
         status_message: null, last_message: lastMsg?.body?.slice(0, 200) ?? "",
-        last_timestamp: lastMsg?.ts ?? s.updated, share_url: `/s/${s.id}?t=local`,
+        last_timestamp: lastMsg?.ts ?? s.updated, share_url: loadReg(ctx).sessions[s.id]?.shared ? `/s/${s.id}?t=local` : null,
       };
     });
     json(res, 200, { sessions });
