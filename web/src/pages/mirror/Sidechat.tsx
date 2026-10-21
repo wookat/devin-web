@@ -1,6 +1,6 @@
 import { useEffect, useState } from 'react'
 import { useTranslation } from 'react-i18next'
-import { Loader2, Copy, Check, ArrowUp, Square, Link2, MessageSquarePlus, SquarePen, Brain, Wrench, Reply, ThumbsUp, ThumbsDown, Languages } from 'lucide-react'
+import { Loader2, Copy, Check, ArrowUp, Square, Link2, MessageSquarePlus, SquarePen, Brain, Wrench, Reply, ThumbsUp, ThumbsDown, Languages, GitFork, TextQuote } from 'lucide-react'
 import { adminFetch } from '@/lib/api'
 import { visibleInterval } from '@/lib/poll'
 import Markdown from '@/components/Markdown'
@@ -9,7 +9,7 @@ import { cn } from '@/lib/utils'
 import { PREFERRED_LANG } from './VoiceButton'
 import { FeedbackDialog } from './dialogs'
 
-function MessageToolbar({ text, eid, ts, tab, onSideChat, onStartNewSession, sessionId, onTranslated }: { text: string; eid: string; ts?: string; tab?: string; onSideChat?: () => void; onStartNewSession?: () => void; sessionId?: string; onTranslated?: (t: string) => void }) {
+function MessageToolbar({ text, eid, ts, tab, onSideChat, onStartNewSession, onFork, onQuote, sessionId, onTranslated }: { text: string; eid: string; ts?: string; tab?: string; onSideChat?: () => void; onStartNewSession?: () => void; onFork?: () => void; onQuote?: () => void; sessionId?: string; onTranslated?: (t: string) => void }) {
   const { t } = useTranslation()
   const [done, setDone] = useState('')
   const [fb, setFb] = useState<'positive' | 'negative' | null>(null)
@@ -22,10 +22,20 @@ function MessageToolbar({ text, eid, ts, tab, onSideChat, onStartNewSession, ses
   }
   const btn = 'flex size-6 cursor-pointer items-center justify-center rounded-[6px] text-muted-foreground hover:bg-tint-secondary hover:text-foreground'
   return (
-    <div className="absolute -top-5 right-0 z-10 flex h-7 min-w-fit items-center gap-px whitespace-nowrap rounded-[8px] border border-border bg-card p-px opacity-0 shadow-[0_1px_2px_rgba(0,0,0,0.05)] transition-opacity focus-within:opacity-100 group-hover:opacity-100">
+    <div data-testid="transcript-message-actions" data-find-exclude="true" data-quote-exclude="true" className="transcript-message-actions absolute -top-7 right-2 z-10 flex h-7 min-w-fit items-center gap-px whitespace-nowrap rounded-[8px] border border-border bg-card p-px opacity-0 shadow-shadow-L1 transition-opacity focus-visible:opacity-100 focus-within:opacity-100 group-hover:opacity-100 has-[:focus-visible]:opacity-100">
       {onStartNewSession && (
         <button aria-label={t('sc.newWithPrompt')} title={t('sc.newWithPrompt')} onClick={onStartNewSession} className={btn}>
           <SquarePen size={16} />
+        </button>
+      )}
+      {onQuote && (
+        <button aria-label={t('sc.quote')} title={t('sc.quote')} onClick={onQuote} className={btn}>
+          <TextQuote size={16} />
+        </button>
+      )}
+      {onFork && (
+        <button aria-label={t('sc.forkHere')} title={t('sc.forkHere')} onClick={onFork} className={btn}>
+          <GitFork size={16} />
         </button>
       )}
       {sessionId && (

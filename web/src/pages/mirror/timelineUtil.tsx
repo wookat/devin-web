@@ -40,7 +40,8 @@ interface TimelinePage {
   peek?: boolean
   /** The last turn never settled (server died mid-prompt / turn cut) — the
    * original message so the composer area can offer a one-click resend. */
-  interrupted?: { text: string; ts: number; kind?: 'continue' | 'resend'; attachments?: { url: string; name?: string; size?: number; mime?: string }[] } | null
+  interrupted?: { text: string; ts: number; kind?: 'continue' | 'resend'; attachments?: { url: string; name?: string; size?: number; mime?: string }[] }
+  persona?: { mode: string; escalated: boolean } | null
 }
 
 /** Merge a freshly polled page into what we already have, keeping ids unique and order by time. */

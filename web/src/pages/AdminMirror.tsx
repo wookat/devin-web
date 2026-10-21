@@ -7,7 +7,7 @@ import { useTranslation } from 'react-i18next'
 import i18n from '@/i18n'
 import { createPortal } from 'react-dom'
 import { Link, useLocation, useNavigate, useParams } from 'react-router-dom'
-import { ArrowLeft, Loader2, ChevronRight, ChevronDown, ChevronUp, Settings2, Copy, Check, RotateCcw, Archive, ArchiveRestore, Plus, FileText, Circle, ArrowUp, ArrowUpRight, Square, Link2, X, Expand, Code, Workflow as WorkflowIcon, BookOpen, UploadCloud, Folder as FolderIcon, Pencil, Clock, Lightbulb, Info, Laptop, FolderOpen, Image as ImageIcon, Share2, RefreshCw, AlertTriangle, Rows3, Globe } from 'lucide-react'
+import { ArrowLeft, Loader2, ChevronRight, ChevronDown, ChevronUp, Settings2, Copy, Check, RotateCcw, Archive, ArchiveRestore, Plus, FileText, Circle, ArrowUp, ArrowUpRight, Square, Link2, X, Expand, Code, Workflow as WorkflowIcon, BookOpen, UploadCloud, Folder as FolderIcon, Pencil, Clock, Lightbulb, Info, Laptop, FolderOpen, Image as ImageIcon, Share2, RefreshCw, AlertTriangle, Rows3, Globe, MessageSquare, Sparkles, GitFork, TextQuote, CornerDownLeft, GitPullRequest } from 'lucide-react'
 import { OArchive, OBell, OCollapse, OCompose, OExpand, OSearch } from '../components/officialIcons'
 import { adminFetch, adminFetchSwr, shareFetchSwr, type AdminSession, type PublicMessage, type DashboardData } from '@/lib/api'
 import { adminViewer, visitorViewer, setViewer, sessionFetch, sessionFetchSwr, attachmentUrl, type Viewer, type SharePermission } from '@/lib/viewer'
@@ -24,7 +24,7 @@ import QuestionPanel from '@/components/QuestionPanel'
 import { StatusDot, Combo } from '@/components/ui'
 import ComposerEditor, { type ComposerEditorHandle } from '@/components/ComposerEditor'
 import LocalDock from '@/components/LocalDock'
-import DevinMark from '@/components/DevinMark'
+import DwMark from '@/components/DwMark'
 import TermPanel from '@/components/TermPanel'
 import BeardBand, { BandItem } from '@/components/BeardBand'
 import { filePillSvg } from '@/components/filePillIcons'
@@ -33,6 +33,7 @@ import ThinkingPersona from '@/components/ThinkingPersona'
 import UserAttachments, { IMAGE_RE } from '@/components/UserAttachments'
 import { extractRepos } from '@/lib/repos'
 import { type QuoteAttachment } from '../../shared/quotes'
+import QuoteChip from '@/components/QuoteChip'
 import { cn, fmtTime } from '@/lib/utils'
 import { ATTACH_MENU_ICONS, MODE_INFO_ICON, MODE_CHECK_ICON, MENU_CHEVRON_ICON } from '@/lib/officialMenuIcons'
 import { PanelAddTabIcon, PanelAttachmentsIcon, PanelCloseTabIcon, PanelFullWidthIcon, PanelHideTabsIcon, PanelPullRequestIcon } from '@/components/panelTabIcons'
@@ -46,7 +47,7 @@ import { type TreePrefs, TREE_PREFS_KEY, DEFAULT_TREE_PREFS, buildFilterQ, Sessi
 import DirPicker from './mirror/DirPicker'
 import CodeView from '@/components/CodeView'
 import { type WfAgentEventState, AgentsPanel } from './mirror/AgentsPanel'
-import { SessionSettingsGlyph, HeaderMenuPortal, AwaitingInstructionsGlyph, ApiOriginGlyph, OfficialGlyph } from './mirror/glyphs'
+import { SessionSettingsGlyph, HeaderMenuPortal, AwaitingInstructionsGlyph, ApiOriginGlyph, OfficialGlyph, BubblePlusGlyph, CloseQuoteGlyph } from './mirror/glyphs'
 import { PermissionCard, PermissionSidebarPanel } from './mirror/Permission'
 import { EventRow, WorkGroup } from './mirror/TimelineRows'
 import { splitAttachments, isOwnUserMessage, indexPreview } from './mirror/attachments'
@@ -61,6 +62,175 @@ import { WorkspacePanel, CtxMenu } from './mirror/WorkspacePanel'
 import { ResourcesPanel, SubagentsPanel } from './mirror/ResourcePanels'
 
 let lastSeenLocalCfg: LocalCfg | null = null
+
+/* Official dark-quote tokens (verbatim from app.devin.ai .dark scope):
+   wax bg rgb(31,31,31,.94)+blur, border white/.04, text white/.9, hint /.52. */
+const QWAX = 'rgb(31 31 31 / 0.94)'
+const QBORDER = 'rgb(255 255 255 / 0.04)'
+const QBORDER_FOCUS = 'rgb(255 255 255 / 0.08)'
+const QTEXT = 'rgb(255 255 255 / 0.9)'
+const QTINT = 'rgb(255 255 255 / 0.05)'
+
+/** Floating quote affordance — official SelectionQuoteAffordance, two states:
+ *  minimal  = dark pill above the anchor, [bubble-plus=Add caption]
+ *             [close-quote-2=Add to chat ⏎]; typing begins the caption.
+ *  expanded = the official 360px wax card: quoted-text preview header,
+ *             caption input (min-h 28), footer split button
+ *             [Add to chat | ▾ → Send immediately ⌘⏎]. Enter commits,
+ *             ⌘/Ctrl+Enter sends immediately, Esc dismisses. */
+function QuotePill({ x, y, placement = 'above', hidden, startExpanded, quoteText, onCommit, onSend, onClose }: {
+  x: number; y: number; placement?: 'above' | 'below'; hidden?: boolean; startExpanded?: boolean; quoteText?: string
+  onCommit: (caption: string) => void; onSend?: (caption: string) => void; onClose: () => void
+}) {
+  const { t } = useTranslation()
+  const [expanded, setExpanded] = useState(!!startExpanded)
+  const [caption, setCaption] = useState('')
+  const [sendMenu, setSendMenu] = useState(false)
+  const capRef = useRef<HTMLInputElement>(null)
+  const cardRef = useRef<HTMLFormElement>(null)
+  const [cardH, setCardH] = useState(0)
+  useEffect(() => { if (expanded) capRef.current?.focus() }, [expanded])
+  // Official card geometry: top = anchor - measuredHeight when 'above' (the
+  // anchor point is the layer origin; gap 6 already folded into y).
+  useLayoutEffect(() => { if (expanded && cardRef.current) setCardH(cardRef.current.getBoundingClientRect().height) })
+  useEffect(() => {
+    const onKey = (e: KeyboardEvent) => {
+      if (e.key === 'Escape') { e.preventDefault(); onClose(); return }
+      if (e.key === 'Enter' && (e.metaKey || e.ctrlKey)) {
+        if (onSend) { e.preventDefault(); onSend(caption.trim()); return }
+      }
+      if (expanded) return
+      if (e.key === 'Enter') { e.preventDefault(); onCommit(caption); return }
+      if (e.key.length === 1 && !/\p{C}/u.test(e.key) && !e.ctrlKey && !e.metaKey && !e.altKey) {
+        setExpanded(true); setCaption(e.key)
+      }
+    }
+    // Official: while the pill is up, a plain-text paste becomes the caption
+    // (file clipboard items are ignored).
+    const onPaste = (e: ClipboardEvent) => {
+      if ([...(e.clipboardData?.items ?? [])].some((i) => i.kind === 'file')) return
+      const txt = e.clipboardData?.getData('text/plain')
+      if (txt) { e.preventDefault(); e.stopPropagation(); setExpanded(true); setCaption(txt) }
+    }
+    document.addEventListener('keydown', onKey, true)
+    document.addEventListener('paste', onPaste, true)
+    return () => { document.removeEventListener('keydown', onKey, true); document.removeEventListener('paste', onPaste, true) }
+  }, [expanded, caption, onCommit, onSend, onClose])
+  const iconBtn = 'flex h-6 w-6 items-center justify-center rounded-md'
+  return (
+    <div
+      className="dw-quote-pill fixed left-0 top-0 z-50 select-none"
+      style={{
+        transform: `translate(${x}px, ${expanded ? (placement === 'above' ? y - cardH : y) : (placement === 'above' ? y - 28 : y)}px)`,
+        transformOrigin: placement === 'above' ? 'center bottom' : 'center top',
+        visibility: hidden ? 'hidden' : undefined,
+      }}
+      onMouseDown={(e) => e.preventDefault()}
+    >
+      {expanded ? (
+        /* Official expanded card: 360px wax, r12, border secondary, blur, p6 gap10 */
+        <form
+          ref={cardRef}
+          className="dark w-[360px] overflow-hidden rounded-[12px] border backdrop-blur"
+          style={{ background: QWAX, borderColor: sendMenu ? QBORDER_FOCUS : QBORDER, color: QTEXT }}
+          onSubmit={(e) => { e.preventDefault(); onCommit(caption.trim()) }}
+        >
+          <div className="flex flex-col" style={{ padding: 6, gap: 10 }}>
+            {quoteText && (
+              <div className="line-clamp-3 text-[12px] leading-4" style={{ color: 'rgb(255 255 255 / 0.52)' }}>
+                {quoteText}
+              </div>
+            )}
+            <input
+              ref={capRef}
+              value={caption}
+              onChange={(e) => setCaption(e.target.value)}
+              onKeyDown={(e) => {
+                if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); onCommit(caption.trim()) }
+                if (e.key === 'Escape') { e.preventDefault(); setCaption(''); onClose() }
+                e.stopPropagation()
+              }}
+              placeholder={t('quote.captionPh')}
+              className="min-h-7 w-full bg-transparent text-[13px] leading-5 outline-none"
+              style={{ color: QTEXT }}
+            />
+            <div className="flex h-7 items-stretch justify-end">
+              {onSend ? (
+                /* Official split button: [Add to chat][|][▾ → Send immediately ⌘⏎] */
+                <div className="relative flex items-stretch rounded-[6px] border" style={{ borderColor: QBORDER_FOCUS, background: QTINT }}>
+                  <button
+                    type="submit"
+                    className="rounded-l-[5px] px-2 text-[13px] hover:bg-[rgb(255_255_255/0.08)]"
+                    style={{ color: QTEXT }}
+                  >{t('quote.addToChat')}</button>
+                  <div className="w-px" style={{ background: QBORDER_FOCUS }} />
+                  <button
+                    type="button"
+                    aria-label={t('quote.moreOptions')}
+                    className="flex w-6 items-center justify-center rounded-r-[5px] hover:bg-[rgb(255_255_255/0.08)]"
+                    style={{ color: QTEXT }}
+                    onClick={() => setSendMenu((v) => !v)}
+                  >
+                    <ChevronDown size={13} />
+                  </button>
+                  {sendMenu && (
+                    <div className="absolute right-0 top-[30px] z-10 min-w-[180px] rounded-lg border p-1 shadow-md" style={{ background: QWAX, borderColor: QBORDER, backdropFilter: 'blur(8px)' }}>
+                      <button
+                        type="button"
+                        className="flex w-full items-center justify-between gap-3 rounded-md px-2 py-1 text-left text-[13px] hover:bg-[rgb(255_255_255/0.05)]"
+                        style={{ color: QTEXT }}
+                        onClick={() => onSend(caption.trim())}
+                      >
+                        <span>{t('quote.sendImmediately')}</span>
+                        <kbd className="flex gap-0.5 text-[10px]" style={{ color: 'rgb(255 255 255 / 0.52)' }}>⌘⏎</kbd>
+                      </button>
+                    </div>
+                  )}
+                </div>
+              ) : (
+                <button type="submit" className="rounded-[6px] px-2 text-[13px] hover:bg-[rgb(255_255_255/0.08)]" style={{ color: QTEXT, background: QTINT }}>
+                  {t('quote.addToChat')}
+                </button>
+              )}
+            </div>
+          </div>
+        </form>
+      ) : (
+        /* Official minimal pill (verbatim `ht` class): h-7 gap-px rounded-8
+           p-0.5, bg-elevated, shadow-L1, ring-inset border-secondary */
+        <div
+          className="flex h-7 min-w-fit items-center gap-px whitespace-nowrap rounded-[8px] p-0.5 shadow-[0_1px_2px_0_rgba(0,0,0,0.2)] ring-1 ring-inset ring-[rgb(255_255_255/0.04)]"
+          style={{ background: 'rgb(31 31 31)', color: QTEXT }}
+        >
+          <button
+            type="button"
+            title={`${t('quote.addCaption')} — ${t('quote.startTyping')}`}
+            aria-label={t('quote.addCaption')}
+            className={iconBtn}
+            style={{ color: QTEXT }}
+            onMouseOver={(e) => (e.currentTarget.style.background = QTINT)}
+            onMouseOut={(e) => (e.currentTarget.style.background = 'transparent')}
+            onClick={() => setExpanded(true)}
+          >
+            <BubblePlusGlyph className="size-4" />
+          </button>
+          <button
+            type="submit"
+            title={`${t('quote.addToChat')} ⏎`}
+            aria-label={t('quote.addToChat')}
+            className={iconBtn}
+            style={{ color: QTEXT }}
+            onMouseOver={(e) => (e.currentTarget.style.background = QTINT)}
+            onMouseOut={(e) => (e.currentTarget.style.background = 'transparent')}
+            onClick={() => onCommit(caption.trim())}
+          >
+            <CloseQuoteGlyph className="size-4" />
+          </button>
+        </div>
+      )}
+    </div>
+  )
+}
 
 export default function AdminMirrorPage() {
   const { t } = useTranslation()
@@ -123,6 +293,13 @@ export default function AdminMirrorPage() {
   }, [isVisitor, sessions])
   const [items, setItems] = useState<TimelineItem[]>([])
   const [interrupted, setInterrupted] = useState<{ text: string; ts: number; kind?: 'continue' | 'resend'; attachments?: { url: string; name?: string; size?: number; mime?: string }[] } | null>(null)
+  // 分身: per-session mode + escalation flag, ridden on the /timeline response.
+  const [persona, setPersona] = useState<{ mode: string; escalated: boolean } | null>(null)
+  const [personaBusy, setPersonaBusy] = useState(false)
+  // Draft tip bar — desktop "Tip: New space (Ctrl+N)" parity, dismiss persists.
+  const [draftTipGone, setDraftTipGone] = useState(() => { try { return localStorage.getItem('dw-draft-tip') === '1' } catch { return false } })
+  const [draftAgent, setDraftAgent] = useState('devin')
+  const [agentMenuOpen, setAgentMenuOpen] = useState(false)
   const [activity, setActivity] = useState<{ text: string } | null>(null)
   const reloadTl = useRef<(() => Promise<void>) | null>(null)
   /** Peek→real graduation: browsing starts in lazy-peek mode (no session/load,
@@ -1349,6 +1526,7 @@ export default function AdminMirrorPage() {
             try { gone = localStorage.getItem(`dw-intd:${id}`) === String(r.interrupted.ts) } catch { /* unavailable */ }
             setInterrupted(gone ? null : r.interrupted)
           } else setInterrupted(null)
+          if (r.persona) setPersona(r.persona)
           setTlError(r.error)
           setLoaded(true)
           failCount.current = 0
@@ -1440,7 +1618,7 @@ export default function AdminMirrorPage() {
         })
         boundWindow()
         setLoaded(true)
-      } else if (ev.type === 'prompt_done' || ev.type === 'account_limited' || ev.type === 'account_rotated') {
+      } else if (ev.type === 'prompt_done' || ev.type === 'account_limited' || ev.type === 'account_rotated' || ev.type === 'persona_state') {
         void load()
       }
     })
@@ -1671,6 +1849,116 @@ export default function AdminMirrorPage() {
   }, [older, items])
   const allItemsRef = useRef(allItems)
   allItemsRef.current = allItems
+
+  // Selection → quote draft (official SelectionQuoteAffordance, message-text
+  // scope): select text inside a message bubble → floating pill → click adds
+  // it to the composer as a quote chip; send() serializes drafts into
+  // <quoted_artifact> markup so the round-trip renders real QuoteChips.
+  type DraftQuote = QuoteAttachment & { author: 'user' | 'devin'; endEventId?: string }
+  const [selQuote, setSelQuote] = useState<{ x: number; y: number; text: string; eventId: string; author: 'user' | 'devin'; tsMs?: number; expanded?: boolean; kind?: 'message' | 'worklog'; endEventId?: string; placement?: 'above' | 'below'; hidden?: boolean } | null>(null)
+  const [draftQuotes, setDraftQuotes] = useState<DraftQuote[]>([])
+  const quoteGuardUntil = useRef(0)
+  const quoteDraftFrom = (q: { text: string; eventId: string; author: 'user' | 'devin'; tsMs?: number; kind?: 'message' | 'worklog'; endEventId?: string }, caption: string): DraftQuote => ({
+    kind: q.kind ?? 'message',
+    label: q.kind === 'worklog' ? 'Worklog' : q.author === 'devin' ? 'Devin message' : 'User message',
+    text: q.text, eventId: q.eventId, tsMs: q.tsMs, author: q.author,
+    ...(q.endEventId ? { endEventId: q.endEventId } : {}),
+    ...(caption ? { caption } : {}),
+  } as DraftQuote)
+  const stageQuoteDraft = (q: { text: string; eventId: string; author: 'user' | 'devin'; tsMs?: number; kind?: 'message' | 'worklog'; endEventId?: string }, caption: string) => {
+    setDraftQuotes((d) => d.some((x) => x.eventId === q.eventId && x.text === q.text) ? d : [...d, quoteDraftFrom(q, caption)])
+    window.getSelection()?.removeAllRanges()
+  }
+  useEffect(() => {
+    if (isVisitor || isDraft || isSub) { setSelQuote(null); return }
+    const onSel = () => {
+      const sel = window.getSelection()
+      // Toolbar-opened quotes (expanded pill) outlive the selection collapse
+      // that clicking the toolbar button itself fires; and while focus lives
+      // inside the pill (caption input), collapses don't dismiss it either.
+      if (!sel || sel.isCollapsed || sel.rangeCount === 0) {
+        if (Date.now() > quoteGuardUntil.current && !document.activeElement?.closest?.('.dw-quote-pill')) setSelQuote(null)
+        return
+      }
+      quoteGuardUntil.current = 0
+      const node = sel.anchorNode instanceof Element ? sel.anchorNode : sel.anchorNode?.parentElement
+      const host = node?.closest?.('[data-eid]')
+      if (!host) { setSelQuote(null); return }
+      const range = sel.getRangeAt(0)
+      // Official Bt/Wt/Ut port: anchor rect from getClientRects (≤3.5-line
+      // spans anchor above the whole block; else backwards→start-above,
+      // forwards→end-below), left-edge horizontal clamp (margin 8, gap 6),
+      // pill size {w53,h28}, hidden when the anchor rect leaves every
+      // overflow ancestor's vertical band.
+      const quoteAnchor = (): { x: number; y: number; placement: 'above' | 'below'; hidden: boolean } => {
+        const rects = range.getClientRects()
+        const r0 = rects[0]; const rN = rects[rects.length - 1]
+        const an = sel.anchorNode; const fn = sel.focusNode
+        const backwards = !!an && !!fn && (an === fn ? sel.focusOffset < sel.anchorOffset : !!(an.compareDocumentPosition(fn) & Node.DOCUMENT_POSITION_PRECEDING))
+        let ar: { top: number; bottom: number; left: number }; let above: boolean
+        if (!r0 || !rN) { const b = range.getBoundingClientRect(); ar = { top: b.top, bottom: b.bottom, left: b.left }; above = backwards }
+        else if (r0 !== rN && rN.bottom - r0.top <= Math.max(r0.height, rN.height) * 3.5) { ar = { top: r0.top, bottom: rN.bottom, left: r0.left }; above = true }
+        else if (backwards) { ar = { top: r0.top, bottom: r0.bottom, left: r0.left }; above = true }
+        else { ar = { top: rN.top, bottom: rN.bottom, left: rN.right }; above = false }
+        const M = 8, G = 6, PW = 53, PH = 28
+        const x = Math.min(Math.max(ar.left, M), window.innerWidth - M - PW)
+        const fitsAbove = ar.top - G - PH >= M; const fitsBelow = ar.bottom + G + PH <= window.innerHeight - M
+        const placement: 'above' | 'below' = above ? (fitsAbove || !fitsBelow ? 'above' : 'below') : (fitsBelow || !fitsAbove ? 'below' : 'above')
+        const y = placement === 'above' ? ar.top - G : ar.bottom + G
+        let hidden = false
+        for (let el = (range.commonAncestorContainer instanceof Element ? range.commonAncestorContainer : range.commonAncestorContainer.parentElement); el; el = el.parentElement) {
+          if (getComputedStyle(el).overflowY === 'visible') continue
+          const er = el.getBoundingClientRect()
+          if (ar.bottom <= er.top || ar.top >= er.bottom) { hidden = true; break }
+        }
+        return { x, y, placement, hidden }
+      }
+      const eid = host.getAttribute('data-eid')
+      const item = allItemsRef.current.find((it) => it.id === eid)
+      // Official second mechanism: selections spanning worklog rows resolve
+      // to a kind:'worklog' quote over the [start,end) event-id range.
+      if (!item || item.kind !== 'message') {
+        const anchors = [...document.querySelectorAll<HTMLElement>('[data-quote-anchor]')]
+          .filter((a) => range.intersectsNode(a))
+        if (anchors.length >= 1 && item?.kind !== 'message') {
+          const first = anchors[0].getAttribute('data-quote-anchor')
+          const last = anchors[anchors.length - 1].getAttribute('data-quote-anchor')
+          const text = sel.toString().replace(/\s+/g, ' ').trim()
+          const pos = quoteAnchor()
+          if (text && first && last) {
+            setSelQuote({ ...pos, text, eventId: first, endEventId: last, author: 'devin', kind: 'worklog' })
+            return
+          }
+        }
+        setSelQuote(null); return
+      }
+      // Official extraction (xt): clone the range offscreen and strip
+      // .select-none UI chrome (badges, action bars) before taking text.
+      const frag = sel.getRangeAt(0).cloneContents()
+      let text: string
+      if (!frag.querySelector('.select-none')) text = sel.toString().replace(/\s+/g, ' ').trim()
+      else {
+        const off = host.ownerDocument.createElement('div')
+        off.style.cssText = 'position:fixed;left:-99999px;top:0'
+        off.appendChild(frag)
+        off.querySelectorAll('.select-none').forEach((n) => n.remove())
+        text = (off.innerText || '').replace(/\s+/g, ' ').trim()
+        off.remove()
+      }
+      if (!text) { setSelQuote(null); return }
+      const pos = quoteAnchor()
+      setSelQuote({
+        ...pos,
+        text,
+        eventId: eid!,
+        author: item.role === 'user' ? 'user' : 'devin',
+        tsMs: Date.parse(item.ts) || undefined,
+      })
+    }
+    document.addEventListener('selectionchange', onSel)
+    window.addEventListener('pointerup', onSel)
+    return () => { document.removeEventListener('selectionchange', onSel); window.removeEventListener('pointerup', onSel) }
+  }, [isVisitor, isDraft, isSub])
 
   // Ctrl+F: matching item ids for the current query.
   const findHits = useMemo(() => {
@@ -1927,9 +2215,25 @@ const groups = useMemo(() => groupItems(allItems, sessionWorking), [allItems, se
   }, [allItems])
   const current = sessions.find((s) => s.id === id)
 
-  async function send(preset?: string) {
+  // <quoted_artifact> wire serialization — the markup devin's own composer
+  // emits; stored verbatim in the log so extractQuotes renders the chips.
+  const escXml = (s: string) => s.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;')
+  const escAttr = (s: string) => escXml(s).replace(/"/g, '&quot;')
+  const withQuotes = (bodyText: string, quotes = draftQuotes) => {
+    if (!quotes.length) return bodyText
+    // Official Er() wire shape: optional <caption> (user's note) + <content>.
+    return quotes.map((q) => {
+      const ev = q.kind === 'worklog' && q.endEventId
+        ? ` start_event_id="${escAttr(q.eventId ?? '')}" end_event_id="${escAttr(q.endEventId)}"`
+        : ` event_id="${escAttr(q.eventId ?? '')}"`
+      return `<quoted_artifact kind="${escAttr(q.kind)}" author="${q.author}"${ev}${q.tsMs ? ` ts_ms="${q.tsMs}"` : ''}>${q.caption ? `\n<caption>${escXml(q.caption)}</caption>` : ''}\n<content>\n${escXml(q.text)}\n</content>\n</quoted_artifact>`
+    }).join('\n\n') + (bodyText ? `\n\n${bodyText}` : '')
+  }
+
+  async function send(preset?: string, extraQuotes?: DraftQuote[]) {
     let text = (preset ?? input).trim()
-    if (statusState.inputDisabled || (!text && !(preset === undefined && staged.length)) || sending) return
+    const quotesNow = extraQuotes ?? draftQuotes
+    if (statusState.inputDisabled || (!text && !(preset === undefined && (staged.length || quotesNow.length))) || sending) return
     if (!caps.canSendMessage) { setSendErr(t('visitor.chatForbidden')); return }
     if (
       preset === undefined &&
@@ -1944,7 +2248,7 @@ const groups = useMemo(() => groupItems(allItems, sessionWorking), [allItems, se
     }
     if (preset === undefined && text.startsWith('/queue ')) {
       text = text.slice(7).trim()
-      if (text) { setInput(''); void queueSend(text) }
+      if (text || draftQuotes.length) { setInput(''); setDraftQuotes([]); void queueSend(withQuotes(text)) }
       return
     }
     // Free text typed while an option question is pending answers the
@@ -1983,7 +2287,7 @@ const groups = useMemo(() => groupItems(allItems, sessionWorking), [allItems, se
         const task = text.startsWith('/queue ') ? text.slice(7).trim() : text
         const r = await adminFetch<{ ok: boolean; id?: string; error?: string }>('/api/admin/sessions/new', {
           method: 'POST',
-          body: JSON.stringify({ task, folder: draftFolder || undefined, cwd: draftCwd || undefined, attachments: staged.map((f) => ({ url: f.url, name: f.name, size: f.size })) }),
+          body: JSON.stringify({ task, folder: draftFolder || undefined, cwd: draftCwd || undefined, agent: draftAgent, attachments: staged.map((f) => ({ url: f.url, name: f.name, size: f.size })) }),
         })
         if (!r.ok || !r.id) throw new Error(r.error || 'create failed')
         for (const pick of draftPicks.current) {
@@ -1999,18 +2303,19 @@ const groups = useMemo(() => groupItems(allItems, sessionWorking), [allItems, se
     }
     setSending(true)
     setSendErr(null)
+    const wireText = preset === undefined ? withQuotes(text, quotesNow) : text
     // Local echo (rendered as a plain user row) until the upstream event replaces it.
     const echo: TimelineItem = {
       id: `local-${Date.now()}`, ts: new Date().toISOString(), kind: 'message', role: 'user',
-      body: text, raw_type: 'user_message',
+      body: wireText, raw_type: 'user_message',
       ...(preset === undefined && staged.length
         ? { attachments: staged.map((f) => ({ url: f.url, name: f.name, size: f.size })) }
         : {}),
     }
     setItems((prev) => [...prev, echo])
-    const draft = { input, staged }
+    const draft = { input, staged, quotes: quotesNow }
     pendingPreviewRef.current = draft.staged
-    if (preset === undefined) { setInput(''); setStaged([]) }
+    if (preset === undefined) { setInput(''); setStaged([]); setDraftQuotes([]) }
     let messageSent = false
     try {
       if (!isVisitor && selectedVersion && selectedVersion !== currentVersion) {
@@ -2029,7 +2334,7 @@ const groups = useMemo(() => groupItems(allItems, sessionWorking), [allItems, se
       const res = await sessionFetch<{ ok: boolean; queued?: string }>('/message', {
         method: 'POST',
         body: JSON.stringify({
-          message: text,
+          message: wireText,
           // Real attachment blocks — the server converts staged uploads into
           // ACP image/resource/resource_link prompt blocks.
           attachments: preset === undefined ? staged.map((f) => ({ url: f.url, name: f.name, size: f.size })) : [],
@@ -2056,7 +2361,7 @@ const groups = useMemo(() => groupItems(allItems, sessionWorking), [allItems, se
       // Keep the draft in the composer and surface an inline failure notice.
       pendingPreviewRef.current = []
       setItems((prev) => prev.filter((it) => it.id !== echo.id))
-      if (preset === undefined && !messageSent) { setInput((cur) => cur || draft.input); setStaged((cur) => (cur.length ? cur : draft.staged)) }
+      if (preset === undefined && !messageSent) { setInput((cur) => cur || draft.input); setStaged((cur) => (cur.length ? cur : draft.staged)); setDraftQuotes((cur) => (cur.length ? cur : draft.quotes)) }
       setSendErr(e instanceof Error && e.message ? e.message : 'Failed to send message. Try again.')
     } finally { setSending(false) }
   }
@@ -2088,10 +2393,39 @@ const groups = useMemo(() => groupItems(allItems, sessionWorking), [allItems, se
     setInterrupted(null)
   }
 
+  // 分身代答: chip cycles off → semi → auto (per-session override stored in
+  // dw.json); '问分身' fires a manual ask on the session's tail question.
+  const cyclePersonaMode = async () => {
+    const order = ['off', 'semi', 'auto']
+    const next = order[(order.indexOf(persona?.mode ?? 'off') + 1) % order.length]
+    try {
+      const r = await fetch('/api/admin/session-persona', {
+        method: 'POST', headers: { 'content-type': 'application/json' },
+        body: JSON.stringify({ id, mode: next }),
+      }).then((res) => res.json())
+      if (r.persona) setPersona(r.persona)
+    } catch { /* keep old state */ }
+  }
+  const askPersonaNow = async () => {
+    if (personaBusy || sending) return
+    setPersonaBusy(true)
+    try {
+      await fetch('/api/admin/session-persona-ask', {
+        method: 'POST', headers: { 'content-type': 'application/json' },
+        body: JSON.stringify({ id }),
+      })
+      await reloadTl.current?.()
+    } finally { setPersonaBusy(false) }
+  }
+
   // Dead subagent handle: the registry that held it was emptied by a restart/
   // replay, so resume relays can never land. Respawn sends the text with
   // respawn:1 — the lead spawns a SUCCESSOR carrying this agent's context.
   const subDead = isSub && detail?.session.subagent?.resumable === false
+  // Owning ACP agent — devin-private UI (share/end/subagent controls) hides
+  // for sessions other agents own. Draft picker is separate (draftAgent).
+  const sessionAgent = detail?.session?.agent ?? 'devin'
+  const isDevinSession = sessionAgent === 'devin'
   const respawnSub = async () => {
     if (sending) return
     const msg = input.trim() || t('panel.continueTask')
@@ -2375,6 +2709,13 @@ const groups = useMemo(() => groupItems(allItems, sessionWorking), [allItems, se
             >
               <Rows3 size={14} className="shrink-0 text-muted-foreground" />
               <span className="min-w-0 flex-1 truncate">{t('menu.manageSessions')}</span>
+            </Link>
+            <Link
+              to="/admin/review"
+              className="mb-px flex h-[30px] items-center gap-2 rounded-[6px] px-2 text-[13px] leading-[18px] text-foreground hover:bg-tint-secondary"
+            >
+              <GitPullRequest size={14} className="shrink-0 text-muted-foreground" />
+              <span className="min-w-0 flex-1 truncate">{t('rv.back')}</span>
             </Link>
           </nav>
           <div className="min-h-0 flex-1 overflow-y-auto py-1">
@@ -2667,8 +3008,9 @@ const groups = useMemo(() => groupItems(allItems, sessionWorking), [allItems, se
                   {copied ? <Check size={13} /> : <Link2 size={13} className="text-muted-foreground" />} Copy session link
                 </button>
                 {/* Verified live on local acp: uploads the transcript to
-                    Cognition and returns an app.devin.ai share URL. */}
-                {!isSub && <button
+                    Cognition and returns an app.devin.ai share URL. Devin-private
+                    extension — hidden for sessions owned by other agents. */}
+                {!isSub && isDevinSession && <button
                   role="menuitem"
                   onClick={async () => {
                     setSettingsOpen(false); setSettingsSub('none')
@@ -2680,6 +3022,21 @@ const groups = useMemo(() => groupItems(allItems, sessionWorking), [allItems, se
                   className={settingsRowCls}
                 >
                   <Share2 size={13} className="text-muted-foreground" /> {t('menu.shareToCloud')}
+                </button>}
+                {/* Fork — native session/fork on agents that advertise it
+                    (opencode), transcript-seed fallback on devin. Dedicated
+                    agents report canFork:false and the item hides. */}
+                {!isSub && detail.session.canFork && <button
+                  role="menuitem"
+                  onClick={async () => {
+                    setSettingsOpen(false); setSettingsSub('none')
+                    const r = await adminFetch<{ ok: boolean; id?: string; error?: string }>(`/api/admin/session/${id}/fork`, { method: 'POST', body: JSON.stringify({}) }).catch(() => null)
+                    if (r?.ok && r.id) nav(`/admin/${r.id}`)
+                    else setControlMsg(r?.error || t('menu.forkFailed'))
+                  }}
+                  className={settingsRowCls}
+                >
+                  <GitFork size={13} className="text-muted-foreground" /> {t('menu.forkSession')}
                 </button>}
                 {/* Desktop "Open in new window" — each session can live in its
                     own browser window. */}
@@ -2745,8 +3102,9 @@ const groups = useMemo(() => groupItems(allItems, sessionWorking), [allItems, se
                   </>
                 )}
                 {/* Verified live: {_cognition.ai/session/end} → dispatched.
-                    For a sub session the server maps end → subagent cancel. */}
-                <button
+                    For a sub session the server maps end → subagent cancel.
+                    Devin-private extension — hidden on other agents' sessions. */}
+                {(isSub || isDevinSession) && <button
                   role="menuitem"
                   onClick={async () => {
                     setSettingsOpen(false); setSettingsSub('none')
@@ -2758,7 +3116,7 @@ const groups = useMemo(() => groupItems(allItems, sessionWorking), [allItems, se
                   className={settingsRowCls}
                 >
                   <Square size={13} className="text-muted-foreground" /> {isSub ? t('menu.endSubagent') : t('menu.endSession')}
-                </button>
+                </button>}
                 <div className={settingsSeparatorCls} />
                 <div className="px-2 pb-1 pt-1.5 text-[12px] leading-[18px] text-muted-foreground">
                   <div className="flex justify-between"><span>{t('am.userMsgs')}</span><span className="text-foreground">{userMsgCount}</span></div>
@@ -2786,28 +3144,18 @@ const groups = useMemo(() => groupItems(allItems, sessionWorking), [allItems, se
         </header>
 
         {isDraft && loaded && (
-          // Desktop new-session: empty state + composer center as one unit —
-          // mt-auto here + mb-auto on the footer split free space equally.
-          <div className="mx-auto mt-auto flex w-full max-w-[648px] flex-col items-center gap-2 px-6 text-center">
-            <DevinMark size={48} className="text-foreground/15" />
+          // Desktop New-Space parity: centered column = watermark + tip card
+          // stacked directly on the composer (mt-auto/mb-auto halves the free
+          // space); controls + Recent projects sit below the composer.
+          <div className="mx-auto mt-auto flex w-full max-w-[692px] flex-col items-center gap-2 px-6 text-center">
+            <DwMark size={48} className="text-foreground/15" />
             <p className="mt-2 text-[17px] font-medium leading-[26px] text-foreground">{t('menu.newSession')}</p>
             <p className="text-[13px] leading-[18px] text-muted-foreground">
               {t('menu.draftHint')}{draftFolder ? t('menu.draftHintFolder', { folder: draftFolder }) : ''}
             </p>
-            <div className="mt-3 flex items-center gap-2 text-[12px] leading-[16px] text-muted-foreground">
-              {t('tree.workDir')}
-              <DirPicker
-                value={draftCwd}
-                onChange={setDraftCwd}
-                repos={composerMeta?.repos ?? []}
-                recents={recentCwds}
-                primaryCwd={composerMeta?.primary_cwd}
-              />
-            </div>
-            {draftCwd && <DraftExplorer root={draftCwd} />}
           </div>
         )}
-        <div className={cn('relative flex min-h-0 flex-1 flex-col', isDraft && 'hidden')}>
+        <div className={cn('@container/chat-pane relative flex min-h-0 flex-1 flex-col', isDraft && 'hidden')}>
         {findOpen && (
           <div className="absolute right-4 top-2 z-30 flex items-center gap-1 rounded-lg border border-border bg-card px-2 py-1 shadow-lg">
             <OSearch size={13} className="text-muted-foreground" />
@@ -2846,7 +3194,7 @@ const groups = useMemo(() => groupItems(allItems, sessionWorking), [allItems, se
             updateIdxActive()
           }}
           style={isDraft ? undefined : { paddingBottom: 20 + bandH }}
-          className={cn('min-h-0 flex-1 overflow-y-auto pt-[20px] max-md:pl-[60px] max-md:pr-4 md:pl-[68px] md:pr-6', effShowPanel && 'max-md:hidden', isDraft && 'hidden')}
+          className={cn('min-h-0 flex-1 overflow-y-auto pt-[20px] px-4 @[448px]/chat-pane:px-6', effShowPanel && 'max-md:hidden', isDraft && 'hidden')}
         >
           {connLost && (
             <div className="sticky top-0 z-10 mx-auto mb-2 w-fit rounded-full border border-amber-500/30 bg-amber-500/10 px-3 py-1 text-[12px] leading-[16px] text-amber-600 dark:text-amber-400">
@@ -2854,7 +3202,7 @@ const groups = useMemo(() => groupItems(allItems, sessionWorking), [allItems, se
             </div>
           )}
           {!loaded && (
-            <div className="mx-auto max-w-[648px] pt-2" aria-hidden>
+            <div className="mx-auto max-w-[692px] pt-2" aria-hidden>
               <TimelineSkeleton rows={7} />
             </div>
           )}
@@ -2862,7 +3210,7 @@ const groups = useMemo(() => groupItems(allItems, sessionWorking), [allItems, se
           {loaded && tlError === 'mirror_not_configured' && <p className="text-xs text-muted-foreground">{t('menu.mirrorNotConfigured')}</p>}
           {loaded && tlError === 'token_expired' && <p className="text-xs text-amber-600">{t('menu.mirrorTokenExpired')}</p>}
           {loaded && tlError && tlError !== 'mirror_not_configured' && tlError !== 'token_expired' && <p className="text-xs text-red-600">{t('menu.mirrorReadFailed', { err: tlError })}</p>}
-          <div className="mx-auto max-w-[648px]"><div>
+          <div className="mx-auto max-w-[692px]"><div className="[&>*:first-child]:mt-0 [&>*:last-child]:mb-0">
             {loaded && cursor && (
               <div className="mb-4" aria-hidden>
                 <TimelineSkeleton rows={3} />
@@ -2892,7 +3240,7 @@ const groups = useMemo(() => groupItems(allItems, sessionWorking), [allItems, se
                   const agentMap = wf.agents.get(runId)
                   const done = agentMap ? [...agentMap.values()].filter((s) => s !== 'running' && s !== 'queued').length : 0
                   return (
-                    <div key={it.id} data-eid={it.id} data-testid="transcript-workflow-run" className="relative my-4 flex w-full flex-col overflow-hidden rounded-xl border border-border bg-card">
+                    <div key={it.id} data-eid={it.id} data-testid="transcript-workflow-run" className="relative my-2.5 flex w-full flex-col overflow-hidden rounded-xl border border-border bg-card">
                       <div className="flex items-center gap-1.5 px-2.5 py-2">
                         <WorkflowIcon size={14} className="shrink-0 text-muted-foreground" />
                         <span className="min-w-0 flex-1 truncate text-[12px] leading-[16px] text-muted-foreground">
@@ -2924,7 +3272,7 @@ const groups = useMemo(() => groupItems(allItems, sessionWorking), [allItems, se
                   )
                 })()
               ) : g.type === 'item' && g.item.raw_type === 'pr_created' && g.item.pr ? (
-                <div key={g.item.id} data-eid={g.item.id} className="my-2 w-full min-w-0">
+                <div key={g.item.id} data-eid={g.item.id} className="my-2.5 w-full min-w-0">
                   <PrCreatedCard
                     pr={mergeLivePr(g.item.pr, detail?.session.pull_requests)}
                     onAnalyze={!isVisitor && caps.canAnalyzePr && g.item.pr.prUrl ? () => openPr(g.item.pr!.prUrl!) : undefined}
@@ -2942,7 +3290,7 @@ const groups = useMemo(() => groupItems(allItems, sessionWorking), [allItems, se
               ) : g.type === 'item' && g.item.callout ? (
                 <CalloutCard key={g.item.id} item={g.item} timestamp={rowClock(g.item.ts)} />
               ) : g.type === 'item' && g.item.kind === 'status' ? (
-                <div key={g.item.id} data-eid={g.item.id} className="relative my-2 flex items-start gap-2 text-[13px] leading-[18px] text-muted-foreground">
+                <div key={g.item.id} data-eid={g.item.id} className="relative my-2.5 flex items-start gap-2 text-[13px] leading-[18px] text-muted-foreground">
                   <span className="min-w-0 flex-1 break-words">{g.item.title}</span>
                   <span className="shrink-0 text-[12px] leading-[16px]">{rowClock(g.item.ts)}</span>
                 </div>
@@ -2960,7 +3308,7 @@ const groups = useMemo(() => groupItems(allItems, sessionWorking), [allItems, se
                 // attachments in one group stacked under the bubble.
                 const repos = g.item.raw_type === 'initial_user_message' ? extractRepos(g.item.body || '', detail?.session.repos) : []
                 return (
-                <div key={g.item.id} data-eid={g.item.id} className={cn('group group/message-wrapper relative my-4 flex flex-col gap-1', own ? 'items-end' : 'items-start')}>
+                <div key={g.item.id} data-eid={g.item.id} data-message-event-id={g.item.id} data-message-author={isUser ? 'user' : 'devin'} data-message-ts={g.item.ts ? String(new Date(g.item.ts).getTime()) : undefined} data-quotable-surface className={cn('group group/message-wrapper relative my-2.5 flex flex-col gap-1', own ? 'items-end' : 'items-start')}>
                   {!own && showHeader ? (
                     <ParticipantHeader kind={isUser ? 'user' : 'devin'} name={isUser ? (g.item.title || 'User') : undefined} ts={g.item.ts} />
                   ) : null}
@@ -3025,6 +3373,24 @@ const groups = useMemo(() => groupItems(allItems, sessionWorking), [allItems, se
                     onStartNewSession={g.item.role === 'user' && !isVisitor ? () => {
                       try { localStorage.setItem('dw-new-session-draft', g.item.body || '') } catch { /* quota */ }
                       nav('/admin/new')
+                    } : undefined}
+                    onQuote={!isVisitor && caps.canSendMessage && !isSub ? () => {
+                      // Whole-message quote — official's second entry point:
+                      // hover toolbar ❝ opens the same pill pre-expanded at
+                      // the message row's top edge.
+                      const host = document.querySelector(`[data-eid="${CSS.escape(g.item.id)}"]`)
+                      const r = host?.getBoundingClientRect()
+                      const bodyText = (g.item.body || '').replace(/<quoted_artifact[\s\S]*?<\/quoted_artifact>/g, '').trim().slice(0, 4000)
+                      if (!bodyText || !r) return
+                      quoteGuardUntil.current = Date.now() + 800
+                      setSelQuote({ x: Math.min(Math.max(r.left, 8), window.innerWidth - 8 - 360), y: r.top - 6, placement: 'above', text: bodyText, eventId: g.item.id, author: g.item.role === 'user' ? 'user' : 'devin', tsMs: g.item.ts ? Date.parse(g.item.ts) : undefined, expanded: true })
+                    } : undefined}
+                    onFork={!isVisitor && detail?.session.canFork && !isSub ? () => {
+                      void (async () => {
+                        const r = await adminFetch<{ ok: boolean; id?: string; error?: string }>(`/api/admin/session/${id}/fork`, { method: 'POST', body: JSON.stringify({ anchor: g.item.id }) }).catch(() => null)
+                        if (r?.ok && r.id) nav(`/admin/${r.id}`)
+                        else setControlMsg(r?.error || t('menu.forkFailed'))
+                      })()
                     } : undefined}
                     onSideChat={isVisitor ? undefined : () => { setScAnchor({ id: g.item.id, ts: g.item.ts }); openTab('sidechat') }}
                     sessionId={g.item.role === 'user' || isVisitor ? undefined : id}
@@ -3269,7 +3635,7 @@ const groups = useMemo(() => groupItems(allItems, sessionWorking), [allItems, se
         )}
         </div>
 
-        <footer className={cn('relative max-md:z-20', effShowPanel && 'max-md:hidden', isDraft && 'mb-auto')}>
+        <footer className={cn('relative max-md:z-20', effShowPanel && 'max-md:hidden')}>
           {showJump && (
             <button
               aria-label={t('am.scrollBottom')}
@@ -3559,6 +3925,35 @@ const groups = useMemo(() => groupItems(allItems, sessionWorking), [allItems, se
                 </div>
               </div>
             )}
+            {isDraft && !draftTipGone && (
+              // Desktop "Tip: New space (Ctrl+N)" — plain text row, no icon.
+              <div className="mb-2 flex w-full items-center gap-2 text-[12px] leading-[16px] text-muted-foreground">
+                <span className="min-w-0 flex-1 text-left">{t('draft.tip')}</span>
+                <button
+                  onClick={() => { try { localStorage.setItem('dw-draft-tip', '1') } catch { /* unavailable */ } setDraftTipGone(true) }}
+                  aria-label="Dismiss tip"
+                  className="shrink-0 cursor-pointer rounded p-0.5 hover:bg-accent hover:text-foreground"
+                >
+                  <X size={13} />
+                </button>
+              </div>
+            )}
+            {draftQuotes.length > 0 && (
+              <div className="flex flex-wrap gap-1.5 px-1 pt-1">
+                {draftQuotes.map((q, i) => (
+                  <div key={i} className="group/draft-quote relative">
+                    <QuoteChip quote={q} />
+                    <button
+                      aria-label={t('quote.remove')}
+                      onClick={() => setDraftQuotes((d) => d.filter((_, j) => j !== i))}
+                      className="absolute right-[-5px] top-[-5px] z-10 flex size-[18px] items-center justify-center rounded-full bg-foreground text-background opacity-0 focus-visible:opacity-100 group-hover/draft-quote:opacity-100 [@media(pointer:coarse)]:opacity-100"
+                    >
+                      <X size={14} />
+                    </button>
+                  </div>
+                ))}
+              </div>
+            )}
             {staged.length > 0 && (
               <div className="flex flex-wrap gap-1.5 px-1 pt-1">
                 {staged.map((f) => (
@@ -3592,12 +3987,15 @@ const groups = useMemo(() => groupItems(allItems, sessionWorking), [allItems, se
                 ))}
               </div>
             )}
+            {/* Desktop New-Space parity: inner composer card nested inside the
+                outer card (tip + controls are the outer card's rows). */}
+            <div className={cn(isDraft && 'rounded-[14px] border border-border bg-background p-1.5')}>
             {caps.canSendMessage ? (<>
             <ComposerEditor
               ref={editorRef}
-              className="bg-transparent"
+              className={cn('bg-transparent', isDraft && 'min-h-[44px]')}
               disabled={statusState.inputDisabled || sending}
-              placeholder={pending ? t('composer.respondPending') : stText(t, statusState.placeholder)}
+              placeholder={pending ? t('composer.respondPending') : isDraft ? t('st.message') : stText(t, statusState.placeholder)}
               placeholderNode={!pending && statusState.enum === 'working' && !isVisitor ? QUEUE_PLACEHOLDER : undefined}
               value={input}
               onChange={setInput}
@@ -4126,6 +4524,54 @@ const groups = useMemo(() => groupItems(allItems, sessionWorking), [allItems, se
               })() : null}
               </div>
               <div className="flex shrink-0 items-center gap-1">
+                {isDraft && !isVisitor && (
+                  // Desktop toolbar right side: the agent pill — a real picker.
+                  // Options come from composer-meta agents (builtin + agents.json).
+                  <div className="relative">
+                    <button
+                      onClick={() => setAgentMenuOpen((v) => !v)}
+                      title={t('draft.agentPick')}
+                      className="mr-0.5 flex h-7 shrink-0 cursor-pointer items-center gap-1 rounded-full border border-border px-2 text-[12px] leading-[16px] text-muted-foreground hover:bg-accent hover:text-foreground"
+                    >
+                      <Sparkles size={13} />{composerMeta?.agents?.find((a) => a.id === draftAgent)?.label ?? draftAgent}
+                      <ChevronDown size={11} className="opacity-60" />
+                    </button>
+                    {agentMenuOpen && (
+                      <>
+                        <div className="fixed inset-0 z-10" onClick={() => setAgentMenuOpen(false)} />
+                        <div role="menu" className="absolute bottom-9 right-0 z-20 w-[220px] overflow-hidden rounded-[10px] bg-card shadow-[0_10px_15px_-3px_rgba(0,0,0,0.1)] outline outline-1 outline-black/[0.06] dark:outline-white/[0.06]">
+                          <div className="p-1">
+                            {(composerMeta?.agents ?? [{ id: 'devin', label: 'Devin Local' }]).map((a) => (
+                              <button
+                                key={a.id}
+                                role="menuitem"
+                                onClick={() => { setDraftAgent(a.id); setAgentMenuOpen(false) }}
+                                className="flex w-full cursor-pointer select-none items-center gap-2 rounded-[6px] px-2 py-1.5 text-left text-[13px] hover:bg-accent"
+                              >
+                                <Sparkles size={13} className="text-muted-foreground" />
+                                <span className="min-w-0 flex-1 truncate">{a.label}</span>
+                                {a.id === draftAgent && <Check size={13} className="shrink-0" />}
+                              </button>
+                            ))}
+                          </div>
+                          <p className="border-t border-border/40 px-3 py-1.5 text-[11px] leading-[14px] text-muted-foreground">
+                            {t('draft.agentHint')}
+                          </p>
+                        </div>
+                      </>
+                    )}
+                  </div>
+                )}
+                {/* Open sessions show their owning agent read-only (desktop
+                    parity) — the pick happens at draft time only. */}
+                {!isDraft && !isVisitor && sessionAgent !== 'devin' && (
+                  <span
+                    title={t('draft.agentPick')}
+                    className="mr-0.5 flex h-7 shrink-0 items-center gap-1 rounded-full border border-border px-2 text-[12px] leading-[16px] text-muted-foreground"
+                  >
+                    <Sparkles size={13} />{composerMeta?.agents?.find((a) => a.id === sessionAgent)?.label ?? sessionAgent}
+                  </span>
+                )}
                 {!isVisitor && <VoiceButton onText={(t) => setInput((v) => (v ? `${v} ${t}` : t))} onRecordingChange={setVoiceRecording} disabled={sending || statusState.inputDisabled} />}
                 {status === 'working' && !isVisitor ? (
                   <button
@@ -4170,6 +4616,21 @@ const groups = useMemo(() => groupItems(allItems, sessionWorking), [allItems, se
                     <div role="menu" className="absolute bottom-8 right-0 z-20 w-[270px] overflow-hidden rounded-[10px] bg-[rgba(255,255,255,0.94)] shadow-[0_10px_15px_-3px_rgba(0,0,0,0.1),0_4px_6px_-2px_rgba(0,0,0,0.05)] outline outline-1 outline-black/[0.06] backdrop-blur-[8px] dark:bg-[#1f1f1f]/[0.94] dark:outline-white/[0.06] [transition:transform_40ms_cubic-bezier(0.76,0,0.24,1),scale_40ms_cubic-bezier(0.76,0,0.24,1),opacity_40ms_cubic-bezier(0.76,0,0.24,1)]">
                       <div className="p-1">
                         {/* Official More send options menu (sampled live): Add to queue · Ctrl ⏎; width w-[270px] per bundle */}
+                        {/* Working-session escape: interrupts the live turn and
+                            sends now (server cancels → settle flush fires it). */}
+                        {statusState.enum === 'working' && (
+                          <button
+                            role="menuitem"
+                            onClick={() => {
+                              const text = input.trim()
+                              setSendOptOpen(false)
+                              if (text) { setInput(''); void queueOpReq({ op: 'send_now', message: text }) }
+                            }}
+                            className="flex w-full cursor-pointer select-none items-center gap-2 rounded-[6px] px-2 py-1.5 text-[13px] outline-none hover:bg-tint-secondary"
+                          >
+                            {t('composer.sendNow')}
+                          </button>
+                        )}
                         <button
                           role="menuitem"
                           onClick={() => {
@@ -4189,9 +4650,38 @@ const groups = useMemo(() => groupItems(allItems, sessionWorking), [allItems, se
               </div>
             </div>
             </>) : (
-              <p className="flex min-h-7 items-center px-1 text-[13px] leading-[18px] text-muted-foreground">{t('menu.readonlyBanner')}</p>
+              <p className="flex min-h-7 items-center px-1 text-[13px] leading-[16px] text-muted-foreground">{t('menu.readonlyBanner')}</p>
             )}
+            </div>
             {controlMsg && <div className="px-1 pt-1 text-[12px] leading-[16px] text-muted-foreground">{controlMsg}</div>}
+            {/* Floating quote form over a text selection inside a message —
+                official SelectionQuoteAffordance mini-form: [✏ Add caption]
+                [⏎ Add to chat]; typing while open starts a caption, Enter
+                commits. mousedown+preventDefault keeps the selection alive. */}
+            {selQuote && caps.canSendMessage && (
+              <QuotePill
+                x={selQuote.x}
+                y={selQuote.y}
+                placement={selQuote.placement}
+                hidden={selQuote.hidden}
+                startExpanded={selQuote.expanded}
+                quoteText={selQuote.text}
+                onCommit={(caption) => {
+                  stageQuoteDraft(selQuote, caption)
+                  setSelQuote(null)
+                }}
+                onSend={caps.canSendMessage ? (caption) => {
+                  // Official "Send immediately" — commit + dispatch in one go.
+                  const q = quoteDraftFrom(selQuote, caption)
+                  const merged = draftQuotes.some((x) => x.eventId === q.eventId && x.text === q.text) ? draftQuotes : [...draftQuotes, q]
+                  setDraftQuotes(merged)
+                  setSelQuote(null)
+                  window.getSelection()?.removeAllRanges()
+                  void send(undefined, merged)
+                } : undefined}
+                onClose={() => setSelQuote(null)}
+              />
+            )}
             {interrupted && (
               <div className="flex items-center gap-2 px-1 pt-1 text-[12px] leading-[16px] text-amber-600 dark:text-amber-400">
                 <AlertTriangle size={13} className="shrink-0" />
@@ -4207,10 +4697,52 @@ const groups = useMemo(() => groupItems(allItems, sessionWorking), [allItems, se
                 <button onClick={() => void respawnSub()} className="shrink-0 cursor-pointer underline hover:opacity-80">{t('menu.spawnSuccessor')}</button>
               </div>
             )}
+            {persona && !isVisitor && !isDraft && (persona.mode !== 'off' || persona.escalated) && (
+              <div className="flex items-center gap-2 px-1 pt-1 text-[12px] leading-[16px] text-muted-foreground">
+                <button
+                  onClick={() => void cyclePersonaMode()}
+                  title={t('persona.cycleTip')}
+                  className="shrink-0 cursor-pointer rounded-full border border-border px-2 py-0.5 hover:bg-tint-secondary"
+                >
+                  🎭 {t('persona.label')} · {t(`persona.${persona.mode}`)}
+                </button>
+                {persona.escalated && (
+                  <span className="flex min-w-0 items-center gap-1 text-amber-600 dark:text-amber-400">
+                    <AlertTriangle size={13} className="shrink-0" />
+                    <span className="truncate">{t('persona.escalated')}</span>
+                  </span>
+                )}
+                {persona.mode === 'semi' && !persona.escalated && (
+                  <button
+                    onClick={() => void askPersonaNow()}
+                    disabled={personaBusy}
+                    className="shrink-0 cursor-pointer underline hover:opacity-80 disabled:opacity-50"
+                  >
+                    {personaBusy ? t('persona.asking') : t('persona.ask')}
+                  </button>
+                )}
+              </div>
+            )}
             {sendErr && (
               <div className="flex items-center gap-2 px-1 pt-1 text-[12px] leading-[16px] text-red-500">
                 <span className="min-w-0 truncate">{sendErr}</span>
                 <button onClick={() => void send()} className="shrink-0 cursor-pointer underline hover:text-red-400">{t('common.retry')}</button>
+              </div>
+            )}
+            {isDraft && (
+              // Desktop card bottom row: Local · Choose folder | sessions ↗
+              <div className="mt-2 flex items-center gap-3 border-t border-border/40 px-1 pt-2 text-[12px] leading-[16px] text-muted-foreground">
+                <span className="flex shrink-0 items-center gap-1.5"><Laptop size={13} />{t('draft.local')}</span>
+                <DirPicker
+                  value={draftCwd}
+                  onChange={setDraftCwd}
+                  repos={composerMeta?.repos ?? []}
+                  recents={recentCwds}
+                  primaryCwd={composerMeta?.primary_cwd}
+                />
+                <button onClick={() => nav('/admin/sessions')} className="ml-auto flex shrink-0 cursor-pointer items-center gap-1 hover:text-foreground">
+                  {t('draft.sessionsLink')}<ArrowUpRight size={12} />
+                </button>
               </div>
             )}
           </BeardBand>
@@ -4273,6 +4805,84 @@ const groups = useMemo(() => groupItems(allItems, sessionWorking), [allItems, se
             )
           })()}
         </footer>
+        {isDraft && loaded && (
+          // Desktop New-Space lower segment: Local env · Choose folder ·
+          // Go-to-sessions row, then Recent projects + starter suggestions.
+          // mb-auto keeps the free space AFTER this block, not between it and
+          // the composer.
+          <div className="mx-auto mb-auto w-full max-w-[692px] px-6 pb-8">
+            {draftCwd && <DraftExplorer root={draftCwd} />}
+            <div className="mt-4">
+              <div className="mb-1.5 flex items-center justify-between">
+                <p className="text-[11px] font-medium text-muted-foreground">{t('draft.recentProjects')}</p>
+                <button onClick={() => nav('/admin/sessions')} className="cursor-pointer text-[12px] leading-[16px] text-muted-foreground hover:text-foreground">{t('draft.viewAll')}</button>
+              </div>
+              <div className="rounded-[10px] border border-border">
+                {recentCwds.length === 0 ? (
+                  <p className="px-3 py-2.5 text-[12px] leading-[16px] text-muted-foreground">{t('draft.noProjects')}</p>
+                ) : recentCwds.slice(0, 5).map((dir) => (
+                  <button
+                    key={dir}
+                    onClick={() => setDraftCwd(dir)}
+                    title={dir}
+                    className="flex w-full cursor-pointer items-center gap-2 border-b border-border px-3 py-2 text-left last:border-b-0 hover:bg-tint-secondary"
+                  >
+                    <FolderIcon size={13} className="shrink-0 text-muted-foreground" />
+                    <span className="min-w-0 truncate text-[12px] leading-[16px] text-foreground">{dir}</span>
+                  </button>
+                ))}
+              </div>
+            </div>
+            {composerMeta && (composerMeta.sessions.length > 0 || composerMeta.commands.length > 0 || composerMeta.skills.length > 0) && (
+              <div className="mt-4 flex w-full flex-col gap-3 text-left">
+                {composerMeta.sessions.length > 0 && (
+                  <div>
+                    <p className="mb-1.5 text-[11px] font-medium text-muted-foreground">{t('draft.recent')}</p>
+                    <div className="grid grid-cols-1 gap-1.5 sm:grid-cols-3">
+                      {composerMeta.sessions.slice(0, 3).map((s) => (
+                        <button
+                          key={s.id}
+                          onClick={() => nav(`/admin/${s.id}`)}
+                          className="flex min-w-0 cursor-pointer items-center gap-2 rounded-[8px] border border-border bg-card px-2.5 py-2 text-left hover:bg-tint-secondary"
+                        >
+                          <MessageSquare size={13} className="shrink-0 text-muted-foreground" />
+                          <span className="min-w-0 truncate text-[12px] leading-[16px] text-foreground">{s.title || s.id}</span>
+                        </button>
+                      ))}
+                    </div>
+                  </div>
+                )}
+                {(composerMeta.commands.length > 0 || composerMeta.skills.length > 0) && (
+                  <div>
+                    <p className="mb-1.5 text-[11px] font-medium text-muted-foreground">{t('draft.try')}</p>
+                    <div className="flex flex-wrap gap-1.5">
+                      {composerMeta.commands.slice(0, 5).map((c) => (
+                        <button
+                          key={`c:${c.command}`}
+                          title={c.description}
+                          onClick={() => setInput(`/${c.command} `)}
+                          className="cursor-pointer rounded-full border border-border bg-card px-2.5 py-1 text-[12px] leading-[16px] text-foreground hover:bg-tint-secondary"
+                        >
+                          /{c.command}
+                        </button>
+                      ))}
+                      {composerMeta.skills.slice(0, 4).map((s) => (
+                        <button
+                          key={`s:${s.name}`}
+                          title={s.description ?? s.name}
+                          onClick={() => setInput((v) => (v ? `${v.replace(/\s+$/, '')} @${s.name} ` : `@${s.name} `))}
+                          className="cursor-pointer rounded-full border border-border bg-card px-2.5 py-1 text-[12px] leading-[16px] text-foreground hover:bg-tint-secondary"
+                        >
+                          @{s.name}
+                        </button>
+                      ))}
+                    </div>
+                  </div>
+                )}
+              </div>
+            )}
+          </div>
+        )}
       </div>
 
       {/* right: panels */}

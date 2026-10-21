@@ -288,7 +288,7 @@ function WorkspacePanel({ id }: { id: string }) {
           className={cn(
             'flex h-[26px] w-full cursor-pointer select-none items-center gap-1 rounded-[4px] pr-1 text-left text-[13px] leading-[18px] hover:bg-tint-secondary',
             active === n.path && 'bg-tint-secondary text-foreground',
-            dropDir === n.path && 'bg-accent-primary/15 outline-1 outline-accent-primary',
+            dropDir === n.path && 'bg-accent-fill/15 outline-1 outline-accent-primary',
             dragNode === n.path && 'opacity-50',
           )}
           style={{ paddingLeft: 6 + depth * 14 }}
@@ -587,7 +587,7 @@ function EditBar({ mode, setMode, modes, dirty, saving, onSave, onDiscard }: {
         {dirty && <span className="text-[11px] text-amber-600">{t('ws.unsaved')}</span>}
         {dirty && <button onClick={onDiscard} className="h-6 cursor-pointer rounded-[5px] px-2 text-[12px] text-muted-foreground hover:bg-tint-secondary hover:text-foreground">{t('ws.discard')}</button>}
         <button onClick={onSave} disabled={!dirty || saving}
-          className={cn('flex h-6 cursor-pointer items-center gap-1 rounded-[5px] px-2 text-[12px]', dirty ? 'bg-accent-primary text-white hover:opacity-90' : 'text-muted-foreground opacity-50')}>
+          className={cn('flex h-6 cursor-pointer items-center gap-1 rounded-[5px] px-2 text-[12px]', dirty ? 'bg-accent-fill text-white hover:opacity-90' : 'text-muted-foreground opacity-50')}>
           <Save size={12} /> {saving ? t('ws.saving') : t('common.save')}
         </button>
       </div>
@@ -761,7 +761,7 @@ function CsvView({ text, savedText, onChange, onSave, onDiscard }: {
                 <tr key={i} className={i === 0 ? 'sticky top-0 bg-card font-medium' : 'hover:bg-tint-secondary/50'}>
                   <td className="sticky left-0 border-b border-r border-border bg-card px-1.5 py-1 text-right text-[10px] text-muted-foreground">{i + 1}</td>
                   {r.map((c, j) => (
-                    <td key={j} className="whitespace-nowrap border-b border-r border-border px-2 py-1 align-top outline-none focus:bg-accent-primary/10"
+                    <td key={j} className="whitespace-nowrap border-b border-r border-border px-2 py-1 align-top outline-none focus:bg-accent-fill/10"
                       contentEditable suppressContentEditableWarning
                       onBlur={(e) => setCell(i, j, e.currentTarget.textContent ?? '')}>{c}</td>
                   ))}
@@ -834,7 +834,7 @@ function XlsxView({ src, name, onSave }: { src: string; name: string; onSave: (b
         <div className="ml-auto flex h-full items-center gap-1.5 pb-1">
           {dirty && <span className="text-[11px] text-amber-600">{t('ws.unsaved')}</span>}
           <button onClick={doSave} disabled={!dirty || saving}
-            className={cn('flex h-6 cursor-pointer items-center gap-1 rounded-[5px] px-2 text-[12px]', dirty ? 'bg-accent-primary text-white' : 'text-muted-foreground opacity-50')}>
+            className={cn('flex h-6 cursor-pointer items-center gap-1 rounded-[5px] px-2 text-[12px]', dirty ? 'bg-accent-fill text-white' : 'text-muted-foreground opacity-50')}>
             <Save size={12} /> {saving ? t('ws.saving') : t('common.save')}
           </button>
         </div>
@@ -846,7 +846,7 @@ function XlsxView({ src, name, onSave }: { src: string; name: string; onSave: (b
               <tr key={i} className={i === 0 ? 'sticky top-0 z-[1] bg-card font-medium' : 'hover:bg-tint-secondary/50'}>
                 <td className="sticky left-0 border-b border-r border-border bg-card px-1.5 py-1 text-right text-[10px] text-muted-foreground">{i + 1}</td>
                 {r.map((c, j) => (
-                  <td key={j} className="whitespace-nowrap border-b border-r border-border px-2 py-1 align-top outline-none focus:bg-accent-primary/10"
+                  <td key={j} className="whitespace-nowrap border-b border-r border-border px-2 py-1 align-top outline-none focus:bg-accent-fill/10"
                     contentEditable suppressContentEditableWarning
                     onBlur={(e) => setCell(i, j, e.currentTarget.textContent ?? '')}>{String(c)}</td>
                 ))}
@@ -1008,7 +1008,7 @@ function ImageEditor({ src, name, onSave }: { src: string; name: string; onSave:
         <div className="ml-auto flex items-center gap-1.5">
           <a href={src} download className="h-6 cursor-pointer rounded-[5px] px-2 text-[12px] leading-6 text-muted-foreground hover:bg-tint-secondary hover:text-foreground">{t('common.download')}</a>
           <button onClick={() => void doSave()} disabled={saving}
-            className={cn('flex h-6 cursor-pointer items-center gap-1 rounded-[5px] px-2 text-[12px]', dirty ? 'bg-accent-primary text-white' : 'text-muted-foreground opacity-60')}>
+            className={cn('flex h-6 cursor-pointer items-center gap-1 rounded-[5px] px-2 text-[12px]', dirty ? 'bg-accent-fill text-white' : 'text-muted-foreground opacity-60')}>
             <Save size={12} /> {saving ? t('ws.saving') : t('common.save')}
           </button>
         </div>
@@ -1032,7 +1032,7 @@ function ImageEditor({ src, name, onSave }: { src: string; name: string; onSave:
               <div key={i} className="pointer-events-none absolute font-sans font-medium text-red-500" style={{ left: t.x, top: t.y, fontSize: Math.max(14, img.naturalWidth / 45) }}>{t.t}</div>
             ))}
             {sel && (tool === 'crop' || tool === 'rect') && (
-              <div className={cn('pointer-events-none absolute border-2', tool === 'crop' ? 'border-accent-primary bg-accent-primary/10' : 'border-red-500')}
+              <div className={cn('pointer-events-none absolute border-2', tool === 'crop' ? 'border-accent-primary bg-accent-fill/10' : 'border-red-500')}
                 style={{ left: sel.x, top: sel.y, width: sel.w, height: sel.h }} />
             )}
           </div>

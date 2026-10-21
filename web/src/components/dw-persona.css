@@ -1,0 +1,25 @@
+/* devin-web persona animation — the turbine mark: blades spin around the
+ * shared apex; a slow opacity breathe keeps it alive between rotations.
+ * --dw-play freezes the same animation mid-flight for the wake/idle state. */
+@keyframes dw-orbit {
+  to { transform: rotate(360deg); }
+}
+@keyframes dw-core {
+  0%, 100% { opacity: 1; }
+  50% { opacity: 0.55; }
+}
+.dw-persona {
+  --dw-play: running;
+  display: inline-flex;
+  flex-shrink: 0;
+}
+.dw-persona__orbit {
+  transform-origin: 8px 8px;
+  animation: dw-orbit 1.6s cubic-bezier(0.65, 0.05, 0.35, 0.95) infinite;
+  animation-play-state: var(--dw-play);
+}
+.dw-persona__core {
+  animation: dw-core 1.3s ease-in-out infinite;
+  animation-play-state: var(--dw-play);
+}
+.dw-persona--paused { --dw-play: paused; }

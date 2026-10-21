@@ -2,7 +2,7 @@ import { useState, type FormEvent, type ReactNode } from 'react'
 import { useTranslation } from 'react-i18next'
 import { ArrowUpRight, Check, Circle, CircleCheck, CircleDashed, EyeOff, GitBranch, GitMerge, GitPullRequest, GitPullRequestClosed, GitPullRequestDraft, ListChecks, MessageSquareText, TriangleAlert, Workflow, X } from 'lucide-react'
 import { type PrInfo, type SessionPr, type TimelineItem, type TodoRow, todoLabel } from '@/components/Timeline'
-import { DevinLogo } from '@/components/DevinMark'
+import { DwLogo } from '@/components/DwMark'
 import { cn } from '@/lib/utils'
 
 /** Official horizontal key glyph used by the credentials card header. */
@@ -222,7 +222,7 @@ export function PermissionRequestCard({ item, resolved, busy, error, onRespond, 
         className={cn('flex min-h-9 items-center gap-2 px-2.5 py-2', onOpenSidebar && 'cursor-pointer')}
         onClick={onOpenSidebar}
       >
-        <DevinLogo size={14} className="shrink-0 text-foreground/40" />
+        <DwLogo size={14} className="shrink-0 text-foreground/40" />
         <span className="min-w-0 flex-1 truncate text-[12px] leading-[16px] text-muted-foreground">{title}</span>
         {onOpenSidebar && (
           <button

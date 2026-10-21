@@ -26,6 +26,8 @@ interface MirrorTreeSession {
    *  `loaded_here` (this web is the holder); otherwise another app. */
   is_locked?: boolean
   loaded_here?: boolean
+  /** Owning ACP agent id — non-devin rows get a small badge (devin default). */
+  agent?: string
   /** sub: rows only — false once the acp registry dropped the agent handle
    * (server restart / session replay); the row greys and the child page
    * offers respawn instead of a doomed resume relay. */

@@ -106,6 +106,16 @@ function TreeRow({ s, depth, activeDevinId, folders, onOpen, onPrefetch, onRefre
             <Lock size={12} />
           </span>
         )}
+        {/* Non-devin ownership — the draft picker's chosen agent follows the
+            session; devin rows stay unmarked (the default). */}
+        {s.agent && s.agent !== 'devin' && (
+          <span
+            title={t('draft.agentPick')}
+            className="relative z-10 flex h-4 shrink-0 items-center rounded-[4px] border border-border/60 px-1 text-[10px] leading-none text-muted-foreground"
+          >
+            {s.agent}
+          </span>
+        )}
         {/* Working spinner lives in the left w-6 icon cell above — the old
             second spinner here (compact mode) duplicated it. */}
         {compactPr ? (
@@ -649,7 +659,7 @@ const SessionTree = memo(function SessionTree({ tree, archivedTree, activeDevinI
   }, [propsMenu])
   const groupNames = [...folderNames, 'Pinned', 'Recent', 'Archived']
   return (
-    <div className="px-1.5 py-1">
+    <div className="px-2 py-1">
       <div data-slot="sidebar-label-row" className="group/label sticky top-0 z-20 flex h-8 w-full shrink-0 items-center justify-between gap-px bg-background pl-1 pr-1 text-[12px] font-medium text-muted-foreground">
         <span data-slot="sidebar-group-label" className="min-w-0 flex-1 truncate pl-1">{t('tree.sessions')}</span>
         <button

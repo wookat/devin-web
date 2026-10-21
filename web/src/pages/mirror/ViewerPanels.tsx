@@ -7,7 +7,7 @@ import AttachmentCard from '@/components/AttachmentCard'
 import CodeView from '@/components/CodeView'
 import { type TimelineItem } from '@/components/Timeline'
 import Markdown from '@/components/Markdown'
-import DevinMark from '@/components/DevinMark'
+import DwMark from '@/components/DwMark'
 import { cn } from '@/lib/utils'
 import { headerClock, time, useFullTerminal, TerminalBlock } from './timelineUtil'
 import { AVATAR_HUES } from './attachments'
@@ -39,7 +39,7 @@ function ParticipantHeader({ kind, name, ts }: { kind: 'devin' | 'user'; name?: 
       </div>
       <span role="img" aria-label={displayName} className="absolute left-[-44px] top-[3px] flex h-[32px] w-[32px] select-none items-center justify-center rounded-full">
         {kind === 'devin' ? (
-          <span className="flex size-7 items-center justify-center rounded-[6px] bg-bg-accent-neutral"><DevinMark size={20} /></span>
+          <span className="flex size-7 items-center justify-center rounded-[6px] bg-bg-accent-neutral"><DwMark size={20} /></span>
         ) : isBot ? (
           <span className="flex h-8 w-8 shrink-0 items-center justify-center rounded-full bg-tint-secondary">
             <BotMark />

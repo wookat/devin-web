@@ -6,7 +6,7 @@ import { adminFetchSwr, type AdminSession, type PublicMessage } from '@/lib/api'
 import { type ViewerCaps, type SharePermission } from '@/lib/viewer'
 import { type Theme } from '@/lib/theme'
 import { type TimelineItem } from '@/components/Timeline'
-import DevinMark from '@/components/DevinMark'
+import DwMark from '@/components/DwMark'
 import { Select } from '@/components/ui'
 import { cn } from '@/lib/utils'
 import { type PanelKey } from './panelTabs'
@@ -30,7 +30,7 @@ function CommandPalette({ sessions, onClose, onTheme, onToggleSidebar }: {
     {
       label: 'Start session with a prompt…',
       run: () => nav('/admin/new'),
-      icon: <DevinMark size={16} />,
+      icon: <DwMark size={16} />,
       render: <><span>{t('pal.startSession')}</span><span className="text-muted-foreground"> with a prompt…</span></> },
     { label: 'Search sessions…', run: () => { setMode('search'); setQ('') }, icon: <Search size={16} /> },
     { group: 'Actions', label: 'Go to…', run: () => { setSubmenu('go'); setQ('') }, icon: <ArrowUpRight size={16} /> },
@@ -180,6 +180,10 @@ interface SessionDetail {
     cwd?: string | null
     is_locked?: boolean
     loaded_here?: boolean
+    /** Owning ACP agent id (devin default) — non-devin hides private UI. */
+    agent?: string
+    /** Server can fork this session (native session/fork or seed fallback). */
+    canFork?: boolean
     context_usage?: {
       used: number | null
       size: number | null

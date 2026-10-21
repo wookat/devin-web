@@ -10,6 +10,8 @@ interface ComposerMetaT {
   macros: { name: string; description: string }[]
   repos: { name: string; org: string }[]
   sessions: { id: string; title: string; snippet: string }[]
+  /** Enabled ACP agents for the draft picker's agent dropdown. */
+  agents?: { id: string; label: string }[]
   /** Server's own cwd — the workspace a session lands in when none is picked. */
   primary_cwd?: string
   /** Agent-level config so the /admin/new composer shows real mode+model pills. */

@@ -25,24 +25,30 @@
   --color-text-red: rgb(245 59 58);
   --color-text-purple: rgb(149 108 222);
   --color-accent-primary: rgb(49 124 255);
+  /* Official splits accent: --bg-accent-primary (fills) vs --text-accent-primary
+     (text/border). Equal in light (49 124 255); diverge in dark. */
+  --color-accent-fill: rgb(49 124 255);
   --color-bg-accent-neutral: rgb(54 54 54);
   --color-text-tertiary: rgba(25, 25, 25, 0.4);
   --color-elevated: #ffffff;
   --color-wash: #f8f8f8;
   --color-border-secondary: rgba(0, 0, 0, 0.06);
   --color-scrim: rgba(0, 0, 0, 0.12);
-  --font-sans: "Inter", "PingFang SC", "Noto Sans SC", system-ui, sans-serif;
+  --font-sans: "Inter", ui-sans-serif, system-ui, "PingFang SC", "Noto Sans SC", sans-serif, "Apple Color Emoji", "Segoe UI Emoji", "Segoe UI Symbol", "Noto Color Emoji";
+  /* Official shadow tokens (app.devin.ai): --shadow-L1 = 0 1px 2px rgb(shadow-sm). */
+  --shadow-shadow-L1: 0px 1px 2px 0px rgb(0 0 0 / 0.05);
+  --shadow-shadow-sm-color: 0 0 0 / 0.05;
 }
 
-:root { --text-accent-primary: 49 124 255; }
+@layer base { :root { --text-accent-primary: 49 124 255; } }
 
 /* Dark palette sampled from app.devin.ai with theme=dark (computed styles). */
 @layer base {
   .dark {
     --color-background: #141414;
     --color-foreground: rgba(255, 255, 255, 0.9);
-    --color-card: #1a1a1a;
-    --color-popover: #1a1a1a;
+    --color-card: #1f1f1f;
+    --color-popover: #1f1f1f;
     --color-muted: rgba(255, 255, 255, 0.05);
     --color-muted-foreground: rgba(255, 255, 255, 0.52);
     --color-border: rgba(255, 255, 255, 0.08);
@@ -50,31 +56,42 @@
     --color-tint-primary: rgba(255, 255, 255, 0.08);
     --color-tint-secondary: rgba(255, 255, 255, 0.05);
     --color-tint-tertiary: rgba(255, 255, 255, 0.03);
-    --color-tint-red: rgb(57, 34, 34);
-    --color-tint-green: rgb(29, 47, 39);
-    --color-tint-blue: rgb(34, 41, 53);
+    --color-tint-red: rgb(245 59 58 / 0.12);
+    --color-tint-green: rgb(0 236 126 / 0.08);
+    --color-tint-blue: rgb(51 125 244 / 0.1);
     --color-text-green: rgb(0 236 126);
     --color-text-orange: rgb(245 142 58);
     --color-text-red: rgb(245 59 58);
     --color-text-purple: rgb(149 108 222);
     --color-accent-primary: rgb(73 176 255);
+    --color-accent-fill: rgb(68 137 255);
     --color-bg-accent-neutral: rgb(249 249 249);
     --color-text-tertiary: rgba(255, 255, 255, 0.4);
     --color-elevated: #1f1f1f;
-    --color-wash: #262626;
+    --color-wash: #191919;
     --color-border-secondary: rgba(255, 255, 255, 0.04);
     --color-scrim: rgba(0, 0, 0, 0.32);
     --text-accent-primary: 73 176 255;
+    /* dark --shadow-shadow-sm: 0 0 0 / .2 → L1 = 0 1px 2px rgba(0,0,0,.2) */
+    --shadow-shadow-L1: 0px 1px 2px 0px rgb(0 0 0 / 0.2);
+    --shadow-shadow-sm-color: 0 0 0 / 0.2;
   }
 }
 
 @keyframes voice-row-in { from { opacity: 0; } to { opacity: 1; } }
 .voice-row-in { animation: voice-row-in 200ms ease-out; }
 
-/* Official scrollbar design (sampled from app.devin.ai .scrollbox rules): thin native
-   scrollbars, gray thumb (light rgb(202,202,202) / dark rgb(82,82,82)), transparent track. */
-:root { --scrollbar-thumb: 202 202 202; --scrollbar-thumb-hover: 168 168 168; }
-.dark { --scrollbar-thumb: 82 82 82; --scrollbar-thumb-hover: 110 110 110; }
+/* Official scrollbar design (live-measured on app.devin.ai body vars): thin native
+   scrollbars, near-invisible thumb (light 237/232, dark 32/39), transparent track. */
+:root { --scrollbar-thumb: 237 237 237; --scrollbar-thumb-hover: 232 232 232; }
+.dark { --scrollbar-thumb: 32 32 32; --scrollbar-thumb-hover: 39 39 39; }
+
+/* Official quote-selection highlight (verbatim from app.devin.ai bundle):
+   text selected inside a quotable surface gets the pending-quote tint. */
+:root { --pending-quote-highlight: color-mix(in srgb, Highlight 35%, transparent); }
+.dark { --pending-quote-highlight: rgb(68 137 255 / .35); }
+[data-quotable-surface] ::selection { background-color: var(--pending-quote-highlight); color: currentColor; }
+[data-quotable-surface]::selection { background-color: var(--pending-quote-highlight); color: currentColor; }
 @layer base {
   * {
     scrollbar-width: thin;
@@ -94,6 +111,7 @@
 
 html, body, #root { height: 100%; }
 body { @apply bg-background text-foreground antialiased; font-size: 14px; line-height: 20px; }
+.composer-editor { letter-spacing: -0.07px; border-radius: 4px; }
 .composer-editor:empty::before {
   position: absolute;
   inset: 0;

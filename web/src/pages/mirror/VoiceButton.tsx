@@ -5,6 +5,21 @@ import { adminFetch } from '@/lib/api'
 import { time } from './timelineUtil'
 
 const PREFERRED_LANG = navigator.language?.toLowerCase().startsWith('zh') ? 'Chinese' : 'English'
+const SR_LANG = navigator.language?.toLowerCase().startsWith('zh') ? 'zh-CN' : 'en-US'
+
+// Browser-native streaming recognizer (Chromium/Edge, secure context only) —
+// interim + final results while you speak. `any`-typed: lib.dom lacks the
+// still-prefixed API. Falls back to record→/transcribe when absent.
+type SpeechRec = {
+  lang: string; continuous: boolean; interimResults: boolean
+  onresult: ((e: { resultIndex: number; results: ArrayLike<{ isFinal: boolean; 0: { transcript: string } }> }) => void) | null
+  onend: (() => void) | null; onerror: ((e: { error?: string }) => void) | null
+  start(): void; stop(): void; abort(): void
+}
+const SpeechRecognitionCtor: (new () => SpeechRec) | undefined = window.isSecureContext
+  ? ((window as unknown as { SpeechRecognition?: new () => SpeechRec }).SpeechRecognition
+    ?? (window as unknown as { webkitSpeechRecognition?: new () => SpeechRec }).webkitSpeechRecognition)
+  : undefined
 
 /**
  * Voice input mic button (official: records via MediaRecorder, then `POST
@@ -106,9 +121,10 @@ function VoiceButton({ onText, onRecordingChange, disabled }: { onText: (t: stri
   const timerRef = useRef(0)
   const volumeRef = useRef(0)
 
-  const stop = () => {
-    recRef.current?.stop()
-    recRef.current?.stream.getTracks().forEach((t) => t.stop())
+  const srRef = useRef<SpeechRec | null>(null)
+  const [interim, setInterim] = useState('')
+
+  const teardown = () => {
     cancelAnimationFrame(rafRef.current)
     window.clearInterval(timerRef.current)
     volumeRef.current = 0
@@ -118,12 +134,84 @@ function VoiceButton({ onText, onRecordingChange, disabled }: { onText: (t: stri
     onRecordingChange?.(false)
   }
 
+  const stop = () => {
+    // SR path: stop() ends recognition; pending finals land before onend.
+    if (srRef.current) { srRef.current.stop(); return }
+    recRef.current?.stop()
+    recRef.current?.stream.getTracks().forEach((t) => t.stop())
+    teardown()
+  }
+
+  const failMic = () => {
+    teardown()
+    setMicError(true)
+    window.clearTimeout(micErrTimer.current)
+    micErrTimer.current = window.setTimeout(() => setMicError(false), 4000)
+  }
+
+  const startWaveform = (stream: MediaStream) => {
+    const ctx = new AudioContext()
+    audioCtxRef.current = ctx
+    const analyser = ctx.createAnalyser()
+    analyser.fftSize = 256
+    ctx.createMediaStreamSource(stream).connect(analyser)
+    const data = new Uint8Array(analyser.frequencyBinCount)
+    let lastSampleTime = 0
+    const sample = (time: number) => {
+      if (time - lastSampleTime >= 50) {
+        lastSampleTime = time
+        analyser.getByteFrequencyData(data)
+        const average = data.reduce((sum, value) => sum + value, 0) / data.length
+        volumeRef.current = (average / 128) ** 0.7 * 100
+      }
+      rafRef.current = requestAnimationFrame(sample)
+    }
+    rafRef.current = requestAnimationFrame(sample)
+  }
+
   const start = async () => {
     try {
       const stream = await navigator.mediaDevices.getUserMedia({ audio: true })
+      const begin = () => {
+        startRef.current = new Date()
+        setElapsed(0)
+        timerRef.current = window.setInterval(() => setElapsed(Math.floor((Date.now() - startRef.current.getTime()) / 1000)), 250)
+        startWaveform(stream)
+        setRecording(true)
+        onRecordingChange?.(true)
+      }
+      if (SpeechRecognitionCtor) {
+        // Realtime: each finalized phrase goes straight into the input via
+        // onText; the in-flight interim words render inside the record bar.
+        const sr = new SpeechRecognitionCtor()
+        sr.lang = SR_LANG
+        sr.continuous = true
+        sr.interimResults = true
+        sr.onresult = (e) => {
+          let live = ''
+          for (let i = e.resultIndex; i < e.results.length; i++) {
+            const r = e.results[i]
+            if (r.isFinal) { const seg = r[0].transcript.trim(); if (seg) onText(seg) }
+            else live += r[0].transcript
+          }
+          setInterim(live)
+        }
+        sr.onend = () => { srRef.current = null; stream.getTracks().forEach((t) => t.stop()); setInterim(''); teardown() }
+        sr.onerror = (e) => {
+          srRef.current = null
+          stream.getTracks().forEach((t) => t.stop())
+          setInterim('')
+          if (e.error === 'not-allowed' || e.error === 'service-not-allowed') failMic()
+          else teardown()
+        }
+        srRef.current = sr
+        begin()
+        sr.start()
+        return
+      }
+      // Fallback: record → upload → devin transcribe-audio (batch, on stop).
       const rec = new MediaRecorder(stream)
       chunksRef.current = []
-      startRef.current = new Date()
       rec.ondataavailable = (e) => { if (e.data.size) chunksRef.current.push(e.data) }
       rec.onstop = async () => {
         const blob = new Blob(chunksRef.current, { type: rec.mimeType || 'audio/webm' })
@@ -136,40 +224,16 @@ function VoiceButton({ onText, onRecordingChange, disabled }: { onText: (t: stri
           form.append('start_time', startRef.current.toISOString())
           const r = await adminFetch<{ text: string | null; error: string | null }>('/api/admin/mirror/transcribe', { method: 'POST', body: form })
           if (r.text) onText(r.text)
+          else if (r.error) failMic()
         } finally {
           setBusy(false)
         }
       }
-      rec.start()
       recRef.current = rec
-      setElapsed(0)
-      timerRef.current = window.setInterval(() => setElapsed(Math.floor((Date.now() - startRef.current.getTime()) / 1000)), 250)
-      // Live scrolling waveform (official recording bar shows amplitude bars).
-      const ctx = new AudioContext()
-      audioCtxRef.current = ctx
-      const analyser = ctx.createAnalyser()
-      analyser.fftSize = 256
-      ctx.createMediaStreamSource(stream).connect(analyser)
-      const data = new Uint8Array(analyser.frequencyBinCount)
-      let lastSampleTime = 0
-      const sample = (time: number) => {
-        if (time - lastSampleTime >= 50) {
-          lastSampleTime = time
-          analyser.getByteFrequencyData(data)
-          const average = data.reduce((sum, value) => sum + value, 0) / data.length
-          volumeRef.current = (average / 128) ** 0.7 * 100
-        }
-        rafRef.current = requestAnimationFrame(sample)
-      }
-      rafRef.current = requestAnimationFrame(sample)
-      setRecording(true)
-      onRecordingChange?.(true)
+      rec.start()
+      begin()
     } catch {
-      setRecording(false)
-      onRecordingChange?.(false)
-      setMicError(true)
-      window.clearTimeout(micErrTimer.current)
-      micErrTimer.current = window.setTimeout(() => setMicError(false), 4000)
+      failMic()
     }
   }
 
@@ -206,7 +270,14 @@ function VoiceButton({ onText, onRecordingChange, disabled }: { onText: (t: stri
           <span className="ml-1 w-10 shrink-0 text-[13px] leading-[18px] tabular-nums text-muted-foreground">
             {Math.floor(elapsed / 60)}:{String(elapsed % 60).padStart(2, '0')}
           </span>
-          <Waveform volumeRef={volumeRef} />
+          <div className="relative flex min-w-0 flex-1">
+            <Waveform volumeRef={volumeRef} />
+            {interim && (
+              <span className="pointer-events-none absolute inset-y-0 left-0 flex w-full items-center truncate bg-card/80 text-[13px] leading-[18px] text-foreground">
+                {interim}
+              </span>
+            )}
+          </div>
           <button
             onClick={stop}
             aria-label={t('vb.send')}

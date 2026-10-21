@@ -60,7 +60,7 @@ const EventRow = memo(function EventRow({ item, sessionId, mt, onStepChanges, on
     // clicking a row opens the Computer state, the first row carries the screenshot toggle.
     const openState = () => { if (onOpenProgress && shots.length) onOpenProgress(item); else if (shots.length) setOpen(!open) }
     return (
-      <div className="group wg-time-host relative flex gap-2 pb-2" data-eid={item.id}>
+      <div className="group wg-time-host relative flex gap-2 pb-2" data-eid={item.id} data-quote-anchor={item.id}>
         <div className="min-w-0 flex-1">
           {item.actions.map((a, i) => (
             <button key={i} type="button" title={time(item.ts)} onClick={openState} data-testid="transcript-worklog-row" className={cn(rowCls, shots.length ? 'cursor-pointer hover:text-foreground' : 'cursor-default')}>
@@ -87,7 +87,7 @@ const EventRow = memo(function EventRow({ item, sessionId, mt, onStepChanges, on
     // ("Created x.ts +40", "Edited y.md +4 −4", "Deleted z", "Renamed w").
     const rows = fileRows(item.fileUpdates)
     return (
-      <div className="group wg-time-host relative flex gap-2 pb-2" data-eid={item.id}>
+      <div className="group wg-time-host relative flex gap-2 pb-2" data-eid={item.id} data-quote-anchor={item.id}>
         <div className="min-w-0 flex-1">
           {rows.map((r) => (
             <div
@@ -186,7 +186,7 @@ const EventRow = memo(function EventRow({ item, sessionId, mt, onStepChanges, on
     }
     const splitBtn = 'inline-flex h-7 items-center justify-center border border-border bg-card px-2.5 text-[13px] font-medium disabled:opacity-50'
     return (
-      <div className="flex min-w-0 flex-col gap-1.5 pb-2" data-eid={item.id}>
+      <div className="flex min-w-0 flex-col gap-1.5 pb-2" data-eid={item.id} data-quote-anchor={item.id}>
         <div className="flex items-center gap-1.5">
           <Flag size={15} className="shrink-0 text-orange-500" />
           <button type="button" aria-expanded={open} onClick={() => setOpen(!open)} className="cursor-pointer text-left text-[13px] leading-[18px] text-foreground">{item.title}</button>
@@ -229,7 +229,7 @@ const EventRow = memo(function EventRow({ item, sessionId, mt, onStepChanges, on
   const sub = item.subagent
   if (sub?.agentId) {
     return (
-      <div className="group relative flex gap-2 pb-2" data-eid={item.id}>
+      <div className="group relative flex gap-2 pb-2" data-eid={item.id} data-quote-anchor={item.id}>
         <button type="button" onClick={() => onOpenSubagent?.(sub.agentId!)} className="flex w-full min-w-0 items-center gap-2 rounded-lg border border-border bg-card px-3 py-2 text-left hover:bg-tint-secondary">
           <Bot size={15} className="shrink-0 text-muted-foreground" />
           <span className="min-w-0 flex-1 truncate text-[13px] leading-[18px]">{sub.title || item.title}</span>
@@ -246,7 +246,7 @@ const EventRow = memo(function EventRow({ item, sessionId, mt, onStepChanges, on
     )
   }
   return (
-    <div className="group wg-time-host relative flex gap-2 pb-2" data-eid={item.id}>
+    <div className="group wg-time-host relative flex gap-2 pb-2" data-eid={item.id} data-quote-anchor={item.id}>
       {standalone && (
         <span className="mt-px flex h-4 w-4 shrink-0 items-center justify-center">
           {hasDetail && item.kind !== 'todo' && !shellProgress && (
