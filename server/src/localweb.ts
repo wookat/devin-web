@@ -32,10 +32,11 @@ import {
   beginDrain, isDraining, markGracefulExit,
   sessionStatus, interruptedTurn, listSubagents, subagentTimeline, subPingActive, listLocalSessions,
   snippetFromLog, terminalBuf, cloudVersionToModel,
-  noteSendError, recentSendErrors, sendPreflight,
+  sendPreflight,
   type ListedSession, type SubagentInfo,
 } from "./sessionio.js";
 import { queueList, queueAdd, queueRemove, queueFlush } from "./sessionqueue.js";
+import { noteSendError, recentSendErrors } from "./sendhealth.js";
 import { responseCfg, captureLoadResponse, type SessionConfig, type ConfigOption } from "./sessioncfg.js";
 import {
   personaState, personaMode, askPersona, personaHumanMessage, decisionsTail,

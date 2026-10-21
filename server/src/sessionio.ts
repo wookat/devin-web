@@ -19,6 +19,7 @@ import {
   type ConfigOption, type SessionConfig,
 } from "./sessioncfg.js";
 import { queueList, queueAdd, queueRemove, queueFlush, restoreQueues, bindQueueDeps, type QueuedMsg } from "./sessionqueue.js";
+import { noteSendError, lastSendError, recentSendErrors, restoreSendErrors, type SendCheckStep } from "./sendhealth.js";
 import { loadReg, saveReg, meta, noteLastUsed } from "./dwstore.js";
 import {
   noteUpdate, persistTail, buildTimeline, buildTimelineFrom, snippet, tlCache,
@@ -68,10 +69,7 @@ function isSessionPinned(id: string): boolean {
 export function setCfgCacheDir(dir: string) {
   initCfgState(dir);
   restoreQueues(dir);
-  try {
-    const e = JSON.parse(fs.readFileSync(path.join(dir, "send-errors.json"), "utf8")) as Record<string, SendError>;
-    for (const [sid, se] of Object.entries(e)) if (se && typeof se.ts === "number") sendErrors.set(sid, se);
-  } catch { /* cold start */ }
+  restoreSendErrors(dir);
 }
 
 /** sessionId → in-flight history replay + the acp ACTUALLY performing it.
@@ -567,23 +565,10 @@ function openTurnsSave(ctx: ApiContext) {
 }
 
 // ---------------------------------------------------------------------------
-// Send diagnostics — every failed send is recorded per-session WITH the
-// pipeline stage that produced it, so the settings panel can answer "which
-// hop broke" instead of surfacing a bare error string.
+// Send diagnostics — the error journal lives in sendhealth.ts (imported
+// above). sendPreflight stays HERE: it consumes sessionio state
+// (openTurns/sessionHost/inflight/draining), it's a consumer not storage.
 // ---------------------------------------------------------------------------
-interface SendError { ts: number; stage: string; message: string }
-const sendErrors = new Map<string, SendError>();
-function noteSendError(id: string, stage: string, err: unknown) {
-  sendErrors.set(id, { ts: Date.now(), stage, message: err instanceof Error ? err.message : String(err) });
-  while (sendErrors.size > 200) sendErrors.delete(sendErrors.keys().next().value!);
-  persistJson("send-errors.json", Object.fromEntries(sendErrors));
-}
-function lastSendError(id: string): SendError | null { return sendErrors.get(id) ?? null; }
-function recentSendErrors(): (SendError & { sessionId: string })[] {
-  return [...sendErrors.entries()].map(([sessionId, e]) => ({ sessionId, ...e })).slice(-20);
-}
-
-interface SendCheckStep { id: string; level: "ok" | "warn" | "fail"; detail: string }
 
 /** Side-effect-free preflight of the whole send pipeline for one session —
  *  gate → registry → busy → host → account → store → last error. Never
@@ -1440,7 +1425,7 @@ export {
   sessionConfig, cloudVersionToModel,
   terminalBuf, recordTerminal, inflight, resolveUpload, attachmentBlocks,
   promptWithRetry, dispatchPrompt, sessionStatus, turnEndHooks,
-  noteSendError, lastSendError, recentSendErrors, sendPreflight,
+  sendPreflight,
   beginDrain, isDraining, drainSince,
   type SubagentInfo, listSubagents, subagentTimeline, subPingActive,
   type ListedSession, listLocalSessions, snippetFromLog,
