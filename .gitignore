@@ -27,3 +27,4 @@ _devin_assets/
 # parity forensics: auth profile + captured evidence
 test/parity/.auth/
 docs/parity/
+"/ppt-staging/"  
