@@ -332,7 +332,7 @@ export async function handleSystem(ctx: ApiContext, req: IncomingMessage, res: S
   // Admin-only: the web has no auth, so the screen stays out of
   // the share tree. Read-only by design (see screen.ts).
   if (p === "/api/admin/screen/live" && m === "GET") {
-    await streamScreen(res);
+    await streamScreen(res, url.searchParams.get("q") ?? "auto", url.searchParams.get("mon") ?? "primary");
     return true;
   }
   // POST /api/admin/screen/input — inject one pointer/keyboard event.

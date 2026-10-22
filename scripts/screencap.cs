@@ -1,7 +1,7 @@
 // screencap — capture the virtual screen (all monitors) in a loop and write
 // [uint32le length][jpeg bytes]* frames to stdout. Compiled once at runtime
 // by server/src/screen.ts via the in-box .NET Framework csc.exe.
-// Args: <maxWidth> <jpegQuality> <delayMs>
+// Args: <maxWidth> <jpegQuality> <delayMs> [monitor: virtual|primary]
 using System;
 using System.Drawing;
 using System.Drawing.Drawing2D;
@@ -17,8 +17,9 @@ static class ScreenCap
         int maxWidth = args.Length > 0 ? int.Parse(args[0]) : 1600;
         long quality = args.Length > 1 ? long.Parse(args[1]) : 55;
         int delay = args.Length > 2 ? int.Parse(args[2]) : 250;
+        string monitor = args.Length > 3 ? args[3] : "primary";
 
-        Rectangle vs = SystemInformation.VirtualScreen;
+        Rectangle vs = monitor == "virtual" ? SystemInformation.VirtualScreen : Screen.PrimaryScreen.Bounds;
         int w = vs.Width, h = vs.Height;
         double scale = Math.Min(1.0, (double)maxWidth / w);
         int sw = Math.Max(1, (int)(w * scale)), sh = Math.Max(1, (int)(h * scale));

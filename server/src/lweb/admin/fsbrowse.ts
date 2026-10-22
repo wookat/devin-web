@@ -11,6 +11,21 @@ import type { ApiContext } from "../../routes.js";
 import { sshFs, sshHostFor, sshListDirs, sshTest } from "../../ssh.js";
 import { json, readJson } from "../../httputil.js";
 
+/** Agent resource roots: project .devin/.agents + global ~/.devin/~/.agents +
+ *  the well-known root rule files. Returns the resolved path when `raw` lands
+ *  inside, else null. Shared by /api/admin/resource-file and the per-session
+ *  rule-file route (sessioncontrol) — keep the two confined identically. */
+export function resourceRootPath(ctx: ApiContext, raw: string): string | null {
+  const roots = [
+    path.join(ctx.primaryCwd, ".devin"), path.join(ctx.primaryCwd, ".agents"),
+    path.join(os.homedir(), ".devin"), path.join(os.homedir(), ".agents"),
+  ];
+  const extra = ["AGENTS.md", "CLAUDE.md", ".windsurfrules", ".cursorrules"].map((f) => path.resolve(ctx.primaryCwd, f));
+  const rp = raw ? path.resolve(raw) : "";
+  if (!rp) return null;
+  return (roots.some((r) => rp === path.resolve(r) || rp.startsWith(path.resolve(r) + path.sep)) || extra.includes(rp)) ? rp : null;
+}
+
 export async function handleFsBrowse(ctx: ApiContext, req: IncomingMessage, res: ServerResponse, url: URL, m: string, p: string, parts: string[]): Promise<boolean> {
   // GET /api/admin/fs/dirs?path= — directory browser for the new-session
   // workspace picker (desktop parity). Admin-only, dirs never files;
@@ -164,15 +179,9 @@ export async function handleFsBrowse(ctx: ApiContext, req: IncomingMessage, res:
   // roots only (project .devin/.agents + global ~/.devin/~/.agents + the
   // project-root agent files). Confined exactly like session /file ops.
   if (parts[2] === "resource-file") {
-    const roots = [
-      path.join(ctx.primaryCwd, ".devin"), path.join(ctx.primaryCwd, ".agents"),
-      path.join(os.homedir(), ".devin"), path.join(os.homedir(), ".agents"),
-    ];
-    const extra = ["AGENTS.md", "CLAUDE.md", ".windsurfrules", ".cursorrules"].map((f) => path.resolve(ctx.primaryCwd, f));
     const raw = m === "GET" ? url.searchParams.get("path") : String((await readJson(req)).path ?? "");
-    const rp = raw ? path.resolve(raw) : "";
-    const ok = !!rp && (roots.some((r) => rp === path.resolve(r) || rp.startsWith(path.resolve(r) + path.sep)) || extra.includes(rp));
-    if (!ok) { json(res, 403, { error: "outside resource roots" }); return true; }
+    const rp = resourceRootPath(ctx, String(raw ?? ""));
+    if (!rp) { json(res, 403, { error: "outside resource roots" }); return true; }
     if (m === "GET") {
       try {
         const buf = fs.readFileSync(rp);
@@ -190,6 +199,24 @@ export async function handleFsBrowse(ctx: ApiContext, req: IncomingMessage, res:
       return true;
     }
     json(res, 405, { error: "method" });
+    return true;
+  }
+
+  // POST /api/admin/skill-install {name, content} — installing a skill locally
+  // IS writing ~/.agents/skills/<name>/SKILL.md: the agent's skills/list probe
+  // and the /resources enumerator both scan exactly that dir. Older devin
+  // builds don't expose a plugins/marketplace ext method, so there is no
+  // remote catalog to search — this is the honest local install path.
+  if (parts[2] === "skill-install" && m === "POST") {
+    const body = await readJson(req);
+    const name = String(body.name ?? "").trim();
+    if (!/^[a-zA-Z0-9][a-zA-Z0-9._-]{0,63}$/.test(name)) { json(res, 400, { error: "bad name" }); return true; }
+    const target = path.join(os.homedir(), ".agents", "skills", name, "SKILL.md");
+    try {
+      fs.mkdirSync(path.dirname(target), { recursive: true });
+      fs.writeFileSync(target, String(body.content ?? ""), "utf8");
+      json(res, 200, { ok: true, path: target });
+    } catch (e) { json(res, 500, { error: e instanceof Error ? e.message : "write failed" }); }
     return true;
   }
 

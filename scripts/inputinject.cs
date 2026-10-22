@@ -9,6 +9,7 @@
 // Coordinates are normalized 0..1 over SystemInformation.VirtualScreen —
 // the same rectangle screencap.cs captures, so no client-side DPI math.
 using System;
+using System.Drawing;
 using System.IO;
 using System.Runtime.InteropServices;
 using System.Text;
@@ -56,14 +57,19 @@ static class InputInject
         {
             case "m":
             {
-                // VIRTUALDESK space: 0..65535 spans the whole virtual screen,
-                // whose Left may be negative — offset by vs.Left before scaling.
-                var vs = SystemInformation.VirtualScreen;
+                // u/v are normalized over the CAPTURED rect (primary monitor by
+                // default — matching screencap), but VIRTUALDESK absolute input
+                // space spans the whole virtual screen. Convert: capture-rect
+                // pixel → virtual-screen pixel → 0..65535.
+                var vsAll = SystemInformation.VirtualScreen;
+                Rectangle rc = p.Length > 3 && p[3] == "virtual" ? vsAll : Screen.PrimaryScreen.Bounds;
                 double u2 = double.Parse(p[1], System.Globalization.CultureInfo.InvariantCulture);
                 double v2 = double.Parse(p[2], System.Globalization.CultureInfo.InvariantCulture);
+                double px = rc.Left + u2 * rc.Width;
+                double py = rc.Top + v2 * rc.Height;
                 Send(new INPUT { type = INPUT_MOUSE, u = new INPUTUNION { mi = new MOUSEINPUT {
-                    dx = (int)(u2 * 65535.0),
-                    dy = (int)(v2 * 65535.0),
+                    dx = (int)((px - vsAll.Left) / vsAll.Width * 65535.0),
+                    dy = (int)((py - vsAll.Top) / vsAll.Height * 65535.0),
                     dwFlags = MOUSEEVENTF_MOVE | MOUSEEVENTF_ABSOLUTE | MOUSEEVENTF_VIRTUALDESK } } });
                 break;
             }

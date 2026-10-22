@@ -28,6 +28,12 @@ const SRC = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..", "..
 let dataDir = "";
 export function initScreen(dir: string): void {
   dataDir = dir;
+  // screencap children outlive their backend on Windows (no auto-reap) — a
+  // leftover from a previous backend lifetime keeps streaming stale frames
+  // and blocks arg-keyed respawn. The exe name is ours alone, so sweep it.
+  if (process.platform === "win32") {
+    execFile("taskkill", ["/f", "/im", "screencap.exe"], () => {});
+  }
 }
 
 const exePath = () => path.join(dataDir, "screencap", "screencap.exe");
@@ -69,17 +75,35 @@ async function build(): Promise<string> {
 // ---- capture loop + MJPEG fan-out --------------------------------------------
 
 let child: ChildProcess | null = null;
+let childArgs = "";
+let captureMon = "primary";
+const spawned = new Set<ChildProcess>();
 let latest: Buffer | null = null;
 let buf = Buffer.alloc(0);
 const watchers = new Set<() => void>();
 
-async function ensureCapture() {
-  if (child) return;
-  const exe = await ensureExe();
+/** quality → screencap.exe args: maxWidth, jpegQuality, frameIntervalMs. */
+const QUALITY: Record<string, string[]> = {
+  sharp: ["1920", "75", "150"],
+  auto: ["1600", "55", "250"],
+  saver: ["1280", "35", "400"],
+}
+
+async function ensureCapture(quality: string, monitor = "primary") {
+  const args = [...(QUALITY[quality] ?? QUALITY.auto), monitor === "virtual" ? "virtual" : "primary"]
+  const key = args.join(",")
+  if (child && childArgs === key) return
+  stopCapture()
+  const exe = await ensureExe()
   if (child) return; // another request spawned it while compiling
   buf = Buffer.alloc(0);
-  child = spawn(exe, ["1600", "55", "250"], { stdio: ["ignore", "pipe", "ignore"], windowsHide: true });
-  child.stdout!.on("data", (d: Buffer) => {
+  latest = null; // never flush a stale frame from the previous arg set
+  childArgs = key
+  captureMon = monitor === "virtual" ? "virtual" : "primary"
+  const c = spawn(exe, [...args], { stdio: ["ignore", "pipe", "ignore"], windowsHide: true });
+  child = c;
+  spawned.add(c);
+  c.stdout!.on("data", (d: Buffer) => {
     buf = Buffer.concat([buf, d]);
     for (;;) {
       if (buf.length < 4) return;
@@ -90,26 +114,27 @@ async function ensureCapture() {
       for (const fn of watchers) fn();
     }
   });
-  const drop = () => { child = null; };
-  child.on("exit", drop);
-  child.on("error", drop);
+  const drop = () => { spawned.delete(c); if (child === c) child = null; };
+  c.on("exit", drop);
+  c.on("error", drop);
 }
 
 function stopCapture() {
-  const c = child;
   child = null;
-  try { c?.kill(); } catch { /* already gone */ }
+  childArgs = "";
+  for (const c of spawned) { try { c.kill(); } catch { /* already gone */ } }
+  spawned.clear();
 }
 
-/** `GET /api/admin/screen/live` — multipart/x-mixed-replace JPEG stream. */
-export async function streamScreen(res: ServerResponse): Promise<void> {
+/** `GET /api/admin/screen/live?q=auto|sharp|saver&mon=primary|virtual` — multipart JPEG stream. */
+export async function streamScreen(res: ServerResponse, quality = "auto", monitor = "primary"): Promise<void> {
   if (process.platform !== "win32" || !fs.existsSync(SRC)) {
     res.writeHead(501, { "Content-Type": "application/json" });
     res.end(JSON.stringify({ error: "screen capture unavailable on this host" }));
     return;
   }
   try {
-    await ensureCapture();
+    await ensureCapture(quality, monitor);
   } catch (e) {
     res.writeHead(501, { "Content-Type": "application/json" });
     res.end(JSON.stringify({ error: e instanceof Error ? e.message : String(e) }));
@@ -189,7 +214,7 @@ export async function injectInput(body: unknown): Promise<void> {
   switch (o?.t) {
     case "move": {
       const u = Number(o.u), v = Number(o.v);
-      if (u >= 0 && u <= 1 && v >= 0 && v <= 1) line = `m ${u.toFixed(5)} ${v.toFixed(5)}`;
+      if (u >= 0 && u <= 1 && v >= 0 && v <= 1) line = `m ${u.toFixed(5)} ${v.toFixed(5)} ${captureMon}`;
       break;
     }
     case "button": {
