@@ -26,8 +26,9 @@
     "smoke": "tsx scripts/smoke.ts",
     "typecheck": "tsc --noEmit -p tsconfig.server.json && tsc --noEmit -p tsconfig.web.json",
     "prepack": "npm run build",
-    "test": "node test/api-smoke.mjs",
-    "test:send": "node test/api-smoke.mjs --send"
+    "test": "node --test test/unit-*.mjs && node test/api-smoke.mjs",
+    "test:send": "node test/api-smoke.mjs --send",
+    "test:unit": "node --test test/unit-*.mjs"
   },
   "keywords": [
     "devin",
