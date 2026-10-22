@@ -16,6 +16,20 @@ export default defineConfig({
     outDir: "../dist/web",
     emptyOutDir: true,
     target: "es2022",
+    rollupOptions: {
+      output: {
+        // Split heavy vendors into long-cacheable chunks — shiki alone is the
+        // bulk of the bundle, xterm/dnd follow. App code stays in the entry.
+        manualChunks(id: string) {
+          if (!id.includes("node_modules")) return;
+          if (id.includes("shiki") || id.includes("@shikijs") || id.includes("vscode-textmate") || id.includes("oniguruma")) return "shiki";
+          if (id.includes("@xterm")) return "xterm";
+          if (id.includes("@dnd-kit")) return "dnd";
+          if (id.includes("react-dom") || id.includes("react-router") || /node_modules[\\/]react[\\/]/.test(id) || id.includes("scheduler")) return "react";
+          if (id.includes("i18next")) return "i18n";
+        },
+      },
+    },
   },
   server: {
     port: 5173,

@@ -42,6 +42,9 @@
   "author": "zalize",
   "dependencies": {
     "@agentclientprotocol/sdk": "^1.2.1",
+    "@dnd-kit/core": "^6.3.1",
+    "@dnd-kit/sortable": "^10.0.0",
+    "@dnd-kit/utilities": "^3.2.2",
     "@novnc/novnc": "^1.7.0",
     "fflate": "^0.8.2",
     "i18next": "~26.4.4",
