@@ -84,7 +84,7 @@ function banner() {
     "",
     "  ┌───────────────────────────────────────────────┐",
     `  │   devin-web  v${VERSION}`.padEnd(50) + "│",
-    "  │   local Devin workbench · supervisor+acp      │",
+    "  │   self-hosted Devin control plane           │",
     "  └───────────────────────────────────────────────┘",
     "",
   ].join("\n"));
@@ -143,7 +143,7 @@ function infoCard(status = null) {
 
 function printHelp() {
   console.log(`
-devin-web v${VERSION} — local Devin workbench
+devin-web v${VERSION} — self-hosted Devin control plane
 
 usage: node devin-web.mjs <command> [flags]
 
