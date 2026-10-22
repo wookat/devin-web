@@ -1,12 +1,14 @@
 import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState, type ReactNode } from 'react'
 import { useTranslation } from 'react-i18next'
 import { createPortal } from 'react-dom'
-import { Loader2, ChevronRight, ChevronDown, ChevronUp, Copy, Check, FileText, PanelLeft, PanelRight, FolderTree, X, Expand, ChevronsUpDown, Search } from 'lucide-react'
+import { Loader2, ChevronRight, ChevronDown, ChevronUp, Copy, Check, PanelLeft, PanelRight, FolderTree, X, Expand, ChevronsUpDown, Search, Ellipsis } from 'lucide-react'
+import { FileIcon } from '@/lib/fileIcon'
 import { sessionFetch, fetchFileContents } from '@/lib/viewer'
 import { type TimelineItem } from '@/components/Timeline'
 import { lineDiffFull, blockWordDiff, type DiffLine, type WordSeg } from '@/lib/diff'
 import { cn } from '@/lib/utils'
 import { WordDiffLine } from './PrPanel'
+import { useShikiTokens, type Tok } from '@/components/CodeView'
 
 interface AggFile {
   path: string
@@ -146,13 +148,25 @@ function ChangesPanel({ items, step, onClearStep, focus, embedded, sessionId, vi
     return () => { alive = false }
   }, [embedded, oldestLoadedMs, sessionId, step])
   const files = scope === 'lastTurn' || step || embedded ? scopedLocalFiles : serverFiles ?? localFiles
-  const [diffs, setDiffs] = useState<Record<string, { lines: DiffLine[]; vis: boolean[]; loading: boolean; text?: string; addCount?: number; delCount?: number }>>({})
+  const [diffs, setDiffs] = useState<Record<string, { lines: DiffLine[]; vis: boolean[]; loading: boolean; text?: string; oldText?: string; addCount?: number; delCount?: number }>>({})
   const [collapsed, setCollapsed] = useState<Set<string>>(new Set())
+  const [closedFolders, setClosedFolders] = useState<Set<string>>(new Set())
   const [treeHidden, setTreeHidden] = useState(false)
   const [treeView, setTreeView] = useState(true)
+  // Official FileHeader "viewed" checkbox — persisted per session+file.
+  const [viewed, setViewed] = useState<Set<string>>(() => {
+    try { return new Set(JSON.parse(localStorage.getItem(`dw-chg-viewed:${sessionId}`) || '[]')) } catch { return new Set() }
+  })
+  const toggleViewed = (path: string) => setViewed((prev) => {
+    const next = new Set(prev)
+    if (next.has(path)) next.delete(path); else next.add(path)
+    try { localStorage.setItem(`dw-chg-viewed:${sessionId}`, JSON.stringify([...next])) } catch {}
+    return next
+  })
   const [treeQuery, setTreeQuery] = useState('')
   const [scopeOpen, setScopeOpen] = useState(false)
   const [scopeMenuPos, setScopeMenuPos] = useState({ left: 5, top: 0 })
+  const [fileMenu, setFileMenu] = useState<{ path: string; left: number; top: number } | null>(null)
   const scopeButtonRef = useRef<HTMLButtonElement>(null)
   const scopeMenuRef = useRef<HTMLDivElement>(null)
   const loadingPaths = useRef(new Set<string>())
@@ -230,6 +244,7 @@ function ChangesPanel({ items, step, onClearStep, focus, embedded, sessionId, vi
                 vis: initialVisible(lines),
                 loading: false,
                 text: newText,
+                oldText,
                 addCount: lines.filter((line) => line.type === 'add').length,
                 delCount: lines.filter((line) => line.type === 'del').length,
               }
@@ -259,7 +274,23 @@ function ChangesPanel({ items, step, onClearStep, focus, embedded, sessionId, vi
     })
   }, [])
 
+  const scrollRef = useRef<HTMLDivElement>(null)
+  // Scroll compensation: expanding a collapsed region above the viewport must
+  // not shove the viewed content — remember the first still-visible line after
+  // the revealed range and restore its viewport offset after the re-render.
+  const compRef = useRef<{ sel: string; top: number } | null>(null)
   const reveal = useCallback((path: string, from: number, to: number) => {
+    const cur = diffs[path]
+    if (cur) {
+      let anchor = -1
+      for (let k = Math.max(0, to); k < cur.lines.length; k++) if (cur.vis[k]) { anchor = k; break }
+      if (anchor >= 0) {
+        const newNo = cur.lines.slice(0, anchor + 1).filter((l) => l.type !== 'del').length
+        const sel = `[data-change-path="${CSS.escape(path)}"] [data-line-number="${newNo}"]`
+        const el = document.querySelector(sel)
+        if (el) compRef.current = { sel, top: el.getBoundingClientRect().top }
+      }
+    }
     setDiffs((prev) => {
       const diff = prev[path]
       if (!diff) return prev
@@ -267,7 +298,15 @@ function ChangesPanel({ items, step, onClearStep, focus, embedded, sessionId, vi
       for (let k = Math.max(0, from); k < Math.min(vis.length, to); k++) vis[k] = true
       return { ...prev, [path]: { ...diff, vis } }
     })
-  }, [])
+  }, [diffs])
+  useLayoutEffect(() => {
+    const comp = compRef.current
+    compRef.current = null
+    const scroller = scrollRef.current
+    if (!comp || !scroller) return
+    const el = document.querySelector(comp.sel)
+    if (el) scroller.scrollTop += el.getBoundingClientRect().top - comp.top
+  }, [diffs])
 
   const focusN = useRef(0)
   useEffect(() => {
@@ -335,14 +374,19 @@ function ChangesPanel({ items, step, onClearStep, focus, embedded, sessionId, vi
     const rows: ReactNode[] = []
     for (const folder of [...node.folders.values()].sort((a, b) => a.name.localeCompare(b.name))) {
       const modified = hasModifiedDescendant(folder)
+      const folderOpen = !closedFolders.has(folder.path)
       rows.push(
-        <div key={`folder-${folder.path}`} role="treeitem" aria-level={level} aria-expanded data-item-type="folder" data-item-path={folder.path} className="flex h-[22px] min-h-[22px] items-center gap-1 rounded-[5px] px-[3px] text-[13px] leading-[22px]" style={{ paddingLeft: level * 5 + 3 }}>
-          <ChevronDown size={14} className="shrink-0 text-muted-foreground" />
+        <button key={`folder-${folder.path}`} type="button" role="treeitem" aria-level={level} aria-expanded={folderOpen} data-item-type="folder" data-item-path={folder.path}
+          onClick={() => setClosedFolders((prev) => { const next = new Set(prev); folderOpen ? next.add(folder.path) : next.delete(folder.path); return next })}
+          className="flex h-[22px] min-h-[22px] w-full cursor-pointer items-center gap-1 rounded-[5px] px-[3px] text-left text-[13px] leading-[22px] hover:bg-tint-secondary" style={{ paddingLeft: level * 5 + 3 }}>
+          {folderOpen
+            ? <ChevronDown size={14} className="shrink-0 text-muted-foreground" />
+            : <ChevronRight size={14} className="shrink-0 text-muted-foreground" />}
           <span className="min-w-0 flex-1 truncate">{folder.name}</span>
           {modified && <span className="size-1.5 shrink-0 rounded-[1px] bg-[rgb(230,130,20)]" />}
-        </div>,
+        </button>,
       )
-      rows.push(...treeRows(folder, level + 1))
+      if (folderOpen) rows.push(...treeRows(folder, level + 1))
     }
     for (const file of [...node.files].sort((a, b) => displayPath(a.path).localeCompare(displayPath(b.path)))) {
       const shown = displayPath(file.path)
@@ -350,9 +394,12 @@ function ChangesPanel({ items, step, onClearStep, focus, embedded, sessionId, vi
       const status = statusFor(file)
       rows.push(
         <button key={`file-${file.path}`} type="button" role="treeitem" aria-label={name} aria-level={level} data-item-parent-path={node.path} data-item-path={file.path} data-item-type="file" data-type="item" data-item-git-status={status.letter === 'M' ? 'modified' : status.letter === 'A' ? 'added' : status.letter === 'D' ? 'deleted' : 'renamed'} style={{ minHeight: 22, paddingLeft: level * 5 + 3 }} className="flex h-[22px] w-full items-center gap-1 rounded-[5px] px-[3px] text-left text-[13px] leading-[22px] text-foreground" onClick={() => { setCollapsed((prev) => { const next = new Set(prev); next.delete(file.path); return next }); requestAnimationFrame(() => document.querySelector(`[data-change-path="${CSS.escape(file.path)}"]`)?.scrollIntoView({ block: 'nearest' })) }}>
-          <FileText size={16} className="shrink-0 text-muted-foreground" />
+          <FileIcon path={name} size={16} className="shrink-0" />
           <span className="min-w-0 flex-1 truncate">{name}</span>
-          <span title={`Git status: ${status.letter === 'M' ? 'modified' : status.letter === 'A' ? 'added' : status.letter === 'D' ? 'deleted' : 'renamed'}`} className={cn('w-[10px] shrink-0 text-center text-[12px] leading-[22px]', status.color)}>{status.letter}</span>
+          {(stats(file).added > 0 || stats(file).removed > 0) && (
+            <span className="flex shrink-0 items-center gap-0.5 text-[11px] tabular-nums"><span className="text-[rgb(0,165,88)]">+{stats(file).added}</span><span className="text-[rgb(245,59,58)]">−{stats(file).removed}</span></span>
+          )}
+          <span title={t('chg.gitStatus', { s: t(status.letter === 'M' ? 'chg.gitModified' : status.letter === 'A' ? 'chg.gitAdded' : status.letter === 'D' ? 'chg.gitDeleted' : 'chg.gitRenamed') })} className={cn('w-[10px] shrink-0 text-center text-[12px] leading-[22px]', status.color)}>{status.letter}</span>
         </button>,
       )
     }
@@ -364,7 +411,7 @@ function ChangesPanel({ items, step, onClearStep, focus, embedded, sessionId, vi
         <div className="flex h-9 shrink-0 items-center gap-2 overflow-hidden border-b border-border pl-1 pr-2">
           <span className="pl-2 text-[13px] leading-[18px] font-medium">{t('chg.all')}</span>
           <span className="flex items-center gap-1.5 text-[12px] leading-[16px] tabular-nums text-muted-foreground">
-            <span>{files.length} {files.length === 1 ? 'file' : 'files'}</span>
+            <span>{files.length} {t('chg.files', { count: files.length })}</span>
             {!viewMode && <><span className="text-text-green">+{tot.add}</span><span className="text-text-red">−{tot.rem}</span></>}
           </span>
         </div>
@@ -377,6 +424,7 @@ function ChangesPanel({ items, step, onClearStep, focus, embedded, sessionId, vi
             return <div key={f.path} data-change-path={f.path}>
               <button onClick={() => toggleFile(f.path)} className="flex w-full cursor-pointer items-center gap-2 px-3 py-1.5 text-left text-[13px] leading-[18px] hover:bg-muted">
                 {collapsed.has(f.path) ? <ChevronRight size={12} className="shrink-0" /> : <ChevronDown size={12} className="shrink-0" />}
+                <FileIcon path={f.path} size={14} className="shrink-0" />
                 <span className="min-w-0 truncate text-[13px]">{f.path.split('/').pop() || f.path}</span>
                 <span className="min-w-0 flex-1 truncate text-[13px] text-muted-foreground">{f.path.match(/\/repos\/([^/]+)/)?.[1]}</span>
                 <span className="text-text-green">+{stats(f).added}</span><span className="text-text-red">−{stats(f).removed}</span>
@@ -392,55 +440,7 @@ function ChangesPanel({ items, step, onClearStep, focus, embedded, sessionId, vi
   function renderOfficialDiff(file: AggFile) {
     const diff = diffs[file.path]
     if (!diff || diff.loading) return <div className="px-3 py-3"><Loader2 size={14} className="animate-spin text-muted-foreground" /></div>
-    const wordSegments = wordSegmentsForDiff(diff.lines)
-    let oldNo = 1
-    let newNo = 1
-    const numbered = diff.lines.map((line) => {
-      const row = { line, oldNo: line.type === 'add' ? null : oldNo, newNo: line.type === 'del' ? null : newNo }
-      if (line.type !== 'add') oldNo++
-      if (line.type !== 'del') newNo++
-      return row
-    })
-    const rows: ReactNode[] = []
-    let i = 0
-    while (i < numbered.length) {
-      if (diff.vis[i]) {
-        const { line, oldNo: oldLine, newNo: newLine } = numbered[i]
-        const rowBg = line.type === 'del' ? 'bg-tint-red' : line.type === 'add' ? 'bg-tint-green' : 'bg-elevated'
-        rows.push(
-          <div key={`line-${i}`} className="group/line col-span-2 grid grid-cols-subgrid font-mono text-[11px] !leading-[18px] sm:text-[12px] sm:!leading-[20px]" data-line-number={newLine ?? oldLine ?? undefined}>
-            <div className={cn('relative flex select-none items-start justify-end border-r border-r-border pl-[2ch] pr-[1ch]', rowBg, line.type !== 'same' && 'before:absolute before:left-0 before:top-0 before:h-full before:w-[3px]', line.type === 'del' && 'before:bg-[rgb(245,59,58)]', line.type === 'add' && 'before:bg-[rgb(0,165,88)]')}>
-              <div className={cn('text-[11px]', line.type === 'same' ? 'text-muted-foreground' : 'text-foreground')}>{line.type === 'del' ? oldLine : newLine}</div>
-              <span className="h-[16px] sm:h-[20px]" />
-            </div>
-            <div className={cn('line-content relative', rowBg)}>
-              <div className="relative z-[1] whitespace-break-spaces break-all px-2 text-foreground [overflow-wrap:anywhere] cursor-text">
-                <code className="select-text break-all">{wordSegments.get(i) ? <WordDiffLine segs={wordSegments.get(i)!} kind={line.type === 'del' ? 'del' : 'add'} /> : line.text}</code>
-              </div>
-            </div>
-          </div>,
-        )
-        i++
-      } else {
-        const start = i
-        while (i < numbered.length && !diff.vis[i]) i++
-        const len = i - start
-        rows.push(
-          <div key={`gap-${start}`} className="group col-span-2 grid grid-cols-subgrid bg-tint-blue">
-            <div className="col-span-2 select-none py-2">
-              <div className="flex items-center pl-[2ch] text-[12px]">
-                <span className="inline-flex items-center gap-3.5 text-[12px]">
-                  {len > 5 && <button type="button" aria-label={`Expand ${Math.min(5, len)} lines above`} onClick={() => reveal(file.path, i - 5, i)} className="inline-flex cursor-pointer items-center gap-1 text-[rgba(13,133,185,0.85)] dark:text-blue-400"><ChevronUp size={12} />5 lines</button>}
-                  <button type="button" aria-label={`Expand all ${len} lines`} onClick={() => reveal(file.path, start, i)} className="inline-flex cursor-pointer items-center gap-1 text-[rgba(13,133,185,0.85)] dark:text-blue-400"><ChevronsUpDown size={12} />All {len} lines</button>
-                  {len > 5 && <button type="button" aria-label={`Expand ${Math.min(5, len)} lines below`} onClick={() => reveal(file.path, start, start + 5)} className="inline-flex cursor-pointer items-center gap-1 text-[rgba(13,133,185,0.85)] dark:text-blue-400"><ChevronDown size={12} />5 lines</button>}
-                </span>
-              </div>
-            </div>
-          </div>,
-        )
-      }
-    }
-    return <div className="overflow-hidden border-0 bg-elevated"><div data-diff-table="true" className="grid w-full grid-cols-[min-content_1fr]">{rows}</div></div>
+    return <FileDiffBody file={file} diff={diff} reveal={reveal} />
   }
   return (
     <div className="relative flex h-full min-h-0 @container/changes">
@@ -454,17 +454,17 @@ function ChangesPanel({ items, step, onClearStep, focus, embedded, sessionId, vi
             onClick={() => setScopeOpen((value) => !value)}
             className="flex h-7 shrink-0 cursor-pointer items-center gap-1 rounded-[6px] border border-transparent px-[10px] text-[13px] leading-[18px] font-medium text-foreground hover:bg-tint-secondary"
           >
-            <span className="truncate">{scope === 'all' ? 'All changes' : 'Last agent turn'}</span>
+            <span className="truncate">{scope === 'all' ? t('chg.all') : t('chg.lastTurn')}</span>
             <ChevronDown size={16} className="shrink-0 text-muted-foreground" />
           </button>
-          <span className="flex items-center gap-1.5 text-[12px] leading-[16px] tabular-nums text-muted-foreground"><span>{files.length} {files.length === 1 ? 'file' : 'files'}</span><span className="text-[rgb(0,165,88)]">+{tot.add}</span><span className="text-[rgb(245,59,58)]">−{tot.rem}</span></span>
+          <span className="flex items-center gap-1.5 text-[12px] leading-[16px] tabular-nums text-muted-foreground"><span>{files.length} {t('chg.files', { count: files.length })}</span><span className="text-[rgb(0,165,88)]">+{tot.add}</span><span className="text-[rgb(245,59,58)]">−{tot.rem}</span></span>
           <span className="ml-auto flex items-center gap-1">
             {treeHidden && <button type="button" aria-label={t('chg.showTree')} onClick={() => setTreeHidden(false)} className="flex size-7 shrink-0 cursor-pointer items-center justify-center rounded-[6px] text-muted-foreground hover:bg-tint-secondary hover:text-foreground"><PanelLeft size={18} /></button>}
-            {files.length > 0 && <button type="button" onClick={() => setCollapsed(allCollapsed ? new Set() : new Set(files.map((f) => f.path)))} aria-label={allCollapsed ? 'Expand all files' : 'Collapse all files'} className="flex size-7 shrink-0 cursor-pointer items-center justify-center rounded-[6px] text-muted-foreground hover:bg-tint-secondary hover:text-foreground"><ChevronsUpDown size={18} /></button>}
+            {files.length > 0 && <button type="button" onClick={() => setCollapsed(allCollapsed ? new Set() : new Set(files.map((f) => f.path)))} aria-label={allCollapsed ? t('chg.expandAllFiles') : t('chg.collapseAllFiles')} className="flex size-7 shrink-0 cursor-pointer items-center justify-center rounded-[6px] text-muted-foreground hover:bg-tint-secondary hover:text-foreground"><ChevronsUpDown size={18} /></button>}
           </span>
         </div>
         {step && !embedded && <div className="flex items-center gap-2 px-3 py-1.5 text-[12px] leading-[16px] text-muted-foreground">{t('chg.fromStep')}<button onClick={onClearStep} aria-label={t('chg.showAll')} className="ml-auto flex size-5 cursor-pointer items-center justify-center rounded hover:bg-accent hover:text-foreground"><X size={12} /></button></div>}
-        <div tabIndex={-1} className="min-h-0 min-w-0 flex-1 overflow-y-auto outline-none">
+        <div ref={scrollRef} tabIndex={-1} className="min-h-0 min-w-0 flex-1 overflow-y-auto outline-none">
           {files.length === 0 ? <div className="mx-2 mb-4 mt-1"><span className="text-[14px] leading-[20px] text-muted-foreground">{t('chg.none')}</span></div> : files.map((file) => {
             const bodyOpen = !collapsed.has(file.path)
             const name = file.path.split('/').pop() || file.path
@@ -472,10 +472,27 @@ function ChangesPanel({ items, step, onClearStep, focus, embedded, sessionId, vi
             return <div key={file.path} data-change-path={file.path} className="border-b border-border-secondary">
               <div className="sticky top-0 z-10 bg-background">
                 <div role="presentation" onClick={() => toggleFile(file.path)} className="flex h-[42px] cursor-pointer select-none items-center gap-1.5 overflow-x-auto border-b border-border-secondary bg-wash px-2 py-1.5 pr-3 [scrollbar-width:none]">
-                  <button type="button" aria-label={bodyOpen ? 'Collapse file' : 'Expand file'} onClick={(event) => { event.stopPropagation(); toggleFile(file.path) }} className="flex size-7 shrink-0 items-center justify-center rounded-[6px] text-muted-foreground hover:bg-tint-secondary hover:text-foreground"><ChevronDown size={18} className={cn(!bodyOpen && '-rotate-90')} /></button>
-                  <div className="flex min-w-10 flex-1 items-center gap-1.5 font-sans text-[13px]"><span className="flex min-w-0 items-center gap-1.5"><span className="shrink select-text truncate whitespace-nowrap text-foreground">{name}</span>{repoLabel && <span className="shrink-[1000000] select-text truncate text-muted-foreground">{repoLabel}</span>}</span></div>
+                  <button type="button" aria-label={bodyOpen ? t('chg.collapseFile') : t('chg.expandFile')} onClick={(event) => { event.stopPropagation(); toggleFile(file.path) }} className="flex size-7 shrink-0 items-center justify-center rounded-[6px] text-muted-foreground hover:bg-tint-secondary hover:text-foreground"><ChevronDown size={18} className={cn(!bodyOpen && '-rotate-90')} /></button>
+                  <div className="flex min-w-10 flex-1 items-center gap-1.5 font-sans text-[13px]"><span className="flex min-w-0 items-center gap-1.5"><FileIcon path={name} size={15} className="shrink-0" /><span className="shrink select-text truncate whitespace-nowrap text-foreground">{name}</span>{repoLabel && <span className="shrink-[1000000] select-text truncate text-muted-foreground">{repoLabel}</span>}</span></div>
                   <button type="button" aria-label={t('chg.copyPath')} onClick={(event) => { event.stopPropagation(); navigator.clipboard.writeText(file.path).catch(() => {}) }} className="hidden size-7 shrink-0 items-center justify-center rounded-[6px] text-muted-foreground hover:bg-tint-secondary hover:text-foreground sm:flex"><Copy size={18} /></button>
                   <div className="hidden shrink-0 gap-0.5 text-[12px] font-normal sm:flex"><span className="text-[rgb(0,165,88)]">+{stats(file).added}</span><span className="text-[rgb(245,59,58)]">−{stats(file).removed}</span></div>
+                  <label title={t('chg.markViewed')} onClick={(event) => event.stopPropagation()} className="flex shrink-0 cursor-pointer items-center gap-1 text-[11px] text-muted-foreground">
+                    <input type="checkbox" checked={viewed.has(file.path)} onChange={() => toggleViewed(file.path)} className="size-3.5 cursor-pointer accent-[rgb(0,165,88)]" />
+                    <span className="hidden sm:inline">{t('chg.viewed')}</span>
+                  </label>
+                  <button
+                    type="button"
+                    aria-label={t('chg.moreActions')}
+                    aria-haspopup="menu"
+                    onClick={(event) => {
+                      event.stopPropagation()
+                      const rect = (event.currentTarget as HTMLElement).getBoundingClientRect()
+                      setFileMenu({ path: file.path, left: rect.right - 180, top: rect.bottom + 4 })
+                    }}
+                    className="flex size-7 shrink-0 cursor-pointer items-center justify-center rounded-[6px] text-muted-foreground hover:bg-tint-secondary hover:text-foreground"
+                  >
+                    <Ellipsis size={16} />
+                  </button>
                 </div>
               </div>
               {bodyOpen && renderOfficialDiff(file)}
@@ -495,6 +512,16 @@ function ChangesPanel({ items, step, onClearStep, focus, embedded, sessionId, vi
           </div>
         </div>
       </div>}
+      {fileMenu && createPortal(
+        <>
+          <div className="fixed inset-0 z-40" onClick={() => setFileMenu(null)} />
+          <div role="menu" className="fixed z-50 flex w-[200px] flex-col overflow-hidden rounded-[10px] bg-white/[.94] p-1 text-foreground shadow-[0_10px_15px_-3px_rgba(0,0,0,0.1),0_4px_6px_-2px_rgba(0,0,0,0.05)] outline outline-1 outline-black/[.06] backdrop-blur-[8px] dark:bg-[#1f1f1f]/[.94]" style={{ left: fileMenu.left, top: fileMenu.top }}>
+            <button type="button" role="menuitem" onClick={() => { navigator.clipboard.writeText(fileMenu.path).catch(() => {}); setFileMenu(null) }} className="flex cursor-pointer items-center gap-2 rounded-[6px] px-2 py-1.5 text-left text-[13px] leading-[18px] hover:bg-tint-secondary"><Copy size={14} className="shrink-0 text-muted-foreground" />{t('chg.copyPath')}</button>
+            <button type="button" role="menuitem" onClick={() => { toggleViewed(fileMenu.path); setFileMenu(null) }} className="flex cursor-pointer items-center gap-2 rounded-[6px] px-2 py-1.5 text-left text-[13px] leading-[18px] hover:bg-tint-secondary"><Check size={14} className="shrink-0 text-muted-foreground" />{viewed.has(fileMenu.path) ? t('chg.unmarkViewed') : t('chg.markViewed')}</button>
+          </div>
+        </>,
+        document.body,
+      )}
       {scopeOpen && createPortal(
         <>
           <div className="fixed inset-0 z-40" onClick={() => setScopeOpen(false)} />
@@ -538,5 +565,76 @@ function ChangesPanel({ items, step, onClearStep, focus, embedded, sessionId, vi
   )
 }
 
+
+/* Per-file diff body — official RenderDisplayItems shape: syntax-highlighted
+ * rows (shiki dual-theme tokens, word-level diff emphasis on changed lines)
+ * with collapsed regions expanding ±5 / All N (official EXPAND_STEP_LINES=5). */
+function FileDiffBody({ file, diff, reveal }: { file: AggFile; diff: { lines: DiffLine[]; vis: boolean[]; text?: string; oldText?: string }; reveal: (path: string, from: number, to: number) => void }) {
+  const { t } = useTranslation()
+  const newToks = useShikiTokens(diff.text ?? '', file.path)
+  const oldToks = useShikiTokens(diff.oldText ?? '', file.path)
+  const wordSegments = useMemo(() => wordSegmentsForDiff(diff.lines), [diff.lines])
+  const codeCell = (toks: Tok[] | undefined, segs: WordSeg[] | undefined, kind: 'del' | 'add' | 'same') => {
+    if (segs) return <WordDiffLine segs={segs} kind={kind === 'same' ? 'add' : kind} />
+    if (toks?.length) return toks.map((tk, j) => (
+      <span key={j} className={tk.color || tk.darkColor ? 'text-[var(--shiki-light)] dark:text-[var(--shiki-dark)]' : undefined} style={tk.color || tk.darkColor ? ({ '--shiki-light': tk.color, '--shiki-dark': tk.darkColor } as React.CSSProperties) : undefined}>{tk.content}</span>
+    ))
+    return null
+  }
+  let oldNo = 1
+  let newNo = 1
+  const numbered = diff.lines.map((line) => {
+    const row = { line, oldNo: line.type === 'add' ? null : oldNo, newNo: line.type === 'del' ? null : newNo }
+    if (line.type !== 'add') oldNo++
+    if (line.type !== 'del') newNo++
+    return row
+  })
+  const rows: ReactNode[] = []
+  let i = 0
+  while (i < numbered.length) {
+    if (diff.vis[i]) {
+      const { line, oldNo: oldLine, newNo: newLine } = numbered[i]
+      const rowBg = line.type === 'del' ? 'bg-tint-red' : line.type === 'add' ? 'bg-tint-green' : 'bg-elevated'
+      const toks = line.type === 'del' ? oldToks?.[(oldLine ?? 1) - 1] : newToks?.[(newLine ?? 1) - 1]
+      rows.push(
+        <div key={`line-${i}`} className="group/line col-span-2 grid grid-cols-subgrid font-mono text-[11px] !leading-[18px] sm:text-[12px] sm:!leading-[20px]" data-line-number={newLine ?? oldLine ?? undefined}>
+          <div className={cn('relative flex select-none items-start justify-end border-r border-r-border pl-[2ch] pr-[1ch]', rowBg, line.type !== 'same' && 'before:absolute before:left-0 before:top-0 before:h-full before:w-[3px]', line.type === 'del' && 'before:bg-[rgb(245,59,58)]', line.type === 'add' && 'before:bg-[rgb(0,165,88)]')}>
+            <div className={cn('text-[11px]', line.type === 'same' ? 'text-muted-foreground' : 'text-foreground')}>{line.type === 'del' ? oldLine : newLine}</div>
+            <span className="h-[16px] sm:h-[20px]" />
+          </div>
+          <div className={cn('line-content relative', rowBg)}>
+            <div className="relative z-[1] whitespace-break-spaces break-all px-2 text-foreground [overflow-wrap:anywhere] cursor-text">
+              <code className="select-text break-all">{codeCell(toks, wordSegments.get(i), line.type) ?? line.text}</code>
+            </div>
+          </div>
+        </div>,
+      )
+      i++
+    } else {
+      const start = i
+      while (i < numbered.length && !diff.vis[i]) i++
+      const len = i - start
+      // Official collapsed region (RenderDisplayItems): [↑ N lines | All N
+      // lines | ↓ N lines], N=5 (EXPAND_STEP), step buttons only when the gap
+      // is ≥10 lines. "Above" grows the upper region downward (reveals the
+      // gap's TOP lines, scroll-compensated); "below" grows the lower region
+      // upward (reveals the gap's BOTTOM lines).
+      rows.push(
+        <div key={`gap-${start}`} data-collapsed-region={start} data-find-exclude="" className="group col-span-2 grid grid-cols-subgrid bg-tint-blue">
+          <div className="col-span-2 select-none py-2">
+            <div className="flex items-center pl-[2ch] text-[12px]">
+              <span className="inline-flex items-center gap-3.5 text-[12px]">
+                {len >= 10 && <button type="button" aria-label={t('chg.expandAbove', { n: Math.min(5, len) })} onClick={() => reveal(file.path, start, start + 5)} className="inline-flex cursor-pointer items-center gap-1 text-[rgba(13,133,185,0.85)] dark:text-blue-400"><ChevronUp size={12} />{t('chg.nLines', { n: 5 })}</button>}
+                <button type="button" aria-label={t('chg.expandAll', { n: len })} onClick={() => reveal(file.path, start, i)} className="inline-flex cursor-pointer items-center gap-1 text-[rgba(13,133,185,0.85)] dark:text-blue-400"><ChevronsUpDown size={12} />{t('chg.allLines', { n: len })}</button>
+                {len >= 10 && <button type="button" aria-label={t('chg.expandBelow', { n: Math.min(5, len) })} onClick={() => reveal(file.path, i - 5, i)} className="inline-flex cursor-pointer items-center gap-1 text-[rgba(13,133,185,0.85)] dark:text-blue-400"><ChevronDown size={12} />{t('chg.nLines', { n: 5 })}</button>}
+              </span>
+            </div>
+          </div>
+        </div>,
+      )
+    }
+  }
+  return <div className="overflow-hidden border-0 bg-elevated"><div data-diff-table="true" className="grid w-full grid-cols-[min-content_1fr]">{rows}</div></div>
+}
 
 export { type AggFile, type SessionChangesResponse, aggregateFiles, initialVisible, wordSegmentsForDiff, ChangesPanel };
