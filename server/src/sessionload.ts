@@ -1,6 +1,6 @@
 /**
  * sessionload — the load/recovery engine: session→acp resolution (hostFor),
- * session/load with replay dedup (doLoad/loadOnce/replayGuard), placement
+ * session/load with append-only replay dedup (doLoad/loadOnce), placement
  * marks, session_locked forensics (claimLockedHolder), the interrupted-turn
  * evidence reader, auto-resume, and the durable-state boot hook. Broker
  * adoption + recovered-turn settlement live in sessionadopt.ts (it imports
@@ -15,7 +15,7 @@ import { agentById, DEFAULT_AGENT } from "./agents.js";
 import { remapLegacyCwd } from "./store.js";
 import { loadReg, meta, noteLastUsed } from "./dwstore.js";
 import { noteUpdate, tlCache } from "./dwtimeline.js";
-import { persistTail, tailSnapshot } from "./dwtailsnap.js";
+import { persistTail } from "./dwtailsnap.js";
 import type { LogEntry } from "./sessiondb.js";
 import { initCfgState, isSessionLocked, loadWithRetry, captureLoadResponse } from "./sessioncfg.js";
 import { queueList, queueFlush, restoreQueues, bindQueueDeps, queuedSessions } from "./sessionqueue.js";
@@ -40,162 +40,25 @@ export function setCfgCacheDir(dir: string) {
 
 /** loadInflight moved to sessionplace.ts (placement leaf). */
 
-/** Post-replay echo guard: devin re-pushes the tail of the last streamed
- * message as live deltas right after session/load. Two signatures:
- *  - `ids`: streamingMessageIds this session already saw live — the echo
- *    reuses them (the replayed copy lacks smid entirely).
- *  - `since`: the reload's start time — an echo re-emits with its ORIGINAL
- *    `cognition.ai/timestamp`, which predates `since`, while any genuinely
- *    new chunk stamps ≈now. This catches echoes even when the pre-load log
- *    was already in replayed form and the id harvest came up empty.
- * Never dedup by text — consecutive identical replies are legitimate; the
- * id/timestamp pair is what separates an echo from a new turn. */
-const replayGuard = new Map<string, { ids: Set<string>; since: number }>();
-
-/** True when `update` is a live re-emission of a message this session already
- * had before its last reload — drop it before it lands in the log. Only
- * smid-bearing chunks are checked: replayed entries carry no streaming id,
- * so the timestamp cutoff can never eat the replay itself. */
-export function isReplayEcho(sessionId: string, update: Record<string, unknown>): boolean {
-  const g = replayGuard.get(sessionId);
-  if (!g) return false;
-  const meta = (update._meta ?? {}) as Record<string, unknown>;
-  const smid = meta["cognition.ai/streamingMessageId"];
-  if (typeof smid !== "string") return false;
-  if (g.ids.has(smid)) return true;
-  const ts = Date.parse(String(meta["cognition.ai/timestamp"] ?? ""));
-  return !Number.isNaN(ts) && ts < g.since;
-}
-
-/** Replay history onto `acp` (clears + rebuilds the in-memory log). */
+/** Replay history onto `acp` — APPEND-ONLY: the local store is never
+ * cleared. session/load re-streams devin's transcript verbatim, and every
+ * streamed update whose content key already sits in the store is skipped
+ * by the dedup arm (beginDedupReplay); only the genuine delta lands. A
+ * mid-replay kill therefore leaves the stored transcript intact — the next
+ * load simply re-dedups the same stream — and `_local` optimistic entries
+ * graduate in place when their authoritative twins arrive. */
 async function doLoad(ctx: ApiContext, acp: DevinAcp, id: string, cwd: string): Promise<void> {
-  // Reloading onto a fresh process replays the whole history — clear the
-  // in-memory log first so entries don't duplicate. (New user messages are
-  // appended by dispatchPrompt before this call; loadSession's replay does
-  // not contain them, so keep them by re-appending after the load.)
-  const pendingUser = ctx.sessionLog.get(id)
-    .filter((e) => (e.update as { sessionUpdate?: string; _local?: boolean }).sessionUpdate === "user_message_chunk"
-      && (e.update as { _local?: boolean })._local);
-  const logWasFull = ctx.sessionLog.get(id).length > pendingUser.length;
-  if (logWasFull) {
-    // Keep the outgoing log as the display snapshot — the replay streams
-    // oldest→newest, so without it the page would watch mid-history scroll
-    // past until the newest entries finally arrive.
-    const preLoad = ctx.sessionLog.get(id).slice();
-    tailSnapshot.set(id, preLoad);
-    // Arm the echo guard before the log is cleared: union any live-stream
-    // ids the pre-load log still has, and stamp `since` with the reload
-    // start. Post-load echoes of stored messages get dropped via
-    // isReplayEcho (id match, or original meta timestamp predating `since`
-    // — the only signature left once preLoad is entirely replayed form).
-    {
-      const g = replayGuard.get(id) ?? { ids: new Set<string>(), since: 0 };
-      for (const e of preLoad) {
-        const smid = ((e.update._meta ?? {}) as Record<string, unknown>)["cognition.ai/streamingMessageId"];
-        if (typeof smid === "string") g.ids.add(smid);
-      }
-      g.since = Date.now();
-      replayGuard.set(id, g);
-    }
-    ctx.sessionLog.clear(id);
-    let replayed = false;
-    try {
-      captureLoadResponse(id, await loadWithRetry(acp, id, cwd));
-      // A successful reload rebuilt session state from the store — its
-      // subagent registry is fresh: agents spawned before this moment have
-      // no live handle even though their transcripts replay fine.
-      loadEpoch.set(id, Date.now());
-      replayed = true;
-      persistTail(ctx, id);
-      ctx.sessionLog.dropBackup(id);
-    } finally {
-      tailSnapshot.delete(id);
-      const postLog = ctx.sessionLog.get(id);
-      if (!replayed || (postLog.length === 0 && preLoad.length > 0)) {
-        // The replay never ran (session_locked / dead process) — clear()
-        // already moved the disk log aside, so put EVERYTHING back: file via
-        // rename (full history, byte-exact), memory via restoreMemory (the
-        // ring window). Without this a failed reload permanently erases the
-        // transcript — the "message + reply gone after refresh" bug.
-        ctx.sessionLog.restoreFile(id);
-        ctx.sessionLog.restoreMemory(id, preLoad);
-      } else {
-        // Replay delivered the real twins of our optimistic prompts — don't
-        // re-append `_local` copies that would duplicate (and shift ids).
-        const replayedUser = new Set(
-          postLog
-            .filter((e) => {
-              const u = e.update as { sessionUpdate?: string; _local?: boolean; content?: { text?: string } };
-              return u.sessionUpdate === "user_message_chunk" && !u._local;
-            })
-            .map((e) => (e.update as { content?: { text?: string } }).content?.text),
-        );
-        // devin's store snapshot can lag the stream it just sent us by a turn —
-        // anything in the pre-load log AFTER the last entry the replay covered
-        // is the unreplayed tail: re-append it or that exchange vanishes.
-        // Anchors are identity-stable units (user text, toolCallId); an
-        // ordinal suffix keeps repeated identical texts unambiguous.
-        const keyOf = (u: Record<string, unknown>) => {
-          const t = (u.content as { text?: string } | undefined)?.text;
-          if (u.sessionUpdate === "user_message_chunk" && t) return `U|${t}`;
-          if (u.sessionUpdate === "tool_call" && u.toolCallId) return `TC|${u.toolCallId}`;
-          return null;
-        };
-        const ordinals = (entries: LogEntry[]) => {
-          const seen = new Map<string, number>();
-          return entries.map((e) => {
-            const k = keyOf(e.update);
-            if (!k) return null;
-            const n = (seen.get(k) ?? 0) + 1;
-            seen.set(k, n);
-            return `${k}#${n}`;
-          });
-        };
-        const postKeys = new Set(ordinals(postLog));
-        const preKeys = ordinals(preLoad);
-        let anchor = -1;
-        for (let i = preLoad.length - 1; i >= Math.max(0, preLoad.length - 2000); i--) {
-          const k = preKeys[i];
-          if (k && postKeys.has(k)) { anchor = i; break; }
-        }
-        // Anchors bound the tail but can't cover agent message chunks (no
-        // stable key) — a settled last turn anchors on its user message and
-        // the reply lands in "tail" even though the replay HAS it. Concat
-        // all message-stream text instead: chunk boundaries differ between
-        // live stream and replay, but the concatenated stream is identical.
-        const streamText = (entries: LogEntry[]) => {
-          let s = "";
-          for (const e of entries) {
-            const u = e.update as { sessionUpdate?: string; content?: { text?: string } };
-            const k = u.sessionUpdate;
-            if (k === "agent_message_chunk" || k === "agent_thought_chunk" || k === "user_message_chunk") {
-              s += String(u.content?.text ?? "");
-            }
-          }
-          return s;
-        };
-        const tailEntries = anchor >= 0 ? preLoad.slice(anchor + 1) : [];
-        const tailStream = streamText(tailEntries);
-        const covered = !tailStream || streamText(postLog).includes(tailStream);
-        const kept = new Set<LogEntry>();
-        if (tailEntries.length && !covered) {
-          for (const e of tailEntries) {
-            const u = e.update as { sessionUpdate?: string; _local?: boolean; content?: { text?: string } };
-            if (u._local && u.sessionUpdate === "user_message_chunk" && replayedUser.has(u.content?.text)) continue;
-            ctx.sessionLog.append(id, e.update);
-            kept.add(e);
-          }
-        }
-        for (const e of pendingUser) {
-          const t = (e.update as { content?: { text?: string } }).content?.text;
-          if (!kept.has(e) && !replayedUser.has(t)) ctx.sessionLog.append(id, e.update);
-        }
-      }
-    }
-  } else {
+  const hasLog = ctx.sessionLog.get(id).length > 0;
+  if (hasLog) ctx.sessionLog.beginDedupReplay(id);
+  try {
     captureLoadResponse(id, await loadWithRetry(acp, id, cwd));
+    // A successful reload rebuilt session state from the store — its
+    // subagent registry is fresh: agents spawned before this moment have
+    // no live handle even though their transcripts replay fine.
     loadEpoch.set(id, Date.now());
     persistTail(ctx, id);
+  } finally {
+    if (hasLog) ctx.sessionLog.endDedupReplay(id);
   }
 }
 

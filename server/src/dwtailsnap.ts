@@ -1,7 +1,7 @@
 /**
  * dwtailsnap — the tail-snapshot subsystem split from dwtimeline: the
- * instant "newest messages" view shown while a fresh replay streams in,
- * plus the persisted on-disk tail that paints a cold post-restart open.
+ * persisted on-disk tail that paints a cold post-restart open (and covers
+ * the window while a replay is still streaming its first delta).
  * Imports the builder (buildTimelineFrom) to shape entries into DwItems —
  * one-directional edge, dwtimeline never imports this file.
  */
@@ -11,10 +11,6 @@ import type { ApiContext } from "./routes.js";
 import type { LogEntry } from "./sessiondb.js";
 import { buildTimelineFrom, type DwItem } from "./dwtimeline.js";
 
-/** Complete pre-reload logs (memory only): the view to show while the fresh
- * replay streams in, so the UI stays on the newest messages instead of
- * watching mid-history scroll by. */
-const tailSnapshot = new Map<string, LogEntry[]>();
 /** Tail persisted to disk so a post-restart cold open also paints instantly. */
 const diskTailCache = new Map<string, LogEntry[]>();
 const TAIL_KEEP = 400;
@@ -47,13 +43,12 @@ function persistTail(ctx: ApiContext, id: string) {
   } catch { /* best-effort */ }
 }
 
-/** Snapshot items to show while a replay is in flight (or log still empty):
- * the pre-reload log if we had one, else the persisted tail. */
+/** Snapshot items for a cold open / still-empty log: the persisted tail. */
 function snapshotItems(ctx: ApiContext, id: string): DwItem[] | null {
-  const src = tailSnapshot.get(id) ?? readDiskTail(ctx, id);
+  const src = readDiskTail(ctx, id);
   if (!src?.length) return null;
   const items = buildTimelineFrom(src, undefined, id, (u) => ctx.sessionLog.resolveBlobs(u));
   return items.length ? items : null;
 }
 
-export { tailSnapshot, persistTail, snapshotItems };
+export { persistTail, snapshotItems };

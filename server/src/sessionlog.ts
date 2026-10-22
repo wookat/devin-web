@@ -1,6 +1,6 @@
 import fs from "node:fs";
 import path from "node:path";
-import { SessionDb } from "./sessiondb.js";
+import { SessionDb, dedupKey } from "./sessiondb.js";
 import { Sidecars, eachFileLine } from "./sessionsidecars.js";
 import type { LogEntry } from "./sessiondb.js";
 import { logMaxMb } from "./env.js";
@@ -31,12 +31,19 @@ export class SessionLog {
   private dirReady = false;
   /** Ids already disk-probed by get()'s lazy hydrate this process — an
    * empty disk marks too, or every miss would rescan. Invalidated by
-   * clear()/append()/restore* — anything that rewrites what a probe finds. */
+   * append()/restore* — anything that rewrites what a probe finds. */
   private hydrated = new Set<string>();
-  /** Between clear() and the first replay append a hydrate would seed the
-   * ring with the OLD generation's db rows and the replay would stream on
-   * top — a permanently duplicated transcript. Hold hydrate off there. */
-  private replayHold = new Set<string>();
+  /** Sessions inside a session/load replay stream — replayed copies of
+   * stored rows are recognized by content key and skipped (append-only
+   * replay: nothing is destroyed, a mid-replay kill leaves the transcript
+   * intact and the next load simply re-dedups the same stream). */
+  private dedupReplay = new Set<string>();
+  /** Tail-arm timers for dedupReplay — kept armed a few seconds after the
+   * load resolves so stream-lag echoes of stored rows still dedupe. */
+  private dedupUnarm = new Map<string, ReturnType<typeof setTimeout>>();
+  /** Content-key index for the no-db degraded path (process lifetime only —
+   * the db path indexes keys on the rows themselves). */
+  private dedupSeen = new Map<string, Set<string>>();
   /** SQLite event store — the authoritative query side (readDisk/diskSize/
    * seq-resume). The .jsonl stays as a write-through mirror: appends land in
    * both, .bak/restore keeps its file-level semantics, and a legacy file is
@@ -241,11 +248,19 @@ export class SessionLog {
     return this.writer(sessionId);
   }
 
-  append(sessionId: string, update: Record<string, unknown>) {
-    // The first append after a clear() ends the replay window, and any
-    // append makes a previous "empty disk" hydrate verdict stale.
-    this.replayHold.delete(sessionId);
+  /** Returns false when the update was a replayed dupe — callers skip all
+   * downstream fan-out (broadcast/rate-limit/noteUpdate) for it. */
+  append(sessionId: string, update: Record<string, unknown>): boolean {
+    // Any append makes a previous "empty disk" hydrate verdict stale.
     this.hydrated.delete(sessionId);
+    const key = dedupKey(update);
+    // Replay-scoped dedup: while a session/load stream is arriving, an
+    // update whose content key already sits in the store is a replayed
+    // copy — skipped (and a stored `_local` optimistic row graduates to
+    // its authoritative twin). `_local` sends themselves never dedup —
+    // two identical optimistic texts are legitimately distinct sends.
+    if (this.dedupReplay.has(sessionId) && update._local == null && this.dedupHit(sessionId, key, update)) return false;
+    this.dedupSeen.get(sessionId)?.add(key);
     let log = this.logs.get(sessionId);
     if (!log) {
       if (this.logs.size >= MAX_SESSIONS) {
@@ -277,7 +292,7 @@ export class SessionLog {
           // First-db-write for a legacy session must import before it lands —
           // a lone insert would make has() true and orphan the file history.
           this.importLegacy(sessionId);
-          storedUpdate = this.db.append(sessionId, seq, this.gens.get(sessionId) ?? 0, entry.ts, update);
+          storedUpdate = this.db.append(sessionId, seq, this.gens.get(sessionId) ?? 0, entry.ts, update, key);
         } catch { /* db is best-effort — the .jsonl mirror still records it */ }
       }
       const line = JSON.stringify({ ts: entry.ts, seq, update: storedUpdate }) + "\n";
@@ -304,6 +319,79 @@ export class SessionLog {
       }
       this.sidecars.noteAppended(sessionId, update, line, seq, before, fd != null);
     }
+    return true;
+  }
+
+  /** Replay-window dedup probe: true when `key` matches a stored row —
+   *  the incoming update is a replayed copy and must not append. A stored
+   *  `_local` optimistic row hit by its authoritative twin graduates in
+   *  place (same seq, real payload) rather than producing a duplicate. */
+  private dedupHit(sessionId: string, key: string, update: Record<string, unknown>): boolean {
+    if (this.db) {
+      const hit = this.db.dedupGet(sessionId, key);
+      if (!hit) return false;
+      if (hit.local) {
+        try { this.db.updateStored(sessionId, hit.gen, hit.seq, hit.ts, update); } catch {}
+        const e = this.logs.get(sessionId)?.find((x) => x.seq === hit.seq);
+        if (e) e.update = update;
+      }
+      return true;
+    }
+    return this.dedupSeen.get(sessionId)?.has(key) ?? false;
+  }
+
+  /** Arm replay dedup for a session/load stream and lazily backfill content
+   *  keys for rows stored before the dedup column existed — chunked so a
+   *  near-million-row history never blocks the event loop. Replays stream
+   *  oldest→newest while the fill walks seq-ascending, so the fill stays
+   *  ahead of the wire; a straggler at worst leaves one benign duplicate. */
+  beginDedupReplay(sessionId: string) {
+    const prev = this.dedupUnarm.get(sessionId);
+    if (prev) { clearTimeout(prev); this.dedupUnarm.delete(sessionId); }
+    this.dedupReplay.add(sessionId);
+    if (this.db) {
+      const it = this.db.dedupRows(sessionId);
+      const step = () => {
+        try {
+          for (let n = 0; n < 2000; n++) {
+            const r = it.next();
+            if (r.done) return;
+            let key: string;
+            try { key = dedupKey(this.db!.resolveBlobs(JSON.parse(r.value.data))); }
+            catch { continue; }
+            try { this.db!.dedupSet(sessionId, r.value.gen, r.value.seq, key); } catch {}
+          }
+          setImmediate(step);
+        } catch { /* backfill is best-effort — a missed key only risks a dupe */ }
+      };
+      setImmediate(step);
+    } else if (this.dir) {
+      const set = this.dedupSeen.get(sessionId) ?? new Set<string>();
+      this.dedupSeen.set(sessionId, set);
+      const it = this.diskEntries(sessionId);
+      const step = () => {
+        try {
+          for (let n = 0; n < 8000; n++) {
+            const r = it.next();
+            if (r.done) return;
+            set.add(dedupKey(r.value.update));
+          }
+          setImmediate(step);
+        } catch { /* best-effort */ }
+      };
+      setImmediate(step);
+    }
+  }
+
+  /** Disarm replay dedup after the load resolves — held a few seconds so
+   *  updates flushed behind the response still dedupe stored echoes. */
+  endDedupReplay(sessionId: string) {
+    const prev = this.dedupUnarm.get(sessionId);
+    if (prev) clearTimeout(prev);
+    this.dedupUnarm.set(sessionId, setTimeout(() => {
+      this.dedupReplay.delete(sessionId);
+      this.dedupUnarm.delete(sessionId);
+    }, 15000).unref());
   }
 
   get(sessionId: string): LogEntry[] {
@@ -313,9 +401,7 @@ export class SessionLog {
     // .jsonl) survives — refill once per id or every post-restart read path
     // (timeline/sidebar/share) stares at an empty transcript. Bounded to
     // the ring's tail cap; an empty disk marks too, so no rescan loop.
-    // Held off during the clear→replay window, where the disk still shows
-    // the old generation and replayed rows would land on top of it.
-    if (this.replayHold.has(sessionId) || this.hydrated.has(sessionId)) return cur ?? [];
+    if (this.hydrated.has(sessionId)) return cur ?? [];
     this.hydrated.add(sessionId);
     try {
       const disk = this.readDiskTail(sessionId, MAX_UPDATES_PER_SESSION);
@@ -447,83 +533,9 @@ export class SessionLog {
     eachFileLine(this.file(sessionId), cb);
   }
 
-  /** Drop a session's buffered updates — used before a session/load re-replay.
-   * The disk file is stashed aside as `.bak` rather than deleted: a replay
-   * that never delivers (session_locked, dead acp) must not destroy the only
-   * complete copy — `restoreFile`/`restoreMemory` put it back, `dropBackup`
-   * commits a successful replay. */
-  clear(sessionId: string) {
-    this.logs.delete(sessionId);
-    this.seqs.delete(sessionId);
-    // Disk state is about to be rewritten twice (stash now, replay/restore
-    // after) — any prior hydrate verdict is stale, and a hydrate inside the
-    // window would pull the OLD generation into the fresh ring.
-    this.hydrated.delete(sessionId);
-    this.replayHold.add(sessionId);
-    this.gens.set(sessionId, (this.gens.get(sessionId) ?? 0) + 1);
-    // DB rows are NOT deleted — the bump hides them under gen isolation:
-    // new-gen rows shadow them, and a failed replay rolls back by dropping
-    // the partial gen (restoreFile), a successful one by dropBackup.
-    const fd = this.fds.get(sessionId);
-    this.fds.delete(sessionId);
-    if (fd != null) { try { fs.closeSync(fd); } catch {} }
-    if (this.dir) {
-      const f = this.file(sessionId), bak = f + ".bak";
-      try { fs.rmSync(bak, { force: true }); } catch {}
-      try { fs.renameSync(f, bak); } catch { /* no file / rename failed */ }
-      // All derived sidecars index the OLD generation — drop them.
-      this.sidecars.wipe(sessionId);
-    }
-  }
-
-  /** Replay succeeded — the fresh log is authoritative; drop the stash and
-   * every older DB generation (physically erasing replay-rewritten dupes). */
-  dropBackup(sessionId: string) {
-    // Replay committed — release the hydrate hold even if it streamed zero
-    // entries (an empty replay still leaves the hold armed otherwise).
-    this.replayHold.delete(sessionId);
-    try { this.db?.deleteOlderGens(sessionId, this.gens.get(sessionId) ?? 0); } catch {}
-    if (!this.dir) return;
-    try { fs.rmSync(this.file(sessionId) + ".bak", { force: true }); } catch {}
-  }
-
-  /** Replay failed — put the stashed disk log back (replacing whatever the
-   * partial replay wrote). The write fd must be closed first: it still
-   * points at the doomed file and would silently swallow later appends. */
-  restoreFile(sessionId: string) {
-    // The failed replay is rolled back — disk holds the previous generation
-    // again, so both the hydrate hold and its verdict reset.
-    this.replayHold.delete(sessionId);
-    this.hydrated.delete(sessionId);
-    const fd = this.fds.get(sessionId);
-    this.fds.delete(sessionId);
-    if (fd != null) { try { fs.closeSync(fd); } catch {} }
-    if (!this.dir) return;
-    // The failed replay appended at the CURRENT gen — capture it now,
-    // before wipe's liveness bump moves it forward.
-    const failedGen = this.gens.get(sessionId) ?? 0;
-    const f = this.file(sessionId), bak = f + ".bak";
-    try { fs.rmSync(f, { force: true }); } catch {}
-    try { fs.renameSync(bak, f); } catch { /* nothing stashed */ }
-    this.sidecars.wipe(sessionId);
-    // DB rollback via gen isolation: drop the failed replay's partial rows
-    // so the previous generation resurfaces — no file re-import needed.
-    // Runs AFTER the wipe, whose `gens` bump would otherwise undo the
-    // rollback below.
-    try {
-      if (this.db) {
-        this.db.deleteGen(sessionId, failedGen);
-        const back = this.db.maxGen(sessionId);
-        if (back >= 0) this.gens.set(sessionId, back);
-      }
-    } catch {}
-  }
-
-  /** Re-install the pre-clear memory window after a failed replay. File
-   * writes are NOT re-done — `restoreFile` already recovered the full log;
-   * re-appending here would double it. */
+  /** Seed the memory ring from already-stored entries — the disk→ring
+   * hydrate path. File writes are NOT re-done: disk already holds them. */
   restoreMemory(sessionId: string, entries: LogEntry[]) {
-    this.replayHold.delete(sessionId);
     this.hydrated.delete(sessionId);
     this.logs.set(sessionId, entries);
     const last = entries[entries.length - 1];

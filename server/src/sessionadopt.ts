@@ -196,8 +196,8 @@ function watchAdoptedTurn(ctx: ApiContext, id: string, acp: DevinAcp, resync = f
       // Crash attach (no offset): the dead window's frames are gone —
       // heal the transcript hole via a bounded session/load resync
       // BEFORE the turn-end marker, so the gap isn't fossilized under
-      // dw_turn_end. Dedup machinery (replayGuard + tail-anchor merge)
-      // covers the overlap.
+      // dw_turn_end. The replay's content-key dedup covers the overlap —
+      // streamed copies of stored rows never append.
       void Promise.race([
         loadOnce(ctx, acp, id, ctx.sessionCwd.get(id) ?? acp.cwd).catch(() => {}),
         new Promise((r) => setTimeout(r, 60_000)),

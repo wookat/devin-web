@@ -15,7 +15,7 @@ import { SessionLog } from "./sessionlog.js";
 import { handleApi, type ApiContext } from "./routes.js";
 import { handleLocalWb } from "./lweb/index.js";
 import { recordTerminal } from "./sessionview.js";
-import { isReplayEcho, autoResumeInterrupted, setCfgCacheDir } from "./sessionload.js";
+import { autoResumeInterrupted, setCfgCacheDir } from "./sessionload.js";
 import { adoptBrokerAcps, resolveTurnByReq } from "./sessionadopt.js";
 import { notePromptReq } from "./sessionturns.js";
 import { watchSubRateLimit } from "./sessionsub.js";
@@ -267,8 +267,10 @@ termWss.on("connection", (ws, req) => {
 
 const manager = new AcpManager({
   onSessionUpdate: (sessionId, update) => {
-    if (isReplayEcho(sessionId, update as Record<string, unknown>)) return;
-    sessionLog.append(sessionId, update as Record<string, unknown>);
+    // A replayed dupe needs no fan-out — during a session/load stream this
+    // is the hot path (tens of thousands of updates), so skip broadcast,
+    // rate-limit watch and update bookkeeping entirely.
+    if (!sessionLog.append(sessionId, update as Record<string, unknown>)) return;
     watchSubRateLimit(ctx, sessionId, update as Record<string, unknown>);
     hub.broadcast({ type: "session_update", sessionId, update });
     touchSessionActivity(sessionId);

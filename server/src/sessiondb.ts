@@ -95,6 +95,35 @@ function isBlobRef(v: unknown): v is { $blob: string } {
   );
 }
 
+/** Canonical dedup key for an update — sha256 over a normalized form that
+ * drops volatile decorations (`_local`, `_dwBlobbed`, the live-stream-only
+ * streamingMessageId). devin's session/load replays its transcript verbatim,
+ * so a stored row and its replayed twin produce the same key — the replay
+ * then appends only the delta it actually has. */
+export function dedupKey(update: Record<string, unknown>): string {
+  const canon = (v: unknown): unknown => {
+    if (Array.isArray(v)) return v.map(canon);
+    if (v && typeof v === "object") {
+      const o = v as Record<string, unknown>;
+      const out: Record<string, unknown> = {};
+      for (const k of Object.keys(o).sort()) {
+        if (k === "_local" || k === "_dwBlobbed") continue;
+        out[k] = canon(o[k]);
+      }
+      return out;
+    }
+    return v;
+  };
+  const u = canon(update) as Record<string, unknown>;
+  const meta = u._meta as Record<string, unknown> | undefined;
+  if (meta && "cognition.ai/streamingMessageId" in meta) {
+    const m = { ...meta };
+    delete m["cognition.ai/streamingMessageId"];
+    u._meta = m;
+  }
+  return crypto.createHash("sha256").update(JSON.stringify(u)).digest("hex").slice(0, 24);
+}
+
 /** WHERE expression matching the current (max) generation of a session. */
 const CUR_GEN = "gen=(SELECT COALESCE(MAX(gen),0) FROM events WHERE session_id=?)";
 
@@ -115,6 +144,10 @@ export class SessionDb {
   private sDelOlder;
   private sScan;
   private sBlob;
+  private sDedupGet;
+  private sDedupSet;
+  private sDedupNull;
+  private sUpdEntry;
 
   constructor(file: string) {
     this.db = new DatabaseSync(file);
@@ -164,8 +197,18 @@ export class SessionDb {
         WHERE gen < (SELECT MAX(g.gen) FROM events g WHERE g.session_id=events.session_id)`);
       this.db.exec("PRAGMA user_version=1");
     }
+    // Schema v2: the `dedup` column keys every row by content — the
+    // append-only replay model recognizes replayed copies by key and skips
+    // them instead of the old clear()+rewrite (which re-stamped timestamps
+    // and left invisible generation fragments when killed mid-stream).
+    const hasDedupCol = this.db.prepare(
+      "SELECT 1 AS x FROM pragma_table_info('events') WHERE name='dedup'",
+    ).get() != null;
+    if (!hasDedupCol) this.db.exec("ALTER TABLE events ADD COLUMN dedup TEXT");
+    this.db.exec("CREATE INDEX IF NOT EXISTS idx_events_dedup ON events(session_id,dedup)");
+    this.db.exec("PRAGMA user_version=2");
     this.sInsEvent = this.db.prepare(
-      "INSERT OR REPLACE INTO events(session_id,seq,gen,ts,kind,bytes,data) VALUES (?,?,?,?,?,?,?)",
+      "INSERT OR REPLACE INTO events(session_id,seq,gen,ts,kind,bytes,data,dedup) VALUES (?,?,?,?,?,?,?,?)",
     );
     this.sInsBlob = this.db.prepare("INSERT OR IGNORE INTO blobs(sha,data) VALUES (?,?)");
     this.sAll = this.db.prepare(
@@ -191,6 +234,18 @@ export class SessionDb {
       "SELECT seq,ts,data FROM events WHERE session_id=? AND gen=? AND seq>=? AND seq<=? AND data LIKE '%subagent%' ORDER BY seq",
     );
     this.sBlob = this.db.prepare("SELECT data FROM blobs WHERE sha=?");
+    this.sDedupGet = this.db.prepare(
+      "SELECT seq,gen,ts,json_extract(data,'$._local') AS loc FROM events WHERE session_id=? AND dedup=? LIMIT 1",
+    );
+    this.sDedupSet = this.db.prepare(
+      "UPDATE events SET dedup=? WHERE session_id=? AND gen=? AND seq=?",
+    );
+    this.sDedupNull = this.db.prepare(
+      "SELECT seq,gen,data FROM events WHERE session_id=? AND dedup IS NULL",
+    );
+    this.sUpdEntry = this.db.prepare(
+      "UPDATE events SET ts=?,data=? WHERE session_id=? AND gen=? AND seq=?",
+    );
   }
 
   private putBlob(text: string): string {
@@ -247,11 +302,41 @@ export class SessionDb {
   }
 
   /** Append one event; returns the TRANSFORMED update so callers writing a
-   * JSONL mirror persist the identical ref-log line. */
-  append(sessionId: string, seq: number, gen: number, ts: number, update: Record<string, unknown>): Record<string, unknown> {
+   * JSONL mirror persist the identical ref-log line. `dedup` is the
+   * pre-blob content key — replayed twins hash-match on it even though
+   * their stored form may carry {$blob} refs. */
+  append(sessionId: string, seq: number, gen: number, ts: number, update: Record<string, unknown>, dedup: string | null = null): Record<string, unknown> {
     const t = this.transform(update);
-    this.sInsEvent.run(sessionId, seq, gen, ts, String(update.sessionUpdate ?? ""), t.bytes, JSON.stringify(t.update));
+    this.sInsEvent.run(sessionId, seq, gen, ts, String(update.sessionUpdate ?? ""), t.bytes, JSON.stringify(t.update), dedup);
     return t.update;
+  }
+
+  /** Look up a stored row by its content key (any generation — a dupe is a
+   *  dupe wherever it lives). `local` flags `_local` optimistic rows so a
+   *  replayed authoritative twin can graduate them — hot path never parses
+   *  row payloads. */
+  dedupGet(sessionId: string, dedup: string): { seq: number; gen: number; ts: number; local: boolean } | null {
+    const r = this.sDedupGet.get(sessionId, dedup) as { seq: number; gen: number; ts: number; loc: unknown } | undefined;
+    if (!r) return null;
+    return { seq: r.seq, gen: r.gen, ts: r.ts, local: r.loc === true || r.loc === 1 };
+  }
+
+  /** Rows still missing a content key — the lazy backfill feed for
+   *  sessions whose history predates the dedup column. */
+  *dedupRows(sessionId: string): Generator<{ seq: number; gen: number; data: string }> {
+    for (const r of this.sDedupNull.iterate(sessionId) as Iterable<{ seq: number; gen: number; data: string }>) yield r;
+  }
+
+  dedupSet(sessionId: string, gen: number, seq: number, dedup: string) {
+    this.sDedupSet.run(dedup, sessionId, gen, seq);
+  }
+
+  /** Overwrite a stored row in place — the `_local` graduation path: a
+   *  replayed authoritative twin replaces the optimistic copy under the
+   *  same seq, so nothing shifts and no duplicate appears. */
+  updateStored(sessionId: string, gen: number, seq: number, ts: number, update: Record<string, unknown>) {
+    const t = this.transform(update);
+    this.sUpdEntry.run(ts, JSON.stringify(t.update), sessionId, gen, seq);
   }
 
   readAll(sessionId: string): StoredEntry[] {
@@ -379,6 +464,9 @@ export class SessionDb {
           String(e.update?.sessionUpdate ?? ""),
           t.bytes,
           JSON.stringify(t.update),
+          // Mirror lines may carry {$blob} refs — resolve before hashing so
+          // the key matches the original-content form a replay produces.
+          dedupKey(this.resolveBlobs(e.update ?? {})),
         );
         if (++n % IMPORT_BATCH === 0) { this.db.exec("COMMIT"); this.db.exec("BEGIN"); }
       });
