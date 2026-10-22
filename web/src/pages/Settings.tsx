@@ -1,11 +1,12 @@
 import { useState } from 'react'
 import { useTranslation } from 'react-i18next'
 import { Link, useParams } from 'react-router-dom'
-import { ArrowLeft, PanelLeft, ChevronRight, SlidersHorizontal, KeyRound, Wrench, Stethoscope, Info, Boxes, Server } from 'lucide-react'
+import { ArrowLeft, PanelLeft, ChevronRight, SlidersHorizontal, KeyRound, Wrench, Stethoscope, Info, Boxes, Server, SquareTerminal } from 'lucide-react'
 import { PreferencesTab } from '@/pages/settings/PrefsSection'
 import { AccountsTab } from '@/pages/settings/AccountsSection'
 import { ResourcesTab } from '@/pages/settings/ResourcesSection'
 import { SshTab } from '@/pages/settings/SshSection'
+import { CliTab } from '@/pages/settings/CliSection'
 import { ServiceTab, AboutTab } from '@/pages/settings/ServiceSection'
 import { DiagTab } from '@/pages/settings/DiagSection'
 
@@ -37,6 +38,7 @@ const TABS: { key: string; group: 'personal' | 'instance'; cat: string; icon: Re
   { key: 'accounts', group: 'instance', cat: 'administration', icon: <KeyRound size={16} /> },
   { key: 'resources', group: 'instance', cat: 'resources', icon: <Boxes size={16} /> },
   { key: 'ssh', group: 'instance', cat: 'products', icon: <Server size={16} /> },
+  { key: 'cli', group: 'instance', cat: 'products', icon: <SquareTerminal size={16} /> },
   { key: 'service', group: 'instance', cat: 'administration', icon: <Wrench size={16} /> },
   { key: 'diag', group: 'instance', cat: 'administration', icon: <Stethoscope size={16} /> },
   { key: 'about', group: 'instance', cat: 'organization', icon: <Info size={16} /> },
@@ -144,6 +146,8 @@ export default function Settings() {
             {tab === 'resources' && <ResourcesTab />}
 
             {tab === 'ssh' && <SshTab />}
+
+            {tab === 'cli' && <CliTab />}
 
             {tab === 'service' && <ServiceTab setMsg={setPrefsMsg} />}
 

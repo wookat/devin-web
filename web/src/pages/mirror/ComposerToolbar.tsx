@@ -141,7 +141,7 @@ function ComposerToolbar({ isVisitor, caps, uploading, upload, isDraft, openMent
         <button
           ref={modelBtnRef}
           onClick={() => { setModeOpen((v) => !v); setSModeOpen(false) }}
-          aria-label="Select mode"
+          aria-label={t('composer.selectMode')}
           title={modelPillLabel ?? (cfgFetched ? (VERSION_LABEL[pillVersion] ?? pillVersion) : '…')}
           className={cn('flex h-7 cursor-pointer items-center overflow-hidden whitespace-nowrap rounded-full text-[13px] leading-[18px] text-muted-foreground hover:bg-tint-secondary hover:text-foreground', iconMode ? 'size-7 justify-center' : 'max-w-[240px] gap-[3px] px-[6px]', modeOpen && 'bg-tint-secondary text-foreground')}
         >
@@ -181,8 +181,8 @@ function ComposerToolbar({ isVisitor, caps, uploading, upload, isDraft, openMent
                   ref={attachBtnRef}
                   onClick={() => setAttachOpen((v) => !v)}
                   disabled={uploading}
-                  aria-label="Attach or mention"
-                  title="Attach or mention"
+                  aria-label={t('composer.attachMention')}
+                  title={t('composer.attachMention')}
                   className="flex size-7 cursor-pointer items-center justify-center rounded-full text-muted-foreground hover:bg-tint-secondary hover:text-foreground disabled:opacity-50"
                 >
                   {uploading ? <Loader2 size={18} className="animate-spin" /> : <Plus size={18} />}
@@ -207,7 +207,7 @@ function ComposerToolbar({ isVisitor, caps, uploading, upload, isDraft, openMent
                           className="flex w-full cursor-pointer select-none items-center gap-2 rounded-[6px] px-2 py-1.5 text-left text-[13px] leading-[18px] outline-none hover:bg-tint-secondary [&>svg]:size-4 [&>svg]:shrink-0"
                         >
                           <OfficialGlyph svg={ATTACH_MENU_ICONS['Upload attachment']} className="text-muted-foreground" />
-                          Upload attachment
+                          {t('composer.uploadAtt')}
                         </button>
                         <div role="separator" className="mx-2 h-[9px] bg-border bg-clip-content py-1" /></>}
                         {([
@@ -215,10 +215,10 @@ function ComposerToolbar({ isVisitor, caps, uploading, upload, isDraft, openMent
                           // local data (composer-meta: workspaces/skills/sessions
                           // are real; playbooks/secrets/macros/plugins are always
                           // empty locally and are deliberately NOT listed).
-                          ['Workspaces', 'repos', 'Repositories'],
-                          ['Files', 'files', 'Files'],
-                          ['Skills', 'skills', 'Skills'],
-                          ['Sessions', 'sessions', 'Devin sessions'],
+                          [t('composer.catRepos'), 'repos', 'Repositories'],
+                          [t('composer.catFiles'), 'files', 'Files'],
+                          [t('composer.catSkills'), 'skills', 'Skills'],
+                          [t('composer.catSessions'), 'sessions', 'Devin sessions'],
                         ] as [string, string, string][]).map(([label, cat, iconKey]) => (
                           <button
                             key={label}
@@ -292,8 +292,8 @@ function ComposerToolbar({ isVisitor, caps, uploading, upload, isDraft, openMent
                   <button
                     onClick={() => anyRef.current?.click()}
                     disabled={uploading}
-                    aria-label="Upload attachment"
-                    title="Upload attachment"
+                    aria-label={t('composer.uploadAtt')}
+                    title={t('composer.uploadAtt')}
                     className="flex size-7 cursor-pointer items-center justify-center rounded-full text-muted-foreground hover:bg-tint-secondary hover:text-foreground disabled:opacity-50"
                   >
                     {uploading ? <Loader2 size={18} className="animate-spin" /> : <Plus size={18} />}
@@ -314,8 +314,8 @@ function ComposerToolbar({ isVisitor, caps, uploading, upload, isDraft, openMent
                   <button
                     ref={sModeBtnRef}
                     onClick={() => { setSModeOpen((v) => !v); setModeOpen(false) }}
-                    aria-label="Session mode"
-                    title={localModeOpt?.name ?? localModeCurrent ?? 'Session mode'}
+                    aria-label={t('composer.sessionMode')}
+                    title={localModeOpt?.name ?? localModeCurrent ?? t('composer.sessionMode')}
                     className={cn('flex h-7 cursor-pointer items-center overflow-hidden whitespace-nowrap rounded-full text-[13px] leading-[18px] text-muted-foreground hover:bg-tint-secondary hover:text-foreground', pillTier >= 1 ? 'size-7 justify-center' : 'max-w-[220px] gap-1 px-[6px]', sModeOpen && 'bg-tint-secondary text-foreground')}
                   >
                     {pillTier >= 1 ? (
@@ -323,14 +323,14 @@ function ComposerToolbar({ isVisitor, caps, uploading, upload, isDraft, openMent
                         {LOCAL_MODE_ICONS[String(localModeOpt?._meta?.['cognition.ai/icon'] ?? '')] ?? <Settings2 size={18} />}
                       </span>
                     ) : (
-                      <span className="min-w-0 truncate">{localModeOpt?.name ?? localModeCurrent ?? 'Mode'}</span>
+                      <span className="min-w-0 truncate">{localModeOpt?.name ?? localModeCurrent ?? t('composer.mode')}</span>
                     )}
                   </button>
                   {sModeOpen && <div className="fixed inset-0 z-10" onClick={() => setSModeOpen(false)} />}
                   {sModeOpen && sModeBtnRef.current && createPortal(
                     <div role="menu" style={{ bottom: window.innerHeight - sModeBtnRef.current.getBoundingClientRect().top + 6, right: window.innerWidth - sModeBtnRef.current.getBoundingClientRect().right, maxHeight: sModeBtnRef.current.getBoundingClientRect().top - 14 }} className="fixed z-50 flex w-[260px] flex-col overflow-hidden rounded-[10px] bg-[rgba(255,255,255,0.94)] shadow-[0_10px_15px_-3px_rgba(0,0,0,0.1),0_4px_6px_-2px_rgba(0,0,0,0.05)] outline outline-1 outline-black/[0.06] backdrop-blur-[8px] dark:bg-[#1f1f1f]/[0.94] dark:outline-white/[0.06]">
                       <div className="min-h-0 flex-1 overflow-y-auto p-1">
-                        <div className="px-2 py-[5px] text-[11px] font-medium uppercase tracking-wide text-muted-foreground">{localModeGroup.name ?? 'Session Mode'}</div>
+                        <div className="px-2 py-[5px] text-[11px] font-medium uppercase tracking-wide text-muted-foreground">{localModeGroup.name ?? t('composer.sessionMode')}</div>
                         {localModeGroup.options!.map((opt) => {
                           const cur = localModeCurrent === opt.value
                           return (
@@ -399,8 +399,8 @@ function ComposerToolbar({ isVisitor, caps, uploading, upload, isDraft, openMent
                   <button
                     onClick={() => void control('pause')}
                     disabled={controlling}
-                    aria-label="Stop Devin"
-                    title="Stop Devin"
+                    aria-label={t('composer.stopDevin')}
+                    title={t('composer.stopDevin')}
                     className={cn('flex size-7 cursor-pointer items-center justify-center rounded-full bg-foreground text-background disabled:opacity-50', voiceRecording && 'invisible')}
                   >
                     {controlling ? <Loader2 size={16} className="animate-spin" /> : <Square size={12} fill="currentColor" />}
@@ -414,7 +414,7 @@ function ComposerToolbar({ isVisitor, caps, uploading, upload, isDraft, openMent
                     <button
                       onClick={() => void send()}
                       disabled={sending || statusState.inputDisabled || !input.trim()}
-                      aria-label="Send"
+                      aria-label={t('composer.send')}
                       className="flex size-7 cursor-pointer items-center justify-center py-[5px] disabled:cursor-not-allowed"
                     >
                       {sending ? <Loader2 size={16} className="animate-spin" /> : <ArrowUp size={18} />}
@@ -428,8 +428,8 @@ function ComposerToolbar({ isVisitor, caps, uploading, upload, isDraft, openMent
                         onClick={() => setSendOptOpen((v) => !v)}
                         disabled={!input.trim()}
                         tabIndex={input.trim() ? 0 : -1}
-                        aria-label="More send options"
-                        title="More send options"
+                        aria-label={t('composer.moreSend')}
+                        title={t('composer.moreSend')}
                         className={cn('flex w-[25px] shrink-0 cursor-pointer items-center justify-center hover:bg-white/10', sendOptOpen && 'bg-white/10')}
                       >
                         <ChevronDown size={14} />

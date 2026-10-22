@@ -45,10 +45,10 @@ function ComposerPopovers({ cardEl, suggestions, atCat, trigger, sugIdx, setSugI
                 {atCat && trigger?.char === '@' && (
                   <div className="flex items-baseline justify-between gap-2 px-2 py-1">
                     <span className="text-[12px] font-medium text-muted-foreground">
-                      {AT_CATEGORIES.find((c) => c.cat === atCat)?.title || ''}
+                      {t(AT_CATEGORIES.find((c) => c.cat === atCat)?.title || 'common.none')}
                     </span>
                     <span className="truncate text-[11px] text-muted-foreground/70">
-                      {AT_CATEGORIES.find((c) => c.cat === atCat)?.sub || ''}
+                      {t(AT_CATEGORIES.find((c) => c.cat === atCat)?.sub || 'common.none')}
                     </span>
                   </div>
                 )}
@@ -74,20 +74,20 @@ function ComposerPopovers({ cardEl, suggestions, atCat, trigger, sugIdx, setSugI
                   <span className="flex min-w-0 items-center gap-1">
                     <span className="truncate text-[12px] leading-4">
                       {findings[0].finding_type === 'parallelizable_prompt'
-                        ? 'This draft looks like several independent tasks'
+                        ? t('composer.findSplit')
                         : findings[0].finding_type === 'overkill_devin_mode'
-                          ? `${mode} may be more than this task needs`
+                          ? t('composer.findMode', { mode })
                           : findings[0].finding_type === 'no_plan_before_impl'
-                            ? 'Consider asking Devin for a plan before implementing'
+                            ? t('composer.findPlan')
                             : findings[0].finding_type === 'non_work_usage'
-                              ? 'Your prompt seems irrelevant to work use-cases'
+                              ? t('composer.findIrrelevant')
                               : findings[0].finding_type === 'unrelated_followup_new_session'
-                                ? 'This task looks unrelated to the current session'
+                                ? t('composer.findUnrelated')
                                 : findings[0].finding_type === 'use_code_scan'
                                   ? t('menu.codeScanFit')
                                   : findings[0].explanation}
                     </span>
-                    <button type="button" aria-label="Show finding details" title={findings[0].explanation} className="flex shrink-0 cursor-default items-center opacity-70">
+                    <button type="button" aria-label={t('composer.findDetails')} title={findings[0].explanation} className="flex shrink-0 cursor-default items-center opacity-70">
                       <Info size={14} />
                     </button>
                   </span>
@@ -97,30 +97,30 @@ function ComposerPopovers({ cardEl, suggestions, atCat, trigger, sugIdx, setSugI
                       onClick={() => { setSelectedVersion('devin-2-5'); setFindings([]) }}
                       className="shrink-0 cursor-pointer text-[12px] leading-4 text-blue-400 hover:underline"
                     >
-                      Switch mode
+                      {t('composer.coachMode')}
                     </button>
                   ) : findings[0].finding_type === 'parallelizable_prompt' ? (
                     /* Official click (sampled via route capture): appends this sentence to the draft — no network write. */
                     <button
                       type="button"
                       onClick={() => {
-                        setInput((v) => `${v.trimEnd()}\nThese tasks are independent: split them into separate child sessions and run them in parallel.`)
+                        setInput((v) => `${v.trimEnd()}\n${t('composer.appendSplit')}`)
                         setFindings([])
                       }}
                       className="shrink-0 cursor-pointer text-[12px] leading-4 text-blue-400 hover:underline"
                     >
-                      Split into child sessions
+                      {t('composer.coachParallel')}
                     </button>
                   ) : findings[0].finding_type === 'no_plan_before_impl' ? (
                     <button
                       type="button"
                       onClick={() => {
-                        setInput((v) => `${v.trimEnd()}\nBefore implementing anything, investigate and propose a plan for me to review first.`)
+                        setInput((v) => `${v.trimEnd()}\n${t('composer.appendPlan')}`)
                         setFindings([])
                       }}
                       className="shrink-0 cursor-pointer text-[12px] leading-4 text-blue-400 hover:underline"
                     >
-                      Create plan
+                      {t('composer.coachPlan')}
                     </button>
                   ) : findings[0].finding_type === 'non_work_usage' ? (
                     <button
@@ -128,7 +128,7 @@ function ComposerPopovers({ cardEl, suggestions, atCat, trigger, sugIdx, setSugI
                       onClick={() => { setInput(''); setFindings([]) }}
                       className="shrink-0 cursor-pointer text-[12px] leading-4 text-blue-400 hover:underline"
                     >
-                      Clear prompt
+                      {t('composer.coachClear')}
                     </button>
                   ) : findings[0].finding_type === 'unrelated_followup_new_session' ? (
                     /* Official (route-captured): plain <a> navigation to the org new-session page carrying
@@ -139,7 +139,7 @@ function ComposerPopovers({ cardEl, suggestions, atCat, trigger, sugIdx, setSugI
                       onClick={() => { try { localStorage.setItem('dw-new-session-draft', input) } catch { /* quota */ } setFindings([]) }}
                       className="shrink-0 text-[12px] leading-4 text-blue-400 hover:underline"
                     >
-                      Start new session
+                      {t('composer.coachNewSession')}
                     </Link>
                   ) : findings[0].finding_type === 'use_code_scan' ? (
                     /* Official (route-captured): POST /api/sessions with user_message
@@ -175,14 +175,14 @@ function ComposerPopovers({ cardEl, suggestions, atCat, trigger, sugIdx, setSugI
                 <div role="dialog" className="w-full max-w-sm rounded-xl border border-border bg-background p-4 shadow-lg" onClick={(e) => e.stopPropagation()}>
                   <p className="text-[14px] font-medium leading-[20px]">{t('am.confirmSend')}</p>
                   <p className="mt-2 text-[13px] leading-[18px] text-muted-foreground">
-                    {findings[0] ? COACH_RECOMMENDATIONS[findings[0].finding_type] || findings[0].explanation || '' : ''}
+                    {findings[0] ? (COACH_RECOMMENDATIONS[findings[0].finding_type] ? t(COACH_RECOMMENDATIONS[findings[0].finding_type]) : findings[0].explanation || '') : ''}
                   </p>
                   <div className="mt-4 flex items-center justify-end gap-2">
                     <button
                       className="cursor-pointer rounded-md px-3 py-1.5 text-[13px] text-muted-foreground hover:bg-muted"
                       onClick={() => setConfirmSendOpen(false)}
                     >
-                      Back
+                      {t('pal.backTxt')}
                     </button>
                     {findings[0] && COACH_ACTIONS[findings[0].finding_type] && (
                       /* Official tertiaryAction: the finding's action button. applyAndSend
@@ -225,7 +225,7 @@ function ComposerPopovers({ cardEl, suggestions, atCat, trigger, sugIdx, setSugI
                           }
                         }}
                       >
-                        {COACH_ACTIONS[findings[0].finding_type]}
+                        {t(COACH_ACTIONS[findings[0].finding_type])}
                       </button>
                     )}
                     <button
@@ -236,7 +236,7 @@ function ComposerPopovers({ cardEl, suggestions, atCat, trigger, sugIdx, setSugI
                         void send()
                       }}
                     >
-                      Send
+                      {t('composer.send')}
                     </button>
                   </div>
                 </div>

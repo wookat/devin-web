@@ -1,4 +1,5 @@
 import { Search } from 'lucide-react'
+import { useTranslation } from 'react-i18next'
 import { type TimelineItem } from '@/components/Timeline'
 import { type LocalCfg } from './pageBits'
 
@@ -39,25 +40,28 @@ const QUEUE_DRAG_SVG = '<svg aria-hidden="true" width="16" height="16" viewBox="
 // Official running-composer placeholder (Slate DOM sampled 2026-08-31):
 // "Guide Devin while it works, or press <kbd>Ctrl</kbd><kbd>[enter]</kbd> to queue".
 const QUEUE_ENTER_SVG = '<svg class="max-h-[12px] max-w-[12px]" aria-hidden="true" width="24px" height="24px" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg"><path d="M19.938 4.073 C 19.718 4.176,19.576 4.358,19.524 4.601 C 19.494 4.740,19.480 6.173,19.480 9.172 L 19.480 13.540 19.366 13.782 C 19.232 14.065,18.964 14.320,18.688 14.427 C 18.509 14.496,18.184 14.501,12.050 14.511 C 8.502 14.517,5.600 14.508,5.600 14.492 C 5.600 14.475,6.237 13.822,7.016 13.041 C 8.377 11.675,8.434 11.612,8.472 11.424 C 8.495 11.316,8.507 11.208,8.500 11.184 C 8.493 11.160,8.476 11.091,8.463 11.031 C 8.434 10.897,8.228 10.657,8.076 10.578 C 7.945 10.510,7.614 10.502,7.453 10.562 C 7.391 10.585,6.390 11.553,5.229 12.712 C 3.548 14.392,3.106 14.854,3.054 14.990 C 2.969 15.213,3.000 15.478,3.134 15.671 C 3.191 15.753,4.152 16.733,5.269 17.848 C 6.661 19.238,7.347 19.896,7.449 19.938 C 7.737 20.058,8.103 19.978,8.315 19.747 C 8.504 19.542,8.543 19.153,8.401 18.879 C 8.373 18.825,7.728 18.155,6.967 17.391 L 5.584 16.001 12.182 15.991 L 18.780 15.980 19.060 15.886 C 19.512 15.736,19.832 15.535,20.184 15.184 C 20.545 14.822,20.744 14.498,20.887 14.040 L 20.980 13.740 20.980 9.113 C 20.980 4.500,20.980 4.486,20.897 4.375 C 20.645 4.037,20.268 3.918,19.938 4.073 " stroke="none" fill-rule="evenodd" fill="currentColor"></path></svg>'
-const QUEUE_PLACEHOLDER = (
-  <span className="opacity-[0.333]">
-    Guide Devin while it works, or press{' '}
-    <kbd className="inline-flex items-center gap-[2px] align-text-bottom">
-      <kbd className="inline-flex h-4 items-center justify-center rounded-[2px] bg-muted px-[4px] font-sans text-[11px] text-muted-foreground">Ctrl</kbd>
-      <kbd className="inline-flex aspect-square size-4 items-center justify-center rounded-[2px] bg-muted font-sans text-[11px] text-muted-foreground [&_svg]:max-h-[12px] [&_svg]:max-w-[12px]" dangerouslySetInnerHTML={{ __html: QUEUE_ENTER_SVG }} />
-    </kbd>{' '}
-    to queue
-  </span>
-)
+function QueuePlaceholder() {
+  const { t } = useTranslation()
+  return (
+    <span className="opacity-[0.333]">
+      {t('st.guideQueueA')}{' '}
+      <kbd className="inline-flex items-center gap-[2px] align-text-bottom">
+        <kbd className="inline-flex h-4 items-center justify-center rounded-[2px] bg-muted px-[4px] font-sans text-[11px] text-muted-foreground">Ctrl</kbd>
+        <kbd className="inline-flex aspect-square size-4 items-center justify-center rounded-[2px] bg-muted font-sans text-[11px] text-muted-foreground [&_svg]:max-h-[12px] [&_svg]:max-w-[12px]" dangerouslySetInnerHTML={{ __html: QUEUE_ENTER_SVG }} />
+      </kbd>{' '}
+      {t('st.guideQueueB')}
+    </span>
+  )
+}
 
 // `@` mention categories backed by real local data — playbooks/secrets/
 // macros/plugins have no local source (composer-meta returns []), so they
 // are intentionally absent rather than listed as dead empty categories.
 const AT_CATEGORIES: { cat: string; title: string; sub: string }[] = [
-  { cat: 'repos', title: 'Workspaces', sub: 'Local workspace directories' },
-  { cat: 'sessions', title: 'Sessions', sub: 'Local Devin sessions' },
-  { cat: 'files', title: 'Files', sub: 'Files in the session workspace' },
-  { cat: 'skills', title: 'Skills', sub: 'Local .devin/.agents skills' },
+  { cat: 'repos', title: 'composer.catRepos', sub: 'composer.catReposSub' },
+  { cat: 'sessions', title: 'composer.catSessions', sub: 'composer.catSessionsSub' },
+  { cat: 'files', title: 'composer.catFiles', sub: 'composer.catFilesSub' },
+  { cat: 'skills', title: 'composer.catSkills', sub: 'composer.catSkillsSub' },
 ]
 
 type Group =
@@ -78,4 +82,4 @@ function isLifecycleStatus(it: TimelineItem): boolean {
 
 // Official coach finding recommendations (en locale bundle, verbatim).
 
-export { type ComposerMetaT, type SuggestItem, QUEUE_DASHED_SVG, QUEUE_DRAG_SVG, QUEUE_ENTER_SVG, QUEUE_PLACEHOLDER, AT_CATEGORIES, type Group, LIFECYCLE_STATUSES, isLifecycleStatus };
+export { type ComposerMetaT, type SuggestItem, QUEUE_DASHED_SVG, QUEUE_DRAG_SVG, QUEUE_ENTER_SVG, QueuePlaceholder, AT_CATEGORIES, type Group, LIFECYCLE_STATUSES, isLifecycleStatus };

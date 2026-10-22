@@ -102,14 +102,14 @@ function TimelineGroup({ g, isLast, id, isVisitor, isSub, caps, detail, status, 
             <div className="flex items-center gap-1.5 px-2.5 py-2">
               <WorkflowIcon size={14} className="shrink-0 text-muted-foreground" />
               <span className="min-w-0 flex-1 truncate text-[12px] leading-[16px] text-muted-foreground">
-                {running ? (it.workflow?.resumed ? 'Resuming workflow' : 'Running workflow') : 'Ran workflow'}
+                {running ? (it.workflow?.resumed ? t('tl.wfResuming') : t('tl.wfRunning')) : t('tl.wfRan')}
               </span>
               <div className="my-[-2px] flex shrink-0 items-center gap-px">
                 <a
                   href="https://docs.devin.ai/work-with-devin/dynamic-workflows"
                   target="_blank"
                   rel="noopener noreferrer"
-                  aria-label="View workflow documentation"
+                  aria-label={t('ag.wfDoc')}
                   className="inline-flex size-6 shrink-0 items-center justify-center rounded-[6px] bg-transparent text-muted-foreground hover:bg-accent hover:text-foreground"
                 >
                   <BookOpen size={16} />
@@ -121,7 +121,7 @@ function TimelineGroup({ g, isLast, id, isVisitor, isSub, caps, detail, status, 
               onClick={() => onOpenWfRun(runId)}
               className="flex w-full min-w-0 cursor-pointer flex-col gap-1 border-t border-border px-2.5 py-2 text-left"
             >
-              <span className="truncate text-[13px] font-medium leading-[18px]">{it.workflow?.name || 'Workflow run'}</span>
+              <span className="truncate text-[13px] font-medium leading-[18px]">{it.workflow?.name || t('tl.wfRun')}</span>
               {!!agentMap?.size && (
                 <span className="truncate text-[12px] leading-[16px] text-muted-foreground">{done}/{agentMap.size} agents</span>
               )}
@@ -317,14 +317,14 @@ function StatusTail({ statusState, actionRequired, woke, controlling, onResume, 
     ) : statusState.isSleeping && (!woke || controlling) && !isVisitor && statusState.wakeable ? (
       <button
         type="button"
-        aria-label="Wake Devin up"
+        aria-label={t('tl.wakeDevin')}
         disabled={controlling}
         onClick={onResume}
         className="group mt-5 mb-2 flex cursor-pointer items-start gap-[6px] text-left"
       >
         <WakePersona />
         <span className="grid min-h-[17px] overflow-hidden text-[13px] leading-[18px]">
-          <span className="col-start-1 row-start-1 duration-200 group-hover:-translate-y-full motion-safe:transition-transform">Devin went to sleep</span>
+          <span className="col-start-1 row-start-1 duration-200 group-hover:-translate-y-full motion-safe:transition-transform">{t('tl.wentSleep')}</span>
           <span className="col-start-1 row-start-1 translate-y-full duration-200 group-hover:translate-y-0 motion-safe:transition-transform">{controlling ? t('menu.connecting') : stText(t, statusState.wakeText)}</span>
         </span>
       </button>

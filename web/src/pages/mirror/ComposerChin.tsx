@@ -70,7 +70,7 @@ function ComposerChin({ sendErr, send, interrupted, resumeInterrupted, dismissIn
           {createPortal(
             <div role="menu" style={{ bottom: window.innerHeight - agentBtnRef.current.getBoundingClientRect().top + 8, right: window.innerWidth - agentBtnRef.current.getBoundingClientRect().right, maxHeight: agentBtnRef.current.getBoundingClientRect().top - 14 }} className="fixed z-50 w-[220px] overflow-y-auto rounded-[10px] bg-card shadow-[0_10px_15px_-3px_rgba(0,0,0,0.1)] outline outline-1 outline-black/[0.06] dark:outline-white/[0.06]">
             <div className="p-1">
-              {(composerMeta?.agents ?? [{ id: 'devin', label: 'Devin Local' }]).map((a) => (
+              {(composerMeta?.agents ?? [{ id: 'devin', label: t('composer.agentDevin') }]).map((a) => (
                 <button
                   key={a.id}
                   role="menuitem"
@@ -225,7 +225,7 @@ function ComposerChin({ sendErr, send, interrupted, resumeInterrupted, dismissIn
                         </button>
                         <button
                           type="button"
-                          aria-label="Dismiss"
+                          aria-label={t('common.dismiss')}
                           onClick={() => dismissEnvBanner(sug.id)}
                           className="flex size-6 shrink-0 cursor-pointer items-center justify-center rounded-[6px] text-muted-foreground hover:bg-accent hover:text-foreground"
                         >

@@ -1,16 +1,17 @@
-import { memo, useCallback, useEffect, useRef, useState, type ReactNode, type KeyboardEvent as ReactKeyboardEvent } from 'react'
+import { memo, useCallback, useEffect, useMemo, useRef, useState, type ReactNode, type KeyboardEvent as ReactKeyboardEvent } from 'react'
 import { useTranslation } from 'react-i18next'
-import { Loader2, ChevronRight, ChevronDown, SquareTerminal, Bot, CircleDashed, ArrowUpRight, Clock, Flag } from 'lucide-react'
+import { Loader2, ChevronRight, ChevronDown, SquareTerminal, Bot, CircleDashed, ArrowUpRight, Clock, Flag, Square } from 'lucide-react'
 import { adminFetch } from '@/lib/api'
 import { viewer, screenshotUrl } from '@/lib/viewer'
+import { visibleInterval } from '@/lib/poll'
 import { type TimelineItem, heading, fileRows, readLabel, fmtWorkedDur, RowDecor, SubagentActions, ScriptedChildren, SearchResultFiles, BrowserPreviewChip, CalloutCard } from '@/components/Timeline'
 import { TodoSteps, NestedBody } from '@/components/StructuredCards'
 import { PrRowText } from '@/components/PrCards'
 import Markdown from '@/components/Markdown'
 import { LightboxImage } from '@/components/Lightbox'
 import EnvSuggestionCard from '@/components/EnvSuggestionCard'
-import { cn } from '@/lib/utils'
-import { editStats, time, rowClock, preview, FullTerminal } from './timelineUtil'
+import { cn, subProfileLabel } from '@/lib/utils'
+import { editStats, time, rowClock, preview, FullTerminal, AnsiText } from './timelineUtil'
 import { LiveOutputTail } from './ResourcePanels'
 
 const EventRow = memo(function EventRow({ item, sessionId, mt, onStepChanges, onOpenProgress, onOpenSubagent, live, envSupersededBy, tempOpen, selected, standalone }: { item: TimelineItem; sessionId: string; mt: string; onStepChanges?: (item: TimelineItem) => void; onOpenProgress?: (item: TimelineItem) => void; onOpenSubagent?: (agentId: string) => void; live?: boolean; envSupersededBy?: string; tempOpen?: boolean; selected?: boolean; standalone?: boolean }) {
@@ -194,20 +195,20 @@ const EventRow = memo(function EventRow({ item, sessionId, mt, onStepChanges, on
         </div>
         <p className="text-[13px] leading-[18px] text-muted-foreground">
           {fixState === 'sent'
-            ? 'Devin is fixing issues from the review'
+            ? t('tl.fixingReview')
             : item.title === 'Devin Review findings ignored'
-              ? 'Devin Review found issues. Fix them for this PR, or enable auto-fix for all Devin PRs.'
-              : `A comment from ${bf?.botUsername || 'a bot'} was ignored.`}
+              ? t('tl.reviewFound')
+              : t('tl.botCommentIgnored', { bot: bf?.botUsername || t('tl.aBot') })}
         </p>
-        {fixState === 'error' && <p className="text-[12px] text-red-500">Failed to retrigger — try again.</p>}
-        {afState === 'error' && <p className="text-[12px] text-red-500">Failed to update setting — try again.</p>}
+        {fixState === 'error' && <p className="text-[12px] text-red-500">{t('tl.retriggerFail')}</p>}
+        {afState === 'error' && <p className="text-[12px] text-red-500">{t('tl.settingFail')}</p>}
         {fixState !== 'sent' && viewer().role === 'admin' && <div role="presentation" className="mt-0.5 flex w-fit items-center">
-          <button type="button" disabled={afState === 'sending' || afState === 'done'} onClick={enableAutoFix} className={cn(splitBtn, 'rounded-l-[6px]', afState !== 'sending' && afState !== 'done' && 'cursor-pointer hover:bg-accent')}>{afState === 'sending' ? 'Enabling…' : afState === 'done' ? 'Auto-fix enabled' : 'Enable auto-fix'}</button>
+          <button type="button" disabled={afState === 'sending' || afState === 'done'} onClick={enableAutoFix} className={cn(splitBtn, 'rounded-l-[6px]', afState !== 'sending' && afState !== 'done' && 'cursor-pointer hover:bg-accent')}>{afState === 'sending' ? t('tl.enabling') : afState === 'done' ? t('tl.autoFixOn') : t('tl.enableAutoFix')}</button>
           <div className="relative">
             <button type="button" aria-label={t('tl.moreActions')} aria-expanded={fixMenu} onClick={() => setFixMenu((v) => !v)} className={cn(splitBtn, 'cursor-pointer rounded-r-[6px] border-l-0 px-1.5 hover:bg-accent')}><ChevronDown size={16} /></button>
             {fixMenu && (
               <div role="menu" className="absolute left-0 top-8 z-20 min-w-[180px] overflow-hidden rounded-[10px] border border-border bg-popover py-1 shadow-lg">
-                <button role="menuitem" disabled={!canFix || fixState === 'sending'} onClick={retrigger} title={canFix ? undefined : t('tl.noLinkedPr')} className={cn('flex w-full items-center gap-2 px-2.5 py-1.5 text-left text-[13px]', canFix && fixState !== 'sending' ? 'cursor-pointer hover:bg-accent' : 'opacity-50')}>{fixState === 'sending' ? 'Fixing…' : 'Fix for this PR only'}</button>
+                <button role="menuitem" disabled={!canFix || fixState === 'sending'} onClick={retrigger} title={canFix ? undefined : t('tl.noLinkedPr')} className={cn('flex w-full items-center gap-2 px-2.5 py-1.5 text-left text-[13px]', canFix && fixState !== 'sending' ? 'cursor-pointer hover:bg-accent' : 'opacity-50')}>{fixState === 'sending' ? t('tl.fixing') : t('tl.fixThisPr')}</button>
               </div>
             )}
           </div>
@@ -217,7 +218,7 @@ const EventRow = memo(function EventRow({ item, sessionId, mt, onStepChanges, on
             <Markdown text={bf.commentBody} />
             {bf.commentUrl && (
               <a href={bf.commentUrl} target="_blank" rel="noreferrer" className="mt-1 inline-flex items-center gap-1 text-[12px] text-muted-foreground hover:underline">
-                View on GitHub <ArrowUpRight size={12} />
+                {t('tl.viewGithub')} <ArrowUpRight size={12} />
               </a>
             )}
           </div>
@@ -225,26 +226,11 @@ const EventRow = memo(function EventRow({ item, sessionId, mt, onStepChanges, on
       </div>
     )
   }
-  // Local ACP subagent spawn row: a clickable card that opens the child
-  // session page — its events are filtered out of the parent's main feed.
+  // Local ACP subagent card: a bordered activity card whose header opens the
+  // child session page — its events are filtered out of the parent's feed.
   const sub = item.subagent
   if (sub?.agentId) {
-    return (
-      <div className="group relative flex gap-2 pb-2" data-eid={item.id} data-quote-anchor={item.id}>
-        <button type="button" onClick={() => onOpenSubagent?.(sub.agentId!)} className="flex w-full min-w-0 items-center gap-2 rounded-lg border border-border bg-card px-3 py-2 text-left hover:bg-tint-secondary">
-          <Bot size={15} className="shrink-0 text-muted-foreground" />
-          <span className="min-w-0 flex-1 truncate text-[13px] leading-[18px]">{sub.title || item.title}</span>
-          {(sub.profile || sub.model) && <span className="shrink-0 truncate text-[11px] text-muted-foreground">{[sub.profile, sub.model].filter(Boolean).join(' · ')}</span>}
-          {sub.isBackground && <span className="shrink-0 rounded-full bg-muted px-1.5 py-0.5 text-[10px] text-muted-foreground">bg</span>}
-          {sub.finished
-            ? sub.failed
-              ? <span className="shrink-0 text-[11px] text-red-500">{t('tl.failed')}</span>
-              : <span className="shrink-0 text-[11px] text-emerald-600 dark:text-emerald-400">{t('tl.done')}</span>
-            : <Loader2 size={13} className="shrink-0 animate-spin text-muted-foreground" />}
-          <ChevronRight size={14} className="shrink-0 text-muted-foreground" />
-        </button>
-      </div>
-    )
+    return <SubagentCard item={item} sub={sub} sessionId={sessionId} onOpenSubagent={onOpenSubagent} />
   }
   return (
     <div className="group wg-time-host relative flex gap-2 pb-2" data-eid={item.id} data-quote-anchor={item.id}>
@@ -297,7 +283,7 @@ const EventRow = memo(function EventRow({ item, sessionId, mt, onStepChanges, on
               role="button"
               tabIndex={0}
               title={t('tl.viewStepChanges')}
-              aria-label={`View changes from this step (+${stats.added} −${stats.removed})`}
+              aria-label={t('tl.viewStepChangesStats', { added: stats.added, removed: stats.removed })}
               onClick={(e) => { e.stopPropagation(); if (onOpenProgress) onOpenProgress(item); else onStepChanges?.(item) }}
               onKeyDown={(e) => { if (e.key === 'Enter') { e.stopPropagation(); if (onOpenProgress) onOpenProgress(item); else onStepChanges?.(item) } }}
               className="flex shrink-0 cursor-pointer items-center gap-1 rounded px-1 text-[13px] hover:bg-accent"
@@ -348,7 +334,7 @@ const EventRow = memo(function EventRow({ item, sessionId, mt, onStepChanges, on
                 <div className="max-h-[300px] overflow-y-auto whitespace-pre-wrap break-all border-b border-border px-2.5 py-2 font-mono text-[12px] text-muted-foreground">{item.body}</div>
               )}
               {item.output && (
-                <pre className="m-0 max-h-[300px] overflow-y-auto whitespace-pre-wrap break-words px-2.5 py-2 font-mono text-[12px] text-muted-foreground">{item.output}</pre>
+                <pre className="m-0 max-h-[300px] overflow-y-auto whitespace-pre-wrap break-words px-2.5 py-2 font-mono text-[12px] text-muted-foreground"><AnsiText text={item.output} /></pre>
               )}
             </div>
           ) : (
@@ -401,6 +387,147 @@ const EventRow = memo(function EventRow({ item, sessionId, mt, onStepChanges, on
     </div>
   )
 })
+
+type SubInfo = NonNullable<TimelineItem['subagent']>
+
+/** Feed label for one row of a subagent's own timeline — message rows get a
+ * text snippet (bare "Devin"/"User" headings carry no signal), tool rows
+ * reuse the same wording as the main worklog. */
+function subFeedLabel(it: TimelineItem): string {
+  if (it.kind === 'message') return (it.body || '').split('\n')[0].slice(0, 140)
+  return heading(it) || it.title || ''
+}
+
+/**
+ * The subagent card's activity feed: `sub.actions` (the official mirror's
+ * aggregated projection) when present; otherwise the sub's own timeline is
+ * fetched from the admin endpoint — local acp runs never fill `actions`.
+ * Polls only while the run is live; a finished run fetches once.
+ */
+function useSubagentFeed(root: string, agentId: string, enabled: boolean, running: boolean): { label: string; ts: string }[] {
+  const [items, setItems] = useState<TimelineItem[] | null>(null)
+  useEffect(() => {
+    if (!enabled) { setItems(null); return }
+    let alive = true
+    const load = () => adminFetch<{ items: TimelineItem[] }>(`/api/admin/session/${root}/subagent/${encodeURIComponent(agentId)}/timeline`)
+      .then((r) => { if (alive) setItems(r.items ?? []) })
+      .catch(() => {})
+    load()
+    if (!running) return () => { alive = false }
+    const stop = visibleInterval(load, 5000)
+    return () => { alive = false; stop() }
+  }, [enabled, root, agentId, running])
+  return useMemo(() =>
+    (items ?? [])
+      .filter((it) => it.kind !== 'other' && it.kind !== 'status')
+      .slice(-40)
+      .map((it) => ({ label: subFeedLabel(it), ts: it.ts }))
+      .filter((r) => !!r.label),
+  [items])
+}
+
+/**
+ * Local subagent activity card (official style): a bordered card — header row
+ * (bot icon, title, profile/model + status chips, a stop control while the
+ * run is live) that opens the child session page, over a scrollable recent-
+ * activity feed pinned to the tail while the agent is working.
+ */
+function SubagentCard({ item, sub, sessionId, onOpenSubagent }: { item: TimelineItem; sub: SubInfo; sessionId: string; onOpenSubagent?: (agentId: string) => void }) {
+  const { t } = useTranslation()
+  const agentId = sub.agentId ?? ''
+  // `spawn:<toolCallId>` placeholders were never claimed by a subagent_started
+  // update — there's no live handle to poll or cancel.
+  const liveHandle = !!agentId && !agentId.startsWith('spawn:')
+  const isAdmin = viewer().role === 'admin'
+  // `sub:` pages keep ops on the ROOT session — its id hosts the subagent routes.
+  const root = sessionId.startsWith('sub:') ? sessionId.split(':')[1] : sessionId
+  const running = !sub.finished
+  const fetched = useSubagentFeed(root, agentId, isAdmin && liveHandle && !(sub.actions?.length), running)
+  const actions = sub.actions?.length ? sub.actions : fetched
+  const [ctl, setCtl] = useState<'idle' | 'sending' | 'sent' | 'error'>('idle')
+  const feedRef = useRef<HTMLOListElement>(null)
+  const pinned = useRef(true)
+  useEffect(() => {
+    const el = feedRef.current
+    if (el && pinned.current) el.scrollTop = el.scrollHeight
+  }, [actions.length])
+  const onFeedScroll = () => {
+    const el = feedRef.current
+    if (el) pinned.current = el.scrollHeight - el.clientHeight - el.scrollTop <= 24
+  }
+  const stop = async () => {
+    if (ctl === 'sending' || ctl === 'sent') return
+    setCtl('sending')
+    try {
+      const r = await adminFetch<{ ok: boolean; error?: string }>(`/api/admin/session/${root}/subagent/${encodeURIComponent(agentId)}/control`, {
+        method: 'POST',
+        body: JSON.stringify({ action: 'cancel' }),
+      })
+      setCtl(r.ok ? 'sent' : 'error')
+    } catch {
+      setCtl('error')
+    }
+  }
+  const profile = [subProfileLabel(sub.profile ?? ''), sub.model].filter(Boolean).join(' · ')
+  const openSub = () => onOpenSubagent?.(agentId)
+  return (
+    <div className="group relative flex gap-2 pb-2" data-eid={item.id} data-quote-anchor={item.id}>
+      <div className="min-w-0 flex-1 overflow-hidden rounded-lg border border-border bg-card">
+        <div
+          role="button"
+          tabIndex={0}
+          title={t('tl.openSub', { defaultValue: 'Open subagent session' })}
+          onClick={openSub}
+          onKeyDown={(e) => {
+            if (e.key !== 'Enter' && e.key !== ' ') return
+            e.preventDefault()
+            openSub()
+          }}
+          className="flex w-full min-w-0 cursor-pointer items-center gap-2 px-3 py-2 text-left hover:bg-tint-secondary"
+        >
+          <Bot size={15} className="shrink-0 text-muted-foreground" />
+          <span className="min-w-0 flex-1 truncate text-[13px] leading-[18px]">{sub.title || item.title}</span>
+          {profile && <span className="shrink-0 truncate rounded-[4px] bg-muted px-1.5 text-[11px] font-medium leading-[18px] text-muted-foreground">{profile}</span>}
+          {sub.isBackground && <span className="shrink-0 rounded-full bg-muted px-1.5 py-0.5 text-[10px] text-muted-foreground">{t('lib.prof.bg')}</span>}
+          {sub.finished
+            ? sub.failed
+              ? <span className="shrink-0 rounded-[4px] bg-red-500/10 px-1.5 text-[11px] font-medium leading-[18px] text-red-600 dark:text-red-400">{t('tl.failed')}</span>
+              : <span className="shrink-0 rounded-[4px] bg-emerald-500/10 px-1.5 text-[11px] font-medium leading-[18px] text-emerald-600 dark:text-emerald-400">{t('tl.done')}</span>
+            : <span className="inline-flex shrink-0 items-center gap-1 rounded-[4px] bg-muted px-1.5 text-[11px] leading-[18px] text-muted-foreground"><Loader2 size={11} className="animate-spin" />{t('tl.inProgress')}</span>}
+          {running && isAdmin && liveHandle && ctl !== 'sent' && (
+            <span
+              role="button"
+              tabIndex={0}
+              title={ctl === 'error' ? t('tl.subStopFail', { defaultValue: 'Couldn’t stop the subagent — click to retry' }) : t('tl.stopSub', { defaultValue: 'Stop subagent' })}
+              aria-label={ctl === 'error' ? t('tl.subStopFail', { defaultValue: 'Couldn’t stop the subagent — click to retry' }) : t('tl.stopSub', { defaultValue: 'Stop subagent' })}
+              onClick={(e) => { e.stopPropagation(); void stop() }}
+              onKeyDown={(e) => { if (e.key === 'Enter') { e.stopPropagation(); void stop() } }}
+              className={cn('flex size-5 shrink-0 cursor-pointer items-center justify-center rounded text-muted-foreground hover:bg-accent hover:text-foreground', ctl === 'error' && 'text-red-500 hover:text-red-500')}
+            >
+              {ctl === 'sending' ? <Loader2 size={12} className="animate-spin" /> : <Square size={11} className="fill-current" />}
+            </span>
+          )}
+          <ChevronRight size={14} className="shrink-0 text-muted-foreground" />
+        </div>
+        {(actions.length > 0 || running || sub.truncated) && (
+          <ol ref={feedRef} onScroll={onFeedScroll} className="max-h-[180px] overflow-y-auto border-t border-border px-3 py-1.5 text-[12px] leading-[18px] text-muted-foreground">
+            {actions.map((a, i) => (
+              <li key={i} className="flex items-start gap-2 py-0.5">
+                <span className="min-w-0 flex-1 break-words">{a.label}</span>
+                {a.ts && <span className="shrink-0 tabular-nums text-[11px] text-muted-foreground/70">{time(a.ts)}</span>}
+              </li>
+            ))}
+            {!actions.length && <li className="py-0.5 text-[11px] text-muted-foreground/70">{running ? t('tl.subWorking', { defaultValue: 'Subagent is working…' }) : t('tl.subNoActions', { defaultValue: 'No recorded activity' })}</li>}
+            {sub.truncated && <li className="py-0.5 text-[11px] text-muted-foreground/70">{t('ti.earlier')}</li>}
+          </ol>
+        )}
+        {sub.finished && !!sub.summary && (
+          <p className="border-t border-border px-3 py-1.5 text-[12px] leading-[18px] text-muted-foreground">{sub.summary}</p>
+        )}
+      </div>
+    </div>
+  )
+}
 
 /**
  * Expanded work-group body: 400px capped scroll area with official-style
@@ -506,7 +633,7 @@ const WorkGroup = memo(function WorkGroup({ items, seconds, sessionId, mt, defau
             <button
               type="button"
               title={t('tl.viewStepChanges')}
-              aria-label={`View changes from this step (+${added} −${removed})`}
+              aria-label={t('tl.viewStepChangesStats', { added, removed })}
               onClick={(e) => {
                 e.stopPropagation()
                 const it = [...items].reverse().find((x) => editStats(x))

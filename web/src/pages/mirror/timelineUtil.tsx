@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react'
+import { useEffect, useState, type ReactNode } from 'react'
 import { Code } from 'lucide-react'
 import { viewer, sessionFetch } from '@/lib/viewer'
 import { type TimelineItem, STANDALONE_GIT_TYPES, STANDALONE_ROW_TYPES, workSeconds, itemEndMs, GROUP_GAP_MS } from '@/components/Timeline'
@@ -7,22 +7,22 @@ import { cn } from '@/lib/utils'
 import { type Group, isLifecycleStatus } from './composerMeta'
 
 const COACH_RECOMMENDATIONS: Record<string, string> = {
-  no_plan_before_impl: 'Ask Devin to confirm a plan before writing code to avoid mid-session rework',
-  non_work_usage: 'Keep sessions focused on engineering work so your usage goes toward delivering results',
-  overkill_devin_mode: 'Switch to a lighter mode for small, simple tasks',
-  parallelizable_prompt: 'Run independent tasks in parallel child sessions',
-  unrelated_followup_new_session: 'Start a new session so a fresh task gets a clean context',
-  use_code_scan: 'Run a Code Scan to find every instance across whole repositories and track each finding',
+  no_plan_before_impl: 'composer.recPlan',
+  non_work_usage: 'composer.recFocus',
+  overkill_devin_mode: 'composer.recLighter',
+  parallelizable_prompt: 'composer.recParallel',
+  unrelated_followup_new_session: 'composer.recNewSession',
+  use_code_scan: 'composer.recCodeScan',
 }
 
 // Official coach finding action labels (en locale bundle, verbatim).
 const COACH_ACTIONS: Record<string, string> = {
-  no_plan_before_impl: 'Create plan',
-  non_work_usage: 'Clear prompt',
-  overkill_devin_mode: 'Switch mode',
-  parallelizable_prompt: 'Split into child sessions',
-  unrelated_followup_new_session: 'Start new session',
-  use_code_scan: 'Start a Code Scan',
+  no_plan_before_impl: 'composer.coachPlan',
+  non_work_usage: 'composer.coachClear',
+  overkill_devin_mode: 'composer.coachMode',
+  parallelizable_prompt: 'composer.coachParallel',
+  unrelated_followup_new_session: 'composer.coachNewSession',
+  use_code_scan: 'composer.coachScan',
 }
 
 interface TimelinePage {
@@ -192,15 +192,57 @@ function preview(item: TimelineItem): string {
   return ''
 }
 
+/** ANSI SGR → themed span colors (8 base + 8 bright). Non-SGR control
+ * sequences (cursor motion, OSC) are stripped; \r overwrites are folded. */
+const ANSI_FG: Record<number, string> = {
+  30: 'text-neutral-800 dark:text-neutral-300', 31: 'text-red-600 dark:text-red-400', 32: 'text-emerald-600 dark:text-emerald-400',
+  33: 'text-amber-600 dark:text-amber-400', 34: 'text-blue-600 dark:text-blue-400', 35: 'text-purple-600 dark:text-purple-400',
+  36: 'text-cyan-600 dark:text-cyan-400', 37: 'text-neutral-500 dark:text-neutral-400',
+  90: 'text-neutral-500', 91: 'text-red-500', 92: 'text-emerald-500', 93: 'text-amber-500',
+  94: 'text-blue-500', 95: 'text-purple-500', 96: 'text-cyan-500', 97: 'text-neutral-300',
+}
+function foldCarriage(text: string): string {
+  return text.split('\n').map((line) => {
+    if (!line.includes('\r')) return line
+    let buf = ''
+    for (const part of line.split('\r')) buf = part.length >= buf.length ? part : part + buf.slice(part.length)
+    return buf
+  }).join('\n')
+}
+function AnsiText({ text }: { text: string }) {
+  const cleaned = foldCarriage(text).replace(/\x1b\][^\x07\x1b]*(?:\x07|\x1b\\)/g, '').replace(/\x1b\[[0-9;?]*[^0-9;?m\x1b]|\x1b\[[0-9;?]*m/g, (m) => (m.endsWith('m') ? m : ''))
+  const spans: ReactNode[] = []
+  let cls = ''
+  let key = 0
+  const re = /\x1b\[([0-9;]*)m/g
+  let last = 0
+  let match: RegExpExecArray | null
+  while ((match = re.exec(cleaned))) {
+    if (match.index > last) spans.push(<span key={key++} className={cls || undefined}>{cleaned.slice(last, match.index)}</span>)
+    for (const raw of match[1].split(';')) {
+      const code = raw === '' ? 0 : Number(raw)
+      if (code === 0) cls = ''
+      else if (code === 1) cls += ' font-semibold'
+      else if (code === 2) cls += ' opacity-70'
+      else if (code === 3) cls += ' italic'
+      else if (code === 4) cls += ' underline'
+      else if (ANSI_FG[code]) cls = `${cls.replace(/ text-\S+/g, '')} ${ANSI_FG[code]}`
+    }
+    last = match.index + match[0].length
+  }
+  if (last < cleaned.length) spans.push(<span key={key++} className={cls || undefined}>{cleaned.slice(last)}</span>)
+  return <>{spans}</>
+}
+
 /** Full terminal replay for a shell process. */
 function TerminalBlock({ text, className, fill }: { text: string; className?: string; fill?: boolean }) {
   return (
-    <div className={cn('mt-1 overflow-hidden rounded-[4px] border border-border bg-white', className)}>
+    <div className={cn('mt-1 overflow-hidden rounded-[4px] border border-border bg-card', className)}>
       <pre
-        className={cn('overflow-auto whitespace-pre px-2 py-2 text-[12px] leading-[16px] text-[rgb(25,25,25)]', fill ? 'h-full min-h-0' : 'max-h-80')}
+        className={cn('overflow-auto whitespace-pre px-2 py-2 text-[12px] leading-[16px] text-foreground', fill ? 'h-full min-h-0' : 'max-h-80')}
         style={{ fontFamily: '"Roboto Mono", ui-monospace, SFMono-Regular, Menlo, monospace' }}
       >
-        {text}
+        <AnsiText text={text} />
       </pre>
     </div>
   )
@@ -247,4 +289,4 @@ function FullTerminal({ item }: { item: TimelineItem }) {
 }
 
 
-export { COACH_RECOMMENDATIONS, COACH_ACTIONS, type TimelinePage, mergeItems, groupItems, fmtDur, time, rowClock, clock, headerClock, editStats, preview, TerminalBlock, terminalCache, terminalRequests, useFullTerminal, FullTerminal };
+export { COACH_RECOMMENDATIONS, COACH_ACTIONS, type TimelinePage, mergeItems, groupItems, fmtDur, time, rowClock, clock, headerClock, editStats, preview, AnsiText, TerminalBlock, terminalCache, terminalRequests, useFullTerminal, FullTerminal };

@@ -1,4 +1,5 @@
 import { useEffect, useMemo, useRef, useState } from 'react'
+import { useTranslation } from 'react-i18next'
 import { createPortal } from 'react-dom'
 import { Check, ChevronDown, Pin, PinOff, Search, SlidersHorizontal, Sparkles } from 'lucide-react'
 import { cn } from '@/lib/utils'
@@ -115,6 +116,7 @@ export default function ModelPicker({ model, effortGroup, speedGroup, extraGroup
   onPickMulti: (pairs: { configId: string; value: string }[]) => void
   onClose: () => void
 }) {
+  const { t } = useTranslation()
   const [q, setQ] = useState('')
   const [pins, setPins] = useState<string[]>(() => readList(PINS_KEY))
   const [recent, setRecent] = useState<string[]>(() => readList(RECENT_KEY))
@@ -240,7 +242,7 @@ export default function ModelPicker({ model, effortGroup, speedGroup, extraGroup
           autoFocus
           value={q}
           onChange={(e) => setQ(e.target.value)}
-          placeholder="Search all models"
+          placeholder={t('composer.mdlSearch')}
           className="min-w-0 flex-1 bg-transparent text-[13px] outline-none placeholder:text-muted-foreground"
         />
         <SlidersHorizontal size={14} className="shrink-0 text-muted-foreground" />
@@ -249,19 +251,19 @@ export default function ModelPicker({ model, effortGroup, speedGroup, extraGroup
         {topFiltered.map(renderRow)}
         {needle ? (
           <>
-            <div className="px-2 pb-0.5 pt-2 text-[11px] font-medium text-muted-foreground">Models</div>
+            <div className="px-2 pb-0.5 pt-2 text-[11px] font-medium text-muted-foreground">{t('composer.mdlModels')}</div>
             {famRows.filter(match).map(renderRow)}
           </>
         ) : (
           <>
-            <Section title="Pinned" rows={pinnedRows} />
-            <Section title="Recently Used" rows={recentRows} />
-            <Section title="Recommended" rows={restRows} />
+            <Section title={t('composer.mdlPinned')} rows={pinnedRows} />
+            <Section title={t('composer.mdlRecent')} rows={recentRows} />
+            <Section title={t('composer.mdlRecommended')} rows={restRows} />
           </>
         )}
         {extraGroups.length > 0 && (
           <>
-            <div className="px-2 pb-0.5 pt-2 text-[11px] font-medium text-muted-foreground">Settings</div>
+            <div className="px-2 pb-0.5 pt-2 text-[11px] font-medium text-muted-foreground">{t('composer.mdlSettings')}</div>
             {extraGroups.map((o) => {
               const gid = String(o.id ?? '')
               const cur = String(o.currentValue ?? '')
@@ -301,9 +303,9 @@ export default function ModelPicker({ model, effortGroup, speedGroup, extraGroup
           <div className="flex items-start justify-between gap-2">
             <div className="min-w-0">
               <div className="truncate text-[15px] font-medium leading-5">{rowLabel(hover)}</div>
-              {showCtx(hover) && <div className="mt-0.5 text-[12px] text-muted-foreground">1M context</div>}
+              {showCtx(hover) && <div className="mt-0.5 text-[12px] text-muted-foreground">{t('composer.mdlCtx1m')}</div>}
             </div>
-            <button onClick={() => togglePin(hover)} aria-label="Pin model" className="shrink-0 cursor-pointer rounded-[6px] p-1 text-muted-foreground hover:bg-tint-secondary hover:text-foreground">
+            <button onClick={() => togglePin(hover)} aria-label={t('composer.mdlPin')} className="shrink-0 cursor-pointer rounded-[6px] p-1 text-muted-foreground hover:bg-tint-secondary hover:text-foreground">
               {pins.includes(pinOf(hover)) ? <Pin size={15} className="fill-current" /> : <Pin size={15} />}
             </button>
           </div>
@@ -313,7 +315,7 @@ export default function ModelPicker({ model, effortGroup, speedGroup, extraGroup
                 onClick={() => setEffortMenu((v) => !v)}
                 className="flex h-8 w-full cursor-pointer items-center justify-between rounded-[8px] px-1 text-[13px] hover:bg-tint-secondary"
               >
-                <span>Effort</span>
+                <span>{t('composer.mdlEffort')}</span>
                 <span className="flex items-center gap-1 text-muted-foreground">
                   {effortOptsFor(hover).find((o) => o.value === rowEffort(hover))?.name ?? effortOptsFor(hover)[0]?.name}
                   <ChevronDown size={14} />
@@ -344,7 +346,7 @@ export default function ModelPicker({ model, effortGroup, speedGroup, extraGroup
           )}
           {showSpeed(hover) && (
             <div className="mt-1 flex h-8 items-center justify-between px-1 text-[13px]">
-              <span>Fast Mode</span>
+              <span>{t('composer.mdlFast')}</span>
               <span className="flex items-center gap-1">
                 {speedGroup!.options!.map((sp) => (
                   <button
@@ -363,14 +365,14 @@ export default function ModelPicker({ model, effortGroup, speedGroup, extraGroup
           )}
           {hover.siblings.filter((v) => !/-fast$/.test(v.value)).length > 0 && (
             <div className="mt-1.5">
-              <div className="px-1 pb-1 text-[11px] font-medium text-muted-foreground">Variants</div>
+              <div className="px-1 pb-1 text-[11px] font-medium text-muted-foreground">{t('composer.mdlVariants')}</div>
               {[hover.base, ...hover.siblings.filter((v) => !/-fast$/.test(v.value))].map((v) => (
                 <button
                   key={v.value}
                   onClick={() => pick(hover, v.value)}
                   className="flex h-7 w-full cursor-pointer items-center gap-2 rounded-[6px] px-1 text-[13px] hover:bg-tint-secondary"
                 >
-                  <span className="min-w-0 flex-1 truncate text-left">{v === hover.base ? 'Standard' : (v.name ?? v.value).replace(hover.label, '').replace(/\b(none|min|minimal|low|medium|high|xhigh|max)\b/gi, '').trim() || v.name || v.value}</span>
+                  <span className="min-w-0 flex-1 truncate text-left">{v === hover.base ? t('composer.mdlStandard') : (v.name ?? v.value).replace(hover.label, '').replace(/\b(none|min|minimal|low|medium|high|xhigh|max)\b/gi, '').trim() || v.name || v.value}</span>
                   {model.current === v.value && <Check size={13} className="shrink-0" />}
                 </button>
               ))}
@@ -378,12 +380,12 @@ export default function ModelPicker({ model, effortGroup, speedGroup, extraGroup
           )}
           {hover.base.prices && (hover.base.prices.input !== undefined || hover.base.prices.output !== undefined) && (
             <div className="mt-2.5">
-              <div className="px-1 text-[12px] text-muted-foreground"><span className="text-foreground">Cost</span> Higher effort consumes more tokens</div>
+              <div className="px-1 text-[12px] text-muted-foreground"><span className="text-foreground">{t('composer.mdlCost')}</span> {t('composer.mdlCostHint')}</div>
               <div className="mt-1 px-1"><CostBar prices={hover.base.prices} className="h-1.5 w-full" /></div>
               <div className="mt-2 grid grid-cols-3 gap-1.5 px-1">
                 {([['Input', hover.base.prices.input], ['Cached', hover.base.prices.cached], ['Output', hover.base.prices.output]] as const).map(([k, v]) => (
                   <div key={k} className="rounded-[8px] bg-tint-secondary px-2 py-1.5">
-                    <div className="text-[10px] text-muted-foreground">{k === 'Cached' ? 'Cached input' : k}</div>
+                    <div className="text-[10px] text-muted-foreground">{k === 'Cached' ? t('composer.mdlCachedInput') : t(`composer.mdl${k}`)}</div>
                     <div className="text-[12px] font-medium">{fmt$(v)} / 1M</div>
                   </div>
                 ))}

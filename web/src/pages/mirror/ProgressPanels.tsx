@@ -1,12 +1,15 @@
-import { useCallback, useEffect, useMemo, useRef, useState, type PointerEvent as ReactPointerEvent } from 'react'
+import { useCallback, useEffect, useMemo, useRef, useState, type PointerEvent as ReactPointerEvent, type ReactNode } from 'react'
 import { useTranslation } from 'react-i18next'
-import { ArrowLeft, ChevronRight, ChevronLeft, Copy, RefreshCw, ArrowUp, Terminal, List, MessageSquare, Wrench, Pencil, FileCode2 } from 'lucide-react'
-import { sessionFetch, screenshotUrl } from '@/lib/viewer'
-import { type TimelineItem, heading, fileRows } from '@/components/Timeline'
+import i18n from '@/i18n'
+import { ArrowLeft, ChevronRight, ChevronLeft, Copy, RefreshCw, ArrowUp, Terminal, List, MessageSquare, Wrench, Pencil, FileCode2, Loader2 } from 'lucide-react'
+import { sessionFetch, screenshotUrl, fetchFileContents, viewer } from '@/lib/viewer'
+import { FileIcon } from '@/lib/fileIcon'
+import { type TimelineItem, type FileUpdate, heading, fileRows } from '@/components/Timeline'
+import { useShikiTokens } from '@/components/CodeView'
 import { TodoStatusIcon } from '@/components/StructuredCards'
 import Markdown from '@/components/Markdown'
 import { cn } from '@/lib/utils'
-import { useFullTerminal, headerClock, fmtDur, clock } from './timelineUtil'
+import { useFullTerminal, headerClock, fmtDur, clock, AnsiText } from './timelineUtil'
 import { ChangesPanel } from './ChangesPanel'
 
 type ProgressStep = { item: TimelineItem; id: string; tsMs: number }
@@ -278,9 +281,9 @@ function WorklogPanel({ id, items, mt, onGoLive, onWake, jumpTo, finished, canLi
         <div className="group/app-title relative text-[14px] text-muted-foreground">
           {title.mcp ? (
             title.mcp.list ? (
-              <><List size={16} className="mr-1 inline" /><span>{title.title || 'Listed available MCP tools'}</span></>
+              <><List size={16} className="mr-1 inline" /><span>{title.title || t('pp.mcpListed')}</span><McpTitleChip item={title} /></>
             ) : (
-              <><Wrench size={16} className="mr-1 inline" /><span>{t('pp.called')}</span><span className="rounded bg-tint-secondary px-[3px] font-mono text-[13px] text-foreground">{title.mcp.toolName || 'tool'}</span><span> on </span><span className="rounded bg-tint-secondary px-[3px] font-mono text-[13px] text-foreground">{title.mcp.displayName || (title.mcp.server ? `${title.mcp.server} MCP server` : 'MCP server')}</span></>
+              <><Wrench size={16} className="mr-1 inline" /><span>{t('pp.called')}</span><span className="rounded bg-tint-secondary px-[3px] font-mono text-[13px] text-foreground">{title.mcp.toolName || 'tool'}</span><span> {t('pp.onServer')} </span><span className="rounded bg-tint-secondary px-[3px] font-mono text-[13px] text-foreground">{title.mcp.displayName || (title.mcp.server ? t('pp.mcpServer', { name: title.mcp.server }) : t('pp.mcpServerGeneric'))}</span><McpTitleChip item={title} /></>
             )
           ) : title.kind === 'shell' ? (
             <><Terminal size={16} className="mr-1 inline" /><span>{t('pp.executed')}</span><span className="rounded bg-tint-secondary px-[3px] font-mono text-[13px] text-foreground [overflow-wrap:anywhere]">{command}</span></>
@@ -298,11 +301,23 @@ function WorklogPanel({ id, items, mt, onGoLive, onWake, jumpTo, finished, canLi
         {title.mcp ? (
           <McpDetail item={title} />
         ) : title.kind === 'shell' ? (
-          <div className="flex min-h-[50dvh] flex-grow flex-col overflow-hidden rounded-lg border border-border bg-background"><pre className="min-h-0 flex-1 overflow-auto whitespace-pre-wrap break-words px-3 py-2 font-mono text-[13px] leading-4 text-foreground">{fullTerminal ?? title.terminal ?? title.output ?? ''}</pre></div>
+          // Official ShellOutputRow: bordered card, "Command" + "Output"
+          // sections, ANSI-rendered output, exit-code chip.
+          <div className="flex min-h-[50dvh] flex-grow flex-col overflow-hidden rounded-lg border border-border bg-background">
+            <div className="border-b border-border-secondary px-3 py-1.5 text-[11px] font-medium uppercase tracking-wide text-muted-foreground">{t('pp.command')}</div>
+            <pre className="max-h-40 overflow-auto whitespace-pre-wrap break-words border-b border-border px-3 py-2 font-mono text-[12px] leading-[16px] text-foreground">{fullCommand || command}</pre>
+            <div className="border-b border-border-secondary px-3 py-1.5 text-[11px] font-medium uppercase tracking-wide text-muted-foreground">{t('pp.output')}</div>
+            <pre className="min-h-0 flex-1 overflow-auto whitespace-pre-wrap break-words px-3 py-2 font-mono text-[13px] leading-4 text-foreground"><AnsiText text={fullTerminal ?? title.terminal ?? title.output ?? ''} /></pre>
+            {title.exitCode !== undefined && title.exitCode !== null && (
+              <div className="flex items-center gap-2 border-t border-border px-3 py-1.5">
+                <span className={cn('rounded px-1.5 py-0.5 font-mono text-[11px]', title.exitCode === '0' ? 'bg-emerald-500/10 text-emerald-600 dark:text-emerald-400' : 'bg-red-500/10 text-red-600 dark:text-red-400')}>{t('pp.exitCode', { code: title.exitCode })}</span>
+              </div>
+            )}
+          </div>
         ) : title.kind === 'edit' ? (
           <ChangesPanel items={detailItems} embedded fileCardsOnly />
         ) : title.kind === 'read' ? (
-          <ChangesPanel items={detailItems} embedded viewMode fileCardsOnly />
+          <ReadView item={title} />
         ) : title.kind === 'message' && title.role === 'user' ? (
           <div className="flex flex-1 flex-col gap-2 p-4"><div className="whitespace-pre-wrap text-[14px] text-foreground">{title.body || title.title || ''}</div></div>
         ) : title.kind === 'computer' ? (
@@ -317,7 +332,7 @@ function WorklogPanel({ id, items, mt, onGoLive, onWake, jumpTo, finished, canLi
         ) : null}
       </div>
       <div className="mx-1 mb-2 flex flex-col items-center">
-        <div ref={sliderRef} role="slider" tabIndex={0} aria-label={t('pp.timeline')} aria-orientation="horizontal" aria-valuemin={Math.round(timeline.firstNavigablePosition)} aria-valuemax={100} aria-valuenow={Math.round(currentPosition)} aria-valuetext={atEnd ? 'Live' : headerClock(title.ts)} className="relative z-10 my-1 h-[10px] w-full cursor-pointer select-none self-stretch rounded-[4px] focus:outline-none" onPointerDown={onPointerDown} onKeyDown={(event) => { if (event.key === 'ArrowRight' || event.key === 'ArrowDown') { event.preventDefault(); goNext() } else if (event.key === 'ArrowLeft' || event.key === 'ArrowUp') { event.preventDefault(); goPrevious() } }} onMouseEnter={() => sliderRef.current?.focus()}>
+        <div ref={sliderRef} role="slider" tabIndex={0} aria-label={t('pp.timeline')} aria-orientation="horizontal" aria-valuemin={Math.round(timeline.firstNavigablePosition)} aria-valuemax={100} aria-valuenow={Math.round(currentPosition)} aria-valuetext={atEnd ? t('pp.live') : headerClock(title.ts)} className="relative z-10 my-1 h-[10px] w-full cursor-pointer select-none self-stretch rounded-[4px] focus:outline-none" onPointerDown={onPointerDown} onKeyDown={(event) => { if (event.key === 'ArrowRight' || event.key === 'ArrowDown') { event.preventDefault(); goNext() } else if (event.key === 'ArrowLeft' || event.key === 'ArrowUp') { event.preventDefault(); goPrevious() } }} onMouseEnter={() => sliderRef.current?.focus()}>
           {timeline.groups.map((group, index) => {
             const width = group.end - group.start
             const fill = currentPosition >= group.end ? 100 : currentPosition > group.start ? ((currentPosition - group.start) / width) * 100 : 0
@@ -344,7 +359,7 @@ function WorklogPanel({ id, items, mt, onGoLive, onWake, jumpTo, finished, canLi
                 'bg-accent hover:bg-accent/80',
               )}
           >
-            {atEnd ? (canWake ? 'Wake up to see live' : 'Go to live desktop') : 'Go to end'}
+            {atEnd ? (canWake ? t('pp.wakeLive') : t('pp.goLive')) : t('pp.goEnd')}
           </button>
         </div>
       </div>
@@ -374,33 +389,199 @@ function McpSkeleton() {
   )
 }
 
-function McpDetail({ item }: { item: TimelineItem }) {
+/** Mirror projections may carry untyped lifecycle fields alongside the
+ * declared ones — read them defensively (local items only set pending/list). */
+type McpInfo = NonNullable<TimelineItem['mcp']> & { status?: string; error?: string; rejected?: boolean; canceled?: boolean; cancelled?: boolean }
+
+type McpState = 'pending' | 'canceled' | 'rejected' | 'failed' | 'done'
+
+/** Normalize every signal a call can end with — explicit flags first, then
+ * status strings, then the row-level markers failed tools carry. */
+function mcpState(item: TimelineItem, mcp: McpInfo): McpState {
+  const status = (mcp.status ?? '').toLowerCase()
+  if (mcp.rejected === true || /reject|denied/.test(status)) return 'rejected'
+  if (mcp.canceled === true || mcp.cancelled === true || /cancel/.test(status) || item.suffix === 'Canceled') return 'canceled'
+  if (!!mcp.error || /fail|error/.test(status) || item.callout === 'error' || (item.suffix ?? '').includes('failed')) return 'failed'
+  if (mcp.pending || /pending|progress|running/.test(status)) return 'pending'
+  return 'done'
+}
+
+/** Small inline status pill for a non-normal MCP outcome (title row + detail). */
+function McpTitleChip({ item }: { item: TimelineItem }) {
   const { t } = useTranslation()
-  const mcp = item.mcp
+  const mcp = item.mcp as McpInfo | undefined
   if (!mcp) return null
-  const codeClass = 'min-w-0 max-h-48 overflow-auto whitespace-pre-wrap break-words rounded bg-tint-secondary p-3 font-mono text-[12px] leading-[16px]'
+  const state = mcpState(item, mcp)
+  if (state === 'done') return null
+  const cls = state === 'failed'
+    ? 'bg-red-500/10 text-red-600 dark:text-red-400'
+    : state === 'pending'
+      ? 'bg-blue-500/10 text-blue-600 dark:text-blue-400'
+      : 'bg-amber-500/10 text-amber-600 dark:text-amber-400'
+  const label = state === 'pending' ? t('pp.mcpPending', { defaultValue: 'Running' })
+    : state === 'rejected' ? t('pp.mcpRejected', { defaultValue: 'Rejected' })
+      : state === 'canceled' ? t('pp.mcpCanceled', { defaultValue: 'Canceled' })
+        : t('pp.mcpFailed', { defaultValue: 'Failed' })
   return (
-    <div className="flex min-h-0 flex-1 flex-col gap-3 overflow-auto">
-      {!mcp.list && (
-        <>
-          <div>
-            <div className="mb-2 text-[12px] font-medium text-muted-foreground">{t('pp.input')}</div>
-            <pre className={codeClass}>{mcpCode(mcp.input) || '{}'}</pre>
-          </div>
-          <div>
-            <div className="mb-2 text-[12px] font-medium text-muted-foreground">{t('pp.output')}</div>
-            {mcp.pending ? <McpSkeleton /> : <pre className={codeClass}>{mcpCode(mcp.output)}</pre>}
-          </div>
-        </>
-      )}
-      {mcp.list && (
-        <div>
-          <div className="mb-2 text-[12px] font-medium text-muted-foreground">{t('pp.output')}</div>
-          {mcp.pending ? <McpSkeleton /> : <pre className={codeClass}>{mcpCode(mcp.output || item.body)}</pre>}
-        </div>
-      )}
+    <span className={cn('ml-1.5 inline-flex items-center gap-1 rounded-[4px] px-1.5 py-0.5 align-middle text-[11px] font-medium leading-none', cls)}>
+      {state === 'pending' && <Loader2 size={10} className="animate-spin" />}{label}
+    </span>
+  )
+}
+
+/** Collapsible Input/Output block — long payloads stay foldable. */
+function McpSection({ label, children }: { label: string; children: ReactNode }) {
+  const { t } = useTranslation()
+  const [open, setOpen] = useState(true)
+  return (
+    <div>
+      <button
+        type="button"
+        aria-expanded={open}
+        aria-label={`${open ? t('pp.collapse', { defaultValue: 'Collapse' }) : t('pp.expand', { defaultValue: 'Expand' })}: ${label}`}
+        onClick={() => setOpen(!open)}
+        className="mb-2 flex cursor-pointer items-center gap-1 text-[12px] font-medium text-muted-foreground hover:text-foreground"
+      >
+        <ChevronRight size={12} className={cn('shrink-0 transition-transform duration-150', open && 'rotate-90')} />{label}
+      </button>
+      {open && children}
     </div>
   )
+}
+
+function McpDetail({ item }: { item: TimelineItem }) {
+  const { t } = useTranslation()
+  const mcp = item.mcp as McpInfo | undefined
+  if (!mcp) return null
+  const state = mcpState(item, mcp)
+  const codeClass = 'min-w-0 max-h-48 overflow-auto whitespace-pre-wrap break-words rounded bg-tint-secondary p-3 font-mono text-[12px] leading-[16px]'
+  const output = (fallback?: string) => (
+    state === 'pending' ? <McpSkeleton />
+      : state === 'canceled' || state === 'rejected'
+        ? <p className="px-1 text-[12px] text-muted-foreground">{t('pp.mcpNoOutput', { defaultValue: 'No output — the call did not complete.' })}</p>
+        : <pre className={codeClass}>{mcpCode(mcp.output || fallback)}</pre>
+  )
+  return (
+    <div className="flex min-h-0 flex-1 flex-col gap-3 overflow-auto">
+      {state === 'failed' && !!mcp.error && (
+        <p className="break-words rounded-md border border-red-500/30 bg-red-500/[0.06] px-2.5 py-1.5 text-[12px] text-red-700 dark:text-red-300">{mcp.error}</p>
+      )}
+      {!mcp.list && (
+        <>
+          <McpSection label={t('pp.input')}><pre className={codeClass}>{mcpCode(mcp.input) || '{}'}</pre></McpSection>
+          <McpSection label={t('pp.output')}>{output(state === 'failed' ? mcp.error : undefined)}</McpSection>
+        </>
+      )}
+      {mcp.list && <McpSection label={t('pp.output')}>{output(item.body)}</McpSection>}
+    </div>
+  )
+}
+
+const READ_CONTEXT_LINES = 3
+
+/**
+ * Read-step detail: the actually-read line range inside the file — the range
+ * ±3 lines of context, numbered, read lines tinted green (official read
+ * region view). ChangesPanel's viewMode dumps the whole file body; this is
+ * the compact per-range variant. */
+function ReadView({ item }: { item: TimelineItem }) {
+  const { t } = useTranslation()
+  const files = item.fileUpdates ?? []
+  const keys = useMemo(
+    () => [...new Set(files.map((f) => f.fileId || f.contents_key || `path:${encodeURIComponent(f.file_path)}`))],
+    [files],
+  )
+  const keysKey = keys.join('\n')
+  const [texts, setTexts] = useState<Record<string, string> | null>(null)
+  const [failed, setFailed] = useState(false)
+  useEffect(() => {
+    let alive = true
+    setTexts(null)
+    setFailed(false)
+    if (!keys.length) return
+    fetchFileContents(keys)
+      .then((r) => { if (alive) { setTexts(r.files); setFailed(!!r.error) } })
+      .catch(() => { if (alive) setFailed(true) })
+    return () => { alive = false }
+    // `keys` is derived from item.fileUpdates — the joined string is the
+    // stable identity; re-running on array identity would refetch every poll.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [keysKey])
+  if (item.image) {
+    return (
+      <div className="flex min-h-0 flex-1 items-center justify-center overflow-hidden">
+        <img src={`/api/admin/session/${viewer().id}/file-raw?path=${encodeURIComponent(item.image.path)}`} alt={item.image.path} className="max-h-full max-w-full rounded-md border border-border object-contain" />
+      </div>
+    )
+  }
+  if (!files.length) {
+    return item.body
+      ? <pre className="min-h-0 flex-1 overflow-auto whitespace-pre-wrap break-words rounded-lg border border-border bg-card p-3 font-mono text-[12px] leading-[16px] text-muted-foreground">{item.body}</pre>
+      : <div className="p-4 text-[13px] text-muted-foreground">{t('pp.readEmpty', { defaultValue: 'No file content captured for this read.' })}</div>
+  }
+  const textOf = (f: FileUpdate): string | null => {
+    if (!texts) return null
+    const k = f.fileId || f.contents_key || `path:${encodeURIComponent(f.file_path)}`
+    return texts[k] ?? ''
+  }
+  return (
+    <div className="flex min-h-0 flex-1 flex-col gap-3 overflow-auto">
+      {files.map((f, i) => {
+        const text = textOf(f)
+        return (
+          <div key={`${f.file_path}:${i}`} className="shrink-0 overflow-hidden rounded-lg border border-border bg-background">
+            <div className="flex items-center gap-2 border-b border-border-secondary bg-wash px-3 py-1.5">
+              <FileIcon path={f.file_path} size={13} className="shrink-0" />
+              <span className="min-w-0 flex-1 truncate font-mono text-[12px] text-foreground" title={f.file_path}>{f.file_path.split('/').pop() || f.file_path}</span>
+              {f.start_line !== undefined && f.end_line !== undefined && (
+                <span className="shrink-0 rounded-[4px] bg-tint-green px-1.5 py-0.5 text-[11px] tabular-nums leading-none text-emerald-800 dark:text-emerald-300">{t('pp.readRange', { start: f.start_line, end: f.end_line, defaultValue: 'lines {{start}}–{{end}}' })}</span>
+              )}
+            </div>
+            {text === null
+              ? <div className="flex items-center gap-2 px-3 py-3 text-[12px] text-muted-foreground"><Loader2 size={13} className="animate-spin" />{t('common.loading')}</div>
+              : text === ''
+                ? <pre className="max-h-[50dvh] overflow-auto whitespace-pre-wrap break-words px-3 py-2 font-mono text-[12px] leading-[16px] text-muted-foreground">{item.body || t('chg.readFail')}</pre>
+                : <ReadFileBody file={f} text={text} />}
+          </div>
+        )
+      })}
+      {failed && <p className="px-1 text-[11px] text-amber-600 dark:text-amber-400">{t('chg.readFail')}</p>}
+    </div>
+  )
+}
+
+/** One read file's range: numbered code lines, read region ±3 context lines,
+ * green tint on the lines Devin actually opened, shiki token colors. */
+function ReadFileBody({ file, text }: { file: FileUpdate; text: string }) {
+  const lines = useMemo(() => text.split('\n'), [text])
+  const start = file.start_line !== undefined && file.start_line >= 1 ? file.start_line : 1
+  const end = file.end_line !== undefined && file.end_line >= start ? Math.min(file.end_line, lines.length) : lines.length
+  const from = Math.max(1, start - READ_CONTEXT_LINES)
+  const to = Math.min(lines.length, end + READ_CONTEXT_LINES)
+  const windowText = useMemo(() => lines.slice(from - 1, to).join('\n'), [lines, from, to])
+  const toks = useShikiTokens(windowText, file.file_path)
+  const rows: ReactNode[] = []
+  for (let lineNo = from; lineNo <= to; lineNo++) {
+    const read = lineNo >= start && lineNo <= end
+    const lineToks = toks?.[lineNo - from]
+    rows.push(
+      <div key={lineNo} className="col-span-2 grid grid-cols-subgrid" data-line-number={lineNo}>
+        <div className={cn('select-none border-r border-border pl-[2ch] pr-[1ch] text-right text-[11px] leading-[20px]', read ? 'bg-tint-green text-foreground' : 'bg-card text-muted-foreground')}>
+          {lineNo}
+        </div>
+        <div className={cn('whitespace-break-spaces break-all px-2 [overflow-wrap:anywhere]', read ? 'bg-tint-green' : 'bg-card')}>
+          <code className="select-text break-all text-foreground">
+            {lineToks?.length
+              ? lineToks.map((tk, j) => (
+                <span key={j} className={tk.color || tk.darkColor ? 'text-[var(--shiki-light)] dark:text-[var(--shiki-dark)]' : undefined} style={tk.color || tk.darkColor ? ({ '--shiki-light': tk.color, '--shiki-dark': tk.darkColor } as React.CSSProperties) : undefined}>{tk.content}</span>
+              ))
+              : lines[lineNo - 1] || '​'}
+          </code>
+        </div>
+      </div>,
+    )
+  }
+  return <div className="grid w-full grid-cols-[min-content_1fr] font-mono text-[12px] leading-[20px]">{rows}</div>
 }
 
 function ProgressPanel({ items, id, status }: { items: TimelineItem[]; id: string; status: string }) {
@@ -458,7 +639,7 @@ function ProgressPanel({ items, id, status }: { items: TimelineItem[]; id: strin
                 ? `completed ${ago(timing.completedAtMs)}`
                 : undefined
             const title = t.status === 'completed' && timing?.startedAtMs !== undefined && timing.completedAtMs !== undefined
-              ? `Completed ${clock(new Date(timing.completedAtMs).toISOString())} · took ${fmtDur(Math.max(0, Math.floor((timing.completedAtMs - timing.startedAtMs) / 1000)))}`
+              ? i18n.t('pp.todoDoneTip', { at: clock(new Date(timing.completedAtMs).toISOString()), dur: fmtDur(Math.max(0, Math.floor((timing.completedAtMs - timing.startedAtMs) / 1000))) })
               : undefined
             return (
               <div key={i} title={title} className="flex items-start gap-2.5">
@@ -479,4 +660,4 @@ function ProgressPanel({ items, id, status }: { items: TimelineItem[]; id: strin
 }
 
 
-export { type ProgressStep, type ProgressMarker, type ProgressGroup, stripProgressMarkdown, progressTimeline, WorklogPanel, mcpCode, McpSkeleton, McpDetail, ProgressPanel };
+export { type ProgressStep, type ProgressMarker, type ProgressGroup, stripProgressMarkdown, progressTimeline, WorklogPanel, mcpCode, McpSkeleton, type McpInfo, type McpState, mcpState, McpTitleChip, McpSection, McpDetail, ReadView, ReadFileBody, READ_CONTEXT_LINES, ProgressPanel };

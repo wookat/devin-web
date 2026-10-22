@@ -1,3 +1,4 @@
+import i18n from '@/i18n'
 import type { EnvResolution, TimelineItem } from './Timeline'
 
 /**
@@ -27,7 +28,7 @@ export function mergeScriptedRuns(items: TimelineItem[]): TimelineItem[] {
         : it.nested
       const ran = d || it.kind === 'shell_done'
       const n = nested?.length
-      const title = n ? `${ran ? 'Ran' : 'Running'} ${n} scripted tool ${n === 1 ? 'event' : 'events'}` : ran ? 'Ran scripted tool' : 'Running scripted tool'
+      const title = n ? i18n.t(ran ? 'tl.scriptedRanN' : 'tl.scriptedRunningN', { count: n }) : ran ? i18n.t('tl.ranScripted') : i18n.t('tl.runningScripted')
       return [{ ...it, kind: ran ? ('shell_done' as const) : it.kind, title, nested, exitCode: d?.exitCode ?? it.exitCode, body: it.body || d?.body }]
     }
     return [it]

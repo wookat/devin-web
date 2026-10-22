@@ -1,6 +1,7 @@
 import { useState, type Dispatch, type RefObject, type SetStateAction } from 'react'
 import { useTranslation } from 'react-i18next'
-import { ChevronDown, FileText, X } from 'lucide-react'
+import { ChevronDown, X } from 'lucide-react'
+import { FileIcon } from '@/lib/fileIcon'
 import { attachmentUrl, type ViewerCaps } from '@/lib/viewer'
 import { type TimelineItem } from '@/components/Timeline'
 import { type QuoteAttachment } from '../../../shared/quotes'
@@ -11,7 +12,7 @@ import QuoteChip from '@/components/QuoteChip'
 import { IMAGE_RE } from '@/components/UserAttachments'
 import { cn } from '@/lib/utils'
 import { type SessionDetail, type LocalCfg, type LocalCfgOption } from './pageBits'
-import { type ComposerMetaT, type SuggestItem, QUEUE_PLACEHOLDER } from './composerMeta'
+import { type ComposerMetaT, type SuggestItem, QueuePlaceholder } from './composerMeta'
 import { stText, type ReducedStatus } from './statusReduce'
 import { QuotePill } from './QuotePill'
 import { type DraftTarget } from './LocalPicker'
@@ -44,7 +45,7 @@ type LocalCfgGroup = NonNullable<LocalCfg['options']>[number]
  *  only the footer uses; the session-level send/queue/config machinery stays
  *  in AdminMirror and arrives via props. */
 function ComposerFooter({
-  effShowPanel, showJump, scrollRef, setBandH,
+  effShowPanel, showJump, onScrollBottom,
   isDraft, isVisitor, id, caps,
   sendErr, send, interrupted, resumeInterrupted, dismissInterrupted, subDead, respawnSub,
   controlMsg, persona, personaBusy, cyclePersonaMode, askPersonaNow,
@@ -69,8 +70,7 @@ function ComposerFooter({
 }: {
   effShowPanel: boolean
   showJump: boolean
-  scrollRef: RefObject<HTMLDivElement>
-  setBandH: (h: number) => void
+  onScrollBottom?: () => void
   isDraft: boolean
   isVisitor: boolean
   id: string
@@ -184,17 +184,13 @@ function ComposerFooter({
           {showJump && (
             <button
               aria-label={t('am.scrollBottom')}
-              onClick={() => {
-                const el = scrollRef.current
-                if (el) el.scrollTo({ top: el.scrollHeight, behavior: 'smooth' })
-              }}
+              onClick={onScrollBottom}
               className="absolute -top-11 left-1/2 z-30 flex h-7 w-9 -translate-x-1/2 cursor-pointer items-center justify-center rounded-full bg-[rgba(31,31,31,0.94)] text-white/90 shadow-[0_1px_3px_0_rgba(0,0,0,0.25),0_1px_2px_0_rgba(0,0,0,0.06)] transition-colors hover:bg-[rgba(51,51,51,0.94)]"
             >
               <ChevronDown size={20} />
             </button>
           )}
           <BeardBand
-            onBandHeight={setBandH}
             cardRef={setCardEl}
             wrapClassName={isDraft ? 'max-w-[692px]' : undefined}
             bareCard={isDraft}
@@ -244,7 +240,7 @@ function ComposerFooter({
                         className="size-9 rounded-[6px] object-cover"
                       />
                       <button
-                        aria-label="Remove attachment"
+                        aria-label={t('composer.removeAtt')}
                         onClick={() => removeStaged(f.url)}
                         className="absolute right-[-5px] top-[-5px] flex size-[18px] items-center justify-center rounded-full bg-foreground text-background opacity-0 focus-visible:opacity-100 group-hover/attachment:opacity-100 [@media(pointer:coarse)]:opacity-100"
                       >
@@ -253,12 +249,12 @@ function ComposerFooter({
                     </div>
                   ) : (
                     <div key={f.url} className="flex items-center gap-2 rounded-lg border border-border bg-background px-2 py-1.5">
-                      <FileText size={16} className="shrink-0 text-muted-foreground" />
+                      <FileIcon path={f.name} size={16} className="shrink-0" />
                       <div className="min-w-0">
                         <div className="max-w-[180px] truncate text-[12px] leading-[16px]">{f.name}</div>
                         <div className="text-[11px] leading-[14px] text-muted-foreground">{f.size < 1024 ? `${f.size} B` : `${(f.size / 1024).toFixed(1)} KB`}</div>
                       </div>
-                      <button aria-label="Remove attachment" onClick={() => removeStaged(f.url)} className="cursor-pointer text-muted-foreground hover:text-foreground">
+                      <button aria-label={t('composer.removeAtt')} onClick={() => removeStaged(f.url)} className="cursor-pointer text-muted-foreground hover:text-foreground">
                         <X size={13} />
                       </button>
                     </div>
@@ -275,7 +271,7 @@ function ComposerFooter({
               className={cn('bg-transparent', isDraft && 'min-h-[44px]')}
               disabled={statusState.inputDisabled || sending}
               placeholder={pending ? t('composer.respondPending') : isDraft ? t('draft.message') : stText(t, statusState.placeholder)}
-              placeholderNode={!pending && statusState.enum === 'working' && !isVisitor ? QUEUE_PLACEHOLDER : undefined}
+              placeholderNode={!pending && statusState.enum === 'working' && !isVisitor ? <QueuePlaceholder /> : undefined}
               value={input}
               onChange={setInput}
               onFiles={(files) => { for (const f of files) void upload(f) }}

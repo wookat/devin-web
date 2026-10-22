@@ -1,7 +1,8 @@
-import { Brain, Terminal, CheckCircle2, XCircle, Activity, Monitor, ListTodo, MessageSquare, MessageCircleQuestion, Info, FilePen, Eye, GitBranch, Search, Workflow, Bot, ShieldQuestion, Flag, Lightbulb, KeyRound, Globe, AlertTriangle, AlertCircle, File } from 'lucide-react'
+import { Brain, Terminal, CheckCircle2, XCircle, Activity, Monitor, ListTodo, MessageSquare, MessageCircleQuestion, Info, FilePen, Eye, GitBranch, Search, Workflow, Bot, ShieldQuestion, Flag, Lightbulb, KeyRound, Globe, AlertTriangle, AlertCircle } from 'lucide-react'
 import { useTranslation } from 'react-i18next'
 import i18n from '@/i18n'
 import { cn } from '@/lib/utils'
+import { FileIcon } from '@/lib/fileIcon'
 import type { QuoteAttachment, QuoteMeta } from '../../shared/quotes'
 
 export interface FileUpdate {
@@ -230,10 +231,11 @@ export function RowDecor({ item }: { item: TimelineItem }) {
  * so the chip is static.
  */
 export function BrowserPreviewChip({ item }: { item: TimelineItem }) {
+  const { t } = useTranslation()
   return (
     <div className="pb-2.5" data-eid={item.id}>
       <div
-        aria-label={item.title || 'Preview'}
+        aria-label={item.title || t('tl.preview')}
         data-testid="transcript-browser-preview"
         className="flex w-[360px] max-w-full items-center gap-2.5 rounded-[10px] bg-tint-tertiary p-1.5 pr-3 text-left"
       >
@@ -288,7 +290,7 @@ export function SearchResultFiles({ files }: { files: string[] }) {
         const dir = parts.slice(0, -1).join('/')
         return (
           <div key={f} title={f} className="flex shrink-0 items-center gap-1 truncate text-nowrap text-[12px] text-muted-foreground">
-            <File size={14} className="shrink-0" />
+            <FileIcon path={f} size={14} className="shrink-0" />
             <span>{name}</span>
             {dir && <span className="min-w-0 flex-1 truncate text-[11px] opacity-70">{dir}</span>}
           </div>
@@ -300,7 +302,7 @@ export function SearchResultFiles({ files }: { files: string[] }) {
 
 /** Official scripted_tools_group nested body: the run row itself, then each child tool row. */
 export function ScriptedChildren({ item, time }: { item: TimelineItem; time: (ts: string) => string }) {
-  const rows = [{ label: item.kind === 'shell_done' ? 'Ran scripted tool' : 'Running scripted tool', ts: item.ts }, ...(item.nested || [])]
+  const rows = [{ label: item.kind === 'shell_done' ? i18n.t('tl.ranScripted') : i18n.t('tl.runningScripted'), ts: item.ts }, ...(item.nested || [])]
   return (
     <ol data-testid="transcript-scripted-children" className="mt-1 rounded-[10px] border border-border bg-card py-1 text-[13px] leading-[18px] text-muted-foreground">
       {rows.map((a, i) => (
@@ -325,7 +327,7 @@ export function SubagentActions({ run, time }: { run: NonNullable<TimelineItem['
         </li>
       ))}
       {run.truncated && <li className="px-2.5 py-0.5 text-[11px] text-muted-foreground/70">{t('ti.earlier')}</li>}
-      {(run.actions?.length ?? 0) === 0 && <li className="px-2.5 py-0.5 text-[11px] text-muted-foreground/70">{run.finished ? 'Finished' : 'Running…'}</li>}
+      {(run.actions?.length ?? 0) === 0 && <li className="px-2.5 py-0.5 text-[11px] text-muted-foreground/70">{run.finished ? t('tl.finished') : t('tl.running')}</li>}
     </ol>
   )
 }
@@ -376,14 +378,14 @@ export function todoTitle(item: TimelineItem): string {
   switch (action) {
     case 'created': {
       const n = a?.action === 'created' && typeof a.createdCount === 'number' ? a.createdCount : todos.length
-      return n === 1 ? 'Created 1 task' : `Created ${n} tasks`
+      return i18n.t('tl.todoCreated', { count: n })
     }
-    case 'deleted': return `Deleted task${subject}`
-    case 'updated': return `Updated task${subject}`
-    case 'started': return `Started task${subject}`
-    case 'completed': return `Completed task${subject}`
+    case 'deleted': return i18n.t('tl.todoDeleted', { subject })
+    case 'updated': return i18n.t('tl.todoUpdated', { subject })
+    case 'started': return i18n.t('tl.todoStarted', { subject })
+    case 'completed': return i18n.t('tl.todoCompleted', { subject })
   }
-  if (todos.length === 0) return 'Updated the plan'
+  if (todos.length === 0) return i18n.t('tl.planUpdated')
   const done = todos.filter((t) => t.status === 'completed').length
   let idx = todos.findIndex((t) => t.status === 'in_progress')
   const pos = idx === -1 ? done : idx + 1
@@ -463,7 +465,7 @@ export function fmtThoughtDur(ms: number): string {
 }
 
 /** Official "Worked for" duration: h/m/s parts, seconds dropped once hours appear, "a bit" for 0. */
-export function fmtWorkedDur(ms: number, fallback = 'a bit'): string {
+export function fmtWorkedDur(ms: number, fallback = i18n.t('tl.aBit')): string {
   const total = Math.max(0, Math.round(ms / 1000))
   const h = Math.floor(total / 3600)
   const m = Math.floor((total % 3600) / 60)
@@ -490,52 +492,52 @@ export function shellLabel(cmd: string): string {
 export function heading(item: TimelineItem): string {
   switch (item.kind) {
     case 'thought':
-      return item.durationMs ? `Thought for ${fmtThoughtDur(item.durationMs)}` : 'Thoughts'
+      return item.durationMs ? i18n.t('tl.thoughtFor', { dur: fmtThoughtDur(item.durationMs) }) : i18n.t('tl.thoughts')
     case 'shell':
-      return shellLabel(item.body ?? '') || item.title || 'Ran command'
+      return shellLabel(item.body ?? '') || item.title || i18n.t('tl.ranCmd')
     case 'shell_done':
-      return shellLabel(item.body ?? '') || item.title || `Exit code ${item.exitCode ?? '?'}`
+      return shellLabel(item.body ?? '') || item.title || i18n.t('tl.exitCode', { code: item.exitCode ?? '?' })
     case 'message':
-      return item.role === 'user' ? item.title || 'User' : 'Devin'
+      return item.role === 'user' ? item.title || i18n.t('common.user') : 'Devin'
     case 'status':
-      return item.title || 'Status'
+      return item.title || i18n.t('tl.status')
     case 'computer':
-      return item.actions?.length ? item.actions[0] : item.title && item.title !== 'browser' ? item.title : 'Browsed'
+      return item.actions?.length ? item.actions[0] : item.title && item.title !== 'browser' ? item.title : i18n.t('tl.browsed')
     case 'todo':
       return todoTitle(item)
     case 'secret_request':
-      return `${item.secretRequest?.save ? 'Save secret' : 'Credentials requested'}: ${item.secretRequest?.name || ''}`
+      return `${item.secretRequest?.save ? i18n.t('scc.saveSecret') : i18n.t('scc.credsReq')}${item.secretRequest?.name || ''}`
     case 'activity':
-      return item.title || 'Activity'
+      return item.title || i18n.t('tl.activity')
     case 'edit': {
       const rows = fileRows(item.fileUpdates || [])
-      if (rows.length === 0) return 'Edited files'
+      if (rows.length === 0) return i18n.t('tl.editedFiles')
       if (rows.length === 1) return rows[0].label
-      return `Edited ${rows.length} files`
+      return i18n.t('tl.editedN', { n: rows.length })
     }
     case 'read':
       // Official row: "Read <name>:<range>, <name>" (multi_edit_result with read-only opens).
-      return `Read ${(item.fileUpdates || []).map(readLabel).join(', ')}`
+      return i18n.t('tl.read', { files: (item.fileUpdates || []).map(readLabel).join(', ') })
     case 'git':
       return item.title || 'Git'
     case 'search':
-      return item.title || 'Searched'
+      return item.title || i18n.t('tl.searched')
     case 'question':
       return item.questions?.[0]?.question || i18n.t('ti.question')
     case 'answer':
       return item.answers?.join('、') || item.body || i18n.t('ti.answered')
     case 'workflow':
       return item.workflow?.status === 'running'
-        ? (item.workflow.resumed ? 'Resuming workflow' : 'Running workflow')
-        : 'Ran workflow'
+        ? (item.workflow.resumed ? i18n.t('tl.wfResuming') : i18n.t('tl.wfRunning'))
+        : i18n.t('tl.wfRan')
     case 'workflow_agent':
-      return `Workflow agent ${item.agent?.label || ''} ${item.agent?.status || ''}`.trim()
+      return i18n.t('tl.wfAgent', { label: item.agent?.label || '', status: item.agent?.status || '' }).trim()
     case 'bot_flag':
-      return item.title || 'Bot comment ignored'
+      return item.title || i18n.t('tl.botIgnored')
     case 'permission':
       return item.permission?.resolved
-        ? `${item.permission.toolName || 'Action'} — ${item.permission.resolved}`
-        : item.title || 'Allow this action?'
+        ? i18n.t('tl.permDone', { tool: item.permission.toolName || i18n.t('tl.actionWord'), state: i18n.t(item.permission.resolved === 'approved' ? 'scc.approved' : 'scc.denied') })
+        : item.title || i18n.t('tl.allowAction')
     default:
       return item.title || item.raw_type
   }
