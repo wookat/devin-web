@@ -192,9 +192,13 @@ async function cmdStart() {
   const fd = fs.openSync(path.join(DATA, "supervisor.log"), "a");
   const c = spawnSupervisor(["ignore", fd, fd]);
   console.log(`supervisor spawned pid=${c.pid} — waiting for backend…`);
-  if (await waitUp("supervisor", probeSupervisor)) {
+  // Wait through to backend health so the card shows live pids/state —
+  // the supervisor answers :7791 a couple of seconds before its child is up.
+  if (await waitUp("backend", probeBackend)) {
     const s = JSON.parse((await call("/api/_super/status")).body);
     infoCard(s);
+  } else if (await probeSupervisor()) {
+    infoCard(JSON.parse((await call("/api/_super/status")).body));
   }
 }
 
