@@ -266,6 +266,7 @@ export class SessionLog {
       if (this.logs.size >= MAX_SESSIONS) {
         const oldest = this.logs.keys().next().value!;
         this.logs.delete(oldest);
+        this.hydrated.delete(oldest); // evicted rings must re-probe disk
       }
       log = [];
       this.logs.set(sessionId, log);

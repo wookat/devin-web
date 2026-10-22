@@ -5,6 +5,9 @@
  * snippet read-models the sidebar polls. Leaf module.
  */
 import type { ApiContext } from "./routes.js";
+import { dataDir } from "./env.js";
+import { appendFileSync, existsSync, mkdirSync, readFileSync, readdirSync, statSync, writeFileSync } from "node:fs";
+import { join } from "node:path";
 import { catalogInfo } from "./modelcat.js";
 import { remapLegacyCwd } from "./store.js";
 import { loadReg, saveReg, meta } from "./dwstore.js";
@@ -96,6 +99,22 @@ export function sessionConfig(ctx: ApiContext, id: string): SessionConfig {
       }),
     };
   }
+  // Per-session picks overlay — devin's echoed configOptions do NOT carry the
+  // user's model choice across session/load (a refresh reverts to "high").
+  // meta.lastConfig is journaled by the POST /config handler; re-apply it so
+  // what the user picked is what the picker shows after every reload.
+  const sticky = meta(ctx, id).lastConfig;
+  if (sticky) {
+    for (const o of out.options) {
+      const k = String(o.id ?? "");
+      if (sticky[k] !== undefined) o.currentValue = sticky[k];
+    }
+    if (sticky.mode) out.mode = sticky.mode;
+    if (sticky.model && out.model) {
+      out.model.current = sticky.model;
+      out.model.currentName = out.model.options.find((o) => o.value === sticky.model)?.name ?? sticky.model;
+    }
+  }
   return out;
 }
 
@@ -124,13 +143,49 @@ export function cloudVersionToModel(version: string, opts: { value: string; name
   }
 }
 
-/** terminalId → accumulated output (fed by index.ts onTerminalOutput). */
+/** terminalId → accumulated output (fed by index.ts onTerminalOutput).
+ *  Memory is a hot cache — every chunk is also appended to a per-terminal
+ *  disk sidecar (`<dataDir>/term/<sid>.<pid>.log`) because terminal/output
+ *  is a client-RPC channel that never lands in the session log: without
+ *  the sidecar a backend restart left every exec row at "未捕获输出". */
 export const terminalBuf = new Map<string, { sessionId: string; text: string }>();
+const TERM_CAP = 512 * 1024;
+function termFile(sessionId: string, terminalId: string): string {
+  const safe = (s: string) => s.replace(/[^\w.-]+/g, "_").slice(-120);
+  return join(dataDir(), "term", `${safe(sessionId)}.${safe(terminalId)}.log`);
+}
 export function recordTerminal(terminalId: string, sessionId: string, data: string) {
   const e = terminalBuf.get(terminalId) ?? { sessionId, text: "" };
   e.sessionId = sessionId;
-  e.text = (e.text + data).slice(-512 * 1024);
+  e.text = (e.text + data).slice(-TERM_CAP);
   terminalBuf.set(terminalId, e);
+  try {
+    const f = termFile(sessionId, terminalId);
+    mkdirSync(join(dataDir(), "term"), { recursive: true });
+    if (existsSync(f) && statSync(f).size > TERM_CAP) {
+      // Keep the tail: rewrite the last TERM_CAP/2 bytes then keep appending.
+      const old = readFileSync(f);
+      writeFileSync(f, old.subarray(-TERM_CAP / 2));
+    }
+    appendFileSync(f, data);
+  } catch { /* disk echo is best-effort — memory still serves */ }
+}
+/** Read-through: memory first, then the disk sidecar (post-restart hits
+ *  repopulate the cache so one cold read warms later ones). */
+export function terminalText(terminalId: string): { sessionId: string; text: string } | undefined {
+  const hit = terminalBuf.get(terminalId);
+  if (hit) return hit;
+  const dir = join(dataDir(), "term");
+  let f: string | undefined;
+  try { f = readdirSync(dir).find((n) => n.endsWith(`.${terminalId.replace(/[^\w.-]+/g, "_").slice(-120)}.log`)); } catch { return undefined; }
+  if (!f) return undefined;
+  try {
+    const raw = readFileSync(join(dir, f));
+    const text = raw.length > TERM_CAP ? raw.subarray(-TERM_CAP).toString("utf8") : raw.toString("utf8");
+    const sessionId = f.split(".")[0];
+    terminalBuf.set(terminalId, { sessionId, text });
+    return { sessionId, text };
+  } catch { return undefined; }
 }
 
 export function sessionStatus(ctx: ApiContext, id: string): { status: string; activity: string } {
@@ -173,6 +228,9 @@ export async function listLocalSessions(ctx: ApiContext): Promise<ListedSession[
         const seen = (s as { updatedAt?: string; updated_at?: string }).updatedAt
           ?? (s as { updated_at?: string }).updated_at ?? null;
         if (seen && seen !== m.updatedAt) { m.updatedAt = seen; dirty = true; }
+        // Internal plumbing sessions (sidechat backends) keep their cwd pin
+        // above but never list — machinery must not crowd the sidebar.
+        if (m.hidden) continue;
         const lm = ((s as { _meta?: Record<string, unknown> })._meta ?? {}) as Record<string, unknown>;
         out.push({
           id: s.sessionId,
@@ -190,7 +248,7 @@ export async function listLocalSessions(ctx: ApiContext): Promise<ListedSession[
   if (dirty) saveReg();
   const known = new Set(out.map((s) => s.id));
   for (const [id, m] of Object.entries(loadReg(ctx).sessions)) {
-    if (!known.has(id) && !m.archived) {
+    if (!known.has(id) && !m.archived && !m.hidden) {
       out.push({ id, title: m.title ?? "Untitled session", updated: m.updatedAt ?? "1970-01-01T00:00:00.000Z", cwd: remapLegacyCwd(ctx.sessionCwd.get(id) ?? ctx.primaryCwd), locked: false, created: null, agent: m.agent ?? ctx.store.agentSession(id)?.agent });
     }
   }

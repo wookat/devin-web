@@ -36,6 +36,26 @@ interface DwSessionMeta {
    *  are enumerable via /ws and the sessions list. Toggled by the admin
    *  share-link endpoint. */
   shared?: boolean;
+  /** Per-session config picks (model/mode/effort) the user set through the
+   *  web UI — devin's own configOptions echo does NOT persist model across
+   *  session/load, so without this overlay a refresh reverts the picker to
+   *  the agent default ("high"). Overlay wins over the echoed cfg. */
+  lastConfig?: Record<string, string>;
+  /** Internal plumbing session (persona / PR-review / fork-writer / sidechat
+   *  backends) — listLocalSessions drops it so machinery never surfaces in
+   *  the sidebar as a normal session row. */
+  hidden?: boolean;
+  /** Local sidechat threads — the fallback for devin builds without the
+   *  `_cognition.ai/sidechain` ext. Key is the client anchor id ("e<seq>" /
+   *  "t<toolCallId>"), value is the dedicated devin session that hosts that
+   *  thread's Q&A (all share one <dataDir>/sidechat pooled acp). */
+  sidechats?: Record<string, string>;
+  /** Anchors whose sidechat session already received the seeded anchor-
+   *  context message — later sends go to that thread bare. */
+  sidechatSeeded?: Record<string, boolean>;
+  /** On a sidechat backend session: the parent session it answers for —
+   *  lets lifecycle cleanup cascade archive/end to the thread sessions. */
+  sidechatFor?: string;
 }
 
 interface DwRegistry {

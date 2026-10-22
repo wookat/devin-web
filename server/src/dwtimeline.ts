@@ -519,6 +519,12 @@ function tlPush(st: TlState, e: { ts: number; seq?: number; update: Record<strin
       if (!resumeId) st.pendingSpawns.push(it);
     }
     const st2 = String(u.status ?? "");
+    // Exec duration: first-seen ts → terminal-status ts. Feeds the terminal
+    // history "时长" column (official Command|Duration|Started table).
+    if (st2 === "completed" || st2 === "failed") {
+      const startMs = Date.parse(it.ts);
+      if (Number.isFinite(startMs)) it.durationMs = Math.max(0, Date.parse(iso) - startMs);
+    }
     if (st2 === "completed") { it.exitCode = it.exitCode ?? "0"; it.suffix = undefined; }
     else if (st2 === "failed") { it.exitCode = "1"; it.suffix = "— failed"; it.callout = "error"; }
     else if (st2 === "in_progress" || st2 === "pending") it.suffix = "running";

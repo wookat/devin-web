@@ -15,6 +15,7 @@ import { responseCfg, captureLoadResponse, type ConfigOption } from "../../sessi
 import { agentById } from "../../agents.js";
 import { json, readBody, readJson } from "../../httputil.js";
 import { summarizeForFork, titleFromLog } from "../session.js";
+import { archiveSidechats } from "./sessiontimeline.js";
 
 export async function handleSessionLifecycle(ctx: ApiContext, req: IncomingMessage, res: ServerResponse, url: URL, m: string, sub: string, id: string): Promise<boolean> {
   // GET /api/admin/session/:id/config — real ACP config options (mode/model).
@@ -62,6 +63,11 @@ export async function handleSessionLifecycle(ctx: ApiContext, req: IncomingMessa
       });
     }
     noteLastUsed(ctx, isMode ? "mode" : configId, value);
+    // Per-session stickiness: devin does not persist model across loads —
+    // journal the pick on the session meta so sessionConfig can re-overlay
+    // it after every refresh/restart instead of falling back to "high".
+    meta(ctx, id).lastConfig = { ...(meta(ctx, id).lastConfig ?? {}), [isMode ? "mode" : configId]: value };
+    saveReg();
     ctx.hub.broadcast({ type: "session_update", sessionId: id, update: { sessionUpdate: "config_option_update", configOptions: ropts ?? [] } });
     json(res, 200, result ?? { ok: true });
     return true;
@@ -69,7 +75,9 @@ export async function handleSessionLifecycle(ctx: ApiContext, req: IncomingMessa
 
   if (sub === "archive" && m === "POST") {
     const body = await readJson(req);
-    meta(ctx, id).archived = !!body.archived;
+    const archived = !!body.archived;
+    meta(ctx, id).archived = archived;
+    if (archived) archiveSidechats(ctx, id); // sidechat backends follow the parent onto the shelf
     saveReg();
     json(res, 200, { ok: true });
     return true;

@@ -284,6 +284,7 @@ function personaOnTurnEnd(ctx: ApiContext, id: string) {
   try {
     if (id === loadReg(ctx).persona?.sessionId) return;
     if (ctx.sessionCwd.get(id) === personaDir(ctx)) return;
+    if (meta(ctx, id).hidden) return; // plumbing sessions (sidechat backends) never trigger a persona ask
     if (personaMode(ctx, id) !== "auto") return;
     if (inflight.has(id) || loadInflight.has(id)) return;
     void askPersona(ctx, id, "auto");
