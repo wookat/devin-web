@@ -2,28 +2,24 @@
  * AdminMirror — cloud-parity session view.
  * Extracted modules live in ./mirror/ (components, panels, tree, utils).
  */
-import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState, type KeyboardEvent as ReactKeyboardEvent } from 'react'
+import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react'
 import { useTranslation } from 'react-i18next'
-import { createPortal } from 'react-dom'
 import { Link, useLocation, useNavigate, useParams } from 'react-router-dom'
-import { ArrowLeft, Loader2, ChevronRight, ChevronDown, ChevronUp, Settings2, Copy, Check, Archive, ArchiveRestore, Plus, FileText, Circle, ArrowUp, Square, X, Expand, Code, UploadCloud, Folder as FolderIcon, Pencil, Clock, Lightbulb, Info, Laptop, FolderOpen, Image as ImageIcon, AlertTriangle, MessageSquare, Sparkles, TextQuote, CornerDownLeft } from 'lucide-react'
-import { OExpand, OSearch } from '../components/officialIcons'
+import { Loader2, ChevronDown, ChevronUp, Settings2, Copy, Check, Archive, ArchiveRestore, Plus, FileText, Circle, ArrowUp, Square, X, Expand, Code, UploadCloud, Folder as FolderIcon, Pencil, Lightbulb, Info, Image as ImageIcon, AlertTriangle, MessageSquare, Sparkles, TextQuote, CornerDownLeft } from 'lucide-react'
+import { OSearch } from '../components/officialIcons'
 import { adminFetch, adminFetchSwr, shareFetchSwr, type AdminSession, type PublicMessage, type DashboardData } from '@/lib/api'
 import { adminViewer, visitorViewer, setViewer, sessionFetch, sessionFetchSwr, attachmentUrl, type Viewer, type SharePermission } from '@/lib/viewer'
 import { visibleInterval } from '@/lib/poll'
 import { subscribeWs } from '@/lib/ws'
 import { getTheme, setTheme, type Theme } from '@/lib/theme'
-import { type TimelineItem, fmtWorkedDur, workSeconds, envSupersededMap } from '@/components/Timeline'
-import { PrStateIcon } from '@/components/StructuredCards'
+import { type TimelineItem, workSeconds, envSupersededMap } from '@/components/Timeline'
 import { type ComposerEditorHandle } from '@/components/ComposerEditor'
 import DwMark from '@/components/DwMark'
-import { filePillSvg } from '@/components/filePillIcons'
 import { type QuoteAttachment } from '../../shared/quotes'
 import { cn } from '@/lib/utils'
-import { PanelAddTabIcon, PanelAttachmentsIcon, PanelCloseTabIcon, PanelFullWidthIcon, PanelHideTabsIcon, PanelPullRequestIcon } from '@/components/panelTabIcons'
 import { readTreeCache, type MirrorTreeSession, type TreeCachePayload, writeTreeCache } from './mirror/treeCache'
 import { prefetchSession, visitorTabs, type SessionDetail, tlSnapshots, messagesFromItems, type LocalCfg, EFFORT_SUFFIX_RE, modeOfVersion, type ShareMeta, defaultTabs, CommandPalette, TimelineSkeleton } from './mirror/pageBits'
-import { type PanelKey, PANELS, findItemText, parseOfficialTab, serializeOfficialTab, useUrlParamSync, ADD_TAB_ORDER } from './mirror/panelTabs'
+import { type PanelKey, PANELS, findItemText, parseOfficialTab, serializeOfficialTab, useUrlParamSync } from './mirror/panelTabs'
 import { type TimelinePage, mergeItems, groupItems } from './mirror/timelineUtil'
 import { reduceStatus } from './mirror/statusReduce'
 import { type ComposerMetaT, type SuggestItem, AT_CATEGORIES } from './mirror/composerMeta'
@@ -34,10 +30,11 @@ import { SessionMenu } from './mirror/SessionMenu'
 import { SessionIndex } from './mirror/SessionIndex'
 import { TimelineGroup, StatusTail } from './mirror/TimelineGroups'
 import { DraftExplorer } from './mirror/DraftExplorer'
-import { CtxMenu } from './mirror/WorkspacePanel'
 import { PanelContent } from './mirror/panelRender'
 import { SidebarRail } from './mirror/SidebarRail'
 import { ComposerFooter, type DraftQuote, type SelQuote } from './mirror/ComposerFooter'
+import { HeaderBar } from './mirror/HeaderBar'
+import { TabStrip } from './mirror/TabStrip'
 
 let lastSeenLocalCfg: LocalCfg | null = null
 // Per-session cfg cache — session A's config must never warm-start session B
@@ -197,7 +194,6 @@ export default function AdminMirrorPage() {
     setPanel((p) => (typeof p === 'string' && (p.startsWith('file:') || p.startsWith('pr:') || (allowed as string[]).includes(p)) ? p : allowed[0]))
   }, [isVisitor, caps])
   const [fileTabs, setFileTabs] = useState<{ href: string; name: string; raw?: boolean }[]>(() => tabsSaved?.fileTabs || [])
-  const dragTab = useRef<string | null>(null)
   // Official tab bar is one dnd-kit sortable list mixing panel + file tabs (cross-group order).
   const [tabOrder, setTabOrder] = useState<string[]>(() => tabsSaved?.order || [])
   const tabsHydratedFor = useRef(id)
@@ -224,13 +220,6 @@ export default function AdminMirrorPage() {
       localStorage.setItem(`session-tabs:${id}`, JSON.stringify({ tabs, fileTabs, order: tabOrder, activeTabId: panel, userPickedActiveTab, closedTabIds: [...closedTabIds], lastUpdated: Date.now() }))
     } catch { /* storage full/unavailable */ }
   }, [id, tabs, fileTabs, tabOrder, panel, userPickedActiveTab, closedTabIds, isVisitor])
-  const moveTab = useCallback((from: string, before: string | null, displayed: string[]) => {
-    setTabOrder(() => {
-      const next = displayed.filter((k) => k !== from)
-      next.splice(before === null ? next.length : next.indexOf(before), 0, from)
-      return next
-    })
-  }, [])
   /** Official semantics: opening a tab that is already active pulses an inset accent outline on it. */
   const flashTab = useCallback((key: string) => {
     const el = document.querySelector(`[data-flash-key="${CSS.escape(key)}"]`)
@@ -250,45 +239,9 @@ export default function AdminMirrorPage() {
     setShowPanel(true)
   }, [flashTab])
   useEffect(() => { panelFlashRef.current = panel }, [panel])
+  // addOpen lives here (openTab clears it); the rest of the add-menu cluster
+  // moved to TabStrip.
   const [addOpen, setAddOpen] = useState(false)
-  const [addAnchor, setAddAnchor] = useState<{ left: number; top: number } | null>(null)
-  const [panelTabMenu, setPanelTabMenu] = useState<{ x: number; y: number; close: () => void } | null>(null)
-  const addBtnRef = useRef<HTMLButtonElement | null>(null)
-  // The fixed-position menu doesn't track its anchor, so re-anchor it when the viewport changes
-  // (e.g. the mobile keyboard opening for the search field).
-  useEffect(() => {
-    if (!addOpen) return
-    const reanchor = () => {
-      const r = addBtnRef.current?.getBoundingClientRect()
-      if (r) setAddAnchor({ left: Math.max(5, Math.min(r.left, window.innerWidth - 5 - 226)), top: r.bottom + 2 })
-    }
-    window.addEventListener('resize', reanchor)
-    return () => window.removeEventListener('resize', reanchor)
-  }, [addOpen])
-  useEffect(() => {
-    if (!addOpen) return
-    const onKey = (e: KeyboardEvent) => { if (e.key === 'Escape') setAddOpen(false) }
-    window.addEventListener('keydown', onKey)
-    return () => window.removeEventListener('keydown', onKey)
-  }, [addOpen])
-  const [addQ, setAddQ] = useState('')
-  const [addSub, setAddSub] = useState(false)
-  const [addPrSub, setAddPrSub] = useState(false)
-  const [addSubPos, setAddSubPos] = useState<{ left: number; top: number } | null>(null)
-  const addSubTimer = useRef<ReturnType<typeof setTimeout> | null>(null)
-  const openAddSub = (which: 'files' | 'pr', el: HTMLElement) => {
-    if (addSubTimer.current) { clearTimeout(addSubTimer.current); addSubTimer.current = null }
-    const r = el.getBoundingClientRect()
-    const w = which === 'files' ? 224 : 160
-    setAddSubPos({ left: Math.max(8, r.left - w - 4), top: Math.min(r.top, Math.max(8, window.innerHeight - 264)) })
-    setAddSub(which === 'files')
-    setAddPrSub(which === 'pr')
-  }
-  const closeAddSub = () => {
-    if (addSubTimer.current) clearTimeout(addSubTimer.current)
-    addSubTimer.current = setTimeout(() => { setAddSub(false); setAddPrSub(false); setAddSubPos(null) }, 140)
-  }
-  const cancelAddSubClose = () => { if (addSubTimer.current) { clearTimeout(addSubTimer.current); addSubTimer.current = null } }
   const [wfRunId, setWfRunId] = useState<string | null>(null)
 
   const [fullWidth, setFullWidth] = useState(false)
@@ -541,44 +494,6 @@ export default function AdminMirrorPage() {
   const [permSide, setPermSide] = useState<TimelineItem | null>(null)
   // Official PR tabs ("PR #N") appear automatically for the session's pull requests; "Hide tab" removes one.
   const [hiddenPrs, setHiddenPrs] = useState<Set<string>>(new Set())
-  const [prMenuOpen, setPrMenuOpen] = useState(false)
-  const prChipRef = useRef<HTMLButtonElement>(null)
-  const [prMenuPos, setPrMenuPos] = useState({ left: 5, top: 0, width: 320 })
-  const headerPrs = detail?.session.pull_requests || []
-  const latestHeaderPr = headerPrs[headerPrs.length - 1]
-  const updatePrMenuPosition = useCallback(() => {
-    const chip = prChipRef.current
-    if (!chip) return
-    const rect = chip.getBoundingClientRect()
-    const width = Math.min(320, window.innerWidth * 0.9)
-    const left = Math.max(5, Math.min(rect.left, window.innerWidth - 5 - width))
-    setPrMenuPos({ left, top: rect.bottom + 2, width })
-  }, [])
-  const closePrMenu = useCallback(() => {
-    setPrMenuOpen(false)
-    requestAnimationFrame(() => prChipRef.current?.focus())
-  }, [])
-  useEffect(() => {
-    if (!prMenuOpen) return
-    const onKeyDown = (e: KeyboardEvent) => {
-      if (e.key === 'Escape') {
-        e.preventDefault()
-        closePrMenu()
-      }
-    }
-    window.addEventListener('keydown', onKeyDown)
-    return () => window.removeEventListener('keydown', onKeyDown)
-  }, [closePrMenu, prMenuOpen])
-  useLayoutEffect(() => {
-    if (!prMenuOpen) return
-    updatePrMenuPosition()
-    window.addEventListener('resize', updatePrMenuPosition)
-    window.addEventListener('scroll', updatePrMenuPosition, true)
-    return () => {
-      window.removeEventListener('resize', updatePrMenuPosition)
-      window.removeEventListener('scroll', updatePrMenuPosition, true)
-    }
-  }, [prMenuOpen, updatePrMenuPosition])
   // PR panel data only exists on the admin API; visitors keep the header PR chip + PR cards.
   const panelPrs = useMemo(() => (isVisitor ? [] : detail?.session.pull_requests || treeNode?.pull_requests || [])
     .filter((p) => p.pr_url), [detail, treeNode, isVisitor])
@@ -591,12 +506,6 @@ export default function AdminMirrorPage() {
     () => [...tabOrder.filter((k) => panelKeys.includes(k)), ...panelKeys.filter((k) => !tabOrder.includes(k))],
     [panelKeys, tabOrder],
   )
-  const platformLabel = useMemo(() => {
-    const platform = detail?.session.platform?.toLowerCase()
-    if (platform === 'macos' || platform === 'mac') return 'macOS'
-    if (platform === 'windows' || platform === 'win') return 'Windows'
-    return null
-  }, [detail?.session.platform])
   // Crossing into a narrow viewport auto-hides the sidebar/right panel (official responsive behavior).
   useEffect(() => {
     let prevW = window.innerWidth
@@ -1424,16 +1333,6 @@ export default function AdminMirrorPage() {
     const root = id.startsWith('sub:') ? id.split(':')[1] : id
     nav(`/admin/sub:${root}:${aid}`)
   }, [id, nav])
-
-  const closeTab = useCallback((key: PanelKey) => {
-    setClosedTabIds((prev) => new Set(prev).add(key))
-    setTabs((prev) => {
-      const next = prev.filter((k) => k !== key)
-      if (!next.length) setShowPanel(false)
-      setPanel((cur) => (cur === key ? next[next.length - 1] ?? cur : cur))
-      return next
-    })
-  }, [])
 
   const reloadDetail = useCallback(() => {
     if (isVisitor || isDraft) return
@@ -2374,121 +2273,29 @@ const groups = useMemo(() => groupItems(allItems, sessionWorking), [allItems, se
             </p>
           </div>
         )}
-        <header className="flex h-11 flex-shrink-0 items-center justify-between overflow-hidden border-b border-transparent p-2 pr-[7px]">
-          <div className="flex min-w-0 flex-1 items-center gap-2">
-          {!isVisitor && !sidebar && (
-            <button
-              data-slot="sidebar-trigger"
-              onClick={() => { setPeek(false); setSidebar(true) }}
-              className="flex size-7 shrink-0 cursor-pointer items-center justify-center rounded-md text-muted-foreground hover:bg-accent hover:text-foreground focus-visible:bg-accent focus-visible:text-foreground"
-              aria-label="Expand sidebar"
-            >
-              <OExpand size={16} />
-            </button>
-          )}
-          {detail?.session.parent_devin_id && (
-            <button
-              onClick={() => nav(`/admin/${detail.session.parent_devin_id}`)}
-              title={detail.session.parent_title ?? detail.session.parent_devin_id}
-              className="flex h-7 shrink-0 cursor-pointer items-center gap-1 rounded-md px-1.5 text-[12px] text-muted-foreground hover:bg-accent hover:text-foreground"
-            >
-              <ArrowLeft size={13} />
-              <span className="max-w-[160px] truncate max-md:max-w-[80px]">{detail.session.parent_title ?? 'Parent'}</span>
-            </button>
-          )}
-          <h1 className="min-w-0 flex-1 truncate text-[13px] leading-[18px] max-md:min-w-[120px]">{isDraft ? t('menu.newSession') : current?.title || current?.devin_title || detail?.session.title || detail?.session.devin_title || '…'}</h1>
-          {headerPrs.length > 0 && (!isVisitor || caps.showChanges) && (
-            <div className="relative min-w-0 shrink-0">
-              <button
-                ref={prChipRef}
-                type="button"
-                aria-label={`${headerPrs.length} pull requests`}
-                aria-expanded={prMenuOpen}
-                onClick={() => setPrMenuOpen((open) => !open)}
-                className={cn(
-                  'flex h-[26px] shrink-0 cursor-pointer items-center gap-1.5 overflow-hidden whitespace-nowrap rounded-full border px-1.5 text-[12px] font-medium leading-4 text-foreground/80',
-                  prMenuOpen
-                    ? 'border-border bg-accent text-foreground'
-                    : 'border-transparent hover:border-border hover:bg-accent hover:text-foreground',
-                )}
-              >
-                {latestHeaderPr && <PrStateIcon state={latestHeaderPr.state} draft={latestHeaderPr.draft} size={16} />} {headerPrs.length}
-              </button>
-              {prMenuOpen && createPortal(
-                <>
-                  <div className="fixed inset-0 z-50" onClick={closePrMenu} />
-                  <div
-                    role="menu"
-                    tabIndex={-1}
-                    onKeyDown={(e) => { if (e.key === 'Escape') { e.preventDefault(); closePrMenu() } }}
-                    style={{ left: prMenuPos.left, top: prMenuPos.top, width: prMenuPos.width }}
-                    className="fixed z-[60] flex max-h-[70vh] min-w-[220px] flex-col overflow-y-auto overflow-x-hidden rounded-[10px] border border-border bg-popover p-1 shadow-[0_10px_15px_-3px_rgba(0,0,0,0.1),0_4px_6px_-2px_rgba(0,0,0,0.05)]"
-                  >
-                    {headerPrs.map((pr) => {
-                      const num = pr.number || Number(pr.pr_url.match(/\/(?:pull|merge_requests)\/(\d+)/)?.[1] || 0)
-                      const repo = pr.pr_url.replace(/^https?:\/\//, '').replace(/\/(?:pull|merge_requests)\/\d+.*$/, '')
-                      return (
-                        <button
-                          key={pr.pr_url}
-                          type="button"
-                          role="menuitem"
-                          onClick={() => { closePrMenu(); openPr(pr.pr_url) }}
-                          className="flex w-full cursor-pointer flex-col items-start gap-0.5 rounded-md px-2 py-1.5 text-left hover:bg-accent"
-                        >
-                          <span className="w-full truncate text-[13px] font-medium leading-[18px]">{pr.title || `PR #${num || '?'}`}</span>
-                          <span className="flex min-w-0 w-full items-center gap-1 text-[12px] leading-4 text-muted-foreground">
-                            <PrStateIcon state={pr.state} draft={pr.draft} size={12} />
-                            <span dir="rtl" className="min-w-0 truncate text-left">{repo}#{num || '?'}</span>
-                            <span className="shrink-0">·</span>
-                            <span className="shrink-0 text-text-green">+{pr.additions ?? 0}</span>
-                            <span className="shrink-0 text-text-red">−{pr.deletions ?? 0}</span>
-                            {pr.authorLogin && <><span className="shrink-0">·</span><span className="min-w-0 truncate">{pr.authorLogin}</span></>}
-                          </span>
-                        </button>
-                      )
-                    })}
-                  </div>
-                </>,
-                document.body,
-              )}
-            </div>
-          )}
-          {platformLabel && (
-            <span className="flex h-5 min-w-0 max-md:max-w-[44px] items-center gap-1 overflow-hidden truncate whitespace-nowrap rounded-[6px] px-1.5 text-[12px] font-medium leading-4 text-[#337df4] [background:rgba(51,125,244,0.1)]">
-              <Laptop size={12} /> {platformLabel}
-            </span>
-          )}
-          {!isVisitor && detail?.session.cwd && (
-            <span
-              title={detail.session.cwd}
-              className="flex h-5 min-w-0 max-w-[280px] items-center gap-1 overflow-hidden truncate whitespace-nowrap rounded-[6px] px-1.5 font-mono text-[11px] leading-4 text-muted-foreground [background:var(--muted)]"
-            >
-              <FolderOpen size={11} className="shrink-0" />
-              <span className="min-w-0 truncate" style={{ direction: 'rtl', textAlign: 'left' }}>{detail.session.cwd}</span>
-            </span>
-          )}
-          {!isVisitor && workSecs > 0 && (
-            <span title="Work time" className="flex h-5 items-center gap-1 rounded-[6px] px-1.5 text-[11px] font-medium tabular-nums leading-4 text-muted-foreground [background:var(--muted)]">
-              <Clock size={11} /> {fmtWorkedDur(workSecs * 1000)}
-            </span>
-          )}
-          </div>
-          <div className="flex shrink-0 items-center gap-px pl-1">
-          {!isVisitor && (
-          <SessionMenu detail={detail} id={id} isSub={isSub} isDevinSession={isDevinSession} current={current} treeNode={treeNode} folderOrder={folderOrder} userMsgCount={userMsgCount} reloadDetail={reloadDetail} loadTree={loadTree} onControlMsg={setControlMsg} />
-          )}
-          {!effShowPanel && !isDraft && (
-            <button
-              onClick={() => setShowPanel(true)}
-              aria-label="Show tabs panel"
-              title="Show tabs panel"
-              className="flex size-7 cursor-pointer items-center justify-center rounded-[6px] text-muted-foreground hover:bg-accent hover:text-foreground"
-            >
-              <PanelHideTabsIcon size={18} />
-            </button>
-          )}
-          </div>
-        </header>
+        <HeaderBar
+          isVisitor={isVisitor}
+          sidebar={sidebar}
+          setPeek={setPeek}
+          setSidebar={setSidebar}
+          detail={detail}
+          isDraft={isDraft}
+          current={current}
+          caps={caps}
+          openPr={openPr}
+          workSecs={workSecs}
+          id={id}
+          isSub={isSub}
+          isDevinSession={isDevinSession}
+          treeNode={treeNode}
+          folderOrder={folderOrder}
+          userMsgCount={userMsgCount}
+          reloadDetail={reloadDetail}
+          loadTree={loadTree}
+          onControlMsg={setControlMsg}
+          effShowPanel={effShowPanel}
+          setShowPanel={setShowPanel}
+        />
 
         {isDraft && loaded && (
           // Desktop New-Space parity: centered column = watermark + tip card
@@ -2778,262 +2585,37 @@ const groups = useMemo(() => groupItems(allItems, sessionWorking), [allItems, se
           )}
           style={!fullWidth && window.innerWidth >= 768 ? { flexGrow: rightPct } : undefined}
         >
-          <div className="flex h-11 items-center gap-1 overflow-hidden p-2">
-            <div role="tablist" className="relative min-w-0 flex-1 flex items-center gap-1 overflow-x-auto [-ms-overflow-style:none] [scrollbar-width:none] [&::-webkit-scrollbar]:hidden"
-              onDragOver={(e) => { if (dragTab.current) e.preventDefault() }}
-              onDrop={(e) => { e.preventDefault(); if (dragTab.current) { moveTab(dragTab.current, null, displayedPanelKeys); dragTab.current = null } }}>
-              {(() => {
-                const displayed = displayedPanelKeys
-                const tabProps = (key: string, close?: () => void) => ({
-                  key,
-                  role: 'tab' as const,
-                  tabIndex: 0,
-                  'aria-selected': panel === key,
-                  draggable: true,
-                  'data-sortable-tab': '',
-                  'data-flash-key': key,
-                  onContextMenu: (e: React.MouseEvent) => { e.preventDefault(); if (close) setPanelTabMenu({ x: e.clientX, y: e.clientY, close }) },
-                  onClick: () => { tabSyncBlocked.current = false; setPanel(key); setUserPickedActiveTab(true); setPermSide(null) },
-                  onKeyDown: (e: ReactKeyboardEvent<HTMLDivElement>) => {
-                    if (e.key === 'Enter' || e.key === ' ') {
-                      e.preventDefault()
-                      tabSyncBlocked.current = false
-                      setPanel(key)
-                      setUserPickedActiveTab(true)
-                      setPermSide(null)
-                    }
-                  },
-                  onDragStart: () => { dragTab.current = key },
-                  onDragEnd: () => { dragTab.current = null },
-                  onDragOver: (e: React.DragEvent<HTMLDivElement>) => {
-                    if (dragTab.current && dragTab.current !== key) {
-                      e.preventDefault()
-                      moveTab(dragTab.current, key, displayed)
-                    }
-                  },
-                  className: cn(
-                    'group flex h-7 shrink-0 select-none items-center gap-0.5 rounded-[6px] py-[3px] pl-[3px] pr-[6px] text-[13px] font-normal leading-[18px] whitespace-nowrap',
-                    panel === key ? 'bg-accent text-foreground' : 'text-muted-foreground hover:bg-accent',
-                  ),
-                })
-                const closeButton = (onClose: () => void, active: boolean) => (
-                  <button
-                    type="button"
-                    aria-label="Close tab"
-                    title="Close tab"
-                    onClick={(e) => { e.stopPropagation(); onClose() }}
-                    className={cn('absolute inset-0 flex size-[22px] cursor-pointer items-center justify-center rounded-[4px] hover:bg-accent',
-                      active ? 'opacity-100' : 'opacity-0 group-hover:opacity-100')}
-                  >
-                    <PanelCloseTabIcon size={16} />
-                  </button>
-                )
-                return displayed.map((dk) => {
-                  if (!dk.startsWith('file:') && !dk.startsWith('pr:')) {
-                    const key = dk as PanelKey
-                    const { Icon } = PANELS[key]
-                    const label = t('panels.' + key)
-                    const isActive = panel === key
-                    return (
-                      <div {...tabProps(key, () => closeTab(key))} key={key}>
-                        <span className="relative size-[22px] shrink-0">
-                          <span className={cn('absolute inset-0 flex items-center justify-center', isActive ? 'opacity-0' : 'opacity-100 group-hover:opacity-0')}>
-                            <Icon size={16} />
-                          </span>
-                          {closeButton(() => closeTab(key), isActive)}
-                        </span>
-                        <span className="max-w-[120px] truncate">{label}</span>
-                      </div>
-                    )
-                  }
-                  if (dk.startsWith('pr:')) {
-                    const pr = prTabs.find((p) => `pr:${p.url}` === dk)
-                    if (!pr) return null
-                    const key = dk
-                    const isActive = panel === key
-                    const doClose = () => {
-                      setHiddenPrs((prev) => new Set(prev).add(pr.url))
-                      setClosedTabIds((prev) => new Set(prev).add(key))
-                      if (panel === key) setPanel('progress')
-                    }
-                    return (
-                      <div {...tabProps(key, doClose)} key={key}>
-                        <span className="relative size-[22px] shrink-0">
-                          <span className={cn('absolute inset-0 flex items-center justify-center', isActive ? 'opacity-0' : 'opacity-100 group-hover:opacity-0')}>
-                            <PanelPullRequestIcon size={16} className={pr.draft ? 'text-muted-foreground' : pr.state === 'closed' ? 'text-[#f53b3a]' : pr.state === 'merged' ? 'text-[rgb(149,108,222)]' : 'text-green-600'} />
-                          </span>
-                          {closeButton(doClose, isActive)}
-                        </span>
-                        <span className="max-w-[120px] truncate">PR #{pr.num}</span>
-                      </div>
-                    )
-                  }
-                  const f = fileTabs.find((t) => `file:${t.href}` === dk)
-                  if (!f) return null
-                  const key = dk
-                  const isActive = panel === key
-                  const doClose = () => {
-                    setFileTabs((prev) => prev.filter((t) => t.href !== f.href))
-                    setClosedTabIds((prev) => new Set(prev).add(key))
-                    if (panel === key) setPanel('progress')
-                  }
-                  return (
-                    <div {...tabProps(key, doClose)} key={key} ref={(el) => { if (panel === key) el?.scrollIntoView({ inline: 'nearest', block: 'nearest' }) }}>
-                      <span className="relative size-[22px] shrink-0">
-                        <span className={cn('absolute inset-0 flex items-center justify-center [&_svg]:size-4', isActive ? 'opacity-0' : 'opacity-100 group-hover:opacity-0')} dangerouslySetInnerHTML={{ __html: filePillSvg(f.name) }} />
-                        {closeButton(doClose, isActive)}
-                      </span>
-                      <span className="max-w-[120px] truncate">{f.name}</span>
-                    </div>
-                  )
-                })
-              })()}
-              <div className="sticky right-0 z-10 flex h-7 shrink-0 items-center self-center bg-card pl-1">
-                <button
-                  ref={addBtnRef}
-                  onClick={(e) => {
-                    const r = e.currentTarget.getBoundingClientRect()
-                    setAddAnchor({ left: Math.max(5, Math.min(r.left, window.innerWidth - 5 - 226)), top: r.bottom + 2 })
-                    setAddOpen(!addOpen)
-                  }}
-                  aria-label="Add tab"
-                  title="Add tab"
-                  className="flex size-7 cursor-pointer items-center justify-center rounded-[6px] text-muted-foreground hover:bg-accent"
-                >
-                  <PanelAddTabIcon size={18} />
-                </button>
-              </div>
-            </div>
-            <div className="relative shrink-0">
-              {addOpen && <div className="fixed inset-0 z-10" onClick={() => { setAddOpen(false); setAddQ(''); setAddSub(false); setAddPrSub(false) }} />}
-              {addOpen && (
-                <div role="menu" style={addAnchor ? { left: addAnchor.left, top: addAnchor.top } : undefined} className="fixed z-20 w-[226px] rounded-lg border border-border bg-card p-1 shadow-lg">
-                  <input
-                    value={addQ}
-                    onChange={(e) => setAddQ(e.target.value)}
-                    placeholder="Search"
-                    autoFocus={!window.matchMedia('(any-pointer: coarse)').matches}
-                    className="mb-1 w-full border-b border-border bg-transparent px-2 py-1.5 text-[13px] leading-[18px] outline-none placeholder:text-muted-foreground"
-                  />
-                  {ADD_TAB_ORDER
-                    .filter((k) => k !== 'files' && (!isVisitor || visitorTabs(caps, allItems).includes(k)))
-                    .filter((k) => !addQ || t('panels.' + k).toLowerCase().includes(addQ.toLowerCase()))
-                    .map((k) => (
-                    <button
-                      key={k}
-                      role="menuitem"
-                      onClick={() => { openTab(k); setAddQ('') }}
-                      className="flex w-full cursor-pointer items-center gap-2 rounded-md px-2 py-1.5 text-left hover:bg-accent"
-                    >
-                      {(() => { const { MenuIcon } = PANELS[k]; return <MenuIcon size={16} className="shrink-0 text-muted-foreground" /> })()}
-                      <span className="min-w-0 truncate text-[13px] leading-[18px]">{t('panels.' + k)}</span>
-                    </button>
-                  ))}
-                  {(!isVisitor || visitorTabs(caps, allItems).includes('files')) && (!addQ || 'attachments'.includes(addQ.toLowerCase())) && (
-                    <div className="relative" onMouseEnter={(e) => openAddSub('files', e.currentTarget)} onMouseLeave={closeAddSub}>
-                      <button
-                        role="menuitem"
-                        aria-haspopup="menu"
-                        aria-expanded={addSub}
-                        onClick={() => { openTab('files'); setAddQ('') }}
-                        className="flex w-full cursor-pointer items-center gap-2 rounded-md px-2 py-1.5 text-left hover:bg-accent"
-                      >
-                        <PanelAttachmentsIcon size={16} className="shrink-0 text-muted-foreground" />
-                        <span className="min-w-0 flex-1 truncate text-[13px] leading-[18px]">{t('panels.attachments.label')}</span>
-                        <ChevronRight size={12} className="shrink-0 text-muted-foreground" />
-                      </button>
-                      {addSub && addSubPos && attachFiles.length > 0 && createPortal(
-                        <div role="menu" onMouseEnter={cancelAddSubClose} onMouseLeave={closeAddSub} style={{ left: addSubPos.left, top: addSubPos.top }} className="fixed z-50 max-h-64 w-56 overflow-y-auto rounded-lg border border-border bg-card p-1 shadow-lg">
-                          {attachFiles.filter((f) => !closedTabIds.has(`file:${attachmentUrl(id, f.url, mediaTok)}`)).map((f) => (
-                            <button
-                              key={f.url}
-                              role="menuitem"
-                              onClick={() => { openFileTab(attachmentUrl(id, f.url, mediaTok), f.name); setAddOpen(false); setAddSub(false); setAddQ('') }}
-                              className="flex w-full cursor-pointer items-center gap-2 rounded-md px-2 py-1.5 text-left hover:bg-accent"
-                            >
-                              <span className="flex size-[14px] shrink-0 items-center" dangerouslySetInnerHTML={{ __html: filePillSvg(f.name) }} />
-                              <span className="min-w-0 truncate text-[13px] leading-[18px]">{f.name}</span>
-                            </button>
-                          ))}
-                        </div>,
-                        document.body,
-                      )}
-                    </div>
-                  )}
-                  {!isVisitor && (detail?.session.pull_requests?.length || treeNode?.pull_requests?.length) && (!addQ || 'pull requests'.includes(addQ.toLowerCase())) ? (
-                    <div className="relative" onMouseEnter={(e) => openAddSub('pr', e.currentTarget)} onMouseLeave={closeAddSub}>
-                      <button
-                        role="menuitem"
-                        aria-haspopup="menu"
-                        aria-expanded={addPrSub}
-                        onClick={() => {
-                          tabSyncBlocked.current = false
-                          setHiddenPrs(new Set())
-                          const first = (detail?.session.pull_requests || treeNode?.pull_requests || []).find((p) => p.pr_url)
-                          if (first) {
-                            setClosedTabIds((prev) => { const next = new Set(prev); next.delete(`pr:${first.pr_url}`); return next })
-                            setPanel(`pr:${first.pr_url}`)
-                          }
-                          setAddOpen(false); setAddQ('')
-                        }}
-                        className="flex w-full cursor-pointer items-center gap-2 rounded-md px-2 py-1.5 text-left hover:bg-accent"
-                      >
-                        <PanelPullRequestIcon size={16} className="shrink-0 text-muted-foreground" />
-                        <span className="min-w-0 flex-1 truncate text-[13px] leading-[18px]">{t('panels.prs.label')}</span>
-                        <ChevronRight size={12} className="shrink-0 text-muted-foreground" />
-                      </button>
-                      {addPrSub && addSubPos && createPortal(
-                        <div role="menu" onMouseEnter={cancelAddSubClose} onMouseLeave={closeAddSub} style={{ left: addSubPos.left, top: addSubPos.top }} className="fixed z-50 max-h-64 w-40 overflow-y-auto rounded-lg border border-border bg-card p-1 shadow-lg">
-                          {(detail?.session.pull_requests || treeNode?.pull_requests || []).filter((p) => p.pr_url).map((p) => (
-                            <button
-                              key={p.pr_url}
-                              role="menuitem"
-                              onClick={() => {
-                                tabSyncBlocked.current = false
-                                setHiddenPrs((h) => { const n = new Set(h); n.delete(p.pr_url!); return n })
-                                setClosedTabIds((h) => { const n = new Set(h); n.delete(`pr:${p.pr_url}`); return n })
-                                setPanel(`pr:${p.pr_url}`)
-                                setAddOpen(false); setAddPrSub(false); setAddQ('')
-                              }}
-                              className="flex w-full cursor-pointer items-center gap-2 rounded-md px-2 py-1.5 text-left hover:bg-accent"
-                            >
-                              <PanelPullRequestIcon size={16} className="shrink-0 text-muted-foreground" />
-                              <span className="min-w-0 truncate text-[13px] leading-[18px]">PR #{(p.pr_url!.match(/\/pull\/(\d+)/) || [])[1] || '?'}</span>
-                            </button>
-                          ))}
-                        </div>,
-                        document.body,
-                      )}
-                    </div>
-                  ) : null}
-                </div>
-              )}
-              {panelTabMenu && (
-                <CtxMenu
-                  pos={{ x: panelTabMenu.x, y: panelTabMenu.y }}
-                  items={[{ label: 'Close', onClick: panelTabMenu.close }]}
-                  onClose={() => setPanelTabMenu(null)}
-                />
-              )}
-            </div>
-            <button
-              onClick={() => setFullWidth(!fullWidth)}
-              aria-label={fullWidth ? 'Exit full width' : 'Full width'}
-              title={fullWidth ? 'Exit full width' : 'Full width'}
-              className="flex size-7 shrink-0 cursor-pointer items-center justify-center rounded-[6px] text-muted-foreground hover:bg-accent max-md:hidden"
-            >
-              <PanelFullWidthIcon size={18} />
-            </button>
-            <button
-              type="button"
-              onClick={() => setShowPanel(false)}
-              aria-label="Hide tabs panel"
-              title="Hide tabs panel"
-              className="flex size-7 shrink-0 cursor-pointer items-center justify-center rounded-[6px] text-muted-foreground hover:bg-accent"
-            >
-              <PanelHideTabsIcon size={18} />
-            </button>
-          </div>
+          <TabStrip
+            isVisitor={isVisitor}
+            caps={caps}
+            allItems={allItems}
+            detail={detail}
+            treeNode={treeNode}
+            id={id}
+            mediaTok={mediaTok}
+            panel={panel}
+            setPanel={setPanel}
+            setTabs={setTabs}
+            setFileTabs={setFileTabs}
+            setClosedTabIds={setClosedTabIds}
+            setHiddenPrs={setHiddenPrs}
+            setUserPickedActiveTab={setUserPickedActiveTab}
+            setPermSide={setPermSide}
+            setTabOrder={setTabOrder}
+            tabSyncBlocked={tabSyncBlocked}
+            displayedPanelKeys={displayedPanelKeys}
+            prTabs={prTabs}
+            fileTabs={fileTabs}
+            closedTabIds={closedTabIds}
+            attachFiles={attachFiles}
+            openTab={openTab}
+            openFileTab={openFileTab}
+            addOpen={addOpen}
+            setAddOpen={setAddOpen}
+            fullWidth={fullWidth}
+            setFullWidth={setFullWidth}
+            setShowPanel={setShowPanel}
+          />
           <PanelContent
             panel={panel}
             displayedPanelKeys={displayedPanelKeys}
