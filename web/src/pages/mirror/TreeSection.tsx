@@ -10,7 +10,7 @@ import { TreeRow } from './TreeRow'
  *  sticky label row — collapse toggle, per-folder search input, folder ⋯ menu
  *  trigger, drag-to-reorder — then its TreeRow list. Search/collapse/drag and
  *  the folder menu state live in SessionTree (shared across sections). */
-function TreeSection({ name, items, isFolder, icon, showCount, archived, searchIn, searchQ, setSearchIn, setSearchQ, closed, setClosed, dragFolder, setDragFolder, previewOrder, setPreviewOrder, folderNames, folderTotals, folderAction, setFolderMenu, setFolderDraft, activeDevinId, onOpen, onPrefetch, onRefresh, compact, propHidden }: { name: string; items: MirrorTreeSession[]; isFolder?: boolean; icon?: ReactNode; showCount?: boolean; archived?: boolean; searchIn: string | null; searchQ: string; setSearchIn: Dispatch<SetStateAction<string | null>>; setSearchQ: Dispatch<SetStateAction<string>>; closed: Record<string, boolean>; setClosed: Dispatch<SetStateAction<Record<string, boolean>>>; dragFolder: string | null; setDragFolder: Dispatch<SetStateAction<string | null>>; previewOrder: string[] | null; setPreviewOrder: Dispatch<SetStateAction<string[] | null>>; folderNames: string[]; folderTotals?: Record<string, number>; folderAction: (path: string, payload: Record<string, unknown>) => Promise<void>; setFolderMenu: Dispatch<SetStateAction<FolderMenuState | null>>; setFolderDraft: Dispatch<SetStateAction<string>>; activeDevinId: string; onOpen: (s: MirrorTreeSession) => void; onPrefetch?: (s: MirrorTreeSession) => void; onRefresh?: () => void; compact?: boolean; propHidden?: Record<string, boolean> }) {
+function TreeSection({ name, items, isFolder, icon, showCount, archived, searchIn, searchQ, setSearchIn, setSearchQ, closed, setClosed, dragFolder, setDragFolder, previewOrder, setPreviewOrder, folderNames, folderTotals, folderAction, setFolderMenu, setFolderDraft, activeDevinId, onOpen, onPrefetch, onRefresh, compact, propHidden, dropFolder }: { name: string; items: MirrorTreeSession[]; isFolder?: boolean; icon?: ReactNode; showCount?: boolean; archived?: boolean; searchIn: string | null; searchQ: string; setSearchIn: Dispatch<SetStateAction<string | null>>; setSearchQ: Dispatch<SetStateAction<string>>; closed: Record<string, boolean>; setClosed: Dispatch<SetStateAction<Record<string, boolean>>>; dragFolder: string | null; setDragFolder: Dispatch<SetStateAction<string | null>>; previewOrder: string[] | null; setPreviewOrder: Dispatch<SetStateAction<string[] | null>>; folderNames: string[]; folderTotals?: Record<string, number>; folderAction: (path: string, payload: Record<string, unknown>) => Promise<void>; setFolderMenu: Dispatch<SetStateAction<FolderMenuState | null>>; setFolderDraft: Dispatch<SetStateAction<string>>; activeDevinId: string; onOpen: (s: MirrorTreeSession) => void; onPrefetch?: (s: MirrorTreeSession) => void; onRefresh?: () => void; compact?: boolean; propHidden?: Record<string, boolean>; /** Defined = this section accepts session drops; the value is the folder to assign (null = unfile). */ dropFolder?: string | null }) {
   const { t } = useTranslation()
   const searching = searchIn === name
   const shown = searching && searchQ.trim()
@@ -26,8 +26,14 @@ function TreeSection({ name, items, isFolder, icon, showCount, archived, searchI
           if (dragFolder && previewOrder && previewOrder.join('\n') !== folderNames.join('\n')) folderAction('/api/admin/mirror/folder-reorder', { names: previewOrder })
           setDragFolder(null); setPreviewOrder(null)
         } : undefined}
-        onDragOver={isFolder ? (e) => {
-          if (!dragFolder || dragFolder === name) return
+        onDragOver={(e) => {
+          // Session rows dropped here assign dropFolder (or unfile on null).
+          if (dropFolder !== undefined && e.dataTransfer.types.includes('text/x-dw-session')) {
+            e.preventDefault()
+            e.dataTransfer.dropEffect = 'move'
+            return
+          }
+          if (!isFolder || !dragFolder || dragFolder === name) return
           e.preventDefault()
           setPreviewOrder((prev) => {
             const cur = prev ?? folderNames
@@ -35,8 +41,16 @@ function TreeSection({ name, items, isFolder, icon, showCount, archived, searchI
             order.splice(order.indexOf(name) + (cur.indexOf(dragFolder) < cur.indexOf(name) ? 1 : 0), 0, dragFolder)
             return order
           })
-        } : undefined}
-        onDrop={isFolder ? (e) => e.preventDefault() : undefined}
+        }}
+        onDrop={(e) => {
+          const sid = e.dataTransfer.getData('text/x-dw-session')
+          if (sid && dropFolder !== undefined) {
+            e.preventDefault()
+            void folderAction('/api/admin/mirror/session-folder', { devin_id: sid, folder: dropFolder })
+            return
+          }
+          if (isFolder) e.preventDefault()
+        }}
         className="group/label sticky top-0 z-20 flex h-8 w-full shrink-0 items-center justify-between gap-px bg-background pl-1 pr-1 text-[12px] font-medium text-muted-foreground"
       >
         {searching ? (

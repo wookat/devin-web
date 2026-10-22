@@ -57,6 +57,15 @@ function TreeRow({ s, depth, activeDevinId, folders, onOpen, onPrefetch, onRefre
     <>
       <div
         data-slot="sidebar-menu-item"
+        draggable={!archivedView}
+        onDragStart={(e) => {
+          // Session drag-and-drop: drop targets are TreeSection headers —
+          // dropping on a folder assigns it (session-folder), dropping on the
+          // ungrouped section unfiles it.
+          e.dataTransfer.effectAllowed = 'move'
+          e.dataTransfer.setData('text/x-dw-session', s.devin_id)
+          e.dataTransfer.setData('text/plain', s.title || s.devin_id)
+        }}
         onContextMenu={(e) => {
           e.preventDefault()
           setMenuPos({ left: Math.max(4, Math.min(e.clientX, window.innerWidth - 230)), top: Math.min(e.clientY, window.innerHeight - 244) })

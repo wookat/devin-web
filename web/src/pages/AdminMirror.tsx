@@ -203,23 +203,58 @@ export default function AdminMirrorPage() {
   const [wfRunId, setWfRunId] = useState<string | null>(null)
 
   const [fullWidth, setFullWidth] = useState(false)
-  const [rightPct, setRightPct] = useState(60)
+  // Layout memory — rail width / panel split / collapse states survive refresh.
+  const layoutSaved = useMemo(() => {
+    try { return JSON.parse(localStorage.getItem('dw-layout') || '{}') as { rightPct?: number; leftW?: number; sidebar?: boolean; showPanel?: boolean } } catch { return {} }
+  }, [])
+  const [rightPct, setRightPct] = useState(() => Math.min(75, Math.max(25, layoutSaved.rightPct ?? 60)))
+  const [leftW, setLeftW] = useState(() => Math.min(480, Math.max(200, layoutSaved.leftW ?? 300)))
+  const dragPct = useRef<number | null>(null)
+  const dragLeftW = useRef<number | null>(null)
   const rootRef = useRef<HTMLDivElement>(null)
+  // Widths ride CSS vars DURING drag — zero React renders (a full re-render per
+  // mousemove over the heavy timeline was the resize jank). State commits on
+  // mouseup, which also persists via the layout effect below.
   const startResize = useCallback((e: React.MouseEvent) => {
     e.preventDefault()
     const root = rootRef.current
     if (!root) return
     const onMove = (ev: MouseEvent) => {
       const rect = root.getBoundingClientRect()
-      const sideW = window.innerWidth >= 768 ? 300 : 0
+      const side = root.querySelector<HTMLElement>('[data-slot="sidebar"][data-state="expanded"]')
+      const sideW = window.innerWidth >= 768 ? (side?.getBoundingClientRect().width ?? 0) : 0
       const avail = rect.width - sideW
       if (avail <= 0) return
-      setRightPct(Math.min(75, Math.max(25, ((rect.right - ev.clientX) / avail) * 100)))
+      const v = Math.min(75, Math.max(25, ((rect.right - ev.clientX) / avail) * 100))
+      dragPct.current = v
+      root.style.setProperty('--dw-rpct', v.toFixed(3))
     }
     const onUp = () => {
       document.removeEventListener('mousemove', onMove)
       document.removeEventListener('mouseup', onUp)
       document.body.style.cursor = ''
+      if (dragPct.current != null) setRightPct(dragPct.current)
+      dragPct.current = null
+    }
+    document.body.style.cursor = 'col-resize'
+    document.addEventListener('mousemove', onMove)
+    document.addEventListener('mouseup', onUp)
+  }, [])
+  const startResizeLeft = useCallback((e: React.MouseEvent) => {
+    e.preventDefault()
+    const root = rootRef.current
+    if (!root) return
+    const onMove = (ev: MouseEvent) => {
+      const v = Math.min(480, Math.max(200, ev.clientX - root.getBoundingClientRect().left))
+      dragLeftW.current = v
+      root.style.setProperty('--dw-left-w', `${v}px`)
+    }
+    const onUp = () => {
+      document.removeEventListener('mousemove', onMove)
+      document.removeEventListener('mouseup', onUp)
+      document.body.style.cursor = ''
+      if (dragLeftW.current != null) setLeftW(dragLeftW.current)
+      dragLeftW.current = null
     }
     document.body.style.cursor = 'col-resize'
     document.addEventListener('mousemove', onMove)
@@ -423,12 +458,16 @@ export default function AdminMirrorPage() {
   const userMsgs = useMemo(() => indexEntries.filter((it) => it.kind === 'message'), [indexEntries])
   const userMsgCount = userMsgs.length
   const [dashboard, setDashboard] = useState<{ data: DashboardData | null; updatedAt?: string }>({ data: null })
-  const [sidebar, setSidebar] = useState(window.innerWidth >= 1024)
+  const [sidebar, setSidebar] = useState(() => (window.innerWidth >= 1024 ? (layoutSaved.sidebar ?? true) : false))
   // Official collapsed-sidebar behavior: hovering the left edge shows the sidebar as a floating flyout.
   const [peek, setPeek] = useState(false)
-  const [showPanel, setShowPanel] = useState(window.innerWidth >= 900 || !!wantPr)
+  const [showPanel, setShowPanel] = useState(() => (window.innerWidth >= 900 ? (layoutSaved.showPanel ?? true) : false))
   // Draft mode has no right-hand tabs — session panels would fetch /new.
   const effShowPanel = showPanel && !isDraft
+  // Persist the layout memory whenever any piece changes.
+  useEffect(() => {
+    try { localStorage.setItem('dw-layout', JSON.stringify({ rightPct, leftW, sidebar, showPanel })) } catch { /* quota */ }
+  }, [rightPct, leftW, sidebar, showPanel])
   const [permSide, setPermSide] = useState<TimelineItem | null>(null)
   // Official PR tabs ("PR #N") appear automatically for the session's pull requests; "Hide tab" removes one.
   const [hiddenPrs, setHiddenPrs] = useState<Set<string>>(new Set())
@@ -800,12 +839,18 @@ export default function AdminMirrorPage() {
   const mediaTok = detail?.media_token || ''
   const scrollRef = useRef<HTMLDivElement>(null)
   const stickBottom = useRef(true)
+  // Programmatic scroll corrections (virtualizer measurement adjustments,
+  // the ResizeObserver pin) also fire `scroll` — only a real user gesture may
+  // unstick the bottom anchor, or the transcript falls off the live edge
+  // whenever a row above the viewport re-measures.
+  const userScrollUntil = useRef(0)
   const anchor = useRef<{ id: string; offset: number } | null>(null)
   // Virtualized transcript anchors: event-id → virtual-row index plus the
   // virtualizer instance. Both are populated late in render (the row model
   // depends on allItems/groups) — refs keep early-declared callbacks working.
   const eidToRowRef = useRef<Map<string, number>>(new Map())
   const tlVirtRef = useRef<{ scrollToIndex: (index: number, opts?: { align?: 'start' | 'center' | 'end' | 'auto'; behavior?: 'auto' | 'smooth' }) => void } | null>(null)
+  const listRef = useRef<HTMLDivElement>(null)
 
   /** Remember the top-most visible event so a background refresh doesn't shift the view. */
   const captureAnchor = useCallback(() => {
@@ -1382,6 +1427,21 @@ export default function AdminMirrorPage() {
     const el = scrollRef.current
     if (el && stickBottom.current) el.scrollTop = el.scrollHeight
   }, [bandH])
+
+  // While stickBottom holds, ANY total-size change (virtual rows measuring in,
+  // stream appends, prepended pages) re-pins the view to the true bottom —
+  // this is what makes refresh land on the newest message instead of wherever
+  // the first estimate pass left it.
+  useEffect(() => {
+    const el = scrollRef.current
+    const list = listRef.current
+    if (!el || !list) return
+    const ro = new ResizeObserver(() => {
+      if (stickBottom.current) el.scrollTop = el.scrollHeight
+    })
+    ro.observe(list)
+    return () => ro.disconnect()
+  }, [loaded])
 
   // Official grouper wraps even a lone event in the live tail group ("Working
 // for …") — needs the working flag, which sidebarStatus derives from these
@@ -2002,7 +2062,7 @@ const groups = useMemo(() => groupItems(allItems, sessionWorking), [allItems, se
   }
 
   return (
-    <div ref={rootRef} className="relative flex h-dvh overflow-hidden bg-background">
+    <div ref={rootRef} className="relative flex h-dvh overflow-hidden bg-background" style={{ '--dw-rpct': String(dragPct.current ?? rightPct), '--dw-left-w': `${dragLeftW.current ?? leftW}px` } as React.CSSProperties}>
 
       {/* left: session list (administrator only; visitors have no session tree) */}
       <SidebarRail
@@ -2032,10 +2092,20 @@ const groups = useMemo(() => groupItems(allItems, sessionWorking), [allItems, se
         id={id}
       />
 
+      {/* left rail resize handle — width rides --dw-left-w (see index.css) */}
+      {!isVisitor && sidebar && (
+        <div
+          role="separator"
+          aria-orientation="vertical"
+          onMouseDown={startResizeLeft}
+          className="relative z-10 -mx-0.5 hidden w-1 shrink-0 cursor-col-resize bg-transparent hover:bg-primary/30 md:block"
+        />
+      )}
+
       {/* center: timeline (hidden while the tabs panel is in full width) */}
       <div
         className={cn('relative flex min-w-0 flex-1 flex-col', effShowPanel && !fullWidth && 'md:basis-0', fullWidth && effShowPanel && 'max-md:flex md:hidden')}
-        style={effShowPanel && !fullWidth && window.innerWidth >= 768 ? { flexGrow: 100 - rightPct } : undefined}
+        style={effShowPanel && !fullWidth && window.innerWidth >= 768 ? { flexGrow: 'calc(100 - var(--dw-rpct))' } : undefined}
         onDragEnter={(e) => { if (e.dataTransfer.types.includes('Files')) { e.preventDefault(); setDragOver((n) => n + 1) } }}
         onDragOver={(e) => { if (e.dataTransfer.types.includes('Files')) e.preventDefault() }}
         onDragLeave={(e) => { if (e.dataTransfer.types.includes('Files')) setDragOver((n) => Math.max(0, n - 1)) }}
@@ -2112,12 +2182,30 @@ const groups = useMemo(() => groupItems(allItems, sessionWorking), [allItems, se
           onScroll={(e) => {
             const el = e.currentTarget
             const near = el.scrollHeight - el.scrollTop - el.clientHeight < 60
-            stickBottom.current = near
+            // Unstick only inside a user-gesture window — see userScrollUntil.
+            stickBottom.current = near ? true : (Date.now() < userScrollUntil.current ? false : stickBottom.current)
             setShowJump(!near)
             // Official backfills older history automatically as you approach the top
             // (bundle: tail_window_backfill, backfillStatus loading/idle) — no button.
             if (el.scrollTop < 600) loadOlder()
             updateIdxActive()
+          }}
+          onWheel={(e) => {
+            userScrollUntil.current = Date.now() + 400
+            // An upward wheel unsticks IMMEDIATELY — during heavy streaming the
+            // bottom-pin observer can otherwise win the race against the queued
+            // scroll event and yank the user back to the live edge.
+            if (e.deltaY < 0) stickBottom.current = false
+          }}
+          onTouchMove={() => { userScrollUntil.current = Date.now() + 400 }}
+          onPointerDown={(e) => {
+            const el = e.currentTarget
+            // Scrollbar drag lands in the element's trailing-edge strip.
+            if (e.clientX > el.getBoundingClientRect().right - 20) userScrollUntil.current = Date.now() + 400
+          }}
+          onKeyDown={(e) => {
+            userScrollUntil.current = Date.now() + 400
+            if (e.key === 'PageUp' || e.key === 'Home' || e.key === 'ArrowUp') stickBottom.current = false
           }}
           style={isDraft ? undefined : { paddingBottom: 20 + bandH }}
           className={cn('min-h-0 flex-1 overflow-y-auto pt-[20px] px-4 @[448px]/chat-pane:px-6', effShowPanel && 'max-md:hidden', isDraft && 'hidden')}
@@ -2136,7 +2224,7 @@ const groups = useMemo(() => groupItems(allItems, sessionWorking), [allItems, se
           {loaded && tlError === 'mirror_not_configured' && <p className="text-xs text-muted-foreground">{t('menu.mirrorNotConfigured')}</p>}
           {loaded && tlError === 'token_expired' && <p className="text-xs text-amber-600">{t('menu.mirrorTokenExpired')}</p>}
           {loaded && tlError && tlError !== 'mirror_not_configured' && tlError !== 'token_expired' && <p className="text-xs text-red-600">{t('menu.mirrorReadFailed', { err: tlError })}</p>}
-          <div className="mx-auto max-w-[692px]"><div className="[&>*:first-child]:mt-0 [&>*:last-child]:mb-0" style={{ height: tlVirt.getTotalSize(), position: 'relative' }}>
+          <div className="mx-auto max-w-[692px]"><div ref={listRef} className="[&>*:first-child]:mt-0 [&>*:last-child]:mb-0" style={{ height: tlVirt.getTotalSize(), position: 'relative' }}>
             {tlVirt.getVirtualItems().map((vi) => {
               const row = vRows[vi.index]
               return (
@@ -2362,7 +2450,7 @@ const groups = useMemo(() => groupItems(allItems, sessionWorking), [allItems, se
             'flex w-full shrink-0 flex-col border-l border-border bg-card/40 max-md:absolute max-md:inset-x-0 max-md:top-11 max-md:bottom-0 max-md:z-40 max-md:max-w-none max-md:bg-background',
             fullWidth ? 'md:flex-1' : 'min-w-0 md:w-auto md:basis-0',
           )}
-          style={!fullWidth && window.innerWidth >= 768 ? { flexGrow: rightPct } : undefined}
+          style={!fullWidth && window.innerWidth >= 768 ? { flexGrow: 'var(--dw-rpct)' } : undefined}
         >
           <TabStrip
             isVisitor={isVisitor}

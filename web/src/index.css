@@ -245,3 +245,12 @@ body { @apply bg-background text-foreground antialiased; font-size: 14px; line-h
 /* NOTE: content-visibility:auto was tried for transcript culling and
  * reverted — Edge/Chromium STATUS_BREAKPOINT renderer crashes when older
  * pages prepend above the viewport while cull estimates are active. */
+
+/* Resizable left rail: the expanded desktop sidebar reads --dw-left-w (set
+ * on the layout root by the drag handle + dw-layout memory). Mobile and the
+ * peek flyout stay at the fixed 300px rail. */
+@media (min-width: 768px) {
+  [data-slot='sidebar'][data-state='expanded'] {
+    width: var(--dw-left-w, 300px);
+  }
+}

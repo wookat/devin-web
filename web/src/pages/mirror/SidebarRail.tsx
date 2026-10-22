@@ -1,4 +1,4 @@
-import { useState } from 'react'
+import { useEffect, useRef, useState } from 'react'
 import { useTranslation } from 'react-i18next'
 import i18n from '@/i18n'
 import { Link } from 'react-router-dom'
@@ -45,6 +45,33 @@ function SidebarRail({ isVisitor, sidebar, peek, setSidebar, setPeek, isDraft, n
   const [orgMenu, setOrgMenu] = useState(false)
   const [notifOpen, setNotifOpen] = useState(false)
   const unreadCount = unreadSessions.length
+  // Session-list scroll memory + the dock overlay height. The scroll region
+  // runs to the page bottom; the dock floats over it (padding keeps the last
+  // rows reachable).
+  const treeScrollRef = useRef<HTMLDivElement>(null)
+  const dockRef = useRef<HTMLDivElement>(null)
+  const [dockH, setDockH] = useState(52)
+  useEffect(() => {
+    const d = dockRef.current
+    if (!d) return
+    const ro = new ResizeObserver(() => setDockH(d.offsetHeight))
+    ro.observe(d)
+    return () => ro.disconnect()
+  }, [sidebar, peek])
+  useEffect(() => {
+    const el = treeScrollRef.current
+    if (!el) return
+    try { el.scrollTop = Number(localStorage.getItem('dw-tree-scroll') || 0) || 0 } catch { /* unavailable */ }
+    let t = 0
+    const onScroll = () => {
+      window.clearTimeout(t)
+      t = window.setTimeout(() => {
+        try { localStorage.setItem('dw-tree-scroll', String(Math.round(el.scrollTop))) } catch { /* quota */ }
+      }, 150)
+    }
+    el.addEventListener('scroll', onScroll)
+    return () => { window.clearTimeout(t); el.removeEventListener('scroll', onScroll) }
+  }, [sidebar, peek])
   return (
     <>
       {!isVisitor && sidebar && window.innerWidth < 768 && (
@@ -59,7 +86,7 @@ function SidebarRail({ isVisitor, sidebar, peek, setSidebar, setPeek, isDraft, n
           data-state={sidebar ? 'expanded' : 'collapsed'}
           onMouseLeave={() => { if (!sidebar) setPeek(false) }}
           className={cn(
-            'group/sidebar flex w-[300px] shrink-0 flex-col bg-background max-md:fixed max-md:inset-y-0 max-md:left-0 max-md:z-50 max-md:duration-150 max-md:ease-out motion-safe:max-md:transition-transform',
+            'group/sidebar relative flex w-[300px] shrink-0 flex-col bg-background max-md:fixed max-md:inset-y-0 max-md:left-0 max-md:z-50 max-md:duration-150 max-md:ease-out motion-safe:max-md:transition-transform',
             !sidebar && 'max-md:-translate-x-full',
             sidebar
               ? 'border-r border-border'
@@ -200,7 +227,7 @@ function SidebarRail({ isVisitor, sidebar, peek, setSidebar, setPeek, isDraft, n
               <span className="min-w-0 flex-1 truncate">{t('sp.wiki')}</span>
             </Link>
           </nav>
-          <div className="min-h-0 flex-1 overflow-y-auto py-1">
+          <div ref={treeScrollRef} className="min-h-0 flex-1 overflow-y-auto py-1" style={{ paddingBottom: dockH }}>
             {tree.length > 0 ? (
               <SessionTree tree={tree} archivedTree={archTree} activeDevinId={activeDevinId} onOpen={onOpen} onPrefetch={onPrefetch} onRefresh={onRefresh} prefs={prefs} onPrefs={onPrefs} folderOrder={folderOrder} folderTotals={folderTotals} onLoadMore={onLoadMore} loadingMore={loadingMore} />
             ) : sessions.map((s) => (
@@ -218,7 +245,11 @@ function SidebarRail({ isVisitor, sidebar, peek, setSidebar, setPeek, isDraft, n
               </Link>
             ))}
           </div>
-          <LocalDock />
+          {/* Dock overlays the bottom of the scroll region — the scrollbar
+              track runs to the page bottom edge. */}
+          <div ref={dockRef} className="absolute inset-x-0 bottom-0 z-10 border-t border-border/60 bg-background">
+            <LocalDock />
+          </div>
         </aside>
       )}
     </>

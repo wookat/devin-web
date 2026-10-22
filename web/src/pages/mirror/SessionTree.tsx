@@ -61,9 +61,9 @@ const SessionTree = memo(function SessionTree({ tree, archivedTree, activeDevinI
   return (
     <div className="px-2 py-1">
       <TreeHeaderMenus prefs={prefs} onPrefs={onPrefs} tree={tree} folderNames={folderNames} folderAction={folderAction} />
-      {(previewOrder ?? folderNames).filter((name) => !prefs.hidden[name]).map((name) => <TreeSection key={name} name={name} items={groups.folders.get(name) ?? []} isFolder {...sectionShared} />)}
+      {(previewOrder ?? folderNames).filter((name) => !prefs.hidden[name]).map((name) => <TreeSection key={name} name={name} items={groups.folders.get(name) ?? []} isFolder dropFolder={name} {...sectionShared} />)}
       {groups.pinned.length > 0 && !prefs.hidden['Pinned'] && <TreeSection name={t('tree.gPinned')} items={groups.pinned} icon={<OPin size={14} />} showCount {...sectionShared} />}
-      {groups.rest.length > 0 && !prefs.hidden['Recent'] && <TreeSection name={t('tree.gRecent')} items={groups.rest} icon={<Clock size={14} />} {...sectionShared} />}
+      {groups.rest.length > 0 && !prefs.hidden['Recent'] && <TreeSection name={t('tree.gRecent')} items={groups.rest} icon={<Clock size={14} />} dropFolder={null} {...sectionShared} />}
       {[...groups.projects.entries()].map(([cwd, items]) => (
         <TreeSection
           key={`proj:${cwd}`}
