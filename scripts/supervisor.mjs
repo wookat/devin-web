@@ -15,6 +15,7 @@
 import http from "node:http";
 import net from "node:net";
 import fs from "node:fs";
+import os from "node:os";
 import path from "node:path";
 import { spawn, execFile } from "node:child_process";
 import { fileURLToPath } from "node:url";
@@ -431,7 +432,20 @@ server.on("upgrade", (req, socket, head) => {
 });
 
 server.listen(PUB_PORT, "0.0.0.0", () => {
-  log(`supervisor up on :${PUB_PORT} → backend :${BACK_PORT} (pid ${process.pid})`);
+  const lan = [];
+  try {
+    for (const addrs of Object.values(os.networkInterfaces()))
+      for (const a of addrs ?? []) if (a.family === "IPv4" && !a.internal) lan.push(`http://${a.address}:${PUB_PORT}`);
+  } catch {}
+  const version = (() => { try { return JSON.parse(fs.readFileSync(path.join(repoRoot, "package.json"), "utf8")).version; } catch { return "?"; } })();
+  for (const line of [
+    `devin-web v${version} — supervisor up`,
+    `  public    http://127.0.0.1:${PUB_PORT}${lan.length ? "   lan " + lan.join("  ") : ""}`,
+    `  backend   127.0.0.1:${BACK_PORT} (spawn pending)   broker ${BROKER_SOCK}`,
+    `  data dir  ${dataDir}`,
+    `  admin     ${adminKey() ? "protected (x-admin-key)" : "open — DEVIN_WEB_ADMIN_KEY unset"}`,
+    `  pid ${process.pid} — probing /api/health every 4s; logs ${path.join(dataDir, "supervisor.log")} · server.log · broker.log`,
+  ]) log(line);
   spawnBroker();          // acp owner must exist before the backend needs it
   void respawnSoon(true); // unified path — clears port squatters before spawn
 });

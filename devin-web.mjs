@@ -15,6 +15,7 @@
 //   node devin-web.mjs uninstall   remove persistence
 //   node devin-web.mjs deploy      build + install + restart (deploy.bat wraps this)
 //   node devin-web.mjs logs [file] tail supervisor.log / server.log
+//   flags: --port <n> --backend-port <n> --data-dir <dir> --build -h/--help -v/--version
 import http from "node:http";
 import fs from "node:fs";
 import os from "node:os";
@@ -25,8 +26,28 @@ import process from "node:process";
 
 const ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)));
 const SUP = path.join(ROOT, "scripts", "supervisor.mjs");
+const VERSION = JSON.parse(fs.readFileSync(path.join(ROOT, "package.json"), "utf8")).version;
+
+// ---- argv: flags first so port/data-dir resolve before the consts below --
+const argv = process.argv.slice(2);
+const VALUE_FLAGS = new Set(["--port", "--backend-port", "--data-dir"]);
+const positional = argv.filter((a, i) => !a.startsWith("-") && !VALUE_FLAGS.has(argv[i - 1]));
+const cmd = positional[0];
+const arg1 = positional[1]; // e.g. `logs <file>`
+const flagVal = (name) => {
+  const i = argv.indexOf(name);
+  return i >= 0 && argv[i + 1] && !argv[i + 1].startsWith("-") ? argv[i + 1] : null;
+};
+const hasFlag = (...names) => names.some((n) => argv.includes(n));
+if (hasFlag("-h", "--help")) { printHelp(); process.exit(0); }
+if (hasFlag("-v", "--version")) { console.log(VERSION); process.exit(0); }
+if (flagVal("--port")) process.env.DEVIN_WEB_PUBLIC_PORT = flagVal("--port");
+if (flagVal("--backend-port")) process.env.DEVIN_WEB_BACKEND_PORT = flagVal("--backend-port");
+if (flagVal("--data-dir")) process.env.DEVIN_WEB_DATA_DIR = flagVal("--data-dir");
+
 const PUB = Number(process.env.DEVIN_WEB_PUBLIC_PORT) || 7791;
-const DATA = process.env.DEVIN_WEB_HOME || path.join(os.homedir(), ".devin-web");
+const DATA = process.env.DEVIN_WEB_DATA_DIR || process.env.DEVIN_WEB_HOME
+  || path.join(os.homedir(), ".devin-web");
 const HOSTS = process.env.DEVIN_WEB_ALLOWED_HOSTS
   || "192.168.6.251:7791,devin.zalize.com,devin-web.zalize.com";
 
@@ -57,6 +78,106 @@ function spawnSupervisor(stdio) {
   return child;
 }
 
+// ---- presentation -----------------------------------------------------------
+function banner() {
+  console.log([
+    "",
+    "  ┌───────────────────────────────────────────────┐",
+    `  │   devin-web  v${VERSION}`.padEnd(50) + "│",
+    "  │   local Devin workbench · supervisor+acp      │",
+    "  └───────────────────────────────────────────────┘",
+    "",
+  ].join("\n"));
+}
+
+function lanUrls() {
+  const urls = [];
+  try {
+    for (const [name, addrs] of Object.entries(os.networkInterfaces())) {
+      for (const a of addrs ?? []) {
+        if (a.family === "IPv4" && !a.internal) urls.push(`http://${a.address}:${PUB}`);
+      }
+    }
+  } catch {}
+  return urls;
+}
+
+function persistKind() {
+  if (process.platform === "win32") {
+    try { execFileSync("schtasks", ["/query", "/tn", "devin-web-supervisor"], { stdio: "pipe" });
+      return "Scheduled Tasks (onlogon + 1-min watchdog)"; } catch { return "not installed"; }
+  }
+  if (process.platform === "linux") {
+    return fs.existsSync(path.join(os.homedir(), ".config/systemd/user/devin-web.service"))
+      ? "systemd --user (Restart=always)" : "not installed";
+  }
+  if (process.platform === "darwin") {
+    return fs.existsSync(path.join(os.homedir(), "Library/LaunchAgents/ai.zalize.devin-web.plist"))
+      ? "LaunchAgent (KeepAlive)" : "not installed";
+  }
+  return "n/a";
+}
+
+/** Startup info card — the block a product prints once it's up. `status`
+ *  is the live /api/_super/status payload when available. */
+function infoCard(status = null) {
+  const rows = [
+    ["version", VERSION],
+    ["state", status ? `${status.state ?? "up"} (recentExits ${status.recentExits ?? 0})` : "starting"],
+    ["public", `http://127.0.0.1:${PUB}`],
+    ...lanUrls().map((u) => ["lan", u]),
+    ["data dir", DATA],
+    ["admin", process.env.DEVIN_WEB_ADMIN_KEY
+      ? "protected — x-admin-key required"
+      : "open — set DEVIN_WEB_ADMIN_KEY to gate /api/admin/*"],
+    ["pids", status
+      ? `supervisor ${status.supervisorPid ?? "-"} · backend ${status.pid ?? "starting"} · port ${status.backendPort ?? "-"}`
+      : "—"],
+    ["logs", `${path.join(DATA, "supervisor.log")} · server.log · broker.log`],
+    ["persist", persistKind()],
+  ];
+  const w = Math.max(...rows.map(([k]) => k.length));
+  for (const [k, v] of rows) console.log(`  ${k.padEnd(w)}  ${v}`);
+  console.log("");
+}
+
+function printHelp() {
+  console.log(`
+devin-web v${VERSION} — local Devin workbench
+
+usage: node devin-web.mjs <command> [flags]
+
+commands
+  run        foreground supervisor — dev mode, Ctrl+C stops everything
+  start      detached supervisor, waits until healthy
+  stop       stop supervisor + backend + broker (watchdog honors it)
+  restart    backend-only bounce; --build rebuilds dist first
+  status     component state, urls, persistence
+  install    platform persistence:
+               win32  → Scheduled Tasks (onlogon + 1-min watchdog)
+               linux  → systemd --user unit (Restart=always, linger)
+               darwin → launchd LaunchAgent (RunAtLoad+KeepAlive)
+  uninstall  remove persistence
+  deploy     install + build + restart — the one-shot release
+  logs [n]   tail supervisor | server | broker log
+  help       this help
+  version    print version
+
+flags
+  --port <n>          public port        (env DEVIN_WEB_PUBLIC_PORT,  default 7791)
+  --backend-port <n>  backend port       (env DEVIN_WEB_BACKEND_PORT, default 7792)
+  --data-dir <dir>    data directory     (env DEVIN_WEB_DATA_DIR,     default ~/.devin-web)
+  --build             restart only: rebuild dist first
+  -h, --help          this help
+  -v, --version       print version
+
+env
+  DEVIN_WEB_ADMIN_KEY       gate /api/admin/* via x-admin-key (unset = open mode)
+  DEVIN_WEB_ALLOWED_HOSTS   comma list of accepted Host headers
+  DEVIN_WEB_EDITION         local | team | school | enterprise feature gate
+`);
+}
+
 async function waitUp(what, fn, timeoutMs = 40_000) {
   const t0 = Date.now();
   while (Date.now() - t0 < timeoutMs) { if (await fn()) return true; await sleep(400); }
@@ -65,14 +186,15 @@ async function waitUp(what, fn, timeoutMs = 40_000) {
 }
 
 async function cmdStart() {
+  banner();
   if (await probeSupervisor()) { console.log("supervisor already running on :" + PUB); return; }
   fs.mkdirSync(DATA, { recursive: true });
   const fd = fs.openSync(path.join(DATA, "supervisor.log"), "a");
   const c = spawnSupervisor(["ignore", fd, fd]);
-  console.log(`supervisor spawned pid=${c.pid}`);
+  console.log(`supervisor spawned pid=${c.pid} — waiting for backend…`);
   if (await waitUp("supervisor", probeSupervisor)) {
     const s = JSON.parse((await call("/api/_super/status")).body);
-    console.log(`up — backend pid=${s.pid} state=${s.state} → http://127.0.0.1:${PUB}`);
+    infoCard(s);
   }
 }
 
@@ -106,26 +228,21 @@ async function cmdRestart(build) {
     await cmdStart();
     return;
   }
-  await waitUp("backend", probeBackend) && console.log("backend healthy");
+  if (await waitUp("backend", probeBackend)) {
+    const s = await call("/api/_super/status");
+    infoCard(s?.status === 200 ? JSON.parse(s.body) : null);
+  }
 }
 
 async function cmdStatus() {
+  banner();
   const sup = await call("/api/_super/status");
   if (sup?.status === 200) {
-    const s = JSON.parse(sup.body);
-    console.log(`supervisor: up  pid=${s.supervisorPid}`);
-    console.log(`backend:    ${s.state}  pid=${s.pid ?? "-"} port=${s.backendPort} uptime=${s.uptime}s recentExits=${s.recentExits}`);
+    infoCard(JSON.parse(sup.body));
   } else {
-    console.log(`supervisor: DOWN on :${PUB}` + (await probeBackend() ? " (bare backend answering)" : ""));
-  }
-  // Persistence state per platform
-  if (process.platform === "linux") {
-    console.log("persist:    " + (fs.existsSync(path.join(os.homedir(), ".config/systemd/user/devin-web.service")) ? "systemd --user unit installed" : "not installed"));
-  } else if (process.platform === "darwin") {
-    console.log("persist:    " + (fs.existsSync(path.join(os.homedir(), "Library/LaunchAgents/ai.zalize.devin-web.plist")) ? "LaunchAgent installed" : "not installed"));
-  } else if (process.platform === "win32") {
-    try { execFileSync("schtasks", ["/query", "/tn", "devin-web-supervisor"], { stdio: "pipe" }); console.log("persist:    Scheduled Tasks installed"); }
-    catch { console.log("persist:    not installed"); }
+    console.log(`  state       DOWN on :${PUB}` + (await probeBackend() ? " (bare backend answering)" : ""));
+    console.log(`  data dir    ${DATA}`);
+    console.log(`  persist     ${persistKind()}\n`);
   }
 }
 
@@ -231,24 +348,27 @@ function cmdLogs(file) {
 }
 
 // ---- dispatch ---------------------------------------------------------------
-const [cmd, ...rest] = process.argv.slice(2);
 try {
   switch (cmd) {
-    case "run": { // foreground — dev mode
+    case "run": { // foreground — dev mode; the supervisor prints its own card on listen
+      banner();
       const c = spawn(process.execPath, [SUP], { cwd: ROOT, stdio: "inherit", env: process.env });
       c.on("exit", (code) => process.exit(code ?? 0));
       break;
     }
     case "start": await cmdStart(); break;
     case "stop": await cmdStop(); break;
-    case "restart": await cmdRestart(rest.includes("--build")); break;
+    case "restart": await cmdRestart(hasFlag("--build")); break;
     case "status": await cmdStatus(); break;
     case "install": await cmdInstall(); break;
     case "uninstall": await cmdUninstall(); break;
     case "deploy": await cmdInstall(); await cmdRestart(true); break;
-    case "logs": cmdLogs(rest[0]); break;
+    case "logs": cmdLogs(arg1); break;
+    case "help": printHelp(); break;
+    case "version": console.log(VERSION); break;
     default:
-      console.log(`usage: node devin-web.mjs <run|start|stop|restart [--build]|status|install|uninstall|deploy|logs [supervisor|server|broker]>`);
+      if (cmd) console.error(`unknown command: ${cmd}\n`);
+      printHelp();
       process.exitCode = cmd ? 1 : 0;
   }
 } catch (e) {
