@@ -60,7 +60,7 @@ export function confined(cwd: string, p: unknown): string | null {
   } catch { return null; /* doesn't exist — never read it */ }
 }
 
-export function subStatusEnum(a: { status: string; agentId?: string; resumable?: boolean } | undefined | null, aid: string): string {
+function subStatusEnum(a: { status: string; agentId?: string; resumable?: boolean } | undefined | null, aid: string): string {
   if (a?.status === "running") return a.resumable === false ? "stopped" : "working";
   if (subPingActive(aid)) return "working";
   if (a?.status === "failed") return "stopped";

@@ -13,9 +13,9 @@ import BeardBand, { BandItem } from '@/components/BeardBand'
 import { LightboxImage } from '@/components/Lightbox'
 import QuoteChip from '@/components/QuoteChip'
 import { IMAGE_RE } from '@/components/UserAttachments'
-import { ATTACH_MENU_ICONS, MODE_INFO_ICON, MODE_CHECK_ICON, MENU_CHEVRON_ICON } from '@/lib/officialMenuIcons'
+import { ATTACH_MENU_ICONS, MODE_CHECK_ICON } from '@/lib/officialMenuIcons'
 import { cn } from '@/lib/utils'
-import { type SessionDetail, type LocalCfg, type LocalCfgOption, LOCAL_MODE_ICONS, VERSION_LABEL, versionOf } from './pageBits'
+import { type SessionDetail, type LocalCfg, type LocalCfgOption, LOCAL_MODE_ICONS, VERSION_LABEL } from './pageBits'
 import { COACH_RECOMMENDATIONS, COACH_ACTIONS } from './timelineUtil'
 import { type ComposerMetaT, type SuggestItem, AT_CATEGORIES, QUEUE_DASHED_SVG, QUEUE_DRAG_SVG, QUEUE_PLACEHOLDER } from './composerMeta'
 import { stText, type ReducedStatus } from './statusReduce'
@@ -79,14 +79,14 @@ function ComposerFooter({
   suggestions, atCat, setAtCat, trigger, sugIdx, setSugIdx, applySuggestion, openMention,
   findings, setFindings, scanState, setScanState, confirmSendOpen, setConfirmSendOpen,
   confirmedDraftRef, autoSendRef, setAutoSendTick, setSelectedVersion,
-  modeOpen, setModeOpen, sModeOpen, setSModeOpen, modeSub, setModeSub, modeSubPos, setModeSubPos,
+  modeOpen, setModeOpen, sModeOpen, setSModeOpen,
   input, setInput, mode,
   draftQuotes, setDraftQuotes, staged, removeStaged, mediaTok,
   editorRef, statusState, upload, uploading, sendWith, workSend,
   status, control, controlling,
   localModeGroup, localModeOpt, localModeCurrent, modelPillLabel, cfgFetched, pillVersion,
   localCfg, effortGroup, speedGroup, extraGroups, chooseLocalOption, chooseLocalOptions,
-  detail, sessionAgent, speed,
+  detail, sessionAgent,
   selQuote, setSelQuote, stageQuoteDraft, quoteDraftFrom,
   nav,
 }: {
@@ -159,10 +159,6 @@ function ComposerFooter({
   setModeOpen: Dispatch<SetStateAction<boolean>>
   sModeOpen: boolean
   setSModeOpen: Dispatch<SetStateAction<boolean>>
-  modeSub: string | null
-  setModeSub: Dispatch<SetStateAction<string | null>>
-  modeSubPos: { left: number; top: number } | null
-  setModeSubPos: Dispatch<SetStateAction<{ left: number; top: number } | null>>
   input: string
   setInput: Dispatch<SetStateAction<string>>
   mode: string
@@ -194,7 +190,6 @@ function ComposerFooter({
   chooseLocalOptions: (pairs: { configId: string; value: string }[]) => void
   detail: SessionDetail | null
   sessionAgent: string
-  speed: string
   selQuote: SelQuote | null
   setSelQuote: Dispatch<SetStateAction<SelQuote | null>>
   stageQuoteDraft: (q: QuoteSel, caption: string) => void
@@ -205,20 +200,6 @@ function ComposerFooter({
   const [agentMenuOpen, setAgentMenuOpen] = useState(false)
     const [envSaveState, setEnvSaveState] = useState<'idle' | 'sending' | 'done' | 'error'>('idle')
     const [sendOptOpen, setSendOptOpen] = useState(false)
-  // Flyout anchor for the local-config cascading menu — the dropdown's
-  // overflow-y-auto clips absolute children, so submenus render in a body
-  // portal at fixed coordinates.
-  const modeSubTimer = useRef<ReturnType<typeof setTimeout> | null>(null)
-  const openModeSub = (id: string, el: HTMLElement) => {
-    if (modeSubTimer.current) { clearTimeout(modeSubTimer.current); modeSubTimer.current = null }
-    const r = el.getBoundingClientRect()
-    setModeSub(id)
-    setModeSubPos({ left: Math.min(r.right + 2, window.innerWidth - 246), top: Math.min(r.top, window.innerHeight - 260) })
-  }
-  const closeModeSub = () => {
-    if (modeSubTimer.current) clearTimeout(modeSubTimer.current)
-    modeSubTimer.current = setTimeout(() => { setModeSub(null); setModeSubPos(null) }, 140)
-  }
     const [voiceRecording, setVoiceRecording] = useState(false)
     const [attachOpen, setAttachOpen] = useState(false)
   const attachMenuRef = useRef<HTMLDivElement | null>(null)
@@ -291,9 +272,13 @@ function ComposerFooter({
     const anyRef = useRef<HTMLInputElement>(null)
   const imgRef = useRef<HTMLInputElement>(null)
   
-  // Model pill — one render shared by the toolbar right cluster (sessions;
-  // collapse tiers drive icon/text) and the draft chin row (always text).
+  // Model pill — toolbar right cluster (collapse tiers drive icon/text). The
+  // menu is driven exclusively by the agent's advertised config: when no real
+  // model group exists there is nothing to pick, so the pill hides instead of
+  // painting stale cloud capability rows; while the fetch is in flight it
+  // shows "…".
   const modelPillEl = (alwaysText: boolean) => {
+    if (cfgFetched && !localCfg?.model) return null
     const iconMode = !alwaysText && pillTier >= 1
     return (
       <div className="relative">
@@ -309,7 +294,7 @@ function ComposerFooter({
         </button>
         {modeOpen && <div className="fixed inset-0 z-10" onClick={() => setModeOpen(false)} />}
         {modeOpen && modelBtnRef.current && createPortal(
-          <div role="menu" style={{ bottom: window.innerHeight - modelBtnRef.current.getBoundingClientRect().top + 6, right: window.innerWidth - modelBtnRef.current.getBoundingClientRect().right, maxHeight: modelBtnRef.current.getBoundingClientRect().top - 14 }} className={cn('fixed z-50 flex flex-col overflow-hidden rounded-[10px] bg-[rgba(255,255,255,0.94)] shadow-[0_10px_15px_-3px_rgba(0,0,0,0.1),0_4px_6px_-2px_rgba(0,0,0,0.05)] outline outline-1 outline-black/[0.06] backdrop-blur-[8px] dark:bg-[#1f1f1f]/[0.94] dark:outline-white/[0.06] [transition:transform_40ms_cubic-bezier(0.76,0,0.24,1),scale_40ms_cubic-bezier(0.76,0,0.24,1),opacity_40ms_cubic-bezier(0.76,0,0.24,1)]', localCfg?.model ? 'w-[248px] max-h-[70vh]' : 'w-[220px]', cfgFetched && !localCfg?.model ? 'h-[193px]' : '')}>
+          <div role="menu" style={{ bottom: window.innerHeight - modelBtnRef.current.getBoundingClientRect().top + 6, right: window.innerWidth - modelBtnRef.current.getBoundingClientRect().right, maxHeight: modelBtnRef.current.getBoundingClientRect().top - 14 }} className={cn('fixed z-50 flex flex-col overflow-hidden rounded-[10px] bg-[rgba(255,255,255,0.94)] shadow-[0_10px_15px_-3px_rgba(0,0,0,0.1),0_4px_6px_-2px_rgba(0,0,0,0.05)] outline outline-1 outline-black/[0.06] backdrop-blur-[8px] dark:bg-[#1f1f1f]/[0.94] dark:outline-white/[0.06] [transition:transform_40ms_cubic-bezier(0.76,0,0.24,1),scale_40ms_cubic-bezier(0.76,0,0.24,1),opacity_40ms_cubic-bezier(0.76,0,0.24,1)]', localCfg?.model ? 'w-[248px] max-h-[70vh]' : 'w-[220px]')}>
             <div className={cn('min-h-0 flex-1', localCfg?.model ? 'overflow-y-auto' : 'overflow-hidden p-1')}>
             {localCfg?.model ? (
               <ModelPicker
@@ -321,69 +306,8 @@ function ComposerFooter({
                 onPickMulti={chooseLocalOptions}
                 onClose={() => setModeOpen(false)}
               />
-            ) : !cfgFetched ? (
-              <div className="flex h-[30px] items-center px-3 text-[13px] text-muted-foreground">{t('common.loading')}</div>
             ) : (
-            <>
-            {/* Official mode menu: Fusion switch row, capability choices, and
-                Standard/Fast or Standard/Lightning speed submenus. */}
-            <button
-              role="menuitemcheckbox"
-              aria-checked={pillVersion.startsWith('devin-auto')}
-              onMouseEnter={() => setModeSub(null)}
-              onClick={() => { setSelectedVersion(pillVersion.startsWith('devin-auto') ? null : 'devin-auto'); setModeOpen(false) }}
-              className="flex h-[30px] w-full cursor-pointer select-none items-center gap-2 rounded-[6px] px-2 py-[5px] text-[13px] outline-none hover:bg-tint-secondary [&>svg]:size-4 [&>svg]:shrink-0"
-            >
-              <span className={cn('inline-flex h-4 w-[26px] shrink-0 items-center rounded-full border border-border px-px transition-colors', pillVersion.startsWith('devin-auto') ? 'justify-end bg-foreground' : 'justify-start bg-muted')}>
-                <span className="block size-3.5 rounded-full border-[0.5px] border-border bg-white shadow-sm" />
-              </span>
-              <span className="flex flex-1 items-center gap-1">Fusion <span className="cursor-pointer text-[13px] text-blue-500">{t('am.preview')}</span></span>
-            </button>
-            <div role="separator" className="mx-2 my-1 h-px bg-border" />
-            <div className="flex items-center gap-1.5 px-2 py-[5px] pl-[34px]">
-              <span className="flex-1 text-[12px] font-medium text-muted-foreground">{t('am.capability')}</span>
-              <OfficialGlyph svg={MODE_INFO_ICON} className="text-muted-foreground" />
-            </div>
-            {['Ultra', 'Normal', 'Lite', 'SWE-1.7'].map((m) => {
-              const hasSpeed = m === 'Normal' || m === 'SWE-1.7'
-              return (
-                <div key={m} className="relative" onMouseEnter={(e) => hasSpeed ? openModeSub(m, e.currentTarget) : setModeSub(null)} onMouseLeave={() => hasSpeed && closeModeSub()}>
-                  <button
-                    role={hasSpeed ? 'menuitem' : 'menuitemradio'}
-                    aria-checked={hasSpeed ? undefined : mode === m}
-                    aria-haspopup={hasSpeed ? 'menu' : undefined}
-                    onClick={() => { if (!hasSpeed) { setSelectedVersion(versionOf(m, 'Standard')); setModeOpen(false) } }}
-                    className="flex h-[30px] w-full cursor-pointer select-none items-center gap-2 rounded-[6px] px-2 py-[5px] text-[13px] outline-none hover:bg-tint-secondary [&>svg]:size-4 [&>svg]:shrink-0"
-                  >
-                    <span className="flex h-4 w-[18px] shrink-0 items-center justify-center text-muted-foreground">
-                      {mode === m && <OfficialGlyph svg={MODE_CHECK_ICON} />}
-                    </span>
-                    <span className="min-w-0 flex-1 text-left">{m}</span>
-                    {hasSpeed && <OfficialGlyph svg={MENU_CHEVRON_ICON} className="ml-auto text-muted-foreground" />}
-                  </button>
-                  {modeSub === m && modeSubPos && createPortal(
-                    <div role="menu" onMouseEnter={() => { if (modeSubTimer.current) { clearTimeout(modeSubTimer.current); modeSubTimer.current = null } }} onMouseLeave={closeModeSub} style={{ left: modeSubPos.left, top: modeSubPos.top, maxHeight: Math.max(160, window.innerHeight - modeSubPos.top - 8) }} className="fixed z-50 w-[220px] overflow-y-auto rounded-[10px] bg-[rgba(255,255,255,0.94)] p-1 shadow-[0_10px_15px_-3px_rgba(0,0,0,0.1),0_4px_6px_-2px_rgba(0,0,0,0.05)] outline outline-1 outline-black/[0.06] backdrop-blur-[8px] dark:bg-[#1f1f1f]/[0.94] dark:outline-white/[0.06]">
-                      {(m === 'SWE-1.7' ? ['Standard', 'Lightning'] : ['Standard', 'Fast']).map((sp) => (
-                        <button
-                          key={sp}
-                          role="menuitemradio"
-                          aria-checked={mode === m && speed === sp}
-                          onClick={() => { setSelectedVersion(versionOf(m, sp)); setModeSub(null); setModeOpen(false) }}
-                          className="flex h-[30px] w-full cursor-pointer select-none items-center gap-2 rounded-[6px] px-2 py-[5px] text-[13px] outline-none hover:bg-tint-secondary [&>svg]:size-4 [&>svg]:shrink-0"
-                        >
-                          <span className="flex h-4 w-[18px] shrink-0 items-center justify-center text-muted-foreground">
-                            {mode === m && speed === sp && <OfficialGlyph svg={MODE_CHECK_ICON} />}
-                          </span>
-                          <span className="min-w-0 flex-1 text-left">{sp}</span>
-                        </button>
-                      ))}
-                    </div>,
-                    document.body,
-                  )}
-                </div>
-              )
-            })}
-            </>
+              <div className="flex h-[30px] items-center px-3 text-[13px] text-muted-foreground">{t('common.loading')}</div>
             )}
             </div>
           </div>,
@@ -1093,7 +1017,7 @@ function ComposerFooter({
                             <span className="ml-auto truncate text-[11px] text-muted-foreground">{localModeOpt?.name ?? localModeCurrent}</span>
                           </button>
                         )}
-                        {pillTier >= 2 && (
+                        {pillTier >= 2 && (!cfgFetched || localCfg?.model) && (
                           <button
                             role="menuitem"
                             onClick={() => { setAttachOpen(false); setModeOpen(true) }}

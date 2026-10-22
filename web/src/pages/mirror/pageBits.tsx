@@ -269,29 +269,12 @@ const LOCAL_MODE_ICONS: Record<string, ReactNode> = {
  * Keeps the pill from flashing the cloud "Ultra" label on navigation.
  */
 
-const versionOf = (m: string, speed: string): string =>
-  m === 'Ultra'
-    ? 'devin-ultra'
-    : m === 'Lite'
-      ? 'devin_lite'
-      : m === 'Fusion'
-        ? 'devin-auto'
-        : m === 'Normal'
-          ? (speed === 'Fast' ? 'devin-fast-opus' : 'devin-2-5')
-          : (speed === 'Lightning' ? 'devin-swe-1-7-lightning' : 'devin-swe-1-7')
-
 function modeOfVersion(version: string): string {
   if (version.startsWith('devin-auto')) return 'Fusion'
   if (version === 'devin-ultra') return 'Ultra'
   if (version === 'devin_lite') return 'Lite'
   if (version.startsWith('devin-swe')) return 'SWE-1.7'
   return 'Normal'
-}
-
-function speedOfVersion(version: string): string {
-  if (version === 'devin-fast-opus') return 'Fast'
-  if (version === 'devin-swe-1-7-lightning') return 'Lightning'
-  return 'Standard'
 }
 
 /** Visitor /meta projection (Worker `share.get('/:shareId/meta')`). */
@@ -349,4 +332,4 @@ function messagesFromItems(items: TimelineItem[]): PublicMessage[] {
 }
 
 
-export { CommandPalette, TimelineSkeleton, type SessionDetail, tlSnapshots, sessionPrefetchedAt, prefetchSession, VERSION_LABEL, type LocalCfgOption, type LocalCfg, EFFORT_SUFFIX_RE, LOCAL_MODE_ICONS, versionOf, modeOfVersion, speedOfVersion, type ShareMeta, visitorTabs, defaultTabs, messagesFromItems };
+export { CommandPalette, TimelineSkeleton, type SessionDetail, tlSnapshots, sessionPrefetchedAt, prefetchSession, VERSION_LABEL, type LocalCfgOption, type LocalCfg, EFFORT_SUFFIX_RE, LOCAL_MODE_ICONS, modeOfVersion, type ShareMeta, visitorTabs, defaultTabs, messagesFromItems };

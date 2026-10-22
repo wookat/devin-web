@@ -21,21 +21,6 @@ export interface WsServerEvent {
   [key: string]: any;
 }
 
-export interface PermissionRequestPayload {
-  requestId: string;
-  sessionId: string;
-  toolCall: unknown;
-  options: Array<{ optionId: string; name: string; kind: string }>;
-}
-
-export interface SessionMeta {
-  sessionId: string;
-  cwd: string;
-  title?: string;
-  alias?: string;
-  updatedAt?: string;
-}
-
 export interface UsageRecord {
   ts: number;
   sessionId: string;

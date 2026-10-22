@@ -13,6 +13,7 @@ import type { ApiContext } from "./routes.js";
 import type { DevinAcp } from "./acp.js";
 import { uploadPath, MIME } from "./uploads.js";
 import { isRateLimitError, retryAfterSeconds } from "./accounts.js";
+import { brokerEnabled, brokerList, brokerOnEvent } from "./acpbroker.js";
 import { loadReg } from "./dwstore.js";
 import { noteUpdate, persistTail } from "./dwtimeline.js";
 import { noteSendError, lastSendError, type SendCheckStep } from "./sendhealth.js";
@@ -185,6 +186,17 @@ export function releaseBusy(ctx: ApiContext, acp: DevinAcp, id: string) {
   }
 }
 
+/** The ledger broker always emits `pendingPrompts` per acp — a missing field
+ *  means a pre-ledger build is running, which this backend no longer
+ *  tolerates. One loud error per process names it; the ledger probe skips
+ *  rather than trusting a blind broker. */
+let preLedgerWarned = false;
+function warnPreLedgerBroker() {
+  if (preLedgerWarned) return;
+  preLedgerWarned = true;
+  console.error("[broker] pre-ledger broker — upgrade required: pendingPrompts ledger missing; lost-response probe skipped");
+}
+
 // ---------------------------------------------------------------------------
 // promptWithRetry — the ONE retry policy shared by every send path
 // ---------------------------------------------------------------------------
@@ -212,21 +224,98 @@ export async function promptWithRetry<T>(
     let wedgedReject: (e: Error) => void = () => {};
     const wedged = new Promise<never>((_, rej) => { wedgedReject = rej; });
     const t0 = Date.now();
+    let ledgerIv: NodeJS.Timeout | null = null;
+    let promptEvtOff: (() => void) | null = null;
+    let watchDone = false; // clearWatch ran — late-resolving subs self-destruct
+    const clearWatch = () => {
+      watchDone = true;
+      clearInterval(watchdog);
+      if (ledgerIv) { clearInterval(ledgerIv); ledgerIv = null; }
+      if (promptEvtOff) { promptEvtOff(); promptEvtOff = null; }
+    };
     const watchdog = setInterval(() => {
       // Floor at t0: lastActivity may hold a PREVIOUS turn's timestamp —
       // without the floor an idle-for-a-while session gets killed 60s into
       // its next (healthy) turn.
       const last = Math.max(lastActivity.get(id) ?? 0, t0);
       if (Date.now() - last <= TURN_SILENCE_MS) return;
-      clearInterval(watchdog);
+      clearWatch();
       console.warn(`[session] ${id}: no output for ${Math.round(TURN_SILENCE_MS / 60000)}min — recycling wedged host acp`);
       if (!acp.exited) ctx.manager.killProcess(acp);
       wedgedReject(Object.assign(new Error(`turn produced no output for ${Math.round(TURN_SILENCE_MS / 60000)}min — wedged host process recycled`), { stage: "watchdog" }));
     }, 60_000);
     watchdog.unref();
+    // Broker prompt-ledger probe (~30s, staggered from the 60s watchdog): the
+    // broker witnesses every session/prompt request AND its response on this
+    // acp's byte stream. If the ledger shows NO outstanding prompt for this
+    // session while `act`'s promise still pends, the response frame was lost
+    // mid-connection — the turn is DONE on the agent side and only the SDK
+    // settle is missing. Without this the only exit was the 15min silence
+    // watchdog. An acp missing from the broker's list skips the poll (broker
+    // restart race), and a probe failure must NEVER kill a healthy turn.
+    let sentSeen = false; // send-evidence observed on an earlier poll
+    if (brokerEnabled && acp.brokerId) {
+      const bid = acp.brokerId;
+      ledgerIv = setInterval(() => {
+        void (async () => {
+          try {
+            if (acp.exited) return; // transport death reports via act's own rejection
+            const info = (await brokerList()).find((a) => a.acpId === bid);
+            if (!info) return; // acp not listed this poll — broker restart race; skip
+            if (!Array.isArray(info.pendingPrompts)) { warnPreLedgerBroker(); return; }
+            // The sniffer journals reqId+acpId the moment the prompt frame
+            // leaves this process (notePromptReq) — only a journal stamped
+            // to THIS acp's connection counts as send-evidence here.
+            const t = openTurns.get(id);
+            const reqId = t && t.acpId === bid ? t.reqId : undefined;
+            const pending = info.pendingPrompts.some(
+              (p) => p.sessionId === id || (reqId != null && String(p.reqId) === String(reqId)),
+            );
+            if (pending) { sentSeen = true; return; }
+            // Nothing outstanding on the broker. Declare loss only with
+            // proof the request really went out AND had a full cycle to
+            // reach the broker (absorbs the write→broker-read lag for a
+            // freshly-written frame):
+            //  - responseSeen: the journaled reqId is already gone from
+            //    pendingReqs — the sniffer consumed the response off OUR
+            //    wire yet the SDK promise never settled (instant, race-free);
+            //  - sentBefore: send-evidence (ledger-pending, locally
+            //    outstanding, or journaled reqId) seen on a PRIOR poll, now
+            //    absent from the ledger → the broker watched it get answered.
+            const responseSeen = reqId != null && !acp.pendingReqs.has(String(reqId));
+            const sentBefore = sentSeen;
+            if (reqId != null || [...acp.pendingReqs.values()].some((r) => r.method === "session/prompt" && r.sessionId === id)) sentSeen = true;
+            if (!responseSeen && !sentBefore) return;
+            clearWatch();
+            console.warn(`[session] ${id}: broker ledger shows no outstanding prompt but the turn never settled — response lost mid-connection`);
+            wedgedReject(Object.assign(new Error("prompt response lost — broker ledger shows no outstanding prompt"), { stage: "lost-response" }));
+          } catch { /* ledger failures never kill a healthy turn */ }
+        })();
+      }, 30_000);
+      ledgerIv.unref();
+      // Event-driven fast path for the same lost-response condition: the
+      // broker's prompt-done event says it saw the answer on this acp's
+      // wire. The response frame rides the data channel right behind the
+      // ctl event, so the check is deferred a beat — still outstanding on
+      // OUR wire after that means the frame was lost mid-connection and
+      // the SDK promise will never settle: reject lost-response now
+      // instead of waiting out the 30s poll.
+      void brokerOnEvent((e) => {
+        if (e.ev !== "prompt-done" || e.id !== bid) return;
+        const t = openTurns.get(id);
+        const reqId = t && t.acpId === bid ? t.reqId : undefined;
+        if (reqId == null || String(reqId) !== String(e.reqId)) return;
+        setTimeout(() => {
+          if (acp.exited || !acp.pendingReqs.has(String(reqId))) return;
+          clearWatch();
+          console.warn(`[session] ${id}: broker delivered prompt-done for req ${reqId} but the response never reached this connection — lost-response`);
+          wedgedReject(Object.assign(new Error("prompt response lost — broker saw the answer but it never reached the client"), { stage: "lost-response" }));
+        }, 250).unref();
+      }).then((off) => { if (watchDone) off(); else promptEvtOff = off; }).catch(() => {});
+    }
     try {
       return await Promise.race([
-        act(acp).finally(() => { clearInterval(watchdog); releaseBusy(ctx, acp, id); }),
+        act(acp).finally(() => { clearWatch(); releaseBusy(ctx, acp, id); }),
         wedged,
       ]);
     } catch (err) {

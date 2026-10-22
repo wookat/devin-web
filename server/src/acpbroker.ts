@@ -46,8 +46,33 @@ export interface BrokerAcpInfo {
   /** Turn ledger — client→agent `session/prompt` requests the broker saw
    *  sent on this acp and never saw answered. Authoritative "turn live"
    *  evidence for turns dispatched under THIS acp's lifetime
-   *  (openTurn.ts >= startedAt ⇒ the broker witnessed the send). */
+   *  (openTurn.ts >= startedAt ⇒ the broker witnessed the send). The ledger
+   *  broker ALWAYS emits this field — an absent value identifies a
+   *  pre-ledger build, which callers reject loudly rather than tolerate. */
   pendingPrompts?: { reqId: string; sessionId: string | null; ts: number }[];
+}
+
+/** Unsolicited ctl-channel event pushed by the broker. Field naming is
+ *  the broker's own: `acpId` on exit events, `id` on prompt-* events. */
+export interface BrokerCtlEvent {
+  ev: string;
+  /** Acp identity — `id` on prompt-start/prompt-done events. */
+  id?: string;
+  /** Acp identity — `acpId` on exit events. */
+  acpId?: string;
+  /** Session the prompt targeted (prompt-* events). */
+  sessionId?: string | null;
+  /** Client-side JSON-RPC id the prompt was dispatched under (stringified —
+   *  matches the backend's open-turns journal compared as a string). */
+  reqId?: string;
+  /** Broker-side remuxed id — forensics only. */
+  brokerReqId?: number;
+  /** prompt-done: response was a result (false = JSON-RPC error). */
+  ok?: boolean;
+  errMsg?: string;
+  /** exit event payload. */
+  code?: number | null;
+  ts?: number;
 }
 
 // ---------------------------------------------------------------------------
@@ -56,6 +81,7 @@ export interface BrokerAcpInfo {
 interface Ctl {
   call: (msg: Record<string, unknown>) => Promise<Record<string, unknown>>;
   onExit: (fn: (acpId: string, code: number | null) => void) => () => boolean;
+  onEvent: (fn: (ev: BrokerCtlEvent) => void) => () => boolean;
   close: () => void;
 }
 let ctlPromise: Promise<Ctl | null> | null = null;
@@ -66,6 +92,7 @@ function connectCtl(): Promise<Ctl | null> {
     const sock = net.createConnection(SOCK);
     const pending = new Map<number, { res: (v: Record<string, unknown>) => void; rej: (e: Error) => void }>();
     const exitFns = new Set<(acpId: string, code: number | null) => void>();
+    const evFns = new Set<(ev: BrokerCtlEvent) => void>();
     let req = 0;
     let buf = Buffer.alloc(0);
     let ready = false;
@@ -79,7 +106,7 @@ function connectCtl(): Promise<Ctl | null> {
     sock.once("connect", () => {
       sock.write(`${JSON.stringify({ ctl: 1, token: token() })}\n`);
       ready = true;
-      resolve({ call, onExit, close });
+      resolve({ call, onExit, onEvent, close });
     });
     sock.on("data", (d) => {
       buf = Buffer.concat([buf, d]);
@@ -87,7 +114,8 @@ function connectCtl(): Promise<Ctl | null> {
       while ((i = buf.indexOf(0x0a)) >= 0) {
         const l = buf.subarray(0, i).toString("utf8"); buf = buf.subarray(i + 1);
         let m: Record<string, unknown>; try { m = JSON.parse(l); } catch { continue; }
-        if (m.ev === "exit") { for (const f of exitFns) f(String(m.acpId), m.code as number | null); continue; }
+        if (m.ev === "exit") for (const f of exitFns) f(String(m.acpId), m.code as number | null);
+        if (typeof m.ev === "string") { for (const f of evFns) f(m as unknown as BrokerCtlEvent); continue; }
         const p = pending.get(m.req as number);
         if (!p) continue;
         pending.delete(m.req as number);
@@ -107,6 +135,7 @@ function connectCtl(): Promise<Ctl | null> {
       sock.write(`${JSON.stringify({ req: id, ...msg })}\n`);
     });
     const onExit = (fn: (acpId: string, code: number | null) => void) => { exitFns.add(fn); return () => exitFns.delete(fn); };
+    const onEvent = (fn: (ev: BrokerCtlEvent) => void) => { evFns.add(fn); return () => evFns.delete(fn); };
     const close = () => sock.destroy();
     setTimeout(() => { if (!ready) { sock.destroy(); resolve(null); } }, 5000);
   });
@@ -215,6 +244,15 @@ export async function brokerAttach(acpId: string, after: number): Promise<{ proc
 export async function brokerOnExit(fn: (acpId: string, code: number | null) => void): Promise<() => void> {
   const ctl = await connectCtl();
   return ctl?.onExit(fn) ?? (() => {});
+}
+
+/** Subscribe to ALL broker ctl events (exit + prompt-start/prompt-done);
+ *  returns an unsubscribe fn. Same shared ctl connection as brokerOnExit —
+ *  when the channel drops, subscribers die with it (calls re-dial lazily;
+ *  event subscriptions are NOT re-registered — same semantics as onExit). */
+export async function brokerOnEvent(fn: (ev: BrokerCtlEvent) => void): Promise<() => void> {
+  const ctl = await connectCtl();
+  return ctl?.onEvent(fn) ?? (() => {});
 }
 
 // ---------------------------------------------------------------------------

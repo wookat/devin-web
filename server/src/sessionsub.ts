@@ -17,7 +17,7 @@ const BOOT_TS = Date.now();
  * for these; short-circuits further relays instead of burning a turn each
  * time the user retries a dead child. */
 const deadSubs = new Set<string>();
-export function markSubagentDead(parent: string, aid: string) {
+function markSubagentDead(parent: string, aid: string) {
   deadSubs.add(`${parent}:${aid}`);
 }
 

@@ -27,104 +27,6 @@ export function remapLegacyCwd(cwd: string): string {
   return cwd.replace(/devin-workbench-local(?=[\\/]|$)/i, "devin-web");
 }
 
-const LEGACY_HOME = ".devin-remote";
-
-function copyMissing(src: string, dst: string, preferBigger = false) {
-  if (!fs.existsSync(src)) return;
-  for (const e of fs.readdirSync(src, { withFileTypes: true })) {
-    const s = path.join(src, e.name), d = path.join(dst, e.name);
-    if (e.isDirectory()) { fs.mkdirSync(d, { recursive: true }); copyMissing(s, d, preferBigger); continue; }
-    if (!fs.existsSync(d)) fs.copyFileSync(s, d);
-    else if (preferBigger && fs.statSync(s).size > fs.statSync(d).size) fs.copyFileSync(s, d);
-  }
-}
-
-function readJson<T>(f: string): T | null {
-  try { return JSON.parse(fs.readFileSync(f, "utf8")) as T; } catch { return null; }
-}
-
-// Bounded one-time migration — scheduled for removal in v0.6.0 once the
-// installed base has migrated. Removal = delete this function + its call
-// site in the Store constructor + the `.migrated-devin-remote` marker logic.
-/** One-shot merge of the pre-rename `~/.devin-remote` data dir into dataDir.
- * The rename switched DEVIN_WEB_HOME's default but never carried the data —
- * session logs, uploads, pins/folders (dw.json), workspaces and account
- * cooldowns all stayed behind. Idempotent via `.migrated-devin-remote`. */
-function migrateLegacyDataDir(dataDir: string) {
-  if (process.env.DEVIN_WEB_HOME) return; // explicit home — not our story
-  const legacy = path.join(os.homedir(), LEGACY_HOME);
-  if (legacy === dataDir || !fs.existsSync(legacy)) return;
-  const marker = path.join(dataDir, ".migrated-devin-remote");
-  if (fs.existsSync(marker)) return;
-  try {
-    copyMissing(path.join(legacy, "log"), path.join(dataDir, "log"), true);
-    copyMissing(path.join(legacy, "uploads"), path.join(dataDir, "uploads"));
-    copyMissing(path.join(legacy, "tl"), path.join(dataDir, "tl"));
-
-    // store.json — usage records + workspaces + agent-session cwds
-    const cur = readJson<StoreShape>(path.join(dataDir, "store.json"));
-    const leg = readJson<StoreShape>(path.join(legacy, "store.json"));
-    if (leg) {
-      if (!cur) {
-        leg.workspaces = (leg.workspaces ?? []).map(remapLegacyCwd);
-        for (const u of leg.usage ?? []) if (u.cwd) u.cwd = remapLegacyCwd(u.cwd);
-        for (const r of Object.values(leg.agentSessions ?? {})) if (r.cwd) r.cwd = remapLegacyCwd(r.cwd);
-        fs.writeFileSync(path.join(dataDir, "store.json"), JSON.stringify(leg));
-      } else {
-        for (const w of leg.workspaces ?? []) {
-          const rw = remapLegacyCwd(w);
-          if (!cur.workspaces.includes(rw)) cur.workspaces.push(rw);
-        }
-        const seen = new Set((cur.usage ?? []).map((u) => `${u.ts}:${u.sessionId}`));
-        for (const u of leg.usage ?? []) if (!seen.has(`${u.ts}:${u.sessionId}`)) cur.usage.push(u);
-        for (const [id, r] of Object.entries(leg.agentSessions ?? {})) {
-          cur.agentSessions[id] ??= { ...r, cwd: r.cwd ? remapLegacyCwd(r.cwd) : r.cwd };
-        }
-        cur.aliases = { ...leg.aliases, ...cur.aliases };
-        fs.writeFileSync(path.join(dataDir, "store.json"), JSON.stringify(cur));
-      }
-    }
-
-    // dw.json — per-session meta (pins/folders/titles), deep merge
-    const dwCur = readJson<Record<string, any>>(path.join(dataDir, "dw.json"));
-    const dwLeg = readJson<Record<string, any>>(path.join(legacy, "dw.json"));
-    if (dwLeg?.sessions) {
-      const out = dwCur ?? { sessions: {}, folderOrder: [], dashboards: {} };
-      for (const [id, lm] of Object.entries<Record<string, any>>(dwLeg.sessions)) {
-        const cm = out.sessions[id] ?? {};
-        const merged = { ...lm, ...cm };
-        const lu = lm.updatedAt ?? "", cu = cm.updatedAt ?? "";
-        merged.updatedAt = cu >= lu ? cu || undefined : lu;
-        if (!merged.updatedAt) delete merged.updatedAt;
-        out.sessions[id] = merged;
-      }
-      out.folderOrder = [...new Set([...(dwLeg.folderOrder ?? []), ...(out.folderOrder ?? [])])];
-      out.dashboards = { ...dwLeg.dashboards, ...out.dashboards };
-      out.lastConfig = { ...dwLeg.lastConfig, ...out.lastConfig };
-      out.prefs = { ...dwLeg.prefs, ...out.prefs };
-      fs.writeFileSync(path.join(dataDir, "dw.json"), JSON.stringify(out));
-    }
-
-    // accounts-state.json — cooldown marks, max wins
-    const accLeg = readJson<{ current?: string; limited_until?: Record<string, number> }>(path.join(legacy, "accounts-state.json"));
-    if (accLeg) {
-      const f = path.join(dataDir, "accounts-state.json");
-      const accCur = readJson<typeof accLeg>(f) ?? {};
-      accCur.limited_until = accCur.limited_until ?? {};
-      for (const [a, t] of Object.entries(accLeg.limited_until ?? {})) {
-        accCur.limited_until[a] = Math.max(accCur.limited_until[a] ?? 0, t);
-      }
-      accCur.current ??= accLeg.current;
-      fs.writeFileSync(f, JSON.stringify(accCur));
-    }
-
-    fs.writeFileSync(marker, new Date().toISOString());
-    console.log(`[migrate] merged legacy data dir ${legacy} → ${dataDir}`);
-  } catch (e) {
-    console.error(`[migrate] legacy data dir merge failed: ${e instanceof Error ? e.message : e}`);
-  }
-}
-
 export class Store {
   readonly dataDir: string;
   readonly uploadsDir: string;
@@ -141,7 +43,6 @@ export class Store {
     this.uploadsDir = path.join(this.dataDir, "uploads");
     this.file = path.join(this.dataDir, "store.json");
     fs.mkdirSync(this.uploadsDir, { recursive: true });
-    migrateLegacyDataDir(this.dataDir);
     // Sweep temp files left by writes interrupted before their rename.
     for (const f of fs.readdirSync(this.dataDir)) {
       if (f.startsWith("store.json.") && f.endsWith(".tmp")) {

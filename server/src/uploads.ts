@@ -53,7 +53,7 @@ export interface UploadMeta {
  * would also kill the response, so the client would see a connection reset
  * instead of the 413.
  */
-export async function saveUpload(
+async function saveUpload(
   req: IncomingMessage,
   store: Store,
   filename: string,

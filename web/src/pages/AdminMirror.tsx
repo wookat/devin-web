@@ -22,7 +22,7 @@ import { type QuoteAttachment } from '../../shared/quotes'
 import { cn } from '@/lib/utils'
 import { PanelAddTabIcon, PanelAttachmentsIcon, PanelCloseTabIcon, PanelFullWidthIcon, PanelHideTabsIcon, PanelPullRequestIcon } from '@/components/panelTabIcons'
 import { readTreeCache, type MirrorTreeSession, type TreeCachePayload, writeTreeCache } from './mirror/treeCache'
-import { prefetchSession, visitorTabs, type SessionDetail, tlSnapshots, messagesFromItems, type LocalCfg, EFFORT_SUFFIX_RE, modeOfVersion, speedOfVersion, type ShareMeta, defaultTabs, CommandPalette, TimelineSkeleton } from './mirror/pageBits'
+import { prefetchSession, visitorTabs, type SessionDetail, tlSnapshots, messagesFromItems, type LocalCfg, EFFORT_SUFFIX_RE, modeOfVersion, type ShareMeta, defaultTabs, CommandPalette, TimelineSkeleton } from './mirror/pageBits'
 import { type PanelKey, PANELS, findItemText, parseOfficialTab, serializeOfficialTab, useUrlParamSync, ADD_TAB_ORDER } from './mirror/panelTabs'
 import { type TimelinePage, mergeItems, groupItems } from './mirror/timelineUtil'
 import { reduceStatus } from './mirror/statusReduce'
@@ -363,8 +363,6 @@ export default function AdminMirrorPage() {
     (localStorage.getItem('dw-work-send') === 'interrupt' ? 'interrupt' : 'queue'))
   const [modeOpen, setModeOpen] = useState(false)
   const [sModeOpen, setSModeOpen] = useState(false)
-  const [modeSub, setModeSub] = useState<string | null>(null)
-  const [modeSubPos, setModeSubPos] = useState<{ left: number; top: number } | null>(null)
   const [selectedVersion, setSelectedVersion] = useState<string | null>(null)
   const [optimisticVersion, setOptimisticVersion] = useState<string | null>(null)
   // Local ACP config: real model/mode options exposed by `devin acp` (when set,
@@ -439,7 +437,7 @@ export default function AdminMirrorPage() {
   // creation (the server also applies dw.json lastConfig on its own).
   const draftPicks = useRef<{ configId: string; value: string }[]>([])
   const chooseLocalOptions = (pairs: { configId: string; value: string }[]) => {
-    setModeOpen(false); setModeSub(null); setModeSubPos(null); setSModeOpen(false)
+    setModeOpen(false); setSModeOpen(false)
     graduateTl.current?.() // config write is a real op — graduate first
     // Optimistic: repaint the pills now; POSTs run in parallel and the
     // refetch reconciles the authoritative values.
@@ -487,7 +485,6 @@ export default function AdminMirrorPage() {
   const currentVersion = detail?.session.current_devin_version ?? null
   const pillVersion = selectedVersion ?? optimisticVersion ?? currentVersion ?? 'devin-ultra'
   const mode = modeOfVersion(pillVersion)
-  const speed = speedOfVersion(pillVersion)
   useEffect(() => {
     if (optimisticVersion && currentVersion === optimisticVersion) setOptimisticVersion(null)
   }, [currentVersion, optimisticVersion])
@@ -2399,7 +2396,7 @@ const groups = useMemo(() => groupItems(allItems, sessionWorking), [allItems, se
               <span className="max-w-[160px] truncate max-md:max-w-[80px]">{detail.session.parent_title ?? 'Parent'}</span>
             </button>
           )}
-          <h1 className="min-w-0 flex-1 truncate text-[13px] leading-[18px] max-md:min-w-[120px]">{isDraft ? t('menu.newSession') : current?.title || current?.devin_title || detail?.session.title || t('menu.sessionMirror')}</h1>
+          <h1 className="min-w-0 flex-1 truncate text-[13px] leading-[18px] max-md:min-w-[120px]">{isDraft ? t('menu.newSession') : current?.title || current?.devin_title || detail?.session.title || detail?.session.devin_title || '…'}</h1>
           {headerPrs.length > 0 && (!isVisitor || caps.showChanges) && (
             <div className="relative min-w-0 shrink-0">
               <button
@@ -2647,10 +2644,6 @@ const groups = useMemo(() => groupItems(allItems, sessionWorking), [allItems, se
           setModeOpen={setModeOpen}
           sModeOpen={sModeOpen}
           setSModeOpen={setSModeOpen}
-          modeSub={modeSub}
-          setModeSub={setModeSub}
-          modeSubPos={modeSubPos}
-          setModeSubPos={setModeSubPos}
           input={input}
           setInput={setInput}
           mode={mode}
@@ -2682,7 +2675,6 @@ const groups = useMemo(() => groupItems(allItems, sessionWorking), [allItems, se
           chooseLocalOptions={chooseLocalOptions}
           detail={detail}
           sessionAgent={sessionAgent}
-          speed={speed}
           selQuote={selQuote}
           setSelQuote={setSelQuote}
           stageQuoteDraft={stageQuoteDraft}

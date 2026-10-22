@@ -6,6 +6,7 @@
 import fs from "node:fs";
 import path from "node:path";
 import type { ApiContext } from "./routes.js";
+import { MAX_UPDATES_PER_SESSION } from "./sessionlog.js";
 import { loadInflight } from "./sessionplace.js";
 
 // ---------------------------------------------------------------------------
@@ -623,7 +624,11 @@ function buildTimeline(ctx: ApiContext, sessionId: string): { items: DwItem[]; r
     // replaces nothing — don't burn a generation or the reset flag on it,
     // or peek mode would read tlReset and refuse to serve the disk snapshot.
     const hadData = !!st && (st.items.length > 0 || st.seenSeq >= 0);
-    const disk = ctx.sessionLog.readDisk(sessionId);
+    // Bounded tail first — a full readDisk on a near-million-event session
+    // blocks the loop long enough for the supervisor to kill the backend.
+    // The page gets a recent-history timeline instantly; backfillTimeline
+    // then streams the complete log asynchronously and swaps the cache.
+    const disk = ctx.sessionLog.readDiskTail(sessionId);
     const src = disk.length >= log.length ? disk : log;
     st = freshTlState(sessionId);
     // Must be set BEFORE the seed loop — disk entries carry blob refs that
@@ -638,6 +643,9 @@ function buildTimeline(ctx: ApiContext, sessionId: string): { items: DwItem[]; r
       st.gen = ++tlGenSeq;
       tlReset.add(sessionId);
     }
+    // Hit the tail cap → older history almost certainly exists — deep
+    // backfill streams it in chunks off the request path, then swaps st.
+    if (disk.length >= MAX_UPDATES_PER_SESSION) backfillTimeline(ctx, sessionId, logGen);
   }
   st.resolve = (u) => ctx.sessionLog.resolveBlobs(u);
   for (const e of log) {
@@ -645,6 +653,41 @@ function buildTimeline(ctx: ApiContext, sessionId: string): { items: DwItem[]; r
     if (s > st.seenSeq) { tlPush(st, e, s); st.seenSeq = s; }
   }
   return { items: st.items, rebuilt, gen: st.gen };
+}
+
+const backfilling = new Set<string>();
+
+/** Streams the WHOLE disk log through the item builder in event-loop-friendly
+ * chunks, then atomically swaps the tlCache entry built from the bounded tail.
+ * Only scheduled when the tail read hit its cap (older history exists). */
+function backfillTimeline(ctx: ApiContext, sessionId: string, logGen: number) {
+  if (backfilling.has(sessionId)) return;
+  backfilling.add(sessionId);
+  void (async () => {
+    try {
+      const out: LogEntry[] = [];
+      let i = 0;
+      for (const e of ctx.sessionLog.diskEntries(sessionId)) {
+        out.push(e);
+        if (++i % 4000 === 0) await new Promise((r) => setImmediate(r));
+      }
+      // A replay bumped the gen mid-scan — this snapshot mixes generations;
+      // drop it and let the next rebuild run clean.
+      if (ctx.sessionLog.gen(sessionId) !== logGen) return;
+      const cur = tlCache.get(sessionId);
+      if (!cur || cur.logGen !== logGen) return;
+      if (out.length <= MAX_UPDATES_PER_SESSION) return; // no deeper history after all
+      const st = freshTlState(sessionId);
+      st.resolve = (u) => ctx.sessionLog.resolveBlobs(u);
+      for (let j = 0; j < out.length; j++) tlPush(st, out[j], j);
+      st.seenSeq = out[out.length - 1].seq ?? out.length - 1;
+      st.logGen = logGen;
+      st.gen = ++tlGenSeq;
+      tlCache.set(sessionId, st);
+      tlReset.add(sessionId);
+    } catch { /* next rebuild retries */ }
+    finally { backfilling.delete(sessionId); }
+  })();
 }
 
 /** Live streaming: after a log append, run just the new entries through the
@@ -738,6 +781,6 @@ function snippet(items: DwItem[]): string {
 
 export {
   type FileUpdate, type DwItem, type TlState, type LogEntry,
-  tlPush, buildTimelineFrom, buildTimeline, noteUpdate, tlCache, tlReset,
-  tailSnapshot, readDiskTail, persistTail, snapshotItems, buildMessages, snippet,
+  buildTimelineFrom, buildTimeline, noteUpdate, tlCache, tlReset,
+  tailSnapshot, persistTail, snapshotItems, buildMessages, snippet,
 };

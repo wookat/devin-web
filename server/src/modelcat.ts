@@ -251,8 +251,6 @@ function maps() {
   return cache;
 }
 
-export const EFFORT_SUFFIX_RE = /-(none|min|minimal|low|medium|high|xhigh|max)$/;
-
 /**
  * Catalog info for an ACP model value (`swe-2-high` → family `swe-2`).
  * Returns null when the catalog doesn't know the family — callers should
@@ -282,18 +280,4 @@ export function catalogInfo(modelValue: string): CatalogInfo | null {
   const variantPrices = varPrices.get(modelValue)
     ?? (() => { for (const [v, fm] of varToFam) { if (fm === fam && varPrices.has(v)) return varPrices.get(v); } return undefined })();
   return { family: fam, efforts: [...efforts], effortCtl: e.effortCtl, fast: e.fast, ctx1m: e.ctx1m, prices: variantPrices };
-}
-
-/** Effort levels the catalog lists for the family behind an ACP model value. */
-export function catalogEfforts(modelValue: string): string[] {
-  return catalogInfo(modelValue)?.efforts ?? [];
-}
-
-/** Debug helper: dump the parsed family map. */
-export function catalogDump(): Record<string, { efforts: string[]; fast: boolean; ctx1m: boolean }> {
-  const out: Record<string, { efforts: string[]; fast: boolean; ctx1m: boolean }> = {};
-  for (const [k, v] of maps().families) {
-    out[k] = { efforts: [...v.efforts], fast: v.fast, ctx1m: v.ctx1m };
-  }
-  return out;
 }

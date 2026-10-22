@@ -22,6 +22,12 @@
  *     {op:"kill", acpId}           → {ok:true}
  *     {op:"list"}                  → {ok:true, acps:[{acpId,pid,cwd,cmd,exited,bytesOut}]}
  *     {ev:"exit", acpId, code}     — a child died
+ *     {ev:"prompt-start", id, sessionId, reqId, brokerReqId, ts}
+ *         — a session/prompt request was forwarded to an acp's stdin
+ *     {ev:"prompt-done", id, sessionId, reqId, brokerReqId, ok, errMsg?, ts}
+ *         — its response came back on stdout (the prompt ledger cleared).
+ *         `reqId` is the CLIENT-side id (stringified) — what the backend
+ *         journaled — so consumers correlate without knowing the remux.
  *
  *   Data channel — after the {"attach"} line the broker replies
  *   {"ok":true,"pid":P,"exited":B,"bytesOut":N} then the socket goes RAW:
@@ -75,6 +81,13 @@ const RING_CAP = 4 << 20;
 const acps = new Map();
 let seq = 0;
 const ctls = new Set();
+
+/** Broadcast a ctl event to every attached control socket — ndjson on the
+ *  ctl channel ONLY, never onto a per-acp raw data channel. */
+function ctlEvent(obj) {
+  const line = `${JSON.stringify(obj)}\n`;
+  for (const c of ctls) c.write(line);
+}
 
 // ---------------------------------------------------------------------------
 // pid journal — broker crash ⇒ our children are parentless lock-holders
@@ -131,7 +144,10 @@ for (const [id, rec] of Object.entries(journalLoad())) {
 // ---------------------------------------------------------------------------
 function pushRing(a, chunk) {
   // Split at newline boundaries; only complete frames enter the ring so a
-  // re-attach replays whole ndjson messages, never a torn line.
+  // re-attach replays whole ndjson messages, never a torn line. Returns the
+  // complete-frame bytes — response ids already remapped back to the
+  // client-side values — so live attaches forward exactly what the ring
+  // stores and replay/live delivery can never diverge.
   a.pending = Buffer.concat([a.pending, chunk]);
   let cut = 0;
   for (;;) {
@@ -139,60 +155,129 @@ function pushRing(a, chunk) {
     if (nl < 0) break;
     cut = nl + 1;
   }
-  if (!cut) return;
-  const framed = a.pending.subarray(0, cut);
+  if (!cut) return Buffer.alloc(0);
+  let framed = a.pending.subarray(0, cut);
   a.pending = a.pending.subarray(cut);
+  // Index agent→client frames by id BEFORE the bytes enter the ring or the
+  // live forward. `end` is the enclosing chunk's byte position — the same
+  // granularity ring replay uses, so the attach dedup rule is exact
+  // (end > after ⟹ the ring already covers it). Two kinds:
+  //   id+method          → agent→client REQUEST the backend must answer
+  //                        (permission/fs/terminal) — replayed on re-attach.
+  //                        Agent-side id space is never remapped.
+  //   id+result|error    → agent→client RESPONSE — clears the prompt ledger,
+  //                        and via idMap restores the client-side request id
+  //                        in place (ring feeds replay, so stored bytes must
+  //                        already carry the restored id).
+  const freshReqs = [];
+  if (framed.includes(ID_TAG)) {
+    const lines = framed.toString("utf8").split("\n");
+    let dirty = false;
+    for (let i = 0; i < lines.length; i++) {
+      const line = lines[i];
+      if (!line.includes('"id"')) continue;
+      let m;
+      try { m = JSON.parse(line); } catch { continue; } // non-json content line
+      if (m == null || m.id == null) continue;
+      if (typeof m.method === "string") {
+        freshReqs.push([String(m.id), Buffer.from(line + "\n")]);
+      } else if ("result" in m || "error" in m) {
+        const key = String(m.id); // broker-side id — what the agent saw
+        const done = a.prompts.get(key);
+        if (done) {
+          a.prompts.delete(key);
+          // Event-driven settle evidence: a re-attached backend's turn
+          // watchers consume prompt-done in milliseconds instead of
+          // polling the ledger / waiting out a silence floor. reqId is
+          // the CLIENT-side id the backend journaled — the idMap restore
+          // below rewrites the wire bytes, the event already names it.
+          ctlEvent({
+            ev: "prompt-done", id: a.id, sessionId: done.sessionId,
+            reqId: String(done.clientReqId), brokerReqId: done.brokerReqId,
+            ok: "result" in m,
+            ...("error" in m ? { errMsg: String(m.error?.message ?? "request failed").slice(0, 300) } : {}),
+            ts: Date.now(),
+          });
+        }
+        if (a.idMap.has(key)) {
+          m.id = a.idMap.get(key); // raw client id — preserves number/string type
+          a.idMap.delete(key);
+          lines[i] = JSON.stringify(m);
+          dirty = true;
+        }
+      }
+    }
+    if (dirty) framed = Buffer.from(lines.join("\n"), "utf8");
+  }
   a.ring.push(framed);
   a.ringBytes += framed.length;
   a.bytesOut += framed.length;
-  // Index agent→client frames by id. `end` is the enclosing chunk's byte
-  // position — the same granularity ring replay uses, so the attach dedup
-  // rule is exact (end > after ⟹ the ring already covers it). Two kinds:
-  //   id+method          → agent→client REQUEST the backend must answer
-  //                        (permission/fs/terminal) — replayed on re-attach
-  //   id+result|error    → agent→client RESPONSE — clears the prompt ledger
-  if (framed.includes(ID_TAG)) {
-    for (const line of framed.toString("utf8").split("\n")) {
-      if (!line.includes('"id"')) continue;
-      try {
-        const m = JSON.parse(line);
-        if (m == null || m.id == null) continue;
-        if (typeof m.method === "string") {
-          a.reqs.set(String(m.id), { frame: Buffer.from(line + "\n"), end: a.bytesOut });
-        } else if ("result" in m || "error" in m) {
-          a.prompts.delete(String(m.id));
-        }
-      } catch { /* non-json content line */ }
-    }
-  }
+  for (const [id, frame] of freshReqs) a.reqs.set(id, { frame, end: a.bytesOut });
   while (a.ringBytes > RING_CAP) a.ringBytes -= a.ring.shift().length;
+  return framed;
 }
 
 const METHOD_TAG = Buffer.from('"method"');
 const ID_TAG = Buffer.from('"id"');
 
-/** Tee-parse client→agent bytes. Two ledger roles:
- *  - `session/prompt` request → open a prompt-ledger entry (the turn ledger
- *    a re-attaching backend consults to tell live turns from dead ones)
- *  - response (id, no method) → answers an agent→client request in `a.reqs` */
+/** Client→agent stdin demux — RETURNS the bytes to write to the child's
+ *  stdin: complete lines only, request ids already remapped. A trailing
+ *  partial line stays buffered in `a.inBuf` until its newline arrives —
+ *  acp frames are newline-delimited, so nothing downstream can act on a
+ *  torn line anyway (and a partial from a dead connection must never be
+ *  glued onto the next attach's first write). */
 function feedStdin(a, chunk) {
   a.inBuf = Buffer.concat([a.inBuf, chunk]);
+  const out = [];
   for (;;) {
     const nl = a.inBuf.indexOf(0x0a);
-    if (nl < 0) return;
+    if (nl < 0) break;
     const line = a.inBuf.subarray(0, nl + 1);
     a.inBuf = a.inBuf.subarray(nl + 1);
-    if (!line.includes(ID_TAG)) continue;
-    try {
-      const m = JSON.parse(line.toString("utf8"));
-      if (m == null || m.id == null) continue;
-      if (m.method == null) { a.reqs.delete(String(m.id)); continue; }
-      if (m.method === "session/prompt") {
-        const sid = m.params?.sessionId;
-        a.prompts.set(String(m.id), { sessionId: typeof sid === "string" ? sid : null, ts: Date.now() });
-      }
-    } catch { /* non-json content line */ }
+    out.push(remapRequest(a, line));
   }
+  return Buffer.concat(out);
+}
+
+/** One complete client→agent line (newline included) → the line to forward.
+ *  Three roles:
+ *  - id+method REQUEST → remap the id onto the per-acp `nextReq` counter so
+ *    a re-attached backend's fresh per-connection counter can never collide
+ *    with requests still outstanding from the dead connection; journal
+ *    brokerId→clientId in `a.idMap`. `session/prompt` also opens a
+ *    prompt-ledger entry (the turn ledger a re-attaching backend consults
+ *    to tell live turns from dead ones).
+ *  - id-only response  → answers an agent→client request in `a.reqs`.
+ *    Agent-side ids are never remapped, so the ledger key is verbatim.
+ *  - anything else     → forwarded verbatim (notifications, non-JSON). */
+function remapRequest(a, line) {
+  if (!line.includes(ID_TAG)) return line;
+  let m;
+  try { m = JSON.parse(line.toString("utf8")); } catch { return line; }
+  if (m == null || m.id == null) return line;
+  if (typeof m.method !== "string") { a.reqs.delete(String(m.id)); return line; }
+  const clientId = m.id;
+  const brokerId = a.nextReq++;
+  // Store the RAW client id — the ACP SDK matches response ids by strict
+  // equality, so a numeric client id must go back on the wire as a number.
+  a.idMap.set(String(brokerId), clientId);
+  m.id = brokerId;
+  if (m.method === "session/prompt") {
+    const sid = m.params?.sessionId;
+    a.prompts.set(String(brokerId), {
+      sessionId: typeof sid === "string" ? sid : null, ts: Date.now(),
+      clientReqId: clientId, brokerReqId: brokerId,
+    });
+    // Send-side twin of prompt-done — stamps the moment the broker saw the
+    // prompt go out (ledger opens here; consumers may use it to prove a
+    // turn really reached the agent's pipe).
+    ctlEvent({
+      ev: "prompt-start", id: a.id,
+      sessionId: typeof sid === "string" ? sid : null,
+      reqId: String(clientId), brokerReqId: brokerId, ts: Date.now(),
+    });
+  }
+  return Buffer.from(`${JSON.stringify(m)}\n`, "utf8");
 }
 
 function spawnAcp(spec) {
@@ -202,6 +287,7 @@ function spawnAcp(spec) {
     ? spawn(spec.cmdline, { cwd: spec.cwd, env: { ...process.env, ...spec.env }, shell: true, windowsHide: true, detached: false, stdio: ["pipe", "pipe", "pipe"] })
     : spawn(spec.command, spec.args ?? [], { cwd: spec.cwd, env: { ...process.env, ...spec.env }, windowsHide: true, detached: !isWin, stdio: ["pipe", "pipe", "pipe"] });
   const a = {
+    id: acpId,
     proc: child,
     meta: { cwd: spec.cwd, cmd: spec.cmdline ?? `${spec.command} ${(spec.args ?? []).join(" ")}`, key: spec.key ?? null, account: spec.account ?? null, startedAt: Date.now() },
     pending: Buffer.alloc(0),
@@ -211,25 +297,37 @@ function spawnAcp(spec) {
     // died on the old byte stream (dead-window permission/fs/terminal)
     // reaches the new backend instead of wedging devin forever.
     reqs: new Map(),
-    // Turn ledger — client→agent session/prompt requests (reqId →
-    // {sessionId, ts}) whose agent→client response this broker has not seen.
-    // Exposed in ctl `list` so a re-attaching backend settles dead turns
-    // deterministically instead of waiting out a silence window.
+    // Client→agent request id remux: every forwarded request is renumbered
+    // onto `nextReq` (monotonic for the acp's whole life), so a re-attached
+    // backend's fresh per-connection counter can never collide with requests
+    // still outstanding from the dead connection. `idMap` (brokerId → raw
+    // client id) lets pushRing restore the response id before it is stored
+    // or forwarded.
+    nextReq: 1,
+    idMap: new Map(),
+    // Turn ledger — client→agent session/prompt requests (brokerReqId →
+    // {sessionId, ts, clientReqId, brokerReqId}) whose agent→client response
+    // this broker has not seen. Exposed in ctl `list` so a re-attaching
+    // backend settles dead turns deterministically instead of waiting out a
+    // silence window.
     prompts: new Map(),
-    inBuf: Buffer.alloc(0), // client→agent partial line (stdin tee parse)
+    inBuf: Buffer.alloc(0), // client→agent partial line — held back until complete
     attached: null, exited: false, exitCode: null,
   };
   acps.set(acpId, a);
   child.stderr?.on("data", () => { /* drain — same reason as backend */ });
   child.stdout.on("data", (chunk) => {
-    pushRing(a, chunk);
-    if (a.attached && !a.attached.destroyed) a.attached.write(chunk);
+    // Live clients receive exactly what the ring stored — complete frames
+    // with response ids already restored to the client-side value.
+    const out = pushRing(a, chunk);
+    if (out.length && a.attached && !a.attached.destroyed) a.attached.write(out);
   });
   child.on("exit", (code) => {
     a.exited = true; a.exitCode = code;
     a.reqs.clear();
     a.prompts.clear();
-    for (const c of ctls) c.write(`${JSON.stringify({ ev: "exit", acpId, code })}\n`);
+    a.idMap.clear();
+    ctlEvent({ ev: "exit", acpId, code });
     if (a.attached && !a.attached.destroyed) a.attached.end();
     journalWrite();
   });
@@ -271,7 +369,13 @@ function handleCtl(sock, head, rest) {
             acpId, pid: a.proc.pid, cwd: a.meta.cwd, cmd: a.meta.cmd, key: a.meta.key, account: a.meta.account ?? null,
             exited: a.exited, exitCode: a.exitCode, bytesOut: a.bytesOut, pendingReqs: a.reqs.size,
             startedAt: a.meta.startedAt,
-            pendingPrompts: [...a.prompts].map(([reqId, p]) => ({ reqId, sessionId: p.sessionId, ts: p.ts })),
+            // reqId is the CLIENT-side id (what the backend's turn journal
+            // recorded, compared as a string); brokerReqId is what actually
+            // went on the agent's wire — kept for forensics.
+            pendingPrompts: [...a.prompts.values()].map((p) => ({
+              reqId: String(p.clientReqId), brokerReqId: p.brokerReqId,
+              sessionId: p.sessionId, ts: p.ts,
+            })),
           })) });
         }
         else reply({ ok: false, error: `unknown op ${m.op}` });
@@ -287,16 +391,23 @@ function handleAttach(sock, head, rest) {
   if (!a) { sock.write(`${JSON.stringify({ ok: false, error: "no such acp" })}\n`); sock.end(); return; }
   if (a.attached && !a.attached.destroyed) a.attached.destroy(); // latest wins
   a.attached = sock;
+  // A torn client→agent line left by the dead connection can never validly
+  // complete — its tail died with the socket. Drop it so the new backend's
+  // first line isn't glued onto the corpse.
+  a.inBuf = Buffer.alloc(0);
   sock.write(`${JSON.stringify({ ok: true, pid: a.proc.pid, exited: a.exited, bytesOut: a.bytesOut })}\n`);
   // Replay buffered frames newer than `after` (byte offsets count only
-  // complete frames — after=0 replays the whole ring).
+  // complete frames — after=0 replays the whole ring). A partial trailing
+  // frame stays in `a.pending` until it completes, then flows through
+  // pushRing like any other complete frame — writing it raw here would
+  // duplicate those bytes when the completed frame lands, and could leak
+  // an un-restored response id.
   let off = a.bytesOut - a.ringBytes;
   for (const f of a.ring) {
     const end = off + f.length;
     if (end > (head.after ?? 0)) sock.write(f);
     off = end;
   }
-  if (a.pending.length) sock.write(a.pending); // live partial frame tail
   if (a.exited) { sock.end(); return; }
   // Re-emit agent→client requests the previous backend never answered — a
   // pending frame older than `after` is invisible to ring replay and would
@@ -304,9 +415,10 @@ function handleAttach(sock, head, rest) {
   // Frames inside the replay window already arrived via the ring.
   for (const r of a.reqs.values()) if (r.end <= (head.after ?? 0)) sock.write(r.frame);
   // `rest` is bytes the client wrote before the header newline — they belong
-  // to the child's stdin just like every later chunk.
-  if (rest.length) { try { a.proc.stdin.write(rest); } catch { /* dead */ } feedStdin(a, rest); }
-  sock.on("data", (d) => { try { a.proc.stdin.write(d); } catch { /* dead */ } feedStdin(a, d); });
+  // to the child's stdin just like every later chunk. feedStdin returns the
+  // bytes to write: complete lines only, request ids remapped.
+  if (rest.length) { try { a.proc.stdin.write(feedStdin(a, rest)); } catch { /* dead */ } }
+  sock.on("data", (d) => { try { a.proc.stdin.write(feedStdin(a, d)); } catch { /* dead */ } });
   sock.on("close", () => { if (a.attached === sock) a.attached = null; });
   sock.on("error", () => {});
 }

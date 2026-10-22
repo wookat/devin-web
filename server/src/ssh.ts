@@ -46,7 +46,7 @@ export function setSshHostResolver(fn: () => SshHost[]) {
   hostResolver = fn;
 }
 
-export function sshHosts(): SshHost[] {
+function sshHosts(): SshHost[] {
   try { return hostResolver() ?? []; } catch { return []; }
 }
 
@@ -65,14 +65,14 @@ export function publicSshHost(h: SshHost) {
 }
 
 /** True when the record can't be served by the OpenSSH binary. */
-export function needsSsh2(host: SshHost | null): boolean {
+function needsSsh2(host: SshHost | null): boolean {
   if (!host) return false;
   return host.auth === "password" || host.auth === "key" || !!host.password || !!host.keyPath;
 }
 
 /* ---------------- connect ---------------- */
 
-export function parseTarget(target: string): { username?: string; host: string; port?: number } {
+function parseTarget(target: string): { username?: string; host: string; port?: number } {
   let rest = target.trim();
   let username: string | undefined;
   const at = rest.lastIndexOf("@");
@@ -171,7 +171,7 @@ function execRaw(conn: Client, cmd: string): Promise<{ code: number | null; stdo
 }
 
 /** One-shot remote command on the pooled connection. */
-export async function sshExec(target: string, cmd: string): Promise<{ code: number | null; stdout: string; stderr: string }> {
+async function sshExec(target: string, cmd: string): Promise<{ code: number | null; stdout: string; stderr: string }> {
   return withConn(target, (conn) => execRaw(conn, cmd));
 }
 
@@ -258,7 +258,7 @@ export async function sshInteractive(target: string): Promise<ChildProcessByStdi
 
 /* ---------------- remote filesystem ---------------- */
 
-export interface SshEntry {
+interface SshEntry {
   name: string;
   path: string;
   dir: boolean;
@@ -280,7 +280,7 @@ async function remoteHome(target: string): Promise<string> {
 }
 
 /** Expand `~`/empty to the remote home dir; POSIX-normalize the result. */
-export async function sshResolveDir(target: string, p: string): Promise<string> {
+async function sshResolveDir(target: string, p: string): Promise<string> {
   const home = await remoteHome(target);
   let out = (p || "~").trim();
   if (out === "~" || out === "") out = home;

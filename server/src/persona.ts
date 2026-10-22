@@ -300,6 +300,4 @@ export function personaHumanMessage(ctx: ApiContext, id: string) {
   broadcastState(ctx, id, "idle");
 }
 
-export { ANSWER_PREFIX, personaOnTurnEnd };
-
 turnEndHooks.add(personaOnTurnEnd);

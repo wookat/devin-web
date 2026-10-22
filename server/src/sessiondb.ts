@@ -92,6 +92,7 @@ export class SessionDb {
   private sInsEvent;
   private sInsBlob;
   private sAll;
+  private sTail;
   private sHas;
   private sMaxSeq;
   private sMaxSeqInGen;
@@ -132,6 +133,9 @@ export class SessionDb {
     this.sInsBlob = this.db.prepare("INSERT OR IGNORE INTO blobs(sha,data) VALUES (?,?)");
     this.sAll = this.db.prepare(
       `SELECT seq,ts,data FROM events WHERE session_id=? AND ${CUR_GEN} ORDER BY seq`,
+    );
+    this.sTail = this.db.prepare(
+      `SELECT seq,ts,data FROM events WHERE session_id=? AND ${CUR_GEN} ORDER BY seq DESC LIMIT ?`,
     );
     this.sHas = this.db.prepare("SELECT 1 AS x FROM events WHERE session_id=? LIMIT 1");
     this.sMaxSeq = this.db.prepare(
@@ -220,6 +224,27 @@ export class SessionDb {
       try { out.push({ seq: r.seq, ts: r.ts, update: JSON.parse(r.data) }); } catch { /* corrupt row */ }
     }
     return out;
+  }
+
+  /** Last `limit` entries in ascending order — the hydration path for
+   * memory rings; a full readAll on a near-million-row session blocks the
+   * event loop for tens of seconds (supervisor then kills the backend). */
+  readTail(sessionId: string, limit: number): StoredEntry[] {
+    const rows = this.sTail.all(sessionId, sessionId, limit) as { seq: number; ts: number; data: string }[];
+    const out: StoredEntry[] = [];
+    for (let i = rows.length - 1; i >= 0; i--) {
+      const r = rows[i];
+      try { out.push({ seq: r.seq, ts: r.ts, update: JSON.parse(r.data) }); } catch { /* corrupt row */ }
+    }
+    return out;
+  }
+
+  /** Row-by-row generator — lets callers pull the full history in batches
+   * and yield the event loop between them (deep backfill). */
+  *each(sessionId: string): Generator<StoredEntry> {
+    for (const r of this.sAll.iterate(sessionId, sessionId) as Iterable<{ seq: number; ts: number; data: string }>) {
+      try { yield { seq: r.seq, ts: r.ts, update: JSON.parse(r.data) }; } catch { /* corrupt row */ }
+    }
   }
 
   has(sessionId: string): boolean {

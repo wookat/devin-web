@@ -8,7 +8,7 @@
  */
 import type { ApiContext } from "./routes.js";
 import type { DevinAcp } from "./acp.js";
-import { brokerEnabled, brokerList, readOffsets, clearOffsets } from "./acpbroker.js";
+import { brokerEnabled, brokerList, brokerOnEvent, readOffsets, clearOffsets, type BrokerCtlEvent } from "./acpbroker.js";
 import { agentById, DEFAULT_AGENT } from "./agents.js";
 import { remapLegacyCwd } from "./store.js";
 import { loadReg, meta, noteLastUsed } from "./dwstore.js";
@@ -354,7 +354,7 @@ export async function ensureLoaded(ctx: ApiContext, id: string): Promise<void> {
     // cheaper than a session/load replay.
     if (!ctx.sessionLog.get(id).length) {
       try {
-        const disk = ctx.sessionLog.readDisk(id);
+        const disk = ctx.sessionLog.readDiskTail(id);
         if (disk.length) ctx.sessionLog.restoreMemory(id, disk);
       } catch { /* mirror unreadable — pages degrade to empty, not broken */ }
     }
@@ -630,7 +630,52 @@ export function resolveTurnByReq(
   }
 }
 
+/** Broker prompt-event settle — the ctl channel's `prompt-done` says the
+ *  broker saw this prompt's response on the acp's byte stream (it may have
+ *  transited while this backend was dead, or died on the old attach).
+ *  Correlation: a journaled reqId must match so an older prompt's answer
+ *  can't eat a re-dispatched turn's open entry; with no reqId journaled,
+ *  the acp the journal names is the disambiguator. An armed adopted-turn
+ *  watcher gets the same done() path the wire sniffer uses; nobody armed
+ *  → stash like a sniffed dead-window response (a later arming watcher
+ *  consumes it with resync intact, the bounded flush settles the rest). */
+function onBrokerPromptEvt(ctx: ApiContext, e: BrokerCtlEvent) {
+  if (e.ev !== "prompt-done") return; // prompt-start is emitted but unused
+  const id = typeof e.sessionId === "string" && e.sessionId ? e.sessionId : null;
+  if (!id) return;
+  openTurnsLoad(ctx);
+  const t = openTurns.get(id);
+  if (t?.reqId != null && String(t.reqId) !== String(e.reqId)) return;
+  if (t != null && t.reqId == null && t.acpId != null && e.id != null && t.acpId !== e.id) return;
+  const ok = e.ok !== false;
+  const early = adoptedSettle.get(id);
+  if (early) { early(ok, e.errMsg); return; }
+  // A live dispatchPrompt owns the settle — the response arrives on its own
+  // data channel right behind the ctl event and the SDK resolves normally.
+  if (!t || inflight.has(id)) return;
+  sniffedSettles.set(id, { ok, errMsg: e.errMsg, turn: t });
+  if (!sniffedSettleTimer) {
+    sniffedSettleTimer = setTimeout(() => flushSniffedSettles(ctx), SNIFF_SETTLE_DELAY_MS);
+    sniffedSettleTimer.unref();
+  }
+}
+
+/** Shared broker prompt-event subscription — installed lazily the first
+ *  time an adopted-turn watcher needs it (broker mode only), then kept for
+ *  the process lifetime: one shared ctl subscription fans out to every
+ *  watcher by sessionId, so nothing per-turn is ever subscribed or torn
+ *  down. */
+let promptEvtArmed = false;
+function ensurePromptEvtSub(ctx: ApiContext) {
+  if (promptEvtArmed || !brokerEnabled) return;
+  promptEvtArmed = true;
+  void brokerOnEvent((e) => {
+    try { onBrokerPromptEvt(ctx, e); } catch { /* events never break the sub */ }
+  }).catch(() => { promptEvtArmed = false; });
+}
+
 function watchAdoptedTurn(ctx: ApiContext, id: string, acp: DevinAcp, resync = false) {
+  ensurePromptEvtSub(ctx); // millisecond settle via broker prompt-done
   adoptedTurns.add(id);
   inflight.add(id);
   acp.busySessions.add(id); // same protection a real prompt gets — no hard
@@ -705,6 +750,18 @@ function settleDeadAdoptedTurn(ctx: ApiContext, id: string, acp: DevinAcp, resyn
   ]).finally(() => settleRecoveredTurn(ctx, id));
 }
 
+/** The ledger broker always emits `pendingPrompts` per acp — a missing field
+ *  means a pre-ledger build is running, which this backend no longer
+ *  tolerates: the ledger reads as EMPTY (authoritative — every in-window
+ *  journaled turn settles instantly) and one loud error per process names
+ *  the offender. */
+let preLedgerWarned = false;
+function warnPreLedgerBroker(acpId: string) {
+  if (preLedgerWarned) return;
+  preLedgerWarned = true;
+  console.error(`[broker] pre-ledger broker — upgrade required: acp ${acpId} reports no pendingPrompts ledger; treating it as EMPTY (authoritative)`);
+}
+
 /** Broker mode: re-attach to acp children that outlived the old backend,
  *  rebuild the pool/session maps they host, and arm settle watchers on
  *  their surviving in-flight turns. Runs before the orphan sweep (broker
@@ -736,6 +793,11 @@ export async function adoptBrokerAcps(ctx: ApiContext) {
     try {
       const acp = await ctx.manager.adopt(a.cwd, agent, a.key, a.acpId, offsets[a.acpId] ?? SKIP, a.account ?? null);
       adopted++;
+      // The ledger broker always emits pendingPrompts — absent means a
+      // pre-ledger build; warn once and treat it as an EMPTY (authoritative)
+      // ledger rather than falling back to blind silence-watching.
+      if (!Array.isArray(a.pendingPrompts)) warnPreLedgerBroker(a.acpId);
+      const ledger = a.pendingPrompts ?? [];
       // Discover sessions this process still holds: devin stamps the holder
       // pid on loaded sessions — our own acp is "locked" BY its own pid.
       try {
@@ -749,18 +811,19 @@ export async function adoptBrokerAcps(ctx: ApiContext) {
             if (!sid) continue;
             const holder = Number(lm["cognition.ai/lockHolderPid"] ?? 0);
             // Locked by SOMEONE but devin won't name the holder (this build
-            // stamps lockHolderPid:null on every lock): claiming it pins the
-            // session to an acp that answers session_not_found forever — the
-            // exact wedge claimLockedHolder's probe now repairs. Claim only
-            // our own locks, unstamped-unlocked records, or a session whose
-            // still-pending prompt the broker ledger saw go out on THIS acp
-            // (ledger proof outweighs the missing stamp).
-            const heldElsewhere = lm["cognition.ai/isLocked"] === true && holder !== a.pid;
+            // stamps lockHolderPid:null on every lock): pinning an unstamped
+            // record to this acp without evidence is how a session wedges on
+            // a host that only answers session_not_found — the exact bug
+            // claimLockedHolder's probe repairs. Claim ONLY records that
+            // name this acp's pid, or a session whose still-pending prompt
+            // the broker ledger saw go out on THIS acp (ledger proof
+            // outweighs the missing stamp). Everything else stays unpinned —
+            // its next op's session_locked goes through claimLockedHolder.
             const t = openTurns.has(sid) && !adoptedTurns.has(sid) ? openTurns.get(sid) : undefined;
-            const pending = t != null && (a.pendingPrompts ?? []).some(
+            const pending = t != null && ledger.some(
               (p) => p.sessionId === sid || (t.reqId != null && String(t.reqId) === p.reqId),
             );
-            if (holder === a.pid || (holder === 0 && !heldElsewhere) || pending) {
+            if (holder === a.pid || pending) {
               held++;
               if (!loadedOn.get(acp)) loadedOn.set(acp, new Set());
               markLoadedOn(sid, acp);
@@ -775,16 +838,16 @@ export async function adoptBrokerAcps(ctx: ApiContext) {
             if (t) {
               if (pending) {
                 watchAdoptedTurn(ctx, sid, acp, offsets[a.acpId] == null); turns++;
-              } else if (Array.isArray(a.pendingPrompts) && t.ts != null && t.ts >= a.startedAt) {
-                // Broker watched this acp since spawn and saw no outstanding
-                // prompt — the turn's response already fired (consumed or
-                // dropped in the dead window). Settle now instead of
-                // ghosting "working" to the silence cap. (Field absent =
-                // pre-ledger broker — blind, fall through to the watcher.)
+              } else if (t.ts != null && t.ts >= a.startedAt) {
+                // The ledger watched this acp since spawn and shows no
+                // outstanding prompt — the turn's response already fired
+                // (consumed or dropped in the dead window). Settle now
+                // instead of ghosting "working" to the silence cap.
                 settleDeadAdoptedTurn(ctx, sid, acp, offsets[a.acpId] == null); turns++;
               } else {
-                // Sent under a previous acp/broker life — the ledger never
-                // saw it; only the silence detector can tell live from dead.
+                // Journaled before this acp's lifetime — outside the
+                // ledger's authoritative window, so its absence proves
+                // nothing; only the silence detector tells live from dead.
                 watchAdoptedTurn(ctx, sid, acp, offsets[a.acpId] == null); turns++;
               }
             }

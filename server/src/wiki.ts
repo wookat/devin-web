@@ -59,7 +59,7 @@ const REPO_RE = /^[\w.-]+\/[\w.-]+$/;
 const validRepo = (s: string) => REPO_RE.test(s.trim()) && s.trim().length < 200;
 
 /** Parse the structure text ("- 1 Title\n  - 1.1 Sub") into ordered topics. */
-export function parseStructure(text: string): { id: string; title: string; depth: number }[] {
+function parseStructure(text: string): { id: string; title: string; depth: number }[] {
   const topics: { id: string; title: string; depth: number }[] = [];
   for (const line of text.split("\n")) {
     const m = line.match(/^(\s*)-\s+([\d.]+)\s+(.+?)\s*$/);
@@ -71,7 +71,7 @@ export function parseStructure(text: string): { id: string; title: string; depth
 
 /** Split the concatenated wiki doc on `# Page:` markers. Returns pages in
  *  document order; each keeps its title + full markdown body. */
-export function splitPages(doc: string): { title: string; markdown: string }[] {
+function splitPages(doc: string): { title: string; markdown: string }[] {
   const parts = doc.split(/^# Page:\s*/m).slice(1);
   return parts.map((p) => {
     const nl = p.indexOf("\n");

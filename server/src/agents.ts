@@ -109,7 +109,7 @@ function parseUserList(raw: unknown): AgentDef[] {
 }
 
 /** User-defined agents from <dataDir>/agents.json (mtime-cached). */
-export function userAgents(): AgentDef[] {
+function userAgents(): AgentDef[] {
   let mtime = 0;
   try {
     mtime = fs.statSync(agentsFile()).mtimeMs;

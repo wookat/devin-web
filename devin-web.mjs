@@ -240,7 +240,7 @@ try {
     case "deploy": await cmdInstall(); await cmdRestart(true); break;
     case "logs": cmdLogs(rest[0]); break;
     default:
-      console.log(`usage: node devin-web.mjs <run|start|stop|restart [--build]|status|install|uninstall|deploy|logs [supervisor|server|respawn]>`);
+      console.log(`usage: node devin-web.mjs <run|start|stop|restart [--build]|status|install|uninstall|deploy|logs [supervisor|server|broker]>`);
       process.exitCode = cmd ? 1 : 0;
   }
 } catch (e) {

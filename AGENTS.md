@@ -83,7 +83,19 @@ ACP BROKER + ADOPTION — `scripts/acp-broker.mjs` owns local acp children
 daemon pattern). Wire: ndjson ctl channel (spawn/kill/list + exit events)
 and one raw duplex data channel per acp (first line `{"attach":id,"after":N}`
 — the broker replays ring-buffered stdout frames newer than `after`, frames
-cut at line boundaries, ~4MB ring). Client side is `server/src/acpbroker.ts`:
+cut at line boundaries, ~4MB ring). The broker is also a **JSON-RPC id
+remux**: client→agent request ids are rewritten to a per-acp `brokerSeq`
+(`idMap` restores them on the response BEFORE the frame enters the ring —
+ring/replay/live stream all carry client-side ids), so a re-attached
+backend's reused counter can't collide with a dead connection's
+outstanding requests. The `pendingPrompts` ledger is keyed by brokerReqId
+and reports the client `reqId` + `sessionId`; `promptWithRetry` polls it
+every 30s for live turns — a journaled prompt absent from the ledger while
+the SDK promise still pends = lost response frame → `lost-response` reject
+instead of waiting out the 15min silence watchdog (a missing
+`pendingPrompts` field = pre-ledger broker → one hard
+`[broker] pre-ledger broker — upgrade required` error per process, probe
+skipped — this backend only runs against the ledger broker). Client side is `server/src/acpbroker.ts`:
 `brokerSpawn`/`brokerAttach` (a net.Socket posing as ChildProcess stdio via
 the `ProcHandle` structural type), `brokerList`, `brokerOnExit`, and the
 `<dataDir>/acp-offsets.json` journal `markGracefulExit` writes so the next
@@ -99,10 +111,13 @@ attach + `session/list` → rebuild loadedOn/sessionHost/bySession; sessions
 with surviving open-turns get `watchAdoptedTurn` — pseudo-inflight +
 busySessions protection — UNLESS the broker's prompt ledger
 (`pendingPrompts`, acp-broker.mjs tracks session/prompt req→resp pairs on
-the wire) proves the turn already answered and was dispatched under this
-acp's lifetime (openTurn.ts ≥ acp.startedAt) → `settleDeadAdoptedTurn`
-settles instantly; ledger-blind turns keep a ~30s-floored silence settle
-FALLBACK, since the turn's
+the wire — always emitted; an absent field = a pre-ledger build → one loud
+`[broker] pre-ledger broker — upgrade required` error per process and the
+ledger reads as EMPTY, i.e. authoritative) proves the turn already answered
+and was dispatched under this acp's lifetime (openTurn.ts ≥ acp.startedAt)
+→ `settleDeadAdoptedTurn` settles instantly; only turns journaled BEFORE
+this acp's lifetime — outside the ledger's authoritative window — keep the
+~30s-floored silence settle, since the turn's
 prompt response died on the old byte stream) is AWAITED before the orphan
 sweep + `autoResumeInterrupted` so resume never double-prompts a turn that
 is still running. Instant settle: the acp wire sniffer (acp.ts — stdin
@@ -173,14 +188,11 @@ route code never changes.
 
 ## Gotchas
 
-- The pre-rename data dir was `~/.devin-remote` (upstream project name); the
-  rename to `~/.devin-web` did NOT carry data. `migrateLegacyDataDir()` in
-  store.ts runs at Store construction: copies missing log/uploads/tl files
-  (bigger `.jsonl` wins), deep-merges store.json/dw.json (pins/folders/titles)
-  /accounts-state.json, marks `.migrated-devin-remote`. Sessions' spawn-time
-  cwd inside devin's store still says `devin-workbench-local` —
-  `remapLegacyCwd()` (store.ts) rewrites that path segment on every
-  `sessionCwd.set` + `workspaces()` read.
+- Sessions' spawn-time cwd inside devin's store still says
+  `devin-workbench-local` (the upstream project name) — `remapLegacyCwd()`
+  (store.ts) rewrites that path segment on every `sessionCwd.set` +
+  `workspaces()` read. The one-time `~/.devin-remote` → `~/.devin-web`
+  file migration has run and its machinery is deleted.
 - i18next interpolation is `{{var}}` ONLY — single-brace `{name}` renders
   literally. All locale keys must use `{{var}}`.
 - `session/load` locks a session to ONE acp process (`session_locked`,
@@ -193,7 +205,12 @@ route code never changes.
   system/registry/fsbrowse/newsession/persession · `share.ts` the
   /api/share/* tree · `session.ts` sessionSubs + sub:* machinery).
   `httputil.ts` = the ONE json/readBody/readJson/UNSUPPORTED set.
-  `sessionlog.ts` = append/ring/mirror/DB session log;
+  `sessionlog.ts` = append/ring/mirror/DB session log (the ring is a bounded
+  disk cache: `get()` lazy-hydrates the last 5k entries from `readDisk` on
+  miss once per process, `replayHold` blanks reads between `clear()` and the
+  first replay append so stale-gen rows can't double a reloaded transcript;
+  `.jsonl` rotates `.1`/`.2` at `DEVIN_WEB_LOG_MAX_MB`=128 ONLY when the
+  sqlite mirror is authoritative);
   `sessionsidecars.ts` = the subagent sidecar projection hung on
   `sessionLog.sidecars` (`.sub.<aid>`/`.subs`/`.subscan` files).
   `sessionload.ts` = the
