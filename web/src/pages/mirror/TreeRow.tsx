@@ -1,8 +1,9 @@
-import { useState } from 'react'
+import { useCallback, useEffect, useState } from 'react'
 import { useTranslation } from 'react-i18next'
 import { createPortal } from 'react-dom'
 import { Expand, Folder as FolderIcon, GitPullRequest, Link2, Lock, Pencil, Plus } from 'lucide-react'
-import { OArchive, OChevronDown, OChevronRight, ODots, OPin, OX } from '../../components/officialIcons'
+import { useDraggable, useDroppable, type DraggableAttributes, type DraggableSyntheticListeners } from '@dnd-kit/core'
+import { OArchive, OChevronRight, ODots, OPin, OPinSlash, OX } from '../../components/officialIcons'
 import { adminFetch } from '@/lib/api'
 import { StatusDot } from '@/components/ui'
 import { cn } from '@/lib/utils'
@@ -10,15 +11,54 @@ import { sessionMirrorPath } from '@/lib/mirrorLinks'
 import { type MirrorTreeSession, relTime } from './treeCache'
 import { mapEnum, actionCls } from './statusReduce'
 
-function TreeRow({ s, depth, activeDevinId, folders, onOpen, onPrefetch, onRefresh, archivedView, compact, propHidden }: { s: MirrorTreeSession; depth: number; activeDevinId: string; folders: string[]; onOpen: (s: MirrorTreeSession) => void; onPrefetch?: (s: MirrorTreeSession) => void; onRefresh?: () => void; archivedView?: boolean; compact?: boolean; propHidden?: Record<string, boolean> }) {
+/** What a section accepts for session drops — `pin` = pin + position,
+ *  `folder` = assign folder name (null = unfile into Recent). Carried in the
+ *  droppable data so SessionTree's drop resolver fires the right endpoint. */
+type TreeAccept = { pin: true } | { folder: string | null }
+/** Section context every row droppable carries: the accept action + the
+ *  section's shown row ids in order (drop position resolves against it). */
+type RowDrop = { accept: TreeAccept; items: string[] }
+
+type RowProps = { s: MirrorTreeSession; depth: number; activeDevinId: string; folders: string[]; onOpen: (s: MirrorTreeSession) => void; onPrefetch?: (s: MirrorTreeSession) => void; onRefresh?: () => void; archivedView?: boolean; compact?: boolean; propHidden?: Record<string, boolean>; /** Section drop context — absent = rows aren't drop targets (project buckets, archived). */ dndSection?: RowDrop; /** Session id the drag dwell wants expanded (parent-peek). */ dwellId?: string | null; /** True while a folder/group is dragged — rows go inert like the official v||m rule. */ suppressHover?: boolean; /** Shared ms timestamp of the last drag end/cancel — the row anchor suppresses the click a drop leaves behind. */ navGuard?: { current: number } }
+
+type ImplProps = RowProps & { ghost?: boolean; dndRef?: (el: HTMLElement | null) => void; dndListeners?: DraggableSyntheticListeners; dndAttrs?: DraggableAttributes; dragging?: boolean; dropHighlight?: boolean }
+
+/** DraggableSidebarSessionRow: one node is both the `session:` drag source and
+ *  the `session-target:` droppable (positional insert / parent-peek dwell). */
+function TreeRow({ dndSection, dwellId, suppressHover, navGuard, ...props }: RowProps) {
+  const s = props.s
+  const drag = useDraggable({
+    id: `session:${s.devin_id}`,
+    data: { type: 'session', sessionId: s.devin_id },
+    disabled: !!props.archivedView,
+  })
+  const drop = useDroppable({
+    id: `session-target:${s.devin_id}`,
+    data: { type: 'session-target', sessionId: s.devin_id, hasKids: s.children.length > 0 || s.total_children > 0, accept: dndSection?.accept, items: dndSection?.items ?? [] },
+    disabled: !dndSection || !!props.archivedView || !!suppressHover,
+  })
+  const setRefs = useCallback((el: HTMLElement | null) => { drag.setNodeRef(el); drop.setNodeRef(el) }, [drag.setNodeRef, drop.setNodeRef])
+  return <TreeRowImpl {...props} dndSection={dndSection} dwellId={dwellId} suppressHover={suppressHover} navGuard={navGuard} dndRef={setRefs} dndListeners={drag.listeners} dndAttrs={drag.attributes} dragging={drag.isDragging} dropHighlight={drop.isOver} />
+}
+
+/** DragOverlay ghost — a LIVE clone of the row face (official renders
+ *  SidebarSessionRow itself inside an inert wrapper; ours reuses TreeRowImpl
+ *  with no dnd wiring, and the overlay's pointer-events-none keeps it inert). */
+function TreeRowGhost({ s, activeDevinId, compact, propHidden }: { s: MirrorTreeSession; activeDevinId?: string; compact?: boolean; propHidden?: Record<string, boolean> }) {
+  return <TreeRowImpl s={s} depth={0} activeDevinId={activeDevinId ?? ''} folders={[]} onOpen={() => {}} compact={compact} propHidden={propHidden} ghost />
+}
+
+function TreeRowImpl({ s, depth, activeDevinId, folders, onOpen, onPrefetch, onRefresh, archivedView, compact, propHidden, dndSection, dwellId, suppressHover, navGuard, ghost, dndRef, dndListeners, dndAttrs, dragging, dropHighlight }: ImplProps) {
   const { t } = useTranslation()
   const [open, setOpen] = useState(false)
   const [busy, setBusy] = useState(false)
   const [allKids, setAllKids] = useState<MirrorTreeSession[] | null>(null)
   const [kidsBusy, setKidsBusy] = useState(false)
   const kids = allKids ?? s.children
-  const [menu, setMenu] = useState<'closed' | 'main' | 'folder' | 'rename' | 'newfolder'>('closed')
+  const [menu, setMenu] = useState<'closed' | 'main' | 'folder' | 'newfolder'>('closed')
+  const [editing, setEditing] = useState(false)
   const [draft, setDraft] = useState('')
+  const [copiedAt, setCopiedAt] = useState(0)
   const [menuPos, setMenuPos] = useState<{ left: number; top: number }>({ left: 0, top: 0 })
   const [subPos, setSubPos] = useState<{ left: number; top: number }>({ left: 0, top: 0 })
   const openFolderSub = (e: React.MouseEvent) => {
@@ -38,6 +78,11 @@ function TreeRow({ s, depth, activeDevinId, folders, onOpen, onPrefetch, onRefre
     }
   }
   const hasKids = s.children.length > 0 || s.total_children > 0
+  // Parent-peek: SessionTree arms a ~600ms dwell when a dragged session hovers
+  // a collapsed parent row — expands it so the child rows become visible.
+  useEffect(() => {
+    if (dwellId === s.devin_id && hasKids && !open) setOpen(true)
+  }, [dwellId, s.devin_id, hasKids, open])
   const active = s.devin_id === activeDevinId
   const enu = mapEnum(s.status_enum || s.activity_status)
   // Official rows are 30px one-line; rows with a subtitle line render 44px
@@ -57,15 +102,16 @@ function TreeRow({ s, depth, activeDevinId, folders, onOpen, onPrefetch, onRefre
     <>
       <div
         data-slot="sidebar-menu-item"
-        data-dw-sid={s.devin_id}
-        draggable={!archivedView}
-        onDragStart={(e) => {
-          // Session drag-and-drop: TreeSection accepts drops on its header
-          // (folder assign / pin, lands on top) and on any row (positional —
-          // inserts before/after that row via the `after` field).
-          e.dataTransfer.effectAllowed = 'move'
-          e.dataTransfer.setData('text/x-dw-session', s.devin_id)
-          e.dataTransfer.setData('text/plain', s.title || s.devin_id)
+        data-dw-sid={ghost ? undefined : s.devin_id}
+        ref={dndRef}
+        // dnd-kit activator semantics minus `role` — the row nests real
+        // buttons/links, and role=button would hide them from screen readers.
+        {...(dndAttrs ? { tabIndex: dndAttrs.tabIndex, 'aria-roledescription': dndAttrs['aria-roledescription'], 'aria-pressed': dndAttrs['aria-pressed'], 'aria-disabled': dndAttrs['aria-disabled'] } : {})}
+        {...dndListeners}
+        onPointerDown={(e) => {
+          // Only the main button arms the drag — right/middle clicks keep
+          // their context-menu semantics and can never start a drag.
+          if (e.button === 0) (dndListeners?.onPointerDown as ((ev: React.PointerEvent) => void) | undefined)?.(e)
         }}
         onContextMenu={(e) => {
           e.preventDefault()
@@ -74,24 +120,39 @@ function TreeRow({ s, depth, activeDevinId, folders, onOpen, onPrefetch, onRefre
         }}
         onPointerEnter={() => onPrefetch?.(s)}
         onTouchStart={() => onPrefetch?.(s)}
-        className={cn('group/row relative isolate mb-px mt-px flex items-center gap-1 rounded-md pr-0.5 hover:bg-tint-secondary has-[:focus-visible]:bg-tint-secondary [content-visibility:auto]', hasSub ? 'h-11 [contain-intrinsic-block-size:44px]' : 'h-[30px] [contain-intrinsic-block-size:30px]', (active || menu !== 'closed') && 'bg-tint-secondary')}
+        className={cn('group/row relative isolate mb-px mt-px flex items-center gap-1 rounded-md pr-0.5 hover:bg-tint-secondary has-[:focus-visible]:bg-tint-secondary [content-visibility:auto]', hasSub ? 'h-11 [contain-intrinsic-block-size:44px]' : 'h-[30px] [contain-intrinsic-block-size:30px]', (active || menu !== 'closed' || dropHighlight) && 'bg-tint-secondary', (dragging || ghost) && 'pointer-events-none select-none', dragging && 'opacity-40', suppressHover && 'pointer-events-none')}
         style={{ paddingLeft: 4 + depth * 14 }}
       >
         <a
           data-slot="sidebar-menu-button"
-          href={`/admin/d/${s.devin_id.replace(/^devin-/, '')}`}
+          href={`/admin/${s.devin_id}`}
           aria-current={active ? 'page' : undefined}
           aria-label={s.title || s.devin_id}
-          onClick={(e) => { e.preventDefault(); onOpen(s) }}
+          onClick={(e) => {
+            e.preventDefault()
+            // A session dropped back onto its own row lets a click through —
+            // swallow it instead of navigating mid-gesture.
+            if (navGuard && Date.now() - navGuard.current < 250) return
+            if (!editing) onOpen(s)
+          }}
+          onDoubleClick={(e) => {
+            // Official: double-click on the ACTIVE row starts inline rename.
+            if (!active || editing || archivedView) return
+            e.preventDefault()
+            setDraft(s.title || '')
+            setEditing(true)
+          }}
           className="absolute inset-0 cursor-pointer rounded-md"
         />
         {hasKids && (
           <button
+            onPointerDown={(e) => e.stopPropagation()}
             onClick={(e) => { e.stopPropagation(); setOpen((v) => !v) }}
             className="relative z-10 flex size-4 shrink-0 cursor-pointer items-center justify-center rounded text-muted-foreground hover:bg-accent"
-            aria-label={open ? 'Collapse' : 'Expand'}
+            aria-label={open ? t('common.collapse') : t('common.expand')}
+            aria-expanded={open}
           >
-            {open ? <OChevronDown size={12} /> : <OChevronRight size={12} />}
+            <OChevronRight size={12} className={cn('transition-transform duration-150', open && 'rotate-90')} />
           </button>
         )}
         {/* official left icon cell: w-6 h-[18px], 16px status glyph; aligns to
@@ -136,9 +197,32 @@ function TreeRow({ s, depth, activeDevinId, folders, onOpen, onPrefetch, onRefre
           )
         ) : null}
         <span className="flex min-w-0 flex-1 flex-col gap-0.5 overflow-hidden">
-          <span className={cn('min-w-0 truncate text-[13px] leading-[18px]', s.is_unread ? 'font-semibold text-foreground' : 'text-foreground/90', s.resumable === false && 'text-muted-foreground')}>
-            {s.title || s.devin_id}
-          </span>
+          {editing ? (
+            <input
+              autoFocus
+              ref={(el) => el?.select()}
+              value={draft}
+              placeholder={t('tree.sessionTitle')}
+              onChange={(e) => setDraft(e.target.value)}
+              onClick={(e) => e.stopPropagation()}
+              onPointerDown={(e) => e.stopPropagation()}
+              onBlur={() => {
+                const v = draft.trim()
+                setEditing(false)
+                if (v && v !== s.title) rowAction('/api/admin/mirror/session-title', { devin_id: s.devin_id, title: v })
+              }}
+              onKeyDown={(e) => {
+                e.stopPropagation()
+                if (e.key === 'Escape') { setEditing(false); setDraft(s.title || '') }
+                if (e.key === 'Enter') (e.currentTarget as HTMLInputElement).blur()
+              }}
+              className="relative z-10 h-auto min-w-0 w-full select-text rounded-none border-none bg-transparent p-0 text-[13px] leading-[18px] text-foreground shadow-none outline-none placeholder:text-muted-foreground"
+            />
+          ) : (
+            <span className={cn('min-w-0 truncate text-[13px] leading-[18px]', s.is_unread ? 'font-semibold text-foreground' : 'text-foreground/90', s.resumable === false && 'text-muted-foreground')}>
+              {s.title || s.devin_id}
+            </span>
+          )}
           {hasSub && (
             <span className="flex min-w-0 items-center whitespace-nowrap text-[12px] leading-[16px] text-muted-foreground">
               {s.resumable === false && (
@@ -190,7 +274,7 @@ function TreeRow({ s, depth, activeDevinId, folders, onOpen, onPrefetch, onRefre
           )}
         </span>
         {s.is_unread && <span className="size-1.5 shrink-0 rounded-full bg-blue-500 group-hover/row:hidden" />}
-        <span data-slot="sidebar-menu-actions" className="pointer-events-auto relative z-10 flex shrink-0 flex-row items-center gap-px">
+        <span data-slot="sidebar-menu-actions" onPointerDown={(e) => e.stopPropagation()} className="pointer-events-auto relative z-10 flex shrink-0 flex-row items-center gap-px">
           {compact && awakeLabel && (
             <span aria-label={awakeLabel} title={awakeLabel} className="flex size-4 shrink-0 items-center justify-center text-blue-500">
               <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" aria-hidden="true" width={14} height={14}><path d="M7.3 5.9c-.8-1 .8-1.8 0-2.8" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" /><path d="M10.5 5.7c-.9-1.3.9-2.4 0-3.7" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" /><path d="M13.7 5.9c-.8-1 .8-1.8 0-2.8" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" /><ellipse cx="10.5" cy="9.9" rx="9" ry="3.6" stroke="currentColor" strokeWidth="1.5" /><ellipse cx="10.5" cy="9.9" rx="6.8" ry="2.2" fill="currentColor" /><path d="M1.5 9.9c.4 7.5 3.9 12 9 12s8.6-4.5 9-12" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" /><path d="M19.4 12.2c2.2-.45 3.4.55 3.15 2-.3 1.5-2 2.2-3.8 1.95" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" /></svg>
@@ -198,23 +282,27 @@ function TreeRow({ s, depth, activeDevinId, folders, onOpen, onPrefetch, onRefre
           )}
           <button
             data-slot="sidebar-menu-action"
-            aria-label={s.is_pinned ? 'Unpin' : 'Pin'}
-            title={s.is_pinned ? 'Unpin' : 'Pin'}
+            aria-label={s.is_pinned ? t('common.unpin') : t('common.pin')}
+            aria-pressed={!!s.is_pinned}
+            title={s.is_pinned ? t('common.unpin') : t('common.pin')}
             disabled={busy}
             onClick={(e) => { e.stopPropagation(); rowAction('/api/admin/mirror/session-pin', { devin_id: s.devin_id, pinned: !s.is_pinned }) }}
-            className={actionCls(menu !== 'closed')}
+            className={actionCls(menu !== 'closed' || !!s.is_pinned)}
           >
-            {s.is_pinned ? <OPin size={16} /> : <OPin size={16} />}
+            {s.is_pinned
+              ? <OPinSlash size={16} className="text-foreground" />
+              : <OPin size={16} />}
           </button>
           <button
             data-slot="sidebar-menu-action"
             aria-label={archivedView ? t('tree.unarchive') : t('menu.archive')}
+            aria-pressed={!!archivedView}
             title={archivedView ? t('tree.unarchive') : t('menu.archive')}
             disabled={busy}
-            onClick={(e) => { e.stopPropagation(); rowAction('/api/admin/mirror/session-archive', { devin_id: s.devin_id, archive: !archivedView }) }}
-            className={actionCls(menu !== 'closed')}
+            onClick={(e) => { e.stopPropagation(); rowAction('/api/admin/mirror/session-archive', { devin_id: s.devin_id, archived: !archivedView }) }}
+            className={actionCls(menu !== 'closed' || !!archivedView)}
           >
-            {archivedView ? <OArchive size={16} /> : <OArchive size={16} />}
+            <OArchive size={16} className={cn('transition-all duration-150', archivedView && 'scale-110 text-text-orange')} />
           </button>
           <button
             data-slot="sidebar-menu-action"
@@ -242,7 +330,7 @@ function TreeRow({ s, depth, activeDevinId, folders, onOpen, onPrefetch, onRefre
               role="menu"
               ref={(el) => { if (menu === 'main') el?.querySelector('button')?.focus() }}
               onKeyDown={(e) => {
-                if (e.key === 'Escape') { e.stopPropagation(); setMenu(menu === 'rename' ? 'main' : 'closed'); return }
+                if (e.key === 'Escape') { e.stopPropagation(); setMenu('closed'); return }
                 if (e.key === 'ArrowRight' && menu === 'main' && (document.activeElement as HTMLElement)?.getAttribute('aria-haspopup') === 'menu') { e.stopPropagation(); openFolderSub({ currentTarget: document.activeElement } as unknown as React.MouseEvent); return }
                 if (e.key !== 'ArrowDown' && e.key !== 'ArrowUp') return
                 e.preventDefault()
@@ -255,26 +343,7 @@ function TreeRow({ s, depth, activeDevinId, folders, onOpen, onPrefetch, onRefre
               style={{ left: menuPos.left, top: menuPos.top }}
               className="menu-in fixed z-50 min-w-[220px] rounded-[10px] bg-white/[.94] dark:bg-[#1f1f1f]/[.94] p-1 text-popover-foreground shadow-[0_10px_15px_-3px_rgba(0,0,0,0.1),0_4px_6px_-2px_rgba(0,0,0,0.05)] outline outline-1 outline-black/[.08] backdrop-blur-[8px] dark:outline-white/[.04] dark:-outline-offset-1"
             >
-              {menu === 'rename' ? (
-                <input
-                  autoFocus
-                  value={draft}
-                  placeholder={t('tree.sessionTitle')}
-                  onChange={(e) => setDraft(e.target.value)}
-                  onClick={(e) => e.stopPropagation()}
-                  onKeyDown={(e) => {
-                    e.stopPropagation()
-                    if (e.key === 'Escape') setMenu('main')
-                    if (e.key === 'Enter') {
-                      const v = draft.trim()
-                      setMenu('closed')
-                      if (!v) return
-                      if (v !== s.title) rowAction('/api/admin/mirror/session-title', { devin_id: s.devin_id, title: v })
-                    }
-                  }}
-                  className="w-full rounded bg-transparent px-2 py-1.5 text-[13px] outline-none placeholder:text-muted-foreground"
-                />
-              ) : (
+              {(
                 <>
                   <button role="menuitem" aria-haspopup="menu" onMouseEnter={(e) => openFolderSub(e)} onClick={(e) => { e.stopPropagation(); openFolderSub(e) }} className="flex w-full cursor-pointer items-center gap-2 rounded px-2 py-1.5 text-[13px] hover:bg-accent">
                     <FolderIcon size={13} className="text-muted-foreground" /> {t('menu.folder')} <OChevronRight size={12} className="ml-auto text-muted-foreground" />
@@ -283,7 +352,7 @@ function TreeRow({ s, depth, activeDevinId, folders, onOpen, onPrefetch, onRefre
                     role="menuitem"
                     onMouseEnter={() => { if (menu !== 'main') setMenu('main') }}
                     onClick={(e) => {
-                      e.stopPropagation(); setDraft(s.title || ''); setMenu('rename')
+                      e.stopPropagation(); setDraft(s.title || ''); setMenu('closed'); setEditing(true)
                     }}
                     className="flex w-full cursor-pointer items-center gap-2 rounded px-2 py-1.5 text-[13px] hover:bg-accent"
                   >
@@ -292,7 +361,13 @@ function TreeRow({ s, depth, activeDevinId, folders, onOpen, onPrefetch, onRefre
                   <button
                     role="menuitem"
                     onMouseEnter={() => { if (menu !== 'main') setMenu('main') }}
-                    onClick={(e) => { e.stopPropagation(); setMenu('closed'); navigator.clipboard.writeText(`${window.location.origin}${sessionMirrorPath(s.devin_id)}`) }}
+                    onClick={(e) => {
+                      e.stopPropagation()
+                      navigator.clipboard.writeText(`${window.location.origin}${sessionMirrorPath(s.devin_id)}`)
+                      setCopiedAt(Date.now())
+                      window.setTimeout(() => setCopiedAt(0), 1600)
+                      setMenu('closed')
+                    }}
                     className="flex w-full cursor-pointer items-center gap-2 rounded px-2 py-1.5 text-[13px] hover:bg-accent"
                   >
                     <Link2 size={13} className="text-muted-foreground" /> {t('menu.copyLink')}
@@ -367,8 +442,18 @@ function TreeRow({ s, depth, activeDevinId, folders, onOpen, onPrefetch, onRefre
           </>,
           document.body,
         )}
+      {copiedAt > 0 && createPortal(
+        <div
+          role="status"
+          style={{ left: menuPos.left + 8, top: menuPos.top + 4 }}
+          className="menu-in pointer-events-none fixed z-[70] flex items-center gap-1.5 rounded-md bg-foreground px-2 py-1 text-[12px] leading-[16px] text-background shadow-md"
+        >
+          <Link2 size={12} /> {t('menu.linkCopied')}
+        </div>,
+        document.body,
+      )}
       </div>
-      {open && kids.map((c) => <TreeRow key={c.devin_id} s={c} depth={depth + 1} activeDevinId={activeDevinId} folders={folders} onOpen={onOpen} onPrefetch={onPrefetch} onRefresh={onRefresh} archivedView={archivedView} compact={compact} propHidden={propHidden} />)}
+      {open && kids.map((c) => <TreeRow key={c.devin_id} s={c} depth={depth + 1} activeDevinId={activeDevinId} folders={folders} onOpen={onOpen} onPrefetch={onPrefetch} onRefresh={onRefresh} archivedView={archivedView} compact={compact} propHidden={propHidden} dwellId={dwellId} suppressHover={suppressHover} navGuard={navGuard} />)}
       {open && !allKids && s.total_children > s.children.length && (
         <div data-slot="sidebar-menu-item" className="group/row relative" style={{ paddingLeft: (depth + 1) * 14 }}>
           <button
@@ -391,4 +476,5 @@ function TreeRow({ s, depth, activeDevinId, folders, onOpen, onPrefetch, onRefre
   )
 }
 
-export { TreeRow };
+export { TreeRow, TreeRowGhost };
+export type { TreeAccept, RowDrop };

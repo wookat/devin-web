@@ -290,7 +290,7 @@ export default function SessionsPage() {
             {/* hover actions live IN the flow (official expands them before the
                 meta) — no absolute overlay, so the avatar is never covered */}
             <span className="hidden items-center gap-0.5 group-hover/row:flex">
-              <button onClick={(e) => { e.stopPropagation(); pinRow(s) }} title={s.is_pinned ? 'Unpin' : 'Pin'} aria-label={s.is_pinned ? 'Unpin' : 'Pin'} className={cn('flex size-7 cursor-pointer items-center justify-center rounded-[6px] text-muted-foreground hover:bg-tint-secondary hover:text-foreground', FOCUS_RING)}>
+              <button onClick={(e) => { e.stopPropagation(); pinRow(s) }} title={s.is_pinned ? t('common.unpin') : t('common.pin')} aria-label={s.is_pinned ? t('common.unpin') : t('common.pin')} className={cn('flex size-7 cursor-pointer items-center justify-center rounded-[6px] text-muted-foreground hover:bg-tint-secondary hover:text-foreground', FOCUS_RING)}>
                 {s.is_pinned ? <OPin size={14} /> : <OPin size={14} />}
               </button>
               <button onClick={(e) => { e.stopPropagation(); archRow(s) }} title={s.status_enum === 'archived' ? t('sp.unarchive') : t('sp.archive')} aria-label={s.status_enum === 'archived' ? t('sp.unarchive') : t('sp.archive')} className={cn('flex size-7 cursor-pointer items-center justify-center rounded-[6px] text-muted-foreground hover:bg-tint-secondary hover:text-foreground', FOCUS_RING)}>

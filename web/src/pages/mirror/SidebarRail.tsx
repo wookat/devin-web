@@ -75,7 +75,7 @@ function SidebarRail({ isVisitor, sidebar, peek, setSidebar, setPeek, isDraft, n
   return (
     <>
       {!isVisitor && sidebar && window.innerWidth < 768 && (
-        <button type="button" aria-label="Close sidebar" className="fixed inset-0 z-40 cursor-default before:absolute before:inset-0 before:bg-black/50 before:content-[''] md:hidden motion-safe:transition-opacity" onClick={() => setSidebar(false)} />
+        <button type="button" aria-label={t('sp.closeSb')} className="fixed inset-0 z-40 cursor-default before:absolute before:inset-0 before:bg-black/50 before:content-[''] md:hidden motion-safe:transition-opacity" onClick={() => setSidebar(false)} />
       )}
       {!isVisitor && !sidebar && window.innerWidth >= 768 && (
         <div className="absolute inset-y-0 left-0 z-30 w-2" onMouseEnter={() => setPeek(true)} />
@@ -136,8 +136,8 @@ function SidebarRail({ isVisitor, sidebar, peek, setSidebar, setPeek, isDraft, n
             <button
               onClick={onOpenPalette}
               className="ml-auto flex size-7 items-center justify-center rounded-[6px] text-muted-foreground hover:bg-tint-secondary hover:text-foreground"
-              aria-label="Search"
-              title="Search (Ctrl+K)"
+              aria-label={t('common.search')}
+              title={t('sp.searchTitle')}
             >
               <OSearch size={16} />
             </button>
@@ -146,8 +146,8 @@ function SidebarRail({ isVisitor, sidebar, peek, setSidebar, setPeek, isDraft, n
             <button
               onClick={() => setNotifOpen((v) => !v)}
               className="relative flex size-7 items-center justify-center rounded-[6px] text-muted-foreground hover:bg-tint-secondary hover:text-foreground"
-              aria-label="Notifications"
-              title="Notifications"
+              aria-label={t('sp.notif')}
+              title={t('sp.notif')}
             >
               <OBell size={16} />
               {unreadCount > 0 && <span className="absolute right-1 top-1 size-1.5 rounded-full bg-red-500" />}
@@ -175,8 +175,8 @@ function SidebarRail({ isVisitor, sidebar, peek, setSidebar, setPeek, isDraft, n
             <button
               onClick={() => { setPeek(false); setSidebar(false) }}
               className="flex size-7 items-center justify-center rounded-[6px] text-muted-foreground hover:bg-tint-secondary hover:text-foreground"
-              aria-label="Collapse sidebar"
-              title="Collapse sidebar"
+              aria-label={t('sp.collapseSb')}
+              title={t('sp.collapseSb')}
             >
               <OCollapse size={16} />
             </button>

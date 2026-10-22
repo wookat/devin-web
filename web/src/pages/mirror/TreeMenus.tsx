@@ -329,7 +329,7 @@ function TreeHeaderMenus({ prefs, onPrefs, tree, folderNames, folderAction }: { 
               const set = (r: [string, string]) => onPrefs(created ? { createdRange: 'custom', createdCustom: r } : { updatedRange: 'custom', updatedCustom: r })
               return (
                 <MenuCalendar
-                  title={created ? 'Created time' : 'Updated time'}
+                  title={created ? t('tree.flt.flt_created') : t('tree.flt.flt_updated')}
                   range={range}
                   onPick={(d) => {
                     // Official: first pick = single-day range (from=to); a pick while from===to extends it; a pick after a wider range starts a new single-day range.
