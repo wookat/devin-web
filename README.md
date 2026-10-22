@@ -1,6 +1,6 @@
 # devin-web
 
-**A self-hosted web workbench for local Devin agents** — cloud-style sessions,
+**A self-hosted Devin control plane for local agents** — cloud-style sessions,
 timeline, editor, terminals and subagents, driven over the
 [Agent Client Protocol](https://agentclientprotocol.com), served from your own
 machine and reachable anywhere (LAN or Cloudflare Tunnel).
