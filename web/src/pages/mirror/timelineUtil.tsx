@@ -1,7 +1,8 @@
 import { useEffect, useState } from 'react'
 import { Code } from 'lucide-react'
 import { viewer, sessionFetch } from '@/lib/viewer'
-import { type TimelineItem, STANDALONE_GIT_TYPES, STANDALONE_ROW_TYPES, workSeconds, itemEndMs, GROUP_GAP_MS, mergeScriptedRuns, mergeShellPairs, mergeEnvLifecycle } from '@/components/Timeline'
+import { type TimelineItem, STANDALONE_GIT_TYPES, STANDALONE_ROW_TYPES, workSeconds, itemEndMs, GROUP_GAP_MS } from '@/components/Timeline'
+import { mergeScriptedRuns, mergeShellPairs, mergeEnvLifecycle } from '@/components/TimelineMerges'
 import { cn } from '@/lib/utils'
 import { type Group, isLifecycleStatus } from './composerMeta'
 

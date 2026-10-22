@@ -6,24 +6,26 @@ import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } fr
 import { useTranslation } from 'react-i18next'
 import { Link, useLocation, useNavigate, useParams } from 'react-router-dom'
 import { Loader2, Settings2, Copy, Check, Archive, ArchiveRestore, Plus, FileText, Circle, ArrowUp, Square, Expand, Code, UploadCloud, Folder as FolderIcon, Pencil, Lightbulb, Info, Image as ImageIcon, AlertTriangle, MessageSquare, Sparkles, TextQuote, CornerDownLeft } from 'lucide-react'
-import { adminFetch, adminFetchSwr, shareFetchSwr, type AdminSession, type PublicMessage, type DashboardData } from '@/lib/api'
+import { adminFetch, adminFetchSwr, shareFetchSwr, type PublicMessage, type DashboardData } from '@/lib/api'
 import { adminViewer, visitorViewer, setViewer, sessionFetch, sessionFetchSwr, attachmentUrl, type Viewer, type SharePermission } from '@/lib/viewer'
 import { visibleInterval } from '@/lib/poll'
 import { subscribeWs } from '@/lib/ws'
 import { getTheme, setTheme, type Theme } from '@/lib/theme'
-import { type TimelineItem, workSeconds, envSupersededMap } from '@/components/Timeline'
+import { type TimelineItem, workSeconds } from '@/components/Timeline'
+import { envSupersededMap } from '@/components/TimelineMerges'
 import { type ComposerEditorHandle } from '@/components/ComposerEditor'
 import DwMark from '@/components/DwMark'
 import { type QuoteAttachment } from '../../shared/quotes'
 import { cn } from '@/lib/utils'
-import { readTreeCache, type MirrorTreeSession, type TreeCachePayload, writeTreeCache } from './mirror/treeCache'
+import { type MirrorTreeSession } from './mirror/treeCache'
+import { useSessionTreeData } from './mirror/useSessionTreeData'
 import { prefetchSession, visitorTabs, type SessionDetail, tlSnapshots, messagesFromItems, type LocalCfg, EFFORT_SUFFIX_RE, modeOfVersion, type ShareMeta, defaultTabs, CommandPalette, TimelineSkeleton } from './mirror/pageBits'
 import { type PanelKey, PANELS, parseOfficialTab, serializeOfficialTab, useUrlParamSync } from './mirror/panelTabs'
 import { type TimelinePage, mergeItems, groupItems } from './mirror/timelineUtil'
 import { reduceStatus } from './mirror/statusReduce'
 import { type ComposerMetaT, type SuggestItem, AT_CATEGORIES } from './mirror/composerMeta'
-import { type TreePrefs, TREE_PREFS_KEY, DEFAULT_TREE_PREFS, buildFilterQ } from './mirror/SessionTree'
-import { type DraftTarget } from './mirror/LocalPicker'
+import { useDraftSession } from './mirror/useDraftSession'
+import { useSelectionQuote } from './mirror/useSelectionQuote'
 import { type WfAgentEventState } from './mirror/AgentsPanel'
 import { SessionMenu } from './mirror/SessionMenu'
 import { SessionIndex } from './mirror/SessionIndex'
@@ -31,7 +33,7 @@ import { TimelineGroup, StatusTail } from './mirror/TimelineGroups'
 import { DraftExplorer } from './mirror/DraftExplorer'
 import { PanelContent } from './mirror/panelRender'
 import { SidebarRail } from './mirror/SidebarRail'
-import { ComposerFooter, type DraftQuote, type SelQuote } from './mirror/ComposerFooter'
+import { ComposerFooter, type DraftQuote } from './mirror/ComposerFooter'
 import { HeaderBar } from './mirror/HeaderBar'
 import { TabStrip } from './mirror/TabStrip'
 import { FindInSession } from './mirror/FindInSession'
@@ -58,23 +60,12 @@ export default function AdminMirrorPage() {
   // sub:<root>:<aid> — a subagent rendered as a first-class child session.
   const isSub = id.startsWith('sub:')
   const draftFolder = isDraft ? new URLSearchParams(routerLoc.search).get('folder') || '' : ''
-  // Draft workspace pick (desktop parity: new session lets you choose the repo).
-  const [draftCwd, setDraftCwd] = useState('')
-  // Draft run target — local or `本地+SSH` (agent CLI on a configured remote
-  // host). Persisted like the desktop target pick; remote cwd is free text
-  // (no remote fs browse).
-  const [draftTarget, setDraftTargetState] = useState<DraftTarget>(() => {
-    try {
-      const p = JSON.parse(localStorage.getItem('dw-draft-target') ?? 'null')
-      if (p?.kind === 'ssh' && typeof p.host?.target === 'string' && p.host.target) return p as DraftTarget
-    } catch { /* unavailable */ }
-    return { kind: 'local' }
-  })
-  const [draftSshCwd, setDraftSshCwd] = useState('')
-  const setDraftTarget = useCallback((v: DraftTarget) => {
-    setDraftTargetState(v)
-    try { localStorage.setItem('dw-draft-target', JSON.stringify(v)) } catch { /* unavailable */ }
-  }, [])
+  // Draft landing state (workspace/target/agent picks + first-send create)
+  // lives in ./mirror/useDraftSession.
+  const {
+    draftCwd, setDraftCwd, draftTarget, setDraftTarget, draftSshCwd, setDraftSshCwd,
+    draftAgent, setDraftAgent, draftPicks, sendDraft,
+  } = useDraftSession({ draftFolder })
   const sessionSearch = useMemo(() => routerLoc.search, [id])
   const [visitorPerm, setVisitorPerm] = useState<SharePermission | null>(null)
   const vw = useMemo<Viewer>(
@@ -83,44 +74,12 @@ export default function AdminMirrorPage() {
   )
   setViewer(vw)
   const caps = vw.caps
-  const cachedTree = useMemo(() => readTreeCache(), [])
-  const [sessions, setSessions] = useState<AdminSession[]>([])
-  const [tree, setTree] = useState<MirrorTreeSession[]>(() => cachedTree?.sessions || [])
-  const unreadSessions = useMemo(() => tree.filter((s) => s.is_unread), [tree])
-  // "Recent" dirs for the draft workspace picker = cwds of existing sessions
-  // (tree order is already most-recently-updated first).
-  const recentCwds = useMemo(() => [...new Set(tree.map((s) => s.cwd).filter((c): c is string => !!c))].slice(0, 8), [tree])
-  const [folderOrder, setFolderOrder] = useState<string[]>(() => cachedTree?.folder_order || [])
-  const [folderTotals, setFolderTotals] = useState<Record<string, number>>(() => cachedTree?.folder_totals || {})
   const nav = useNavigate()
-  const registering = useRef(false)
-  const openTreeSession = useCallback(async (s: MirrorTreeSession) => {
-    if (window.innerWidth < 768) setSidebar(false)
-    // sub:<root>:<aid> child sessions are already local — open directly.
-    if (s.devin_id.startsWith('sub:')) { nav(`/admin/${s.devin_id}`); return }
-    const reg = sessions.find((x) => x.devin_session_id === s.devin_id)
-    if (reg) { nav(`/admin/${reg.id}`); return }
-    if (registering.current) return
-    registering.current = true
-    try {
-      const r = await adminFetch<{ id: string }>('/api/admin/sessions', {
-        method: 'POST',
-        body: JSON.stringify({ devin_session_id: s.devin_id, title: s.title }),
-      })
-      nav(`/admin/${r.id}`)
-    } catch { /* upstream errors surface in the timeline */ } finally { registering.current = false }
-  }, [sessions, nav])
-  const prefetchRegisteredSession = useCallback((s: MirrorTreeSession) => {
-    if (isVisitor) return
-    const reg = sessions.find((x) => x.devin_session_id === s.devin_id)
-    if (reg) prefetchSession(reg.id)
-  }, [isVisitor, sessions])
   const [items, setItems] = useState<TimelineItem[]>([])
   const [interrupted, setInterrupted] = useState<{ text: string; ts: number; kind?: 'continue' | 'resend'; attachments?: { url: string; name?: string; size?: number; mime?: string }[] } | null>(null)
   // 分身: per-session mode + escalation flag, ridden on the /timeline response.
   const [persona, setPersona] = useState<{ mode: string; escalated: boolean } | null>(null)
   const [personaBusy, setPersonaBusy] = useState(false)
-  const [draftAgent, setDraftAgent] = useState('devin')
   const [activity, setActivity] = useState<{ text: string } | null>(null)
   const reloadTl = useRef<(() => Promise<void>) | null>(null)
   /** Peek→real graduation: browsing starts in lazy-peek mode (no session/load,
@@ -145,8 +104,6 @@ export default function AdminMirrorPage() {
   itemsRef.current = items
   olderRef.current = older
   cursorRef.current = cursor
-  const treeIdsRef = useRef<Set<string>>(new Set())
-  useEffect(() => { treeIdsRef.current = new Set(tree.map((s) => s.devin_id)) }, [tree])
   // Tabs persist per session like the official client's `session-tabs:<devin_id>`
   // localStorage entry ({tabs:[{type,data}], activeTabId, ...}).
   const tabsSaved = useMemo(() => {
@@ -386,9 +343,6 @@ export default function AdminMirrorPage() {
       })
       .catch(() => {})
   }, [isDraft, isVisitor])
-  // Config picks made in draft mode — replayed onto the session right after
-  // creation (the server also applies dw.json lastConfig on its own).
-  const draftPicks = useRef<{ configId: string; value: string }[]>([])
   const chooseLocalOptions = (pairs: { configId: string; value: string }[]) => {
     setModeOpen(false); setSModeOpen(false)
     graduateTl.current?.() // config write is a real op — graduate first
@@ -442,23 +396,6 @@ export default function AdminMirrorPage() {
     if (optimisticVersion && currentVersion === optimisticVersion) setOptimisticVersion(null)
   }, [currentVersion, optimisticVersion])
   const [theme, setThemeState] = useState<Theme>(getTheme)
-  // Current session's tree node (tags / keep_alive_until come from the v2sessions mirror).
-  const treeNode = useMemo(() => {
-    const devinId = detail?.session.devin_session_id || ''
-    if (!devinId) return null
-    const walk = (list: MirrorTreeSession[]): MirrorTreeSession | null => {
-      for (const s of list) {
-        if (s.devin_id === devinId || s.devin_id === `devin-${devinId}` || `devin-${s.devin_id}` === devinId) return s
-        const hit = walk(s.children)
-        if (hit) return hit
-      }
-      return null
-    }
-    return walk(tree)
-  }, [tree, detail])
-
-  const headerStatus = detail?.session.status_enum_raw || detail?.session.status || sessions.find((session) => session.id === id)?.status || ''
-  const headerState = reduceStatus({ status: headerStatus, statusEnumRaw: headerStatus, sleepReason: detail?.session.sleep_reason })
   // Official session-index entries: user messages plus PR rows ("#N" with a PR icon) in timeline order.
   // Official builds this from a full-history skeleton (`historySkeleton` in the bundle); the mirror
   // gets the same coverage from GET .../index (full log scan server-side), merged with live
@@ -494,18 +431,6 @@ export default function AdminMirrorPage() {
   const [permSide, setPermSide] = useState<TimelineItem | null>(null)
   // Official PR tabs ("PR #N") appear automatically for the session's pull requests; "Hide tab" removes one.
   const [hiddenPrs, setHiddenPrs] = useState<Set<string>>(new Set())
-  // PR panel data only exists on the admin API; visitors keep the header PR chip + PR cards.
-  const panelPrs = useMemo(() => (isVisitor ? [] : detail?.session.pull_requests || treeNode?.pull_requests || [])
-    .filter((p) => p.pr_url), [detail, treeNode, isVisitor])
-  const prTabs = useMemo(() => panelPrs
-    .filter((p) => !hiddenPrs.has(p.pr_url) && !closedTabIds.has(`pr:${p.pr_url}`))
-    .map((p) => ({ url: p.pr_url, num: p.pr_url.match(/(\d+)$/)?.[1] || '', state: p.state, draft: p.draft })), [panelPrs, hiddenPrs, closedTabIds])
-  const visiblePanelFiles = useMemo(() => fileTabs.filter((f) => !closedTabIds.has(`file:${f.href}`)), [fileTabs, closedTabIds])
-  const panelKeys = useMemo(() => [...tabs, ...prTabs.map((p) => `pr:${p.url}`), ...visiblePanelFiles.map((f) => `file:${f.href}`)], [tabs, prTabs, visiblePanelFiles])
-  const displayedPanelKeys = useMemo(
-    () => [...tabOrder.filter((k) => panelKeys.includes(k)), ...panelKeys.filter((k) => !tabOrder.includes(k))],
-    [panelKeys, tabOrder],
-  )
   // Crossing into a narrow viewport auto-hides the sidebar/right panel (official responsive behavior).
   useEffect(() => {
     let prevW = window.innerWidth
@@ -892,68 +817,67 @@ export default function AdminMirrorPage() {
   // the large tree payload never competes with the conversation for the first paint.
   const [booted, setBooted] = useState(false)
   useEffect(() => { if (loaded) setBooted(true) }, [loaded])
-  useEffect(() => {
-    if (!booted || isVisitor) return
-    const load = () => adminFetch<{ sessions: AdminSession[] }>('/api/admin/sessions').then((r) => setSessions(r.sessions)).catch(() => {})
-    load()
-    return visibleInterval(load, 30_000)
-  }, [booted, isVisitor])
-
-  const [treePrefs, setTreePrefs] = useState<TreePrefs>(() => {
+  // Session-tree data (registry list, mirror tree, prefs, pagination cursor,
+  // ws status patching) lives in ./mirror/useSessionTreeData.
+  const {
+    sessions, tree, folderOrder, folderTotals, archTree,
+    treeCursor, loadingMore, loadMoreTree, loadTree,
+    treePrefs, updateTreePrefs,
+  } = useSessionTreeData({ isVisitor, isDraft, id, booted })
+  const unreadSessions = useMemo(() => tree.filter((s) => s.is_unread), [tree])
+  // "Recent" dirs for the draft workspace picker = cwds of existing sessions
+  // (tree order is already most-recently-updated first).
+  const recentCwds = useMemo(() => [...new Set(tree.map((s) => s.cwd).filter((c): c is string => !!c))].slice(0, 8), [tree])
+  const registering = useRef(false)
+  const openTreeSession = useCallback(async (s: MirrorTreeSession) => {
+    if (window.innerWidth < 768) setSidebar(false)
+    // sub:<root>:<aid> child sessions are already local — open directly.
+    if (s.devin_id.startsWith('sub:')) { nav(`/admin/${s.devin_id}`); return }
+    const reg = sessions.find((x) => x.devin_session_id === s.devin_id)
+    if (reg) { nav(`/admin/${reg.id}`); return }
+    if (registering.current) return
+    registering.current = true
     try {
-      const raw = localStorage.getItem(TREE_PREFS_KEY)
-      return raw ? { ...DEFAULT_TREE_PREFS, ...(JSON.parse(raw) as Partial<TreePrefs>) } : DEFAULT_TREE_PREFS
-    } catch {
-      return DEFAULT_TREE_PREFS
-    }
-  })
-  const updateTreePrefs = useCallback((p: Partial<TreePrefs>) => setTreePrefs((prev) => {
-    const next = { ...prev, ...p }
-    try { localStorage.setItem(TREE_PREFS_KEY, JSON.stringify(next)) } catch { /* quota */ }
-    return next
-  }), [])
-  const [archTree, setArchTree] = useState<MirrorTreeSession[]>([])
-  const loadTree = useCallback(() => {
-    const filterQ = buildFilterQ(treePrefs)
-    adminFetch<{ sessions: MirrorTreeSession[]; folder_order?: string[]; folder_totals?: Record<string, number>; next_cursor?: string | null }>(`/api/admin/mirror/sessions?limit=60&order_by=${treePrefs.sort}${filterQ}`).then((r) => {
-      const payload: TreeCachePayload = {
-        sessions: r.sessions || [],
-        folder_order: r.folder_order || [],
-        folder_totals: r.folder_totals || {},
-        next_cursor: r.next_cursor || null,
-      }
-      setTree(payload.sessions)
-      setFolderOrder(payload.folder_order)
-      setFolderTotals(payload.folder_totals)
-      setTreeCursor(payload.next_cursor || '')
-      writeTreeCache(payload)
-    }).catch(() => {})
-    if (treePrefs.showArchived) adminFetch<{ sessions: MirrorTreeSession[] }>(`/api/admin/mirror/sessions?limit=10&archived=true&order_by=${treePrefs.sort}${filterQ}`).then((r) => setArchTree(r.sessions || [])).catch(() => {})
-  }, [treePrefs])
-  const [treeCursor, setTreeCursor] = useState(() => cachedTree?.next_cursor || '')
-  const [loadingMore, setLoadingMore] = useState(false)
-  const loadMoreTree = useCallback(() => {
-    if (!treeCursor || loadingMore) return
-    setLoadingMore(true)
-    adminFetch<{ sessions: MirrorTreeSession[]; next_cursor?: string | null }>(`/api/admin/mirror/sessions?limit=60&order_by=${treePrefs.sort}${buildFilterQ(treePrefs)}&cursor=${encodeURIComponent(treeCursor)}`)
-      .then((r) => {
-        setTree((prev) => {
-          const seen = new Set(prev.map((s) => s.devin_id))
-          return [...prev, ...(r.sessions || []).filter((s) => !seen.has(s.devin_id))]
-        })
-        setTreeCursor(r.next_cursor || '')
+      const r = await adminFetch<{ id: string }>('/api/admin/sessions', {
+        method: 'POST',
+        body: JSON.stringify({ devin_session_id: s.devin_id, title: s.title }),
       })
-      .catch(() => {})
-      .finally(() => setLoadingMore(false))
-  }, [treeCursor, loadingMore, treePrefs])
-
-  useEffect(() => {
-    if (!booted || isVisitor) return
-    loadTree()
-    return visibleInterval(loadTree, 60_000)
-  }, [loadTree, booted, isVisitor])
-  const loadTreeRef = useRef(loadTree)
-  loadTreeRef.current = loadTree
+      nav(`/admin/${r.id}`)
+    } catch { /* upstream errors surface in the timeline */ } finally { registering.current = false }
+  }, [sessions, nav])
+  const prefetchRegisteredSession = useCallback((s: MirrorTreeSession) => {
+    if (isVisitor) return
+    const reg = sessions.find((x) => x.devin_session_id === s.devin_id)
+    if (reg) prefetchSession(reg.id)
+  }, [isVisitor, sessions])
+  // Current session's tree node (tags / keep_alive_until come from the v2sessions mirror).
+  const treeNode = useMemo(() => {
+    const devinId = detail?.session.devin_session_id || ''
+    if (!devinId) return null
+    const walk = (list: MirrorTreeSession[]): MirrorTreeSession | null => {
+      for (const s of list) {
+        if (s.devin_id === devinId || s.devin_id === `devin-${devinId}` || `devin-${s.devin_id}` === devinId) return s
+        const hit = walk(s.children)
+        if (hit) return hit
+      }
+      return null
+    }
+    return walk(tree)
+  }, [tree, detail])
+  const headerStatus = detail?.session.status_enum_raw || detail?.session.status || sessions.find((session) => session.id === id)?.status || ''
+  const headerState = reduceStatus({ status: headerStatus, statusEnumRaw: headerStatus, sleepReason: detail?.session.sleep_reason })
+  // PR panel data only exists on the admin API; visitors keep the header PR chip + PR cards.
+  const panelPrs = useMemo(() => (isVisitor ? [] : detail?.session.pull_requests || treeNode?.pull_requests || [])
+    .filter((p) => p.pr_url), [detail, treeNode, isVisitor])
+  const prTabs = useMemo(() => panelPrs
+    .filter((p) => !hiddenPrs.has(p.pr_url) && !closedTabIds.has(`pr:${p.pr_url}`))
+    .map((p) => ({ url: p.pr_url, num: p.pr_url.match(/(\d+)$/)?.[1] || '', state: p.state, draft: p.draft })), [panelPrs, hiddenPrs, closedTabIds])
+  const visiblePanelFiles = useMemo(() => fileTabs.filter((f) => !closedTabIds.has(`file:${f.href}`)), [fileTabs, closedTabIds])
+  const panelKeys = useMemo(() => [...tabs, ...prTabs.map((p) => `pr:${p.url}`), ...visiblePanelFiles.map((f) => `file:${f.href}`)], [tabs, prTabs, visiblePanelFiles])
+  const displayedPanelKeys = useMemo(
+    () => [...tabOrder.filter((k) => panelKeys.includes(k)), ...panelKeys.filter((k) => !tabOrder.includes(k))],
+    [panelKeys, tabOrder],
+  )
 
   useEffect(() => {
     let alive = true
@@ -1162,7 +1086,6 @@ export default function AdminMirrorPage() {
     // window — resync immediately instead of dropping it and going blind for
     // up to a full poll interval (the "updates take forever" bug).
     let wantGen = 0
-    let treeMissTimer: number | null = null
     const resync = (gen: number) => {
       if (!alive) return
       wantGen = Math.max(wantGen, gen)
@@ -1179,23 +1102,6 @@ export default function AdminMirrorPage() {
     }
     const offWs = subscribeWs((ev) => {
       if (!alive) return
-      // Sidebar status pushes — patch the matching tree row in place for ANY
-      // session (this filter otherwise drops every non-current event).
-      if (ev.type === 'session_status' && typeof ev.sessionId === 'string') {
-        const sid = ev.sessionId
-        const st = typeof ev.status === 'string' ? ev.status : 'blocked'
-        setTree((prev) => prev.map((s) =>
-          s.devin_id === sid && s.status_enum !== 'archived'
-            ? { ...s, status_enum: st, activity_status: st === 'working' ? 'working' : 'idle' }
-            : s,
-        ))
-        // Status for a session the tree doesn't list (created by another
-        // client or beyond the loaded page) — one debounced list refresh.
-        if (!treeIdsRef.current.has(sid)) {
-          if (treeMissTimer == null) treeMissTimer = window.setTimeout(() => { treeMissTimer = null; if (alive) loadTreeRef.current() }, 2000)
-        }
-        return
-      }
       if (ev.sessionId !== id) return
       if (ev.type === 'timeline_delta' && Array.isArray(ev.items)) {
         // Drop deltas whose log generation doesn't match the window's —
@@ -1223,7 +1129,6 @@ export default function AdminMirrorPage() {
       graduateTl.current = null
       if (graduateTimer != null) clearTimeout(graduateTimer)
       if (resyncTimer != null) clearTimeout(resyncTimer)
-      if (treeMissTimer != null) clearTimeout(treeMissTimer)
       if (followUp != null) clearTimeout(followUp)
       if (olderPrefetchTimer != null) clearTimeout(olderPrefetchTimer)
       if (olderPrefetch.current?.id === id) olderPrefetch.current = null
@@ -1432,114 +1337,13 @@ export default function AdminMirrorPage() {
   const allItemsRef = useRef(allItems)
   allItemsRef.current = allItems
 
-  // Selection → quote draft (official SelectionQuoteAffordance, message-text
-  // scope): select text inside a message bubble → floating pill → click adds
-  // it to the composer as a quote chip; send() serializes drafts into
-  // <quoted_artifact> markup so the round-trip renders real QuoteChips.
-  const [selQuote, setSelQuote] = useState<SelQuote | null>(null)
-  const [draftQuotes, setDraftQuotes] = useState<DraftQuote[]>([])
-  const quoteGuardUntil = useRef(0)
-  const quoteDraftFrom = (q: { text: string; eventId: string; author: 'user' | 'devin'; tsMs?: number; kind?: 'message' | 'worklog'; endEventId?: string }, caption: string): DraftQuote => ({
-    kind: q.kind ?? 'message',
-    label: q.kind === 'worklog' ? 'Worklog' : q.author === 'devin' ? 'Devin message' : 'User message',
-    text: q.text, eventId: q.eventId, tsMs: q.tsMs, author: q.author,
-    ...(q.endEventId ? { endEventId: q.endEventId } : {}),
-    ...(caption ? { caption } : {}),
-  } as DraftQuote)
-  const stageQuoteDraft = (q: { text: string; eventId: string; author: 'user' | 'devin'; tsMs?: number; kind?: 'message' | 'worklog'; endEventId?: string }, caption: string) => {
-    setDraftQuotes((d) => d.some((x) => x.eventId === q.eventId && x.text === q.text) ? d : [...d, quoteDraftFrom(q, caption)])
-    window.getSelection()?.removeAllRanges()
-  }
-  useEffect(() => {
-    if (isVisitor || isDraft || isSub) { setSelQuote(null); return }
-    const onSel = () => {
-      const sel = window.getSelection()
-      // Toolbar-opened quotes (expanded pill) outlive the selection collapse
-      // that clicking the toolbar button itself fires; and while focus lives
-      // inside the pill (caption input), collapses don't dismiss it either.
-      if (!sel || sel.isCollapsed || sel.rangeCount === 0) {
-        if (Date.now() > quoteGuardUntil.current && !document.activeElement?.closest?.('.dw-quote-pill')) setSelQuote(null)
-        return
-      }
-      quoteGuardUntil.current = 0
-      const node = sel.anchorNode instanceof Element ? sel.anchorNode : sel.anchorNode?.parentElement
-      const host = node?.closest?.('[data-eid]')
-      if (!host) { setSelQuote(null); return }
-      const range = sel.getRangeAt(0)
-      // Official Bt/Wt/Ut port: anchor rect from getClientRects (≤3.5-line
-      // spans anchor above the whole block; else backwards→start-above,
-      // forwards→end-below), left-edge horizontal clamp (margin 8, gap 6),
-      // pill size {w53,h28}, hidden when the anchor rect leaves every
-      // overflow ancestor's vertical band.
-      const quoteAnchor = (): { x: number; y: number; placement: 'above' | 'below'; hidden: boolean } => {
-        const rects = range.getClientRects()
-        const r0 = rects[0]; const rN = rects[rects.length - 1]
-        const an = sel.anchorNode; const fn = sel.focusNode
-        const backwards = !!an && !!fn && (an === fn ? sel.focusOffset < sel.anchorOffset : !!(an.compareDocumentPosition(fn) & Node.DOCUMENT_POSITION_PRECEDING))
-        let ar: { top: number; bottom: number; left: number }; let above: boolean
-        if (!r0 || !rN) { const b = range.getBoundingClientRect(); ar = { top: b.top, bottom: b.bottom, left: b.left }; above = backwards }
-        else if (r0 !== rN && rN.bottom - r0.top <= Math.max(r0.height, rN.height) * 3.5) { ar = { top: r0.top, bottom: rN.bottom, left: r0.left }; above = true }
-        else if (backwards) { ar = { top: r0.top, bottom: r0.bottom, left: r0.left }; above = true }
-        else { ar = { top: rN.top, bottom: rN.bottom, left: rN.right }; above = false }
-        const M = 8, G = 6, PW = 53, PH = 28
-        const x = Math.min(Math.max(ar.left, M), window.innerWidth - M - PW)
-        const fitsAbove = ar.top - G - PH >= M; const fitsBelow = ar.bottom + G + PH <= window.innerHeight - M
-        const placement: 'above' | 'below' = above ? (fitsAbove || !fitsBelow ? 'above' : 'below') : (fitsBelow || !fitsAbove ? 'below' : 'above')
-        const y = placement === 'above' ? ar.top - G : ar.bottom + G
-        let hidden = false
-        for (let el = (range.commonAncestorContainer instanceof Element ? range.commonAncestorContainer : range.commonAncestorContainer.parentElement); el; el = el.parentElement) {
-          if (getComputedStyle(el).overflowY === 'visible') continue
-          const er = el.getBoundingClientRect()
-          if (ar.bottom <= er.top || ar.top >= er.bottom) { hidden = true; break }
-        }
-        return { x, y, placement, hidden }
-      }
-      const eid = host.getAttribute('data-eid')
-      const item = allItemsRef.current.find((it) => it.id === eid)
-      // Official second mechanism: selections spanning worklog rows resolve
-      // to a kind:'worklog' quote over the [start,end) event-id range.
-      if (!item || item.kind !== 'message') {
-        const anchors = [...document.querySelectorAll<HTMLElement>('[data-quote-anchor]')]
-          .filter((a) => range.intersectsNode(a))
-        if (anchors.length >= 1 && item?.kind !== 'message') {
-          const first = anchors[0].getAttribute('data-quote-anchor')
-          const last = anchors[anchors.length - 1].getAttribute('data-quote-anchor')
-          const text = sel.toString().replace(/\s+/g, ' ').trim()
-          const pos = quoteAnchor()
-          if (text && first && last) {
-            setSelQuote({ ...pos, text, eventId: first, endEventId: last, author: 'devin', kind: 'worklog' })
-            return
-          }
-        }
-        setSelQuote(null); return
-      }
-      // Official extraction (xt): clone the range offscreen and strip
-      // .select-none UI chrome (badges, action bars) before taking text.
-      const frag = sel.getRangeAt(0).cloneContents()
-      let text: string
-      if (!frag.querySelector('.select-none')) text = sel.toString().replace(/\s+/g, ' ').trim()
-      else {
-        const off = host.ownerDocument.createElement('div')
-        off.style.cssText = 'position:fixed;left:-99999px;top:0'
-        off.appendChild(frag)
-        off.querySelectorAll('.select-none').forEach((n) => n.remove())
-        text = (off.innerText || '').replace(/\s+/g, ' ').trim()
-        off.remove()
-      }
-      if (!text) { setSelQuote(null); return }
-      const pos = quoteAnchor()
-      setSelQuote({
-        ...pos,
-        text,
-        eventId: eid!,
-        author: item.role === 'user' ? 'user' : 'devin',
-        tsMs: Date.parse(item.ts) || undefined,
-      })
-    }
-    document.addEventListener('selectionchange', onSel)
-    window.addEventListener('pointerup', onSel)
-    return () => { document.removeEventListener('selectionchange', onSel); window.removeEventListener('pointerup', onSel) }
-  }, [isVisitor, isDraft, isSub])
+  // Selection -> quote draft (official SelectionQuoteAffordance, message-text
+  // scope): the selectionchange chain + quote-chip drafts live in
+  // ./mirror/useSelectionQuote.
+  const {
+    selQuote, setSelQuote, draftQuotes, setDraftQuotes,
+    quoteGuardUntil, quoteDraftFrom, stageQuoteDraft,
+  } = useSelectionQuote({ isVisitor, isDraft, isSub, allItemsRef })
 
   const workSecs = useMemo(() => (allItems.length ? workSeconds(allItems) : 0), [allItems])
 
@@ -1868,27 +1672,7 @@ const groups = useMemo(() => groupItems(allItems, sessionWorking), [allItems, se
       setSending(true)
       setSendErr(null)
       try {
-        const task = text.startsWith('/queue ') ? text.slice(7).trim() : text
-        const r = await adminFetch<{ ok: boolean; id?: string; error?: string }>('/api/admin/sessions/new', {
-          method: 'POST',
-          body: JSON.stringify({
-            task,
-            folder: draftFolder || undefined,
-            // Local target → picked dir (empty = server default). SSH target →
-            // the remote dir (text input falls back to the host's default).
-            cwd: draftTarget.kind === 'ssh' ? (draftSshCwd.trim() || draftTarget.host.cwd || undefined) : (draftCwd || undefined),
-            ssh: draftTarget.kind === 'ssh' ? draftTarget.host.target : undefined,
-            agent: draftAgent,
-            attachments: staged.map((f) => ({ url: f.url, name: f.name, size: f.size })),
-          }),
-        })
-        if (!r.ok || !r.id) throw new Error(r.error || 'create failed')
-        for (const pick of draftPicks.current) {
-          void adminFetch(`/api/admin/session/${r.id}/config`, { method: 'POST', body: JSON.stringify(pick) }).catch(() => null)
-        }
-        draftPicks.current = []
-        setInput(''); setStaged([])
-        nav(`/admin/${r.id}`, { replace: true })
+        await sendDraft(text, staged.map((f) => ({ url: f.url, name: f.name, size: f.size })), () => { setInput(''); setStaged([]) })
       } catch (e) {
         reportSendError(e, t('menu.createFailed'))
       } finally { setSending(false) }
