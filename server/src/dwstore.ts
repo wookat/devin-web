@@ -41,6 +41,11 @@ interface DwSessionMeta {
 interface DwRegistry {
   sessions: Record<string, DwSessionMeta>;
   folderOrder: string[];
+  /** Manual session order per section — key is the folder name, "" for the
+   *  unfiled "Recent" list, "_pinned" for the pinned section. A session's
+   *  position = its index here; sessions absent from the list sort to the
+   *  top by updated_at. Rebuilt wholesale on every positional drop. */
+  sessionOrder?: Record<string, string[]>;
   dashboards: Record<string, unknown>;
   /** Last model/mode/effort/speed picked — applied to new sessions. */
   lastConfig?: Record<string, string>;
@@ -141,6 +146,7 @@ function loadReg(ctx: ApiContext): DwRegistry {
   }
   reg!.sessions ??= {};
   reg!.folderOrder ??= [];
+  reg!.sessionOrder ??= {};
   reg!.dashboards ??= {};
   reg!.prefs ??= {};
   return reg!;

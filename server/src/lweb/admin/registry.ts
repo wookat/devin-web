@@ -15,6 +15,31 @@ import { json, readBody, readJson, UNSUPPORTED } from "../../httputil.js";
 import { parseSubId, cwdFor, subsAny, subTreeRow, treeSession, titleFromLog } from "../session.js";
 import { indexWorkspace } from "../admin.js";
 
+/**
+ * Rebuild one section's stored row order around a positional drop. Members
+ * keep their existing stored order first, never-ordered members append by
+ * updated-desc, then the dragged id is spliced in after `after`
+ * (null = top, unknown = end). Key: folder name, "" for the unfiled
+ * Recent list, "_pinned" for the pinned section.
+ */
+async function sessionReorder(ctx: ApiContext, key: string, id: string, after: unknown) {
+  const r = loadReg(ctx);
+  const all = await listLocalSessions(ctx);
+  const members = key === "_pinned"
+    ? all.filter((s) => meta(ctx, s.id).pinned && s.id !== id)
+    : all.filter((s) => (meta(ctx, s.id).folder ?? null) === (key || null) && s.id !== id);
+  const upd = new Map(members.map((s) => [s.id, String(s.updated ?? "")]));
+  const prev = (r.sessionOrder?.[key] ?? []).filter((x) => upd.has(x));
+  const rest = members.map((s) => s.id).filter((x) => !prev.includes(x))
+    .sort((a, b) => upd.get(b)!.localeCompare(upd.get(a)!));
+  const order = [...prev, ...rest];
+  let at: number;
+  if (after == null) at = 0;
+  else { const i = order.indexOf(String(after)); at = i >= 0 ? i + 1 : order.length; }
+  order.splice(at, 0, id);
+  (r.sessionOrder ??= {})[key] = order;
+}
+
 export async function handleRegistry(ctx: ApiContext, req: IncomingMessage, res: ServerResponse, url: URL, m: string, p: string, parts: string[]): Promise<boolean> {
   // /api/admin/automations — scheduled-session CRUD + manual fire.
   // GET list; POST create; POST /:id patch {name?,prompt?,schedule?,cwd?,enabled?};
@@ -121,8 +146,16 @@ export async function handleRegistry(ctx: ApiContext, req: IncomingMessage, res:
     const mm = meta(ctx, id);
     switch (parts[3]) {
       case "session-title": mm.title = String(body.title ?? ""); break;
-      case "session-folder": mm.folder = body.folder ? String(body.folder) : null; break;
-      case "session-pin": mm.pinned = !!body.pinned; break;
+      case "session-folder": {
+        mm.folder = body.folder ? String(body.folder) : null;
+        if ("after" in body) await sessionReorder(ctx, mm.folder ?? "", id, body.after);
+        break;
+      }
+      case "session-pin": {
+        mm.pinned = !!body.pinned;
+        if (mm.pinned && "after" in body) await sessionReorder(ctx, "_pinned", id, body.after);
+        break;
+      }
       case "session-archive": mm.archived = !!body.archived; break;
     }
     saveReg();

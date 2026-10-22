@@ -15,6 +15,11 @@ interface MirrorTreeSession {
   folder: string | null
   is_unread: boolean
   is_pinned: boolean
+  /** Manual row order within its section — index into the server's stored
+   *  sessionOrder list. -1/absent = never ordered (sorts to the top by
+   *  updated_at; once anything is positioned the whole section's order is
+   *  materialized server-side). */
+  forder?: number
   children: MirrorTreeSession[]
   total_children: number
   pull_requests?: { state: string; pr_url: string; draft: boolean; number?: number }[]

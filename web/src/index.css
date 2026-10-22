@@ -228,6 +228,12 @@ body { @apply bg-background text-foreground antialiased; font-size: 14px; line-h
   opacity: 1;
 }
 
+/* Sidebar session drag-and-drop insertion marker — a 2px accent line on the
+   target row's top (drop before) or bottom (drop after) edge. Toggled at the
+   DOM level by TreeSection so dragover never re-renders React. */
+.dw-drop-b { box-shadow: inset 0 2px 0 0 var(--primary); }
+.dw-drop-a { box-shadow: inset 0 -2px 0 0 var(--primary); }
+
 /* Running command shimmer, like the official in-progress worklog row. */
 @keyframes wg-shine {
   from { background-position: 200% 0; }

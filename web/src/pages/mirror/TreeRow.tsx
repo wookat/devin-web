@@ -57,11 +57,12 @@ function TreeRow({ s, depth, activeDevinId, folders, onOpen, onPrefetch, onRefre
     <>
       <div
         data-slot="sidebar-menu-item"
+        data-dw-sid={s.devin_id}
         draggable={!archivedView}
         onDragStart={(e) => {
-          // Session drag-and-drop: drop targets are TreeSection headers —
-          // dropping on a folder assigns it (session-folder), dropping on the
-          // ungrouped section unfiles it.
+          // Session drag-and-drop: TreeSection accepts drops on its header
+          // (folder assign / pin, lands on top) and on any row (positional —
+          // inserts before/after that row via the `after` field).
           e.dataTransfer.effectAllowed = 'move'
           e.dataTransfer.setData('text/x-dw-session', s.devin_id)
           e.dataTransfer.setData('text/plain', s.title || s.devin_id)

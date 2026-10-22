@@ -851,6 +851,25 @@ export default function AdminMirrorPage() {
   const eidToRowRef = useRef<Map<string, number>>(new Map())
   const tlVirtRef = useRef<{ scrollToIndex: (index: number, opts?: { align?: 'start' | 'center' | 'end' | 'auto'; behavior?: 'auto' | 'smooth' }) => void } | null>(null)
   const listRef = useRef<HTMLDivElement>(null)
+  // Fast-scroll placeholder mode: during a hard scrollbar drag the virtual
+  // window slides faster than heavy rows (markdown/mermaid/diffs) can mount —
+  // replacing mounted row bodies with measured-height placeholders keeps the
+  // drag at 60fps and mounts real content ~200ms after the motion settles.
+  // Gate on VELOCITY (>2.5px/ms ≈ 3000px/s): gentle wheel reading must keep
+  // real rows, not flash placeholders on every tick.
+  const [tlFastScroll, setTlFastScroll] = useState(false)
+  const tlFastTimer = useRef(0)
+  const tlProbe = useRef({ t: 0, y: 0 })
+  // Programmatic scroll writes (bottom pins, anchor restores) are stamped
+  // here; the velocity gate ignores events inside the window — otherwise a
+  // big RO pin lands as one huge-dy scroll event, re-triggers fast mode,
+  // placeholders unmount remeasure, the pin fires again… an oscillation.
+  const progScrollUntil = useRef(0)
+  const markProgScroll = () => { progScrollUntil.current = performance.now() + 250 }
+  // Adaptive size estimates: seed estimates from the running average of
+  // actually-measured rows so deep jumps stop drifting ~1000px mid-correction.
+  const tlRowH = useRef(96)
+  const tlWorkH = useRef(220)
 
   /** Remember the top-most visible event so a background refresh doesn't shift the view. */
   const captureAnchor = useCallback(() => {
@@ -1311,7 +1330,7 @@ export default function AdminMirrorPage() {
       if (!r.error) setCursor(r.next_cursor)
       // keep the reader anchored on what they were already looking at
       requestAnimationFrame(() => {
-        if (el) el.scrollTop += el.scrollHeight - prevHeight
+        if (el) { markProgScroll(); el.scrollTop += el.scrollHeight - prevHeight }
       })
     } catch { /* leave cursor in place so the user can retry */ } finally {
       olderBusy.current = false
@@ -1354,7 +1373,7 @@ export default function AdminMirrorPage() {
         cur = r.next_cursor
         setCursor(r.next_cursor)
         await new Promise((res) => requestAnimationFrame(res))
-        if (el) el.scrollTop += el.scrollHeight - prevHeight
+        if (el) { markProgScroll(); el.scrollTop += el.scrollHeight - prevHeight }
         if (r.items.some((it) => it.id === eventId)) break
         if (r.items[0] && new Date(r.items[0].ts).getTime() <= target) break
       }
@@ -1410,6 +1429,7 @@ export default function AdminMirrorPage() {
     const el = scrollRef.current
     if (!el) return
     if (stickBottom.current) {
+      markProgScroll()
       el.scrollTop = el.scrollHeight
       return
     }
@@ -1418,6 +1438,7 @@ export default function AdminMirrorPage() {
     if (!a) return
     const node = el.querySelector<HTMLElement>(`[data-eid="${CSS.escape(a.id)}"]`)
     if (node) {
+      markProgScroll()
       el.scrollTop += node.getBoundingClientRect().top - el.getBoundingClientRect().top - a.offset
     }
     anchor.current = null
@@ -1425,7 +1446,7 @@ export default function AdminMirrorPage() {
 
   useLayoutEffect(() => {
     const el = scrollRef.current
-    if (el && stickBottom.current) el.scrollTop = el.scrollHeight
+    if (el && stickBottom.current) { markProgScroll(); el.scrollTop = el.scrollHeight }
   }, [bandH])
 
   // While stickBottom holds, ANY total-size change (virtual rows measuring in,
@@ -1437,7 +1458,7 @@ export default function AdminMirrorPage() {
     const list = listRef.current
     if (!el || !list) return
     const ro = new ResizeObserver(() => {
-      if (stickBottom.current) el.scrollTop = el.scrollHeight
+      if (stickBottom.current) { markProgScroll(); el.scrollTop = el.scrollHeight }
     })
     ro.observe(list)
     return () => ro.disconnect()
@@ -1477,9 +1498,21 @@ const groups = useMemo(() => groupItems(allItems, sessionWorking), [allItems, se
   const tlVirt = useVirtualizer({
     count: vRows.length,
     getScrollElement: () => scrollRef.current,
-    estimateSize: (i) => (vRows[i]?.kind === 'g' ? (vRows[i]!.g!.type === 'work' ? 220 : 96) : 64),
+    estimateSize: (i) => (vRows[i]?.kind === 'g' ? (vRows[i]!.g!.type === 'work' ? tlWorkH.current : tlRowH.current) : 64),
     getItemKey: (i) => vRows[i]?.key ?? i,
     overscan: 8,
+  })
+  // Rolling estimates from measured rows — shrink-grows toward reality as the
+  // user scrolls, so unmeasured regions estimate closer each pass.
+  useEffect(() => {
+    let n = 0, sum = 0, wn = 0, wsum = 0
+    for (const vi of tlVirt.getVirtualItems()) {
+      const r = vRows[vi.index]
+      if (r?.kind !== 'g' || !r.g) continue
+      if (r.g.type === 'work') { wn++; wsum += vi.size } else { n++; sum += vi.size }
+    }
+    if (n) tlRowH.current = Math.round(sum / n)
+    if (wn) tlWorkH.current = Math.round(wsum / wn)
   })
   // Resize drift above the viewport shifts scrollTop back into place; growth
   // at/under the viewport (live tail) must not move what the user is reading.
@@ -2181,6 +2214,18 @@ const groups = useMemo(() => groupItems(allItems, sessionWorking), [allItems, se
           ref={scrollRef}
           onScroll={(e) => {
             const el = e.currentTarget
+            const now = performance.now()
+            const dt = now - tlProbe.current.t, dy = Math.abs(el.scrollTop - tlProbe.current.y)
+            tlProbe.current = { t: now, y: el.scrollTop }
+            // Browsers coalesce programmatic scrollTop sets — one 21000px
+            // jump may arrive as a single event with dt≈1s. Velocity dy/dt
+            // alone (>2.5px/ms ≈ 3000px/s) is the honest gate for both real
+            // scrollbar drags (dt≈16ms) and coalesced jumps.
+            if (dt > 8 && dy / dt > 2.5 && now > progScrollUntil.current) {
+              if (!tlFastScroll) setTlFastScroll(true)
+              window.clearTimeout(tlFastTimer.current)
+              tlFastTimer.current = window.setTimeout(() => setTlFastScroll(false), 200)
+            }
             const near = el.scrollHeight - el.scrollTop - el.clientHeight < 60
             // Unstick only inside a user-gesture window — see userScrollUntil.
             stickBottom.current = near ? true : (Date.now() < userScrollUntil.current ? false : stickBottom.current)
@@ -2236,9 +2281,17 @@ const groups = useMemo(() => groupItems(allItems, sessionWorking), [allItems, se
                   ) : row.kind === 'tail' ? (
                     <StatusTail statusState={statusState} actionRequired={actionRequired} woke={woke} controlling={controlling} onResume={() => void control('resume')} isVisitor={isVisitor} detail={detail} />
                   ) : row.g ? (
+                    // Fast-scroll placeholder: a measured-height stand-in while
+                    // the window is in hard motion — real content mounts when
+                    // scrolling settles (~200ms). Height is pinned to vi.size
+                    // so re-measurement is a no-op and the scrollbar never jumps.
+                    tlFastScroll ? (
+                      <div aria-hidden style={{ height: vi.size }} />
+                    ) : (
                     // keyed by the newest member: history backfill prepends older items and may
                     // extend the group backwards, which must not remount it (would drop open state)
                     <TimelineGroup g={row.g} isLast={row.gi === groups.length - 1} id={id} isVisitor={isVisitor} isSub={isSub} caps={caps} detail={detail} status={status} panel={panel} mediaTok={mediaTok} permResolved={permResolved} secretProvided={secretProvided} provideSecret={provideSecret} wf={wf} onOpenWfRun={(runId) => { setWfRunId(runId || null); openTab('agents') }} onOpenPr={openPr} onOpenPermission={(it) => { setPermSide(it); setShowPanel(true) }} envSuperseded={envSuperseded} messageHeaders={messageHeaders} translations={translations} onTranslated={(itemId, tr) => setTranslations((p) => ({ ...p, [itemId]: tr }))} onFileRef={onFileRef} openFileTab={openFileTab} jumpToQuote={jumpToQuote} onSelQuote={setSelQuote} quoteGuardUntil={quoteGuardUntil} onControlMsg={setControlMsg} onSideChat={(it) => { setScAnchor({ id: it.id, ts: it.ts }); openTab('sidechat') }} onStepChanges={onStepChanges} onOpenProgress={onOpenProgress} onOpenSubagent={onOpenSubagent} worklogJump={worklogJump} tailThoughtId={tailThoughtId} urlPrs={urlPrs} urlFiles={urlFiles} />
+                    )
                   ) : null}
                 </div>
               )

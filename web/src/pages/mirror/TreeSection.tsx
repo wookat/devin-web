@@ -1,4 +1,4 @@
-import { type Dispatch, type ReactNode, type SetStateAction } from 'react'
+import { useRef, type Dispatch, type DragEvent, type ReactNode, type SetStateAction } from 'react'
 import { useTranslation } from 'react-i18next'
 import { Folder as FolderIcon } from 'lucide-react'
 import { ODots, OSearch } from '../../components/officialIcons'
@@ -10,12 +10,56 @@ import { TreeRow } from './TreeRow'
  *  sticky label row — collapse toggle, per-folder search input, folder ⋯ menu
  *  trigger, drag-to-reorder — then its TreeRow list. Search/collapse/drag and
  *  the folder menu state live in SessionTree (shared across sections). */
-function TreeSection({ name, items, isFolder, icon, showCount, archived, searchIn, searchQ, setSearchIn, setSearchQ, closed, setClosed, dragFolder, setDragFolder, previewOrder, setPreviewOrder, folderNames, folderTotals, folderAction, setFolderMenu, setFolderDraft, activeDevinId, onOpen, onPrefetch, onRefresh, compact, propHidden, dropFolder }: { name: string; items: MirrorTreeSession[]; isFolder?: boolean; icon?: ReactNode; showCount?: boolean; archived?: boolean; searchIn: string | null; searchQ: string; setSearchIn: Dispatch<SetStateAction<string | null>>; setSearchQ: Dispatch<SetStateAction<string>>; closed: Record<string, boolean>; setClosed: Dispatch<SetStateAction<Record<string, boolean>>>; dragFolder: string | null; setDragFolder: Dispatch<SetStateAction<string | null>>; previewOrder: string[] | null; setPreviewOrder: Dispatch<SetStateAction<string[] | null>>; folderNames: string[]; folderTotals?: Record<string, number>; folderAction: (path: string, payload: Record<string, unknown>) => Promise<void>; setFolderMenu: Dispatch<SetStateAction<FolderMenuState | null>>; setFolderDraft: Dispatch<SetStateAction<string>>; activeDevinId: string; onOpen: (s: MirrorTreeSession) => void; onPrefetch?: (s: MirrorTreeSession) => void; onRefresh?: () => void; compact?: boolean; propHidden?: Record<string, boolean>; /** Defined = this section accepts session drops; the value is the folder to assign (null = unfile). */ dropFolder?: string | null }) {
+function TreeSection({ name, items, isFolder, icon, showCount, archived, searchIn, searchQ, setSearchIn, setSearchQ, closed, setClosed, dragFolder, setDragFolder, previewOrder, setPreviewOrder, folderNames, folderTotals, folderAction, setFolderMenu, setFolderDraft, activeDevinId, onOpen, onPrefetch, onRefresh, compact, propHidden, dropFolder, dropPin }: { name: string; items: MirrorTreeSession[]; isFolder?: boolean; icon?: ReactNode; showCount?: boolean; archived?: boolean; searchIn: string | null; searchQ: string; setSearchIn: Dispatch<SetStateAction<string | null>>; setSearchQ: Dispatch<SetStateAction<string>>; closed: Record<string, boolean>; setClosed: Dispatch<SetStateAction<Record<string, boolean>>>; dragFolder: string | null; setDragFolder: Dispatch<SetStateAction<string | null>>; previewOrder: string[] | null; setPreviewOrder: Dispatch<SetStateAction<string[] | null>>; folderNames: string[]; folderTotals?: Record<string, number>; folderAction: (path: string, payload: Record<string, unknown>) => Promise<void>; setFolderMenu: Dispatch<SetStateAction<FolderMenuState | null>>; setFolderDraft: Dispatch<SetStateAction<string>>; activeDevinId: string; onOpen: (s: MirrorTreeSession) => void; onPrefetch?: (s: MirrorTreeSession) => void; onRefresh?: () => void; compact?: boolean; propHidden?: Record<string, boolean>; /** Defined = this section accepts session drops; the value is the folder to assign (null = unfile). */ dropFolder?: string | null; /** Pinned section — a session dropped here gets pinned (and can be positioned). */ dropPin?: boolean }) {
   const { t } = useTranslation()
   const searching = searchIn === name
   const shown = searching && searchQ.trim()
     ? items.filter((s) => (s.title || s.devin_id).toLowerCase().includes(searchQ.trim().toLowerCase()))
     : items
+  // Session drops: `accepts` gates the whole section; row-level drops land at
+  // an exact position (`after` = the previous row's id). The insertion marker
+  // is a DOM class on the target row — no React state churn during dragover.
+  const accepts = dropFolder !== undefined || !!dropPin
+  const markRef = useRef<HTMLElement | null>(null)
+  const markRow = (el: HTMLElement | null, before: boolean) => {
+    if (markRef.current !== el) markRef.current?.classList.remove('dw-drop-a', 'dw-drop-b')
+    if (el) { el.classList.toggle('dw-drop-b', before); el.classList.toggle('dw-drop-a', !before) }
+    markRef.current = el
+  }
+  const rowDropPos = (e: DragEvent, sid: string) => {
+    const list = shown.filter((x) => x.devin_id !== sid)
+    const rowEl = (e.target as HTMLElement).closest<HTMLElement>('[data-dw-sid]')
+    let pos = list.length
+    if (rowEl?.dataset.dwSid) {
+      const ti = list.findIndex((x) => x.devin_id === rowEl.dataset.dwSid)
+      if (ti >= 0) {
+        const r = rowEl.getBoundingClientRect()
+        pos = ti + (e.clientY < r.top + r.height / 2 ? 0 : 1)
+      }
+    }
+    return { pos, after: pos <= 0 ? null : list[pos - 1].devin_id }
+  }
+  const onRowDragOver = (e: DragEvent) => {
+    if (!accepts || searching || !e.dataTransfer.types.includes('text/x-dw-session')) return
+    e.preventDefault()
+    e.stopPropagation()
+    e.dataTransfer.dropEffect = 'move'
+    const rowEl = (e.target as HTMLElement).closest<HTMLElement>('[data-dw-sid]')
+    if (rowEl) {
+      const r = rowEl.getBoundingClientRect()
+      markRow(rowEl, e.clientY < r.top + r.height / 2)
+    }
+  }
+  const onRowDrop = (e: DragEvent) => {
+    markRow(null, false)
+    const sid = e.dataTransfer.getData('text/x-dw-session')
+    if (!sid || !accepts || searching) return
+    e.preventDefault()
+    e.stopPropagation()
+    const { after } = rowDropPos(e, sid)
+    if (dropPin) void folderAction('/api/admin/mirror/session-pin', { devin_id: sid, pinned: true, after })
+    else void folderAction('/api/admin/mirror/session-folder', { devin_id: sid, folder: dropFolder ?? null, after })
+  }
   return (
     <div className={`mb-1 ${isFolder && dragFolder === name ? 'opacity-50' : ''}`}>
       <div
@@ -27,8 +71,9 @@ function TreeSection({ name, items, isFolder, icon, showCount, archived, searchI
           setDragFolder(null); setPreviewOrder(null)
         } : undefined}
         onDragOver={(e) => {
-          // Session rows dropped here assign dropFolder (or unfile on null).
-          if (dropFolder !== undefined && e.dataTransfer.types.includes('text/x-dw-session')) {
+          // Session rows dropped on the header assign without a position
+          // (land at the section top via after:null on the actual drop).
+          if (accepts && e.dataTransfer.types.includes('text/x-dw-session')) {
             e.preventDefault()
             e.dataTransfer.dropEffect = 'move'
             return
@@ -44,9 +89,10 @@ function TreeSection({ name, items, isFolder, icon, showCount, archived, searchI
         }}
         onDrop={(e) => {
           const sid = e.dataTransfer.getData('text/x-dw-session')
-          if (sid && dropFolder !== undefined) {
+          if (sid && accepts) {
             e.preventDefault()
-            void folderAction('/api/admin/mirror/session-folder', { devin_id: sid, folder: dropFolder })
+            if (dropPin) void folderAction('/api/admin/mirror/session-pin', { devin_id: sid, pinned: true, after: null })
+            else void folderAction('/api/admin/mirror/session-folder', { devin_id: sid, folder: dropFolder ?? null, after: null })
             return
           }
           if (isFolder) e.preventDefault()
@@ -109,7 +155,13 @@ function TreeSection({ name, items, isFolder, icon, showCount, archived, searchI
           </button>
         )}
       </div>
-      {!closed[name] && shown.map((s) => <TreeRow key={s.devin_id} s={s} depth={0} activeDevinId={activeDevinId} folders={folderNames} onOpen={onOpen} onPrefetch={onPrefetch} onRefresh={onRefresh} archivedView={archived} compact={compact} propHidden={propHidden} />)}
+      <div
+        onDragOver={onRowDragOver}
+        onDrop={onRowDrop}
+        onDragLeave={(e) => { if (!(e.relatedTarget as HTMLElement | null)?.closest?.('[data-dw-sid]')) markRow(null, false) }}
+      >
+        {!closed[name] && shown.map((s) => <TreeRow key={s.devin_id} s={s} depth={0} activeDevinId={activeDevinId} folders={folderNames} onOpen={onOpen} onPrefetch={onPrefetch} onRefresh={onRefresh} archivedView={archived} compact={compact} propHidden={propHidden} />)}
+      </div>
       {!closed[name] && searching && shown.length === 0 && (
         <div className="px-2 py-1.5 text-[12px] text-muted-foreground">{t('common.noResults')}</div>
       )}

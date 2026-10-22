@@ -42,6 +42,18 @@ const SessionTree = memo(function SessionTree({ tree, archivedTree, activeDevinI
         projects.get(k)!.push(s)
       }
     }
+    // Manual order (sessionOrder / forder): positioned rows keep their stored
+    // index; never-ordered rows float to the top keeping updated-desc —
+    // a fresh session lands first, a dropped one lands exactly where put.
+    const byOrder = (a: MirrorTreeSession, b: MirrorTreeSession) => {
+      const ao = a.forder ?? -1, bo = b.forder ?? -1
+      if (ao >= 0 && bo >= 0) return ao - bo
+      if (ao >= 0) return 1
+      if (bo >= 0) return -1
+      return 0
+    }
+    pinned.sort(byOrder); rest.sort(byOrder)
+    for (const arr of folders.values()) arr.sort(byOrder)
     return { pinned, folders, rest, projects }
   }, [tree, folderOrder, prefs.groupBy])
   const folderNames = useMemo(() => [...groups.folders.keys()], [groups])
@@ -62,7 +74,7 @@ const SessionTree = memo(function SessionTree({ tree, archivedTree, activeDevinI
     <div className="px-2 py-1">
       <TreeHeaderMenus prefs={prefs} onPrefs={onPrefs} tree={tree} folderNames={folderNames} folderAction={folderAction} />
       {(previewOrder ?? folderNames).filter((name) => !prefs.hidden[name]).map((name) => <TreeSection key={name} name={name} items={groups.folders.get(name) ?? []} isFolder dropFolder={name} {...sectionShared} />)}
-      {groups.pinned.length > 0 && !prefs.hidden['Pinned'] && <TreeSection name={t('tree.gPinned')} items={groups.pinned} icon={<OPin size={14} />} showCount {...sectionShared} />}
+      {groups.pinned.length > 0 && !prefs.hidden['Pinned'] && <TreeSection name={t('tree.gPinned')} items={groups.pinned} icon={<OPin size={14} />} showCount dropPin {...sectionShared} />}
       {groups.rest.length > 0 && !prefs.hidden['Recent'] && <TreeSection name={t('tree.gRecent')} items={groups.rest} icon={<Clock size={14} />} dropFolder={null} {...sectionShared} />}
       {[...groups.projects.entries()].map(([cwd, items]) => (
         <TreeSection

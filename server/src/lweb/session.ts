@@ -149,6 +149,10 @@ export function treeSession(ctx: ApiContext, s: ListedSession) {
     created_at: s.created,
     snippet: snippetFromLog(ctx, s.id),
     folder: m.folder ?? null,
+    // Sidebar row order: index inside dw.json sessionOrder — keyed by
+    // "_pinned" / folder name / "" (unfiled). -1 = never manually ordered
+    // (client sorts those to the top by updated_at).
+    forder: (loadReg(ctx).sessionOrder?.[m.pinned ? "_pinned" : (m.folder ?? "")] ?? []).indexOf(s.id),
     is_unread: false,
     is_pinned: !!m.pinned,
     // Project context for grouping + the header cwd chip.
