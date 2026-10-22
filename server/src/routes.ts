@@ -11,8 +11,9 @@ import { buildSessionZip } from "./export.js";
 import { agentById } from "./agents.js";
 import { meta, saveReg } from "./dwstore.js";
 import { AccountPool, fetchUserStatus, pkceFinish, pkceStart } from "./accounts.js";
-import { hostFor, acpForId } from "./sessionload.js";
+import { hostFor, acpForId, claimLockedHolder } from "./sessionload.js";
 import { attachmentBlocks, promptWithRetry } from "./sessionprompt.js";
+import { isSessionLocked } from "./sessioncfg.js";
 import { isDraining, inflight } from "./sessionlive.js";
 import { isSessionPinned } from "./sessionplace.js";
 import type { UsageRecord } from "./types.js";
@@ -191,7 +192,17 @@ export async function handleApi(
         }
         const body = await readJson(req);
         const acp = await acpForSession(ctx, id, body.cwd as string | undefined);
-        await acp.loadSession(id, acp.cwd);
+        try {
+          await acp.loadSession(id, acp.cwd);
+        } catch (e) {
+          // Locked elsewhere: our own/broker holder already satisfies "open";
+          // a foreign holder gets the error annotated with the culprit pid.
+          if (!isSessionLocked(e)) throw e;
+          const claim = await claimLockedHolder(ctx, id).catch(() => null);
+          if (claim?.kind === "joined") return json(res, 200, { ok: true, joined: true });
+          if (claim?.kind === "foreign" && e instanceof Error) e.message = `${e.message} (lock holder: pid ${claim.pid})`;
+          throw e;
+        }
         return json(res, 200, { ok: true });
       }
 

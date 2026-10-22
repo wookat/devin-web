@@ -99,7 +99,7 @@ export async function diagnose(ctx: ApiContext): Promise<{ ok: boolean; checks: 
   // session locks held by other processes (desktop/CLI counts as legitimate holders → warn)
   let lockedIds: string[] = [];
   try {
-    lockedIds = (await listLocalSessions(ctx)).filter(s => (s as { is_locked?: boolean }).is_locked).map(s => s.id);
+    lockedIds = (await listLocalSessions(ctx)).filter(s => s.locked).map(s => s.id);
   } catch {}
   checks.push({ id: "locks", group: "session", label: "Session locks (other processes)", level: lockedIds.length ? "warn" : "ok",
     detail: lockedIds.length ? `${lockedIds.length} locked: ${lockedIds.slice(0, 6).join(",")}${lockedIds.length > 6 ? "…" : ""}` : "none",

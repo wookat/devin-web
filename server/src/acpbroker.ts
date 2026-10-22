@@ -43,6 +43,11 @@ export interface BrokerAcpInfo {
    *  restores real attribution instead of "(account ?)". */
   account: string | null;
   exited: boolean; exitCode: number | null; bytesOut: number; startedAt: number;
+  /** Turn ledger — client→agent `session/prompt` requests the broker saw
+   *  sent on this acp and never saw answered. Authoritative "turn live"
+   *  evidence for turns dispatched under THIS acp's lifetime
+   *  (openTurn.ts >= startedAt ⇒ the broker witnessed the send). */
+  pendingPrompts?: { reqId: string; sessionId: string | null; ts: number }[];
 }
 
 // ---------------------------------------------------------------------------

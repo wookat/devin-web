@@ -97,7 +97,12 @@ ssh2 channels are in-process objects, not children a broker can hold.
 Boot order in index.ts: `adoptBrokerAcps(ctx)` (broker list → per-acp
 attach + `session/list` → rebuild loadedOn/sessionHost/bySession; sessions
 with surviving open-turns get `watchAdoptedTurn` — pseudo-inflight +
-busySessions protection + a 90s-silence settle FALLBACK, since the turn's
+busySessions protection — UNLESS the broker's prompt ledger
+(`pendingPrompts`, acp-broker.mjs tracks session/prompt req→resp pairs on
+the wire) proves the turn already answered and was dispatched under this
+acp's lifetime (openTurn.ts ≥ acp.startedAt) → `settleDeadAdoptedTurn`
+settles instantly; ledger-blind turns keep a ~30s-floored silence settle
+FALLBACK, since the turn's
 prompt response died on the old byte stream) is AWAITED before the orphan
 sweep + `autoResumeInterrupted` so resume never double-prompts a turn that
 is still running. Instant settle: the acp wire sniffer (acp.ts — stdin
@@ -112,7 +117,7 @@ that reqId hosted on the same acp → the armed watcher's early-settle hook
 runs the same done() (resync included); responses sniffed before the
 watcher arms are stashed (`sniffedSettles`, consumed at arm time, 30s
 flush for never-re-discovered sessions). Genuine wedges still fall to the
-90s silence detector. `manager.adopt` re-seats pooled acp by their journaled
+silence detector (~30s post-attach floor, 90s from last activity). `manager.adopt` re-seats pooled acp by their journaled
 pool `key` (spawn args thread it through); dedicated agents journal a bare
 `agent.id` key and are re-bound via `bindSession`. Exit-event dedup:
 broker ctl `ev:exit` → fake proc 'exit' AND socket 'close' → same 'exit' —
@@ -195,8 +200,15 @@ route code never changes.
   load/recovery engine: hostFor (the ONE session→acp resolver:
   dedicated → sessionHost pin → cwd pool), doLoad/loadOnce + replay
   dedup, adoptBrokerAcps/watchAdoptedTurn, autoResumeInterrupted,
-  interruptedTurn, setCfgCacheDir boot hook, and the two injection
-  binds. `sessionprompt.ts` = the send pipeline: dispatchPrompt,
+  interruptedTurn, setCfgCacheDir boot hook, claimLockedHolder (the
+  session_locked recovery: devin's lockHolderPid names the true
+  holder when stamped — join our own acp / adopt a skipped broker
+  acp / annotated error for foreign holders; current devin builds
+  leave lockHolderPid NULL on every lock, so an unstamped-but-locked
+  record falls to a load-probe over live acps — session/load is
+  idempotent on the owner, fails session_locked elsewhere — before
+  giving up to the bounded stale retry),
+  and the two injection binds. `sessionprompt.ts` = the send pipeline: dispatchPrompt,
   promptWithRetry (the ONE retry policy: cool acp.account → rotate →
   resend once → 429 when all cooling; busy-tracking + turn-silence
   watchdog per attempt), attachments, sendPreflight. `sessionsub.ts` =
@@ -331,6 +343,12 @@ route code never changes.
 - `session/list` `_meta` carries `cognition.ai/isLocked` + `lockHolderPid` +
   `createdAt` — surfaced as `is_locked`/`loaded_here`/`created_at`/`cwd` on
   tree rows (amber lock icon = held by ANOTHER process, e.g. desktop/CLI).
+  WARNING: current devin reports `lockHolderPid: null` on EVERY locked
+  session — never treat pid-0/null as "the listing acp owns it" when
+  isLocked is true (that mis-pin is the session_not_found wedge; the
+  holder lives in `AppData/Roaming/Devin/cli/session_locks/<id>.lock`
+  as a byte-locked file containing the owner pid — undeletable while
+  held, but a plain Remove-Item frees a stale lock instantly).
 - Workspace browser: `GET session/:id/files?path=` (list, cwd-confined) and
   `/file?path=` (text ≤2MB, binary flagged). Rendered by WorkspacePanel on the
   'editor' tab (cloud vscode link never exists locally).

@@ -19,7 +19,7 @@ import { restoreSendErrors } from "./sendhealth.js";
 import { dispatchPrompt, releaseBusy, bindPromptDeps } from "./sessionprompt.js";
 import { openTurns, openTurnsLoad, openTurnsSave, sessionByReqId, type OpenTurn } from "./sessionturns.js";
 import {loadedOn, sessionHost, loadEpoch, loadInflight, markLoadedOn } from "./sessionplace.js";
-import { inflight, adoptedTurns, lastActivity, touchSessionActivity, isDraining } from "./sessionlive.js";
+import { inflight, adoptedTurns, lastActivity, isDraining } from "./sessionlive.js";
 import { pingSubagent } from "./sessionsub.js";
 import { sessionStatus } from "./sessionview.js";
 
@@ -248,11 +248,118 @@ export async function hostFor(ctx: ApiContext, id: string, cwdHint?: string): Pr
  * background poll, forever. Real ops go through acpForId and always retry. */
 export const loadCooldown = new Map<string, number>();
 
+/** session_locked forensics: devin's session/list can stamp the holder pid on
+ * loaded sessions (`_meta["cognition.ai/lockHolderPid"]`) — the same field
+ * adoption claims sessions by. The lock error itself never names the holder,
+ * so read the shared registry through any live acp. Returns {pid, locked} —
+ * pid 0 when devin leaves it unstamped — or null when the session isn't
+ * listed. NOTE: current devin builds report `isLocked:true` but
+ * `lockHolderPid:null` on EVERY locked session — "locked by someone,
+ * holder unknown", NOT "unstamped ⇒ lister owns". */
+async function lockHolderState(acp: DevinAcp, id: string): Promise<{ pid: number; locked: boolean } | null> {
+  try {
+    let cursor: string | undefined;
+    for (let pages = 0; pages < 16; pages++) {
+      const page = await acp.listSessions(cursor);
+      const rec = page.sessions.find((s) => (s as { sessionId?: string }).sessionId === id);
+      if (rec) {
+        const lm = ((rec as { _meta?: Record<string, unknown> })._meta ?? {}) as Record<string, unknown>;
+        return { pid: Number(lm["cognition.ai/lockHolderPid"] ?? 0), locked: lm["cognition.ai/isLocked"] === true };
+      }
+      cursor = page.nextCursor ?? undefined;
+      if (!cursor) break;
+    }
+  } catch { /* listing failed — no holder intel from this acp */ }
+  return null;
+}
+
+export type LockClaim = { kind: "joined"; acp: DevinAcp } | { kind: "stale" } | { kind: "foreign"; pid: number };
+
+/** Recover a session devin refused to load (session_locked) by finding the
+ * process its registry actually names:
+ *   our own managed acp      → pin + join its already-loaded session (no replay)
+ *   a broker acp we skipped  → adopt it late, then join
+ *   a dead pid               → stale lock, devin reaps lazily ("stale" → retry)
+ *   a live foreign pid       → desktop/CLI ("foreign" → hopeless, annotate)
+ * Never found in any listing → "stale" (a retry costs nothing). */
+export async function claimLockedHolder(ctx: ApiContext, id: string): Promise<LockClaim> {
+  let holderPid = -1; // -1 = the record never surfaced in any listing
+  let lockedUnstamped = false; // locked by SOMEONE but the holder pid never surfaced
+  const live = ctx.manager.allAcps().filter((a) => !a.exited);
+  for (const a of live) {
+    const s = await lockHolderState(a, id);
+    if (!s) continue;
+    if (s.pid === a.pid || (s.pid === 0 && !s.locked)) { // named us, or unlocked — the lister can own it
+      markLoadedOn(id, a);
+      return { kind: "joined", acp: a };
+    }
+    if (s.pid > 0) { holderPid = s.pid; break; }
+    if (s.locked) lockedUnstamped = true; // keep listing — another acp may stamp it
+  }
+  if (holderPid <= 0 && lockedUnstamped) {
+    // Locked-but-unstamped (this devin build reports lockHolderPid:null for
+    // every lock): joining the lister pins the session to an acp that only
+    // answers session_not_found — the permanent wedge. Find the real owner
+    // by trial instead: session/load is idempotent on the holder and fails
+    // session_locked everywhere else. One shot per acp (no retry — wrong
+    // candidates fail fast); a hit gets the dedup'd rebuild via loadOnce.
+    const cwd = ctx.sessionCwd.get(id) ?? ctx.primaryCwd;
+    for (const a of live) {
+      try { await a.loadSession(id, cwd); } catch { continue; }
+      const owner = await loadOnce(ctx, a, id, cwd).catch(() => a);
+      markLoadedOn(id, owner);
+      console.error(`[session] ${id}: lock holder unstamped — load probe found owner pid ${owner.pid}, joined`);
+      return { kind: "joined", acp: owner };
+    }
+  }
+  if (holderPid <= 0) return { kind: "stale" };
+  const ours = ctx.manager.allAcps().find((a) => a.pid === holderPid && !a.exited);
+  if (ours) {
+    markLoadedOn(id, ours);
+    return { kind: "joined", acp: ours };
+  }
+  if (brokerEnabled) {
+    // A broker child this backend never adopted (its attach raced or failed)
+    // still legally holds the lock — adopt it on the spot instead of failing.
+    const info = (await brokerList().catch(() => [] as Awaited<ReturnType<typeof brokerList>>))
+      .find((b) => b.pid === holderPid && !b.exited);
+    if (info) {
+      try {
+        const agent = agentById((info.key ?? "devin").split(":")[0]) ?? DEFAULT_AGENT;
+        const acp = await ctx.manager.adopt(info.cwd, agent, info.key, info.acpId, Number.MAX_SAFE_INTEGER, info.account ?? null);
+        markLoadedOn(id, acp);
+        if (!agent.multiSession) ctx.manager.bindSession(id, acp);
+        console.error(`[session] ${id}: lock held by unadopted broker acp ${info.acpId} — adopted + joined`);
+        return { kind: "joined", acp };
+      } catch { /* adopt failed — fall through to the liveness probe */ }
+    }
+  }
+  try {
+    process.kill(holderPid, 0); // pid exists → a foreign holder (desktop/CLI)
+    return { kind: "foreign", pid: holderPid };
+  } catch {
+    return { kind: "stale" }; // dead pid → devin will reap the stale record
+  }
+}
+
 /** Kick off / await a history replay. Safe to call from any endpoint; read
  * endpoints call this without awaiting so pages fill progressively. */
 export async function ensureLoaded(ctx: ApiContext, id: string): Promise<void> {
   const { acp, set, cwd } = await hostFor(ctx, id);
-  if (set.has(id)) return;
+  if (set.has(id)) {
+    // Devin-side "loaded" ≠ our memory has the history — a backend restart
+    // drops the in-memory log while adoption still pins the session, and the
+    // early-return used to leave every read path staring at an EMPTY
+    // transcript (blank page). Hydrate the ring from the disk mirror — far
+    // cheaper than a session/load replay.
+    if (!ctx.sessionLog.get(id).length) {
+      try {
+        const disk = ctx.sessionLog.readDisk(id);
+        if (disk.length) ctx.sessionLog.restoreMemory(id, disk);
+      } catch { /* mirror unreadable — pages degrade to empty, not broken */ }
+    }
+    return;
+  }
   const cool = loadCooldown.get(id);
   if (cool && Date.now() - cool < 60_000) return;
   try {
@@ -260,7 +367,18 @@ export async function ensureLoaded(ctx: ApiContext, id: string): Promise<void> {
     // already in flight on another pool.
     markLoadedOn(id, await loadOnce(ctx, acp, id, cwd));
     loadCooldown.delete(id);
-  } catch {
+  } catch (e) {
+    // Locked by ANOTHER of our acp (or a broker child we skipped) is not a
+    // history failure — pin to the real holder so the page fills instead of
+    // sitting out the cooldown on an empty transcript.
+    if (isSessionLocked(e)) {
+      const claim = await claimLockedHolder(ctx, id).catch(() => null);
+      if (claim?.kind === "joined") { loadCooldown.delete(id); return; }
+      // Stale dead-pid records clear soon; a live foreign holder won't —
+      // give the reaper a short retry window instead of the full cooldown.
+      loadCooldown.set(id, Date.now() - (claim?.kind === "stale" ? 50_000 : 0));
+      return;
+    }
     loadCooldown.set(id, Date.now());
     /* history may be unavailable; timeline comes back empty */
   }
@@ -268,12 +386,31 @@ export async function ensureLoaded(ctx: ApiContext, id: string): Promise<void> {
 
 export async function acpForId(ctx: ApiContext, id: string) {
   const { acp, set, cwd } = await hostFor(ctx, id);
-  if (!set.has(id)) {
+  if (set.has(id)) return acp;
+  try {
     // Same cross-pool guard: the load may have lived on another acp — pin to
     // it instead of falsely marking ours (the "Session not found" wedge).
     return markLoadedOn(id, await loadOnce(ctx, acp, id, cwd));
+  } catch (e) {
+    if (!isSessionLocked(e)) throw e;
+    const claim = await claimLockedHolder(ctx, id).catch(() => ({ kind: "stale" }) as LockClaim);
+    if (claim.kind === "joined") return claim.acp;
+    if (claim.kind === "foreign") {
+      if (e instanceof Error) e.message = `${e.message} (lock holder: pid ${claim.pid})`;
+      throw e;
+    }
+    // Stale lock (dead pid / unstamped): devin reaps lazily — keep probing
+    // for a bounded window instead of failing the send inside ~10s.
+    const deadline = Date.now() + 30_000;
+    for (;;) {
+      try {
+        return markLoadedOn(id, await loadOnce(ctx, acp, id, cwd));
+      } catch (e2) {
+        if (!isSessionLocked(e2) || Date.now() > deadline) throw e2;
+        await new Promise((r) => setTimeout(r, 3000));
+      }
+    }
   }
-  return acp;
 }
 
 /** Local analog of the cloud "reboot": kill the acp process hosting this
@@ -431,6 +568,9 @@ function settleRecoveredTurn(ctx: ApiContext, id: string, ok = true, errMsg?: st
   noteUpdate(ctx, id);
   queueFlush(ctx, id);
   ctx.hub.broadcast({ type: "session_status", sessionId: id, status: sessionStatus(ctx, id).status });
+  // prompt_done too — the open page's WS handler refetches detail on it,
+  // so the status pill flips instantly instead of waiting out the 3s poll.
+  ctx.hub.broadcast({ type: "prompt_done", sessionId: id, result: null });
 }
 
 /** Settle every stashed dead-window response that still has live evidence —
@@ -497,7 +637,10 @@ function watchAdoptedTurn(ctx: ApiContext, id: string, acp: DevinAcp, resync = f
                             // kill / unpool while the adopted turn streams
   ctx.hub.broadcast({ type: "session_status", sessionId: id, status: sessionStatus(ctx, id).status });
   const t0 = Date.now();
-  touchSessionActivity(id);
+  // Do NOT touchSessionActivity here: pre-attach silence is real silence —
+  // a turn that died before the restart shouldn't get a free 90s of
+  // "working". The floor below still grants ~30s of benefit-of-doubt for
+  // turns silently running on the other side.
   let finished = false;
   const done = (err: boolean, ok = true, errMsg?: string) => {
     if (finished) return;
@@ -537,13 +680,29 @@ function watchAdoptedTurn(ctx: ApiContext, id: string, acp: DevinAcp, resync = f
   }
   const iv = setInterval(() => {
     if (acp.exited) return done(true);
-    const last = Math.max(lastActivity.get(id) ?? 0, t0);
+    // Floor grants ~30s grace post-attach (a live turn's stream updates push
+    // lastActivity past it anyway); without it a restart resets the clock and
+    // an already-dead turn ghosts "working" for the full silence window.
+    const last = Math.max(lastActivity.get(id) ?? 0, t0 - ADOPT_SILENCE_MS + 30_000);
     if (Date.now() - last > ADOPT_SILENCE_MS) {
       console.error(`[adopt] ${id}: turn silent ${Math.round((Date.now() - last) / 1000)}s — declaring settled`);
       done(false);
     }
   }, 5000);
   iv.unref();
+}
+
+/** A journaled turn the broker prompt-ledger proves already answered —
+ * settle it instantly instead of ghosting "working" through the silence
+ * window. Same resync tail as watchAdoptedTurn's done(): a crash attach
+ * first replays a bounded session/load so the dead-window gap doesn't
+ * fossilize under the turn boundary. */
+function settleDeadAdoptedTurn(ctx: ApiContext, id: string, acp: DevinAcp, resync: boolean) {
+  if (!resync) { settleRecoveredTurn(ctx, id); return; }
+  void Promise.race([
+    loadOnce(ctx, acp, id, ctx.sessionCwd.get(id) ?? acp.cwd).catch(() => {}),
+    new Promise((r) => setTimeout(r, 60_000)),
+  ]).finally(() => settleRecoveredTurn(ctx, id));
 }
 
 /** Broker mode: re-attach to acp children that outlived the old backend,
@@ -589,17 +748,45 @@ export async function adoptBrokerAcps(ctx: ApiContext) {
             const sid = (s as { sessionId?: string }).sessionId;
             if (!sid) continue;
             const holder = Number(lm["cognition.ai/lockHolderPid"] ?? 0);
-            if (holder === a.pid || holder === 0) {
+            // Locked by SOMEONE but devin won't name the holder (this build
+            // stamps lockHolderPid:null on every lock): claiming it pins the
+            // session to an acp that answers session_not_found forever — the
+            // exact wedge claimLockedHolder's probe now repairs. Claim only
+            // our own locks, unstamped-unlocked records, or a session whose
+            // still-pending prompt the broker ledger saw go out on THIS acp
+            // (ledger proof outweighs the missing stamp).
+            const heldElsewhere = lm["cognition.ai/isLocked"] === true && holder !== a.pid;
+            const t = openTurns.has(sid) && !adoptedTurns.has(sid) ? openTurns.get(sid) : undefined;
+            const pending = t != null && (a.pendingPrompts ?? []).some(
+              (p) => p.sessionId === sid || (t.reqId != null && String(t.reqId) === p.reqId),
+            );
+            if (holder === a.pid || (holder === 0 && !heldElsewhere) || pending) {
               held++;
-              // holder===0 also claims it when devin omits the pid — a
-              // session listed by this acp but held elsewhere is still safe:
-              // the next op's session/load is idempotent on the true owner.
               if (!loadedOn.get(acp)) loadedOn.set(acp, new Set());
               markLoadedOn(sid, acp);
               // Dedicated (single-session) agents resolve via bySession —
               // the pool path is multi-session only.
               if (!agent.multiSession) ctx.manager.bindSession(sid, acp);
-              if (openTurns.has(sid) && !adoptedTurns.has(sid)) { watchAdoptedTurn(ctx, sid, acp, offsets[a.acpId] == null); turns++; }
+            }
+            // Turn watchers arm on the first listing acp even when the session
+            // is held elsewhere: the real holder's frames feed lastActivity
+            // through the same wire either way, and an unarmed live turn would
+            // look dead to the boot auto-resume. adoptedTurns dedups the rest.
+            if (t) {
+              if (pending) {
+                watchAdoptedTurn(ctx, sid, acp, offsets[a.acpId] == null); turns++;
+              } else if (Array.isArray(a.pendingPrompts) && t.ts != null && t.ts >= a.startedAt) {
+                // Broker watched this acp since spawn and saw no outstanding
+                // prompt — the turn's response already fired (consumed or
+                // dropped in the dead window). Settle now instead of
+                // ghosting "working" to the silence cap. (Field absent =
+                // pre-ledger broker — blind, fall through to the watcher.)
+                settleDeadAdoptedTurn(ctx, sid, acp, offsets[a.acpId] == null); turns++;
+              } else {
+                // Sent under a previous acp/broker life — the ledger never
+                // saw it; only the silence detector can tell live from dead.
+                watchAdoptedTurn(ctx, sid, acp, offsets[a.acpId] == null); turns++;
+              }
             }
           }
           cursor = page.nextCursor ?? undefined;
