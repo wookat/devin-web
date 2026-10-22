@@ -5,8 +5,7 @@
 import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react'
 import { useTranslation } from 'react-i18next'
 import { Link, useLocation, useNavigate, useParams } from 'react-router-dom'
-import { Loader2, ChevronDown, ChevronUp, Settings2, Copy, Check, Archive, ArchiveRestore, Plus, FileText, Circle, ArrowUp, Square, X, Expand, Code, UploadCloud, Folder as FolderIcon, Pencil, Lightbulb, Info, Image as ImageIcon, AlertTriangle, MessageSquare, Sparkles, TextQuote, CornerDownLeft } from 'lucide-react'
-import { OSearch } from '../components/officialIcons'
+import { Loader2, Settings2, Copy, Check, Archive, ArchiveRestore, Plus, FileText, Circle, ArrowUp, Square, Expand, Code, UploadCloud, Folder as FolderIcon, Pencil, Lightbulb, Info, Image as ImageIcon, AlertTriangle, MessageSquare, Sparkles, TextQuote, CornerDownLeft } from 'lucide-react'
 import { adminFetch, adminFetchSwr, shareFetchSwr, type AdminSession, type PublicMessage, type DashboardData } from '@/lib/api'
 import { adminViewer, visitorViewer, setViewer, sessionFetch, sessionFetchSwr, attachmentUrl, type Viewer, type SharePermission } from '@/lib/viewer'
 import { visibleInterval } from '@/lib/poll'
@@ -19,7 +18,7 @@ import { type QuoteAttachment } from '../../shared/quotes'
 import { cn } from '@/lib/utils'
 import { readTreeCache, type MirrorTreeSession, type TreeCachePayload, writeTreeCache } from './mirror/treeCache'
 import { prefetchSession, visitorTabs, type SessionDetail, tlSnapshots, messagesFromItems, type LocalCfg, EFFORT_SUFFIX_RE, modeOfVersion, type ShareMeta, defaultTabs, CommandPalette, TimelineSkeleton } from './mirror/pageBits'
-import { type PanelKey, PANELS, findItemText, parseOfficialTab, serializeOfficialTab, useUrlParamSync } from './mirror/panelTabs'
+import { type PanelKey, PANELS, parseOfficialTab, serializeOfficialTab, useUrlParamSync } from './mirror/panelTabs'
 import { type TimelinePage, mergeItems, groupItems } from './mirror/timelineUtil'
 import { reduceStatus } from './mirror/statusReduce'
 import { type ComposerMetaT, type SuggestItem, AT_CATEGORIES } from './mirror/composerMeta'
@@ -35,6 +34,7 @@ import { SidebarRail } from './mirror/SidebarRail'
 import { ComposerFooter, type DraftQuote, type SelQuote } from './mirror/ComposerFooter'
 import { HeaderBar } from './mirror/HeaderBar'
 import { TabStrip } from './mirror/TabStrip'
+import { FindInSession } from './mirror/FindInSession'
 
 let lastSeenLocalCfg: LocalCfg | null = null
 // Per-session cfg cache — session A's config must never warm-start session B
@@ -876,23 +876,6 @@ export default function AdminMirrorPage() {
   const stickBottom = useRef(true)
   const anchor = useRef<{ id: string; offset: number } | null>(null)
 
-  // Ctrl+F in-transcript find (desktop parity): search item text, jump via data-eid.
-  const [findOpen, setFindOpen] = useState(false)
-  const [findQ, setFindQ] = useState('')
-  const [findPos, setFindPos] = useState(0)
-  const findInputRef = useRef<HTMLInputElement>(null)
-  useEffect(() => {
-    const onKey = (e: KeyboardEvent) => {
-      if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === 'f') {
-        e.preventDefault()
-        setFindOpen(true)
-        requestAnimationFrame(() => findInputRef.current?.select())
-      } else if (e.key === 'Escape' && findOpen) setFindOpen(false)
-    }
-    window.addEventListener('keydown', onKey)
-    return () => window.removeEventListener('keydown', onKey)
-  }, [findOpen])
-
   /** Remember the top-most visible event so a background refresh doesn't shift the view. */
   const captureAnchor = useCallback(() => {
     const el = scrollRef.current
@@ -1557,28 +1540,6 @@ export default function AdminMirrorPage() {
     window.addEventListener('pointerup', onSel)
     return () => { document.removeEventListener('selectionchange', onSel); window.removeEventListener('pointerup', onSel) }
   }, [isVisitor, isDraft, isSub])
-
-  // Ctrl+F: matching item ids for the current query.
-  const findHits = useMemo(() => {
-    const q = findQ.trim().toLowerCase()
-    if (!q) return [] as string[]
-    const hits: string[] = []
-    for (const it of allItems) {
-      if (findItemText(it).includes(q)) hits.push(it.id)
-      if (hits.length >= 500) break
-    }
-    return hits
-  }, [allItems, findQ])
-  const findCur = findHits.length ? findHits[Math.min(findPos, findHits.length - 1)] : null
-  useEffect(() => { setFindPos(0) }, [findQ])
-  useEffect(() => {
-    if (!findCur) return
-    const node = scrollRef.current?.querySelector<HTMLElement>(`[data-eid="${CSS.escape(findCur)}"]`)
-    if (!node) return
-    node.scrollIntoView({ block: 'center' })
-    node.classList.add('dw-find-hit')
-    return () => node.classList.remove('dw-find-hit')
-  }, [findCur])
 
   const workSecs = useMemo(() => (allItems.length ? workSeconds(allItems) : 0), [allItems])
 
@@ -2310,31 +2271,7 @@ const groups = useMemo(() => groupItems(allItems, sessionWorking), [allItems, se
           </div>
         )}
         <div className={cn('@container/chat-pane relative flex min-h-0 flex-1 flex-col', isDraft && 'hidden')}>
-        {findOpen && (
-          <div className="absolute right-4 top-2 z-30 flex items-center gap-1 rounded-lg border border-border bg-card px-2 py-1 shadow-lg">
-            <OSearch size={13} className="text-muted-foreground" />
-            <input
-              ref={findInputRef}
-              autoFocus
-              value={findQ}
-              onChange={(e) => setFindQ(e.target.value)}
-              onKeyDown={(e) => {
-                if (e.key === 'Enter') { e.preventDefault(); if (findHits.length) setFindPos((p) => (p + (e.shiftKey ? -1 : 1) + findHits.length) % findHits.length) }
-                if (e.key === 'Escape') setFindOpen(false)
-              }}
-              placeholder="Find in session"
-              className="w-44 bg-transparent text-[12px] outline-none placeholder:text-muted-foreground"
-            />
-            <span className="min-w-[42px] text-center text-[11px] tabular-nums text-muted-foreground">
-              {findQ ? `${findHits.length ? Math.min(findPos, findHits.length - 1) + 1 : 0}/${findHits.length}` : ''}
-            </span>
-            <button type="button" aria-label="Previous match" className="rounded p-0.5 hover:bg-accent disabled:opacity-40" disabled={!findHits.length}
-              onClick={() => setFindPos((p) => (p - 1 + findHits.length) % findHits.length)}><ChevronUp size={14} /></button>
-            <button type="button" aria-label="Next match" className="rounded p-0.5 hover:bg-accent disabled:opacity-40" disabled={!findHits.length}
-              onClick={() => setFindPos((p) => (p + 1) % findHits.length)}><ChevronDown size={14} /></button>
-            <button type="button" aria-label="Close find" className="rounded p-0.5 hover:bg-accent" onClick={() => setFindOpen(false)}><X size={14} /></button>
-          </div>
-        )}
+        <FindInSession items={allItems} scrollRef={scrollRef} />
         <div
           ref={scrollRef}
           onScroll={(e) => {
