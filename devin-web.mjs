@@ -84,7 +84,7 @@ function banner() {
     "",
     "  ┌───────────────────────────────────────────────┐",
     `  │   devin-web  v${VERSION}`.padEnd(50) + "│",
-    "  │   self-hosted Devin control plane           │",
+    "  │   self-hosted Devin control plane".padEnd(50) + "│",
     "  └───────────────────────────────────────────────┘",
     "",
   ].join("\n"));
