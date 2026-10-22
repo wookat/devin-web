@@ -678,7 +678,16 @@ function backfillTimeline(ctx: ApiContext, sessionId: string, logGen: number) {
       if (out.length <= MAX_UPDATES_PER_SESSION) return; // no deeper history after all
       const st = freshTlState(sessionId);
       st.resolve = (u) => ctx.sessionLog.resolveBlobs(u);
-      for (let j = 0; j < out.length; j++) tlPush(st, out[j], j);
+      for (let j = 0; j < out.length; j++) {
+        tlPush(st, out[j], j);
+        if (j % 4000 === 3999) {
+          await new Promise((r) => setImmediate(r));
+          // A replay bumped the gen mid-build — same mixed-generation hazard
+          // as mid-scan; drop this snapshot.
+          if (ctx.sessionLog.gen(sessionId) !== logGen) return;
+        }
+      }
+      if (ctx.sessionLog.gen(sessionId) !== logGen) return;
       st.seenSeq = out[out.length - 1].seq ?? out.length - 1;
       st.logGen = logGen;
       st.gen = ++tlGenSeq;

@@ -138,6 +138,32 @@ export class SessionDb {
       data TEXT NOT NULL,
       PRIMARY KEY (session_id, gen, seq))`);
     this.db.exec("CREATE TABLE IF NOT EXISTS blobs(sha TEXT PRIMARY KEY, data TEXT NOT NULL)");
+    // Migration v1 (one-shot, user_version-gated):
+    //  a) restore ORIGINAL event timestamps — sessionlog.append() stamped
+    //     Date.now() on every append, so each replay collapsed its entries to
+    //     the replay moment; the true time survives inside
+    //     data._meta["cognition.ai/timestamp"].
+    //  b) adopt orphan-generation fragments into the current gen — killed
+    //     replays left disjoint seq windows stranded under old gens, invisible
+    //     to CUR_GEN reads. INSERT OR IGNORE dedupes overlapping seqs.
+    const uv = (this.db.prepare("PRAGMA user_version").get() as { user_version: number }).user_version;
+    if (uv < 1) {
+      const jt = `$._meta."cognition.ai/timestamp"`;
+      this.db.exec(`UPDATE events SET ts =
+        CAST(strftime('%s', json_extract(data,'${jt}')) AS INTEGER)*1000
+        + (CAST(strftime('%f', json_extract(data,'${jt}'))*1000 AS INTEGER) % 1000)
+        WHERE data LIKE '%"cognition.ai/timestamp"%'
+          AND json_extract(data,'${jt}') IS NOT NULL`);
+      this.db.exec(`INSERT OR IGNORE INTO events(session_id,seq,gen,ts,kind,bytes,data)
+        SELECT e.session_id, e.seq,
+          (SELECT MAX(g.gen) FROM events g WHERE g.session_id=e.session_id),
+          e.ts, e.kind, e.bytes, e.data
+        FROM events e
+        WHERE e.gen < (SELECT MAX(h.gen) FROM events h WHERE h.session_id=e.session_id)`);
+      this.db.exec(`DELETE FROM events
+        WHERE gen < (SELECT MAX(g.gen) FROM events g WHERE g.session_id=events.session_id)`);
+      this.db.exec("PRAGMA user_version=1");
+    }
     this.sInsEvent = this.db.prepare(
       "INSERT OR REPLACE INTO events(session_id,seq,gen,ts,kind,bytes,data) VALUES (?,?,?,?,?,?,?)",
     );

@@ -258,7 +258,12 @@ export class SessionLog {
     this.resumeSeq(sessionId);
     const seq = this.seqs.get(sessionId) ?? 0;
     this.seqs.set(sessionId, seq + 1);
-    const entry: LogEntry = { ts: Date.now(), seq, update };
+    // Replayed history carries its original event time in _meta — prefer it so
+    // a re-replay preserves true timestamps instead of stamping "now" (a bare
+    // Date.now() collapsed every replayed entry onto its replay moment).
+    const metaTs = (update._meta as Record<string, unknown> | undefined)?.["cognition.ai/timestamp"];
+    const entryTs = typeof metaTs === "string" ? Date.parse(metaTs) : NaN;
+    const entry: LogEntry = { ts: Number.isFinite(entryTs) ? entryTs : Date.now(), seq, update };
     log.push(entry);
     if (log.length > MAX_UPDATES_PER_SESSION) {
       log.splice(0, log.length - MAX_UPDATES_PER_SESSION);
