@@ -214,9 +214,11 @@ route code never changes.
   install/auth probes.
   `sessionlog.ts` = append/ring/mirror/DB session log (the ring is a bounded
   disk cache: `get()` lazy-hydrates the last 5k entries from `readDisk` on
-  miss once per process, `replayHold` blanks reads between `clear()` and the
-  first replay append so stale-gen rows can't double a reloaded transcript;
-  `.jsonl` rotates `.1`/`.2` at `DEVIN_WEB_LOG_MAX_MB`=128 ONLY when the
+  miss once per process; replay is APPEND-ONLY — `beginDedupReplay` arms
+  content-key dedup so a session/load stream's stored copies skip, only the
+  delta lands, `_local` rows graduate in place, and a mid-replay kill leaves
+  the transcript intact; `.jsonl` rotates `.1`/`.2` at
+  `DEVIN_WEB_LOG_MAX_MB`=128 ONLY when the
   sqlite mirror is authoritative);
   `sessionsidecars.ts` = the subagent sidecar projection hung on
   `sessionLog.sidecars` (`.sub.<aid>`/`.subs`/`.subscan` files).
@@ -433,37 +435,39 @@ route code never changes.
   into `_dwFileUpdates` so `fileUpdates` needs no blobs either. Consumers
   that genuinely need a payload call `sessionLog.resolveBlobs(update)`
   (export, read/terminal text via `st.resolve` in dwtimeline).
-  Replay is GEN-ISOLATED: `clear()` only bumps `gens`, replayed appends
-  write the new gen alongside the old; `restoreFile` (failed load) deletes
-  the partial gen so the old resurfaces — no file dependency — and
-  `dropBackup` (success) deletes all older gens. A boot-time sweep +
-  lazy first-touch both import legacy `.jsonl` (`ensureImported`/
-  `importLegacy`), then DELETE the file — the DB is the history; new
-  appends re-create a fresh mirror. Subagent sidecars are built by a
+  Replay is APPEND-ONLY and dedup-keyed: every event row carries a `dedup`
+  content key (sha256 of the canonicalized update — `_local`/`_dwBlobbed`/
+  streamingMessageId stripped). `doLoad` arms `dedupReplay` instead of
+  clearing the log; streamed copies dedup-skip by key (any generation —
+  a dupe is a dupe wherever it lives), only the genuine delta appends, and
+  `_local` optimistic rows graduate in place (same seq, authoritative
+  payload) when their real twin arrives. Pre-dedup-column rows backfill
+  keys lazily in 2k-row `setImmediate` chunks. `append()` returns false
+  for dupes so the update fan-out (broadcast/rate-limit/noteUpdate) skips
+  them — during a 600MB replay stream that fan-out is what used to freeze
+  the event loop into supervisor kills. A mid-replay kill loses nothing:
+  the stored transcript is intact and the next load re-dedups the same
+  stream. The gen column/backup-file/restore machinery this replaced is
+  gone (importLegacy still bumps gen for first-touch `.jsonl` imports,
+  which then DELETE the file — the DB is the history; new appends
+  re-create a fresh mirror). Subagent sidecars are built by a
   seq-based DB scan (`scanSubsFromDb`, marker `.subscan` `{seq:N}`,
   LIKE '%subagent%' prefilter); legacy byte-offset `{off}` markers and
   the chunked file scan remain only as the `db==null` fallback. The
   in-memory ring (5000) is still only the live window.
   `tlCache`/`buildTimeline` seeds from `readDisk` on cold start, log
-  `gen` bump (clear before re-replay), or an unconsumed-eviction gap
+  `gen` bump (a first-touch `.jsonl` import), or an unconsumed-eviction gap
   (`headSeq > seenSeq+1`) — so /timeline backfill reaches the complete
   history. Entries carry `seq` (per-session monotonic, resumes from the db
   max/file tail across restarts) → item ids are `e<seq>`, stable across
   rebuilds; the
-  client cursor stays an index into the items array either way. `clear()`
-  still renames the file to `.jsonl.bak` before a re-replay (file-level
-  mirror hygiene), and a
-  constructor sweep restores a fuller `.bak` after a mid-replay crash
-  (file side; the DB side self-heals via gens).
-  After a successful replay, `doLoad` re-appends the unreplayed tail
-  (anchor-matched past the last entry devin's store covered) so a just-
-  finished exchange can't vanish on refresh. Devin ALSO re-pushes the last
-  streamed message as live deltas right after session/load — those echoes
-  reuse the original `cognition.ai/streamingMessageId` (replayed copies lack
-  it), so `doLoad` harvests pre-clear ids into `replayEchoIds` and
-  `isReplayEcho` drops the re-push at the append gate in index.ts. Never
-  dedup by text alone — consecutive identical replies ("收到" twice) are
-  legitimate; the smid is what separates an echo from a new turn.
+  client cursor stays an index into the items array either way. A
+  constructor sweep restores a fuller `.bak` after a crash (file side;
+  legacy only — nothing writes `.bak` anymore).
+  The dedup model needs no tail re-append — a just-finished exchange
+  can't vanish on refresh because nothing was ever cleared. Post-load
+  echoes of stored rows dedup-skip by content key inside the 15s tail-arm
+  window instead of a harvested smid guard.
 - `session/list` `updatedAt` may be absent — persist last-seen into
   `dw.json` meta (`m.updatedAt`); never fall back to `new Date()`.
 - `snippet()` from a built timeline is O(log); the sidebar uses
@@ -611,8 +615,9 @@ route code never changes.
   excerpt — the successor lands as a NEW child row. UI greys dead rows
   with a 已失效 badge and the child page offers the respawn button.
 - **Coverage rule for subagent data**: the memory ring (5000) is
-  authoritative ONLY when `mem[0].seq === 0` — clear()+replay restarts seq
-  at 0, so that proves nothing was evicted. Otherwise `subsAny`/
+  authoritative ONLY when `mem[0].seq === 0` — a session whose full history
+  fits the ring starts at seq 0, so that proves nothing was evicted.
+  Otherwise `subsAny`/
   `subagentTimeline` must union the sidecars with the memory tail, deduped
   on seq. Bare `mem.length` checks lose early spawns on >5000-entry
   sessions — this bug already shipped once.
@@ -626,15 +631,14 @@ route code never changes.
   beyond (legacy logs bootstrap lazily, chunked in the background past
   32MB; appends skip sidecar writes while coverage lags so a scan never
   double-writes). `readSubStream`/`parseSubFile` sort+dedupe on seq since
-  scan-vs-append overlap can interleave lines. `clear()`/`restoreFile()`
-  wipe every `<id>.jsonl.sub*` file (old generation); the constructor
+  scan-vs-append overlap can interleave lines. The constructor
   deletes leftover `.subidx`. Child timelines read ONE small sidechain —
   never the parent log.
   Coverage-hole rules (0-byte-file audit): `append` only bumps `.subscan`
   when EVERY routed sidecar write landed — a failed open must leave
   coverage behind so `subFilesStale` schedules a healing rescan;
   `wipeSidecars` bumps the gen counter (a wipe IS a generation change, so
-  `restoreFile` wipes also invalidate in-flight scans) and closes live
+  it also invalidates in-flight scans) and closes live
   scan fds registered in `scanOuts` BEFORE rmSync — an rm on an open fd is
   delete-pending on Windows (name lingers at 0 bytes, writes land in a
   doomed file object: the observed ghost), and the `dead` flag stops the
