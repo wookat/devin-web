@@ -21,6 +21,7 @@ import { inflight, isDraining, isGracefulExit, lastActivity } from "./sessionliv
 import { openTurns, openTurnsLoad, openTurnsSave } from "./sessionturns.js";
 import { queueList, queueFlush } from "./sessionqueue.js";
 import { loadedOn, sessionHost } from "./sessionplace.js";
+import { turnSilenceMs } from "./env.js";
 
 // ---------------------------------------------------------------------------
 // injected engine callbacks — bound once by the load domain at module init.
@@ -174,7 +175,7 @@ function isTransportDeadError(e: unknown): boolean {
  * recycled (its transport close rejects the pending RPC anyway; the race
  * below is the belt-and-braces settle) so dispatchPrompt's finally runs and
  * the drain can proceed. Env-tunable; default 15min of silence. */
-const TURN_SILENCE_MS = Number(process.env.DEVIN_WEB_TURN_SILENCE_MS ?? 15 * 60_000);
+const TURN_SILENCE_MS = turnSilenceMs();
 
 /** Drop a session's busy mark on `acp` — when the acp was flagged for
  * retire-after-idle (rotation/restart while mid-turn), the last settle is

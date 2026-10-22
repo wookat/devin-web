@@ -9,6 +9,7 @@ import fs from "node:fs";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
 import type { ApiContext } from "../../routes.js";
+import { isSupervised, noSupervisor } from "../../env.js";
 import { brokerEnabled } from "../../acpbroker.js";
 import { streamScreen, injectInput } from "../../screen.js";
 import { loadReg } from "../../dwstore.js";
@@ -42,10 +43,10 @@ export async function handleSystem(ctx: ApiContext, req: IncomingMessage, res: S
     };
     // Ordered as the actual send pipeline traverses them, top→down:
     // ingress → api → gate → persist → resolve → host → spawn → return.
-    await timed("supervisor", () => process.env.DEVIN_WEB_SUPERVISED
+    await timed("supervisor", () => isSupervised()
       ? {
           detail: "supervised — auto-restart + drain-restart active",
-          rows: [{ name: "DEVIN_WEB_SUPERVISED", value: process.env.DEVIN_WEB_SUPERVISED }],
+          rows: [{ name: "DEVIN_WEB_SUPERVISED", value: process.env.DEVIN_WEB_SUPERVISED ?? "" }],
         }
       : { level: "warn", detail: "unsupervised bare process — no auto-restart" });
     await timed("backend", () => ({
@@ -307,7 +308,7 @@ export async function handleSystem(ctx: ApiContext, req: IncomingMessage, res: S
     const respawn = () => {
       beginDrain();
       markGracefulExit(ctx);
-      if (!process.env.DEVIN_WEB_SUPERVISED && !process.env.DEVIN_WEB_NO_SUPERVISOR) {
+      if (!isSupervised() && !noSupervisor()) {
         spawn(process.execPath, [path.join(repoRoot, "scripts", "supervisor.mjs")],
           { cwd: repoRoot, detached: true, stdio: "ignore", windowsHide: true }).unref();
       }

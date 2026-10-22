@@ -23,6 +23,7 @@ import {loadedOn, sessionHost, loadEpoch, loadInflight, markLoadedOn } from "./s
 import { inflight, adoptedTurns, lastActivity, isDraining } from "./sessionlive.js";
 import { pingSubagent } from "./sessionsub.js";
 import { sessionStatus } from "./sessionview.js";
+import { noAutoResume } from "./env.js";
 
 /** Config caches + durable-state primitives live in sessioncfg.ts — imported
  * above as live bindings (responseCfg is shared state, lastAgentCfg a `let`).
@@ -888,7 +889,7 @@ export async function autoResumeInterrupted(ctx: ApiContext) {
     if (!openTurns.has(sid) && !adoptedTurns.has(sid) && queueList(sid).length)
       console.error(`[boot] ${sid}: ${queueList(sid).length} queued message(s) parked with no turn evidence — left for manual queue-op`);
   }
-  if (process.env.DEVIN_WEB_NO_AUTORESUME || !loadReg(ctx).prefs?.autoResume || !openTurns.size) return;
+  if (noAutoResume() || !loadReg(ctx).prefs?.autoResume || !openTurns.size) return;
   // A resume triggers session/load, which replays the FULL transcript back
   // through the update stream — on multi-GB logs that replay alone saturates
   // the loop and balloons the heap for minutes. Normal-size turns resume

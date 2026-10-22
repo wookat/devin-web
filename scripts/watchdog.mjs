@@ -5,14 +5,14 @@
 // supervisor. Pure node — no shell quoting, no batch-file fragility.
 import http from "node:http";
 import fs from "node:fs";
-import os from "node:os";
 import path from "node:path";
 import { spawn } from "node:child_process";
 import { fileURLToPath } from "node:url";
+import { dataDir as resolveDataDir, pubPort } from "./env.mjs";
 
 const ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..");
-const PUB = Number(process.env.DEVIN_WEB_PUBLIC_PORT) || 7791;
-const DATA = process.env.DEVIN_WEB_HOME || path.join(os.homedir(), ".devin-web");
+const PUB = pubPort();
+const DATA = resolveDataDir();
 
 // An intentional `devin-web.mjs stop` leaves this marker — respect it; the
 // watchdog must NOT resurrect a service the operator asked to keep down.

@@ -3,6 +3,7 @@ import path from "node:path";
 import { SessionDb } from "./sessiondb.js";
 import { Sidecars, eachFileLine } from "./sessionsidecars.js";
 import type { LogEntry } from "./sessiondb.js";
+import { logMaxMb } from "./env.js";
 
 export const MAX_UPDATES_PER_SESSION = 5000;
 const MAX_SESSIONS = 200;
@@ -12,7 +13,7 @@ const MAX_SESSIONS = 200;
  * serves history from the db and the file is a pure mirror. With no db the
  * file IS the store and never rotates. */
 const LOG_MAX_BYTES = (() => {
-  const mb = Number(process.env.DEVIN_WEB_LOG_MAX_MB);
+  const mb = logMaxMb();
   return (Number.isFinite(mb) && mb > 0 ? mb : 128) * 1024 * 1024;
 })();
 

@@ -10,6 +10,7 @@
 
 import type { IncomingMessage } from "node:http";
 import { featureEnabled } from "./edition.js";
+import { adminKey } from "./env.js";
 
 export interface Principal { id: string; name: string; }
 
@@ -21,7 +22,7 @@ export function currentUser(_req: IncomingMessage): Principal {
   return LOCAL_USER;
 }
 
-const ADMIN_KEY = process.env.DEVIN_WEB_ADMIN_KEY ?? "";
+const ADMIN_KEY = adminKey();
 
 /** Whether the key gate is actually armed — /api/health surfaces this so
  * the settings UI can show 已启用/未启用 instead of guessing. */

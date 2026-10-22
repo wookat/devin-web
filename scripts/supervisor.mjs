@@ -15,18 +15,18 @@
 import http from "node:http";
 import net from "node:net";
 import fs from "node:fs";
-import os from "node:os";
 import path from "node:path";
 import { spawn, execFile } from "node:child_process";
 import { fileURLToPath } from "node:url";
 import crypto from "node:crypto";
 import process from "node:process";
+import { dataDir as resolveDataDir, pubPort, backPort, adminKey, allowedHostsRaw } from "./env.mjs";
 
 const repoRoot = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..");
-const PUB_PORT = Number(process.env.DEVIN_WEB_PUBLIC_PORT) || 7791;
+const PUB_PORT = pubPort();
 const BACK_HOST = "127.0.0.1";
-const BACK_PORT = Number(process.env.DEVIN_WEB_BACKEND_PORT) || 7792;
-const dataDir = process.env.DEVIN_WEB_HOME || path.join(os.homedir(), ".devin-web");
+const BACK_PORT = backPort();
+const dataDir = resolveDataDir();
 const webDir = path.join(repoRoot, "dist", "web");
 try { fs.mkdirSync(dataDir, { recursive: true }); } catch {}
 
@@ -169,7 +169,7 @@ function spawnBackend() {
         // Task-Scheduler/boot launches have no shell env — default the known
         // public hosts so the tunnel isn't 403'd after a cold boot. deploy.bat
         // can still override by exporting its own value first.
-        DEVIN_WEB_ALLOWED_HOSTS: process.env.DEVIN_WEB_ALLOWED_HOSTS
+        DEVIN_WEB_ALLOWED_HOSTS: allowedHostsRaw()
           || "192.168.6.251:7791,devin.zalize.com,devin-web.zalize.com",
       },
     });
@@ -358,7 +358,7 @@ const server = http.createServer((req, res) => {
         try { oh = new URL(origin).host; } catch {}
         if (oh !== (req.headers.host ?? "")) { res.writeHead(403).end('{"error":"origin_mismatch"}'); return; }
       }
-      const k = process.env.DEVIN_WEB_ADMIN_KEY;
+      const k = adminKey() || null;
       if (k && req.headers["x-admin-key"] !== k) { res.writeHead(401).end('{"error":"unauthorized"}'); return; }
     }
     if (url.pathname === "/api/_super/status") {

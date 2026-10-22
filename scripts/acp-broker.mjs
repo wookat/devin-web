@@ -53,11 +53,11 @@
 import net from "node:net";
 import fs from "node:fs";
 import path from "node:path";
-import os from "node:os";
 import { spawn, execSync } from "node:child_process";
 import crypto from "node:crypto";
+import { dataDir as resolveDataDir } from "./env.mjs";
 
-const dataDir = process.env.DEVIN_WEB_DATA_DIR || path.join(os.homedir(), ".devin-web");
+const dataDir = resolveDataDir();
 const sockPath = process.platform === "win32"
   ? `\\\\.\\pipe\\devin-web-acp-${crypto.createHash("sha1").update(dataDir).digest("hex").slice(0, 10)}`
   : path.join(dataDir, "acp-broker.sock");

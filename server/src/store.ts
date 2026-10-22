@@ -1,8 +1,8 @@
 import path from "node:path";
-import os from "node:os";
 import fs from "node:fs";
 import fsp from "node:fs/promises";
 import type { AgentSessionRecord, StoreShape, UsageRecord } from "./types.js";
+import { dataDir } from "./env.js";
 
 const DEFAULTS: StoreShape = {
   aliases: {},
@@ -37,9 +37,7 @@ export class Store {
   private tmpSeq = 0;
 
   constructor() {
-    this.dataDir =
-      process.env.DEVIN_WEB_HOME ??
-      path.join(os.homedir(), ".devin-web");
+    this.dataDir = dataDir();
     this.uploadsDir = path.join(this.dataDir, "uploads");
     this.file = path.join(this.dataDir, "store.json");
     fs.mkdirSync(this.uploadsDir, { recursive: true });

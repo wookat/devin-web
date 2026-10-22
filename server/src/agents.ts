@@ -14,7 +14,8 @@
 import fs from "node:fs";
 import os from "node:os";
 import path from "node:path";
-import { spawn } from "node:child_process";
+import { exec, execFile, spawn } from "node:child_process";
+import { promisify } from "node:util";
 
 export interface AgentDef {
   id: string;
@@ -184,3 +185,60 @@ export async function probeAgent(def: AgentDef): Promise<{ ok: boolean; detail: 
   });
   return res;
 }
+
+// ---- install/auth health checks --------------------------------------------
+// Richer than probeAgent: reports version + auth state, cached 30s. Lives here
+// (agent domain) rather than in the entrypoint.
+const execFileP = promisify(execFile);
+const execP = promisify(exec);
+
+export interface AgentCheck {
+  id: string;
+  label: string;
+  installed: boolean;
+  version: string | null;
+  authed: boolean;
+  detail: string;
+}
+
+const checkCache = new Map<string, { at: number; result: AgentCheck }>();
+
+export async function agentCheck(agent: AgentDef): Promise<AgentCheck> {
+  const cached = checkCache.get(agent.id);
+  if (cached && Date.now() - cached.at < 30_000) return cached.result;
+  const result: AgentCheck = {
+    id: agent.id,
+    label: agent.label,
+    installed: false,
+    version: null,
+    authed: false,
+    detail: "",
+  };
+  try {
+    // .cmd/.ps1 shims need a shell (spawn EINVAL otherwise) — same rule as
+    // the acp process launcher.
+    const v = agent.shell
+      ? await execP(agentCommandLine(agent, agent.versionArgs), { timeout: 10_000 })
+      : await execFileP(agent.command, agent.versionArgs, { timeout: 10_000 });
+    result.installed = true;
+    // prime-agent prints its version to stderr; devin to stdout.
+    result.version = (v.stdout.trim() || v.stderr.trim()).split("\n")[0] || null;
+    if (agent.id === "devin") {
+      const s = await execFileP("devin", ["auth", "status"], { timeout: 10_000 });
+      result.authed = /logged in/i.test(s.stdout);
+      result.detail = s.stdout.trim();
+    } else {
+      // Prime manages provider auth itself (`prime-agent` → /login); there is
+      // no headless status probe, so installed is the best signal we have.
+      result.authed = true;
+      result.detail = "provider auth managed by the agent (run its /login once in a terminal)";
+    }
+  } catch (err) {
+    result.detail = err instanceof Error ? err.message : String(err);
+  }
+  checkCache.set(agent.id, { at: Date.now(), result });
+  return result;
+}
+
+export const devinCheck = () => agentCheck(agentById("devin"));
+export const agentsCheck = () => Promise.all(listAgents().map(agentCheck));

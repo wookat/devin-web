@@ -16,8 +16,9 @@ import path from "node:path";
 import crypto from "node:crypto";
 import { EventEmitter } from "node:events";
 import type { Writable, Readable } from "node:stream";
+import { acpBrokerSock, dataDir } from "./env.js";
 
-const SOCK = process.env.DEVIN_WEB_ACP_BROKER || "";
+const SOCK = acpBrokerSock();
 export const brokerEnabled = !!SOCK;
 
 /** Local trust token the broker requires on every connection — lives in
@@ -26,7 +27,7 @@ let brokerToken: string | null = null;
 function token(): string {
   if (brokerToken !== null) return brokerToken;
   try {
-    brokerToken = fs.readFileSync(path.join(process.env.DEVIN_WEB_DATA_DIR || path.join(process.env.HOME || process.env.USERPROFILE || "", ".devin-web"), "broker.token"), "utf8").trim();
+    brokerToken = fs.readFileSync(path.join(dataDir(), "broker.token"), "utf8").trim();
   } catch { brokerToken = ""; }
   return brokerToken;
 }

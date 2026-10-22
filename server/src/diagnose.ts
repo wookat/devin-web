@@ -14,6 +14,7 @@ import { listLocalSessions } from "./sessionview.js";
 import { isDraining, drainSince, inflight, markGracefulExit } from "./sessionlive.js";
 import { clearOpenTurns, openTurns, openTurnsLoad } from "./sessionturns.js";
 import { brokerEnabled } from "./acpbroker.js";
+import { isSupervised } from "./env.js";
 
 const execFileP = promisify(execFile);
 
@@ -68,7 +69,7 @@ export async function diagnose(ctx: ApiContext): Promise<{ ok: boolean; checks: 
   const t0 = Date.now();
 
   // supervisor reachable (we're answering, but supervised flag tells the mode)
-  const supervised = process.env.DEVIN_WEB_SUPERVISED === "1";
+  const supervised = isSupervised();
   checks.push({ id: "supervisor", group: "service", label: "Supervisor", level: supervised ? "ok" : "fail",
     detail: supervised ? `pid ${process.ppid} · :7791 proxying :7792` : "bare backend — no supervisor/self-heal" });
 

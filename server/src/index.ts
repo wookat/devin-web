@@ -3,12 +3,11 @@ import net from "node:net";
 import os from "node:os";
 import path from "node:path";
 import fs from "node:fs";
-import child_process, { exec, execFile } from "node:child_process";
+import child_process, { execFile } from "node:child_process";
 import { fileURLToPath } from "node:url";
-import { promisify } from "node:util";
 import { AcpManager } from "./manager.js";
 import { AccountPool, isRateLimitError, retryAfterSeconds } from "./accounts.js";
-import { AGENTS, agentById, agentCommandLine, listAgents, setAgentsDir, type AgentDef } from "./agents.js";
+import { agentsCheck, devinCheck, setAgentsDir } from "./agents.js";
 import { Store } from "./store.js";
 import { WsHub } from "./ws.js";
 import { WebSocketServer } from "ws";
@@ -26,6 +25,8 @@ import { meta } from "./dwstore.js";
 import { sshInteractive } from "./ssh.js";
 import { edition } from "./edition.js";
 import { adminKeyRequired } from "./authn.js";
+import { adminKey, allowedHostsRaw } from "./env.js";
+import { serveStatic } from "./static.js";
 import { startAutomations } from "./automations.js";
 import { resumeScans } from "./security.js";
 import { noteUpdate } from "./dwtimeline.js";
@@ -33,8 +34,6 @@ import { initLocalBrowser, attachBrowserWs } from "./localbrowser.js";
 import { initScreen } from "./screen.js";
 import type { WsServerEvent } from "./types.js";
 
-const execFileP = promisify(execFile);
-const execP = promisify(exec);
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 
 // A stray async rejection must not kill the process — Node ≥15 exits on
@@ -119,7 +118,7 @@ const allowedHostnames = new Set(["localhost", "127.0.0.1", "::1", os.hostname()
 }
 /** User-declared proxy/tunnel names: valid as Host and as a non-matching Origin. */
 const extraAllowedHostnames = new Set<string>();
-for (const extra of (process.env.DEVIN_WEB_ALLOWED_HOSTS ?? "").split(",")) {
+for (const extra of allowedHostsRaw().split(",")) {
   const p = hostParts(extra);
   if (p) {
     allowedHostnames.add(p.host);
@@ -145,54 +144,6 @@ function isAllowedRequest(req: http.IncomingMessage): boolean {
   return o.port === host.port;
 }
 
-// ---- agent CLI checks ------------------------------------------------------
-interface AgentCheck {
-  id: string;
-  label: string;
-  installed: boolean;
-  version: string | null;
-  authed: boolean;
-  detail: string;
-}
-const checkCache = new Map<string, { at: number; result: AgentCheck }>();
-async function agentCheck(agent: AgentDef): Promise<AgentCheck> {
-  const cached = checkCache.get(agent.id);
-  if (cached && Date.now() - cached.at < 30_000) return cached.result;
-  const result: AgentCheck = {
-    id: agent.id,
-    label: agent.label,
-    installed: false,
-    version: null,
-    authed: false,
-    detail: "",
-  };
-  try {
-    // .cmd/.ps1 shims need a shell (spawn EINVAL otherwise) — same rule as
-    // the acp process launcher.
-    const v = agent.shell
-      ? await execP(agentCommandLine(agent, agent.versionArgs), { timeout: 10_000 })
-      : await execFileP(agent.command, agent.versionArgs, { timeout: 10_000 });
-    result.installed = true;
-    // prime-agent prints its version to stderr; devin to stdout.
-    result.version = (v.stdout.trim() || v.stderr.trim()).split("\n")[0] || null;
-    if (agent.id === "devin") {
-      const s = await execFileP("devin", ["auth", "status"], { timeout: 10_000 });
-      result.authed = /logged in/i.test(s.stdout);
-      result.detail = s.stdout.trim();
-    } else {
-      // Prime manages provider auth itself (`prime-agent` → /login); there is
-      // no headless status probe, so installed is the best signal we have.
-      result.authed = true;
-      result.detail = "provider auth managed by the agent (run its /login once in a terminal)";
-    }
-  } catch (err) {
-    result.detail = err instanceof Error ? err.message : String(err);
-  }
-  checkCache.set(agent.id, { at: Date.now(), result });
-  return result;
-}
-const devinCheck = () => agentCheck(agentById("devin"));
-const agentsCheck = () => Promise.all(listAgents().map(agentCheck));
 
 // ---- wiring ----------------------------------------------------------------
 const store = new Store();
@@ -219,7 +170,7 @@ httpServer.headersTimeout = 76_000;
  *  x-admin-key header (same channel the frontend api.ts uses). */
 function wsKeyAllowed(req: http.IncomingMessage): boolean {
   if (!adminKeyRequired()) return true;
-  const k = process.env.DEVIN_WEB_ADMIN_KEY;
+  const k = adminKey();
   if (req.headers["x-admin-key"] === k) return true;
   try { return new URL(req.url ?? "", "http://x").searchParams.get("key") === k; } catch { return false; }
 }
@@ -413,63 +364,6 @@ const ctx: ApiContext = {
   sessionSsh,
   permissionOwner,
 };
-
-// ---- static files ----------------------------------------------------------
-const WEB_DIRS = [path.join(__dirname, "..", "web"), path.join(__dirname, "..", "..", "dist", "web")];
-const webDir = WEB_DIRS.find((d) => fs.existsSync(path.join(d, "index.html")));
-const STATIC_MIME: Record<string, string> = {
-  ".html": "text/html",
-  ".js": "text/javascript",
-  ".css": "text/css",
-  ".json": "application/json",
-  ".svg": "image/svg+xml",
-  ".png": "image/png",
-  ".woff2": "font/woff2",
-  ".map": "application/json",
-};
-
-function serveStatic(req: http.IncomingMessage, res: http.ServerResponse, url: URL) {
-  if (!webDir) {
-    res.writeHead(200, { "content-type": "text/html" }).end(
-      `<h1>devin-web</h1><p>Web UI not built. Run <code>npm run build</code>, or use <code>npm run dev</code> and open <a href="http://localhost:5173">http://localhost:5173</a>.</p>`,
-    );
-    return;
-  }
-  let file = path.join(webDir, path.normalize(decodeURIComponent(url.pathname)));
-  const rel = path.relative(webDir, file);
-  if (rel.startsWith("..") || path.isAbsolute(rel)) {
-    res.writeHead(403).end();
-    return;
-  }
-  if (!fs.existsSync(file) || fs.statSync(file).isDirectory()) {
-    file = path.join(webDir, "index.html"); // SPA fallback
-  }
-  const ext = path.extname(file).toLowerCase();
-  const mime = STATIC_MIME[ext] ?? "application/octet-stream";
-
-  const send = (p: string, headers: http.OutgoingHttpHeaders) => {
-    const stream = fs.createReadStream(p);
-    // A file swapped/removed mid-request (e.g. rebuild) must not crash the process.
-    stream.on("error", () => {
-      if (!res.headersSent) res.writeHead(500).end();
-      else res.destroy();
-    });
-    stream.once("open", () => {
-      res.writeHead(200, headers);
-      stream.pipe(res);
-    });
-  };
-
-  // Serve pre-compressed assets (scripts/compress.mjs) when the client accepts them.
-  const accept = String(req.headers["accept-encoding"] ?? "");
-  for (const [enc, suffix] of [["br", ".br"], ["gzip", ".gz"]] as const) {
-    if (accept.includes(enc) && fs.existsSync(file + suffix)) {
-      send(file + suffix, { "content-type": mime, "content-encoding": enc });
-      return;
-    }
-  }
-  send(file, { "content-type": mime });
-}
 
 httpServer.on("request", (req, res) => {
   try {
