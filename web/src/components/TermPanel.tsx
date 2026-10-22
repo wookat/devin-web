@@ -1,68 +1,212 @@
-import { useEffect, useRef, useState } from 'react'
-import { adminKey } from '@/lib/api'
+import { useCallback, useEffect, useRef, useState } from 'react'
+import { useTranslation } from 'react-i18next'
+import { Bot, Plus, X } from 'lucide-react'
+import { adminFetch } from '@/lib/api'
+import TermSession, { type TermSessionHandle } from './term/TermSession'
+import TermHistory from './term/TermHistory'
 
-/** Interactive shell — /ws/term spawns cmd/sh in the session cwd.
- * `run` optionally replaces the shell with `devin ssh`/`devin forward` args
- * (query-string fragment, e.g. `run=ssh&arg=<session>`). */
+/** Multi-terminal panel — official-style tabs, each its own xterm + /ws/term
+ * socket in the session cwd. `run` optionally replaces the shell with
+ * `devin ssh`/`devin forward` args (query fragment, e.g. `run=ssh&arg=<s>`).
+ *
+ * Input is INLINE in the xterm prompt — there is no separate input box.
+ * Shell mode (default): keystrokes go to the child verbatim. Agent mode
+ * (chip in the tab bar): the typed line is captured locally and Enter POSTs
+ * it to /term-agent, a separate NL→command agent (devin's
+ * _cognition.ai/command/revise) — NOT the session's main agent. The
+ * returned command is echoed `◇ <cmd>` and executed in the same terminal.
+ * Model pick persists in localStorage 'dw-term-model' (devin's revise has
+ * no model field on this build — forwarded for forward-compat). */
+interface TermTab { tid: number; n: number; live: boolean }
+interface ModelOpt { value: string; name?: string }
+
+const FALLBACK_MODELS: ModelOpt[] = [
+  { value: 'swe-2-high', name: 'SWE-2 high' },
+  { value: 'swe-2-mid', name: 'SWE-2 mid' },
+  { value: 'swe-2-max', name: 'SWE-2 max' },
+]
+
 export default function TermPanel({ id, run }: { id: string; run?: string }) {
-  const [lines, setLines] = useState<string[]>([])
-  const [draft, setDraft] = useState('')
-  const [live, setLive] = useState(false)
-  const wsRef = useRef<WebSocket | null>(null)
-  const boxRef = useRef<HTMLDivElement>(null)
-  const pendRef = useRef('')
+  const { t } = useTranslation()
+  const [tabs, setTabs] = useState<TermTab[]>(() => [{ tid: 1, n: 1, live: false }])
+  const [activeTid, setActiveTid] = useState(1)
+  const [agentMode, setAgentMode] = useState(false)
+  const [agentBusy, setAgentBusy] = useState(false)
+  const busyRef = useRef(false)
+  const [models, setModels] = useState<ModelOpt[]>([])
+  const [model, setModel] = useState(() => localStorage.getItem('dw-term-model') ?? 'swe-2-high')
+  const [histLocal, setHistLocal] = useState<{ cmd: string; ts: string }[]>([])
+  const handles = useRef(new Map<number, TermSessionHandle>())
+  const seq = useRef({ tid: 1, n: 1 })
+  const target = useRef(`${id} ${run}`)
 
+  // Model list: the session's live config options when available, else the
+  // static SWE-2 list. (The pick is persisted + sent; this build of devin
+  // ignores it — see the term-agent route comment.)
   useEffect(() => {
-    pendRef.current = ''
-    setLines([])
-    const proto = location.protocol === 'https:' ? 'wss' : 'ws'
-    const ws = new WebSocket(`${proto}://${location.host}/ws/term?session=${encodeURIComponent(id)}${run ? `&${run}` : ''}${adminKey() ? `&key=${encodeURIComponent(adminKey())}` : ''}`)
-    wsRef.current = ws
-    ws.onopen = () => setLive(true)
-    ws.onmessage = (e) => {
-      try {
-        const m = JSON.parse(String(e.data))
-        if (m.exit !== undefined) { setLive(false); pendRef.current += `\r\n\x1b[90m[exited ${m.exit}]\x1b[0m\r\n` }
-        else if (typeof m.d === 'string') pendRef.current += m.d
-        // strip CSI/OSC so raw cmd.exe output stays readable
-        const clean = pendRef.current.replace(/\x1b\[[0-9;?]*[A-Za-z]|\x1b\][^\x07\x1b]*(?:\x07|\x1b\\)/g, '')
-        if (clean.length > 400_000) pendRef.current = clean.slice(-200_000)
-        setLines(clean.split('\n').slice(-2000))
-      } catch { /* non-json */ }
-    }
-    ws.onclose = () => setLive(false)
-    return () => { try { ws.send(JSON.stringify({ kill: true })); ws.close() } catch {} ; wsRef.current = null }
+    if (!id) return
+    let alive = true
+    adminFetch<{ model?: { options?: { value: string; name?: string }[] } }>(`/api/admin/session/${id}/config`)
+      .then((r) => { if (alive && r?.model?.options?.length) setModels(r.model.options) })
+      .catch(() => {})
+    return () => { alive = false }
+  }, [id])
+
+  const spawn = useCallback(() => {
+    const tid = ++seq.current.tid
+    const n = ++seq.current.n
+    setTabs((ts) => [...ts, { tid, n, live: false }])
+    setActiveTid(tid)
+  }, [])
+
+  // A different session/run target = a whole different shell — reset to one
+  // fresh terminal (old tabs unmount → each TermSession kill+disposes its own).
+  useEffect(() => {
+    const key = `${id} ${run}`
+    if (target.current === key) return
+    target.current = key
+    seq.current.n = 0
+    const tid = ++seq.current.tid
+    setTabs([{ tid, n: ++seq.current.n, live: false }])
+    setActiveTid(tid)
   }, [id, run])
 
-  useEffect(() => { boxRef.current?.scrollTo(0, boxRef.current.scrollHeight) }, [lines])
-
-  const send = (line: string) => {
-    wsRef.current?.send(JSON.stringify({ d: line + '\r\n' }))
-    setDraft('')
+  const close = (tid: number) => {
+    const i = tabs.findIndex((x) => x.tid === tid)
+    const next = tabs.filter((x) => x.tid !== tid)
+    setTabs(next)
+    handles.current.delete(tid)
+    if (tid === activeTid) setActiveTid(next[Math.min(Math.max(i, 0), next.length - 1)]?.tid ?? 0)
   }
+
+  const activeTab = tabs.find((x) => x.tid === activeTid)
+  const live = !!activeTab?.live
+
+  const submitAgent = useCallback((tid: number, line: string) => {
+    const h = handles.current.get(tid)
+    const PROMPT = '\x1b[36m❯\x1b[0m '
+    if (!h || !id) return
+    const text = line.trim()
+    if (!text) { h.write(PROMPT); return }
+    if (busyRef.current) { h.write(`\x1b[2m(${t('tm.agentBusy')})\x1b[0m\r\n${PROMPT}`); return }
+    busyRef.current = true
+    setAgentBusy(true)
+    adminFetch<{ ok?: boolean; command?: string; error?: string }>(`/api/admin/session/${id}/term-agent`, {
+      method: 'POST',
+      body: JSON.stringify({ text, model }),
+    }).then((r) => {
+      const cmd = (r?.command ?? '').trim()
+      if (cmd) {
+        h.write(`\x1b[2m◇ ${cmd}\x1b[0m\r\n`)
+        h.send(cmd + '\r')
+        setHistLocal((hs) => [{ cmd, ts: new Date().toISOString() }, ...hs].slice(0, 50))
+      } else {
+        h.write(`\x1b[31m${t('tm.agentErr')}${r?.error ?? 'unknown'}\x1b[0m\r\n`)
+      }
+    }).catch((e) => {
+      h.write(`\x1b[31m${t('tm.agentErr')}${(e as Error).message}\x1b[0m\r\n`)
+    }).finally(() => {
+      busyRef.current = false
+      setAgentBusy(false)
+      h.write(PROMPT)
+    })
+  }, [id, model, t])
+
   return (
-    <div className="flex h-full min-h-0 flex-col bg-[#0d0d0d] font-mono text-[12px]">
-      <div className="flex items-center justify-between border-b border-white/10 px-2 py-1 text-[10px] text-neutral-500">
-        <span>{live ? 'shell' : 'shell (closed)'}</span>
-        <button type="button" className="rounded px-1.5 py-0.5 hover:bg-white/10" onClick={() => { pendRef.current = ''; setLines([]) }}>Clear</button>
+    <div className="flex h-full min-h-0 flex-col bg-card font-mono text-[12px] text-foreground">
+      <div className="flex items-center gap-1 border-b border-border px-2 py-1 text-[10px] text-muted-foreground">
+        {!!id && (
+          <>
+            <button
+              type="button"
+              onClick={() => setAgentMode((v) => !v)}
+              aria-pressed={agentMode}
+              title={t('tm.agentHint')}
+              className={`flex cursor-pointer items-center gap-1 rounded-[5px] px-1.5 py-0.5 text-[11px] ${agentMode ? 'bg-accent text-foreground' : 'text-muted-foreground hover:text-foreground'}`}
+            >
+              <Bot size={11} />{t('tm.agent')}
+            </button>
+            {agentMode && (
+              <select
+                value={model}
+                onChange={(e) => { setModel(e.target.value); localStorage.setItem('dw-term-model', e.target.value) }}
+                aria-label={t('tm.model')}
+                className="cursor-pointer rounded-[5px] border border-border bg-card px-1 py-0.5 text-[11px] text-foreground outline-none"
+              >
+                {(models.length ? models : FALLBACK_MODELS).map((o) => (
+                  <option key={o.value} value={o.value}>{o.name ?? o.value}</option>
+                ))}
+              </select>
+            )}
+            <span className="mx-0.5 h-3.5 w-px shrink-0 bg-border" />
+          </>
+        )}
+        <div className="flex min-w-0 flex-1 items-center gap-0.5 overflow-x-auto">
+          {tabs.map((tab) => (
+            <span
+              key={tab.tid}
+              className={`group flex shrink-0 items-center rounded-[5px] py-0.5 pl-1.5 pr-0.5 text-[11px] ${tab.tid === activeTid ? 'bg-accent text-foreground' : 'text-muted-foreground hover:text-foreground'} ${tab.live ? '' : 'opacity-60'}`}
+            >
+              <button
+                type="button"
+                onClick={() => { setActiveTid(tab.tid); handles.current.get(tab.tid)?.focus() }}
+                className="cursor-pointer whitespace-nowrap"
+              >
+                {t('vp.terminalN', { n: tab.n })}
+              </button>
+              <button
+                type="button"
+                onClick={() => close(tab.tid)}
+                title={t('common.close')}
+                aria-label={t('common.close')}
+                className={`ml-0.5 cursor-pointer rounded p-0.5 hover:bg-tint-tertiary ${tab.tid === activeTid ? 'opacity-100' : 'opacity-0 focus-visible:opacity-100 group-hover:opacity-100'}`}
+              >
+                <X size={9} />
+              </button>
+            </span>
+          ))}
+          <button
+            type="button"
+            onClick={spawn}
+            title={t('tm.newTerm', { defaultValue: 'New terminal' })}
+            aria-label={t('tm.newTerm', { defaultValue: 'New terminal' })}
+            className="cursor-pointer rounded p-1 hover:bg-accent hover:text-foreground"
+          >
+            <Plus size={11} />
+          </button>
+        </div>
+        <span className="ml-1 shrink-0">{agentMode ? (agentBusy ? t('tm.agentBusy') : t('tm.agent')) : (live ? 'shell' : t('tm.closed'))}</span>
+        <button
+          type="button"
+          className="shrink-0 cursor-pointer rounded px-1.5 py-0.5 hover:bg-accent hover:text-foreground"
+          onClick={() => handles.current.get(activeTid)?.clear()}
+        >{t('tm.clear')}</button>
       </div>
-      <div ref={boxRef} className="min-h-0 flex-1 overflow-y-auto whitespace-pre-wrap break-all px-2 py-1 text-neutral-200">
-        {lines.map((l, i) => <div key={i}>{l}</div>)}
+      <div className="relative min-h-0 flex-1">
+        {tabs.map((tab) => (
+          <TermSession
+            key={tab.tid}
+            ref={(h) => { if (h) handles.current.set(tab.tid, h); else handles.current.delete(tab.tid) }}
+            sid={id}
+            run={run}
+            active={tab.tid === activeTid}
+            agentMode={agentMode}
+            onAgentLine={(line) => submitAgent(tab.tid, line)}
+            onLive={(l) => setTabs((ts) => ts.map((x) => x.tid === tab.tid ? { ...x, live: l } : x))}
+          />
+        ))}
+        {tabs.length === 0 && (
+          <button
+            type="button"
+            onClick={spawn}
+            className="flex h-full w-full cursor-pointer flex-col items-center justify-center gap-1.5 text-muted-foreground hover:text-foreground"
+          >
+            <Plus size={16} />
+            <span className="text-[11px]">{t('tm.newTerm', { defaultValue: 'New terminal' })}</span>
+          </button>
+        )}
       </div>
-      <div className="flex items-center gap-1 border-t border-white/10 px-2 py-1">
-        <span className="text-neutral-500">{'>'}</span>
-        <input
-          className="min-w-0 flex-1 bg-transparent text-neutral-100 outline-none placeholder:text-neutral-600"
-          placeholder={live ? 'type a command…' : 'disconnected'}
-          disabled={!live}
-          value={draft}
-          onChange={(e) => setDraft(e.target.value)}
-          onKeyDown={(e) => {
-            if (e.key === 'Enter') send(draft)
-            else if (e.key === 'c' && e.ctrlKey) { e.preventDefault(); wsRef.current?.send(JSON.stringify({ d: '\x03' })) }
-          }}
-        />
-      </div>
+      {!!id && <TermHistory sid={id} local={histLocal} />}
     </div>
   )
 }
