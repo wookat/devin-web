@@ -6,7 +6,8 @@
 import type { IncomingMessage, ServerResponse } from "node:http";
 import type { ApiContext } from "../routes.js";
 import { meta, loadReg } from "../dwstore.js";
-import { snapshotItems, buildMessages, buildTimeline, tlReset } from "../dwtimeline.js";
+import { buildMessages, buildTimeline, tlReset } from "../dwtimeline.js";
+import { snapshotItems } from "../dwtailsnap.js";
 import { ensureLoaded } from "../sessionload.js";
 import { sessionStatus } from "../sessionview.js";
 import { queueList } from "../sessionqueue.js";
