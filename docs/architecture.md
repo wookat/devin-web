@@ -57,13 +57,16 @@ persisted (durable files), rebuilt (adoption), or deliberately ephemeral.
         ▼
   sessionload  ────── the load/recovery ENGINE: hostFor (the ONE session→acp
         │              resolver), doLoad/loadOnce + replayGuard dedup,
-        │              interruptedTurn evidence, adoptBrokerAcps +
-        │              watchAdoptedTurn (silence floor ~30s post-attach),
-        │              settleDeadAdoptedTurn (ledger evidence → instant),
-        │              resolveTurnByReq/sniffedSettles (wire-sniffed late
-        │              responses → instant settle), claimLockedHolder
+        │              interruptedTurn evidence, claimLockedHolder
         │              (session_locked forensics), autoResumeInterrupted,
         │              setCfgCacheDir boot hook. Binds BOTH injections.
+        │
+  sessionadopt ───── the broker-adoption engine (imports loadOnce for resync
+        │              only): adoptBrokerAcps boot scan, watchAdoptedTurn
+        │              (silence floor ~30s post-attach), settleDeadAdoptedTurn
+        │              (ledger evidence → instant), resolveTurnByReq/
+        │              sniffedSettles (wire-sniffed late responses →
+        │              instant settle), settleRecoveredTurn shared cleanup.
         │
    ┌────┼─────────────┬─────────────┐
    ▼    ▼             ▼             ▼
@@ -114,6 +117,9 @@ Foundations (no server imports): store dwstore uploads terminal ssh
                                  screen localbrowser ws export modelcat
                                  accounts agents edition authn types
                                  httputil (the ONE json/readBody/readJson)
+                                 env (the ONE DEVIN_WEB_* reader — scripts
+                                 mirror it via scripts/env.mjs)
+                                 static (dev-mode dist/web serving)
 ```
 
 Rules:

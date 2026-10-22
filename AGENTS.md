@@ -205,6 +205,11 @@ route code never changes.
   system/registry/fsbrowse/newsession/persession · `share.ts` the
   /api/share/* tree · `session.ts` sessionSubs + sub:* machinery).
   `httputil.ts` = the ONE json/readBody/readJson/UNSUPPORTED set.
+  `env.ts` = the ONE owner of every `DEVIN_WEB_*` env read in the backend
+  (scripts share `scripts/env.mjs` — same rules, standalone processes).
+  `static.ts` = dev-mode static serving (production: the supervisor serves
+  dist/web itself). `agents.ts` owns agent registry AND agentCheck
+  install/auth probes.
   `sessionlog.ts` = append/ring/mirror/DB session log (the ring is a bounded
   disk cache: `get()` lazy-hydrates the last 5k entries from `readDisk` on
   miss once per process, `replayHold` blanks reads between `clear()` and the
@@ -216,7 +221,7 @@ route code never changes.
   `sessionload.ts` = the
   load/recovery engine: hostFor (the ONE session→acp resolver:
   dedicated → sessionHost pin → cwd pool), doLoad/loadOnce + replay
-  dedup, adoptBrokerAcps/watchAdoptedTurn, autoResumeInterrupted,
+  dedup, autoResumeInterrupted,
   interruptedTurn, setCfgCacheDir boot hook, claimLockedHolder (the
   session_locked recovery: devin's lockHolderPid names the true
   holder when stamped — join our own acp / adopt a skipped broker
@@ -225,7 +230,11 @@ route code never changes.
   record falls to a load-probe over live acps — session/load is
   idempotent on the owner, fails session_locked elsewhere — before
   giving up to the bounded stale retry),
-  and the two injection binds. `sessionprompt.ts` = the send pipeline: dispatchPrompt,
+  and the two injection binds. `sessionadopt.ts` = the broker-adoption
+  engine split out of sessionload: adoptBrokerAcps boot scan,
+  watchAdoptedTurn silence fallback, settleDeadAdoptedTurn ledger
+  check, resolveTurnByReq wire-sniffed settle, settleRecoveredTurn
+  shared cleanup — imports loadOnce for resync only. `sessionprompt.ts` = the send pipeline: dispatchPrompt,
   promptWithRetry (the ONE retry policy: cool acp.account → rotate →
   resend once → 429 when all cooling; busy-tracking + turn-silence
   watchdog per attempt), attachments, sendPreflight. `sessionsub.ts` =
