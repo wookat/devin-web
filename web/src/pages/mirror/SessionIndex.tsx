@@ -1,7 +1,7 @@
 import { useMemo, useState, type MutableRefObject, type RefObject } from 'react'
 import { useTranslation } from 'react-i18next'
 import { type TimelineItem } from '@/components/Timeline'
-import { PrStateIcon, mergeLivePr } from '@/components/StructuredCards'
+import { PrStateIcon, mergeLivePr } from '@/components/PrCards'
 import { cn, fmtTime } from '@/lib/utils'
 import { type SessionDetail } from './pageBits'
 import { ApiOriginGlyph } from './glyphs'
