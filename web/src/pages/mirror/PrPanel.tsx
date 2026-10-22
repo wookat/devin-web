@@ -176,7 +176,7 @@ function PrPanel({ id, prUrl }: { id: string; prUrl: string }) {
               <div className="fixed inset-0 z-30" onClick={() => setDiffMenu(false)} />
               <div role="menu" className="absolute right-0 top-7 z-40 min-w-[220px] rounded-[10px] border border-border bg-popover p-1 shadow-lg">
                 <div role="presentation" className="px-2 py-[5px] text-[12px] font-medium text-muted-foreground">{t('pr.diffView')}</div>
-                {([['Split view', true], ['Unified view', false]] as const).map(([label, val]) => (
+                {([[t('pr.splitView'), true], [t('pr.unifiedView'), false]] as const).map(([label, val]) => (
                   <button
                     key={label}
                     role="menuitemradio"
@@ -326,7 +326,7 @@ function PrPanel({ id, prUrl }: { id: string; prUrl: string }) {
                   {cm.committed_at && <span>• {relTime(cm.committed_at)}</span>}
                   {cm.author && <span>• {cm.author}</span>}
                   <span className="rounded bg-muted px-1.5 py-0.5 font-mono">{cm.sha.slice(0, 7)}</span>
-                  <button aria-label="Copy commit SHA" onClick={() => void navigator.clipboard.writeText(cm.sha)} className="flex size-5 cursor-pointer items-center justify-center rounded hover:bg-accent hover:text-foreground"><Copy size={11} /></button>
+                  <button aria-label={t('pr.copySha')} onClick={() => void navigator.clipboard.writeText(cm.sha)} className="flex size-5 cursor-pointer items-center justify-center rounded hover:bg-accent hover:text-foreground"><Copy size={11} /></button>
                 </div>
               </div>
             ))}

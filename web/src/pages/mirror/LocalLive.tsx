@@ -120,7 +120,7 @@ function LocalBrowser() {
       </form>
       <div className="relative min-h-0 flex-1 overflow-hidden rounded-lg border border-border bg-black">
         {frame && (
-          <img ref={imgRef} src={frame} alt="browser" draggable={false}
+          <img ref={imgRef} src={frame} alt={t('live.browserAlt')} draggable={false}
             className="absolute inset-0 h-full w-full select-none object-contain" />
         )}
         {running && (
@@ -257,7 +257,7 @@ function LocalDesktop() {
       <img
         ref={imgRef}
         src="/api/admin/screen/live"
-        alt="host desktop"
+        alt={t('live.desktopAlt')}
         draggable={false}
         className="absolute inset-0 h-full w-full select-none object-contain"
       />
@@ -338,9 +338,10 @@ function LocalDesktop() {
   )
 }
 
-export function LocalLive() {
+export function LocalLive({ quality = 'auto' }: { quality?: 'auto' | 'sharp' | 'saver' }) {
   const { t } = useTranslation()
   const [mode, setMode] = useState<'desktop' | 'browser'>('desktop')
+  const [mon, setMon] = useState<'primary' | 'virtual'>('primary')
   const [full, setFull] = useState(false)
   const rootRef = useRef<HTMLDivElement>(null)
 
@@ -365,6 +366,15 @@ export function LocalLive() {
             <Icon size={14} />{label}
           </button>
         ))}
+        {mode === 'desktop' && (
+          <button
+            onClick={() => setMon((v) => (v === 'primary' ? 'virtual' : 'primary'))}
+            title={mon === 'primary' ? t('live.monPrimary') : t('live.monAll')}
+            className="flex h-7 cursor-pointer items-center gap-1 rounded-md px-2 text-[11px] text-muted-foreground hover:bg-accent hover:text-foreground"
+          >
+            <Monitor size={12} />{mon === 'primary' ? t('live.monPrimary') : t('live.monAll')}
+          </button>
+        )}
         <span className="ml-2 hidden items-center gap-1 pr-2 text-[12px] text-muted-foreground sm:flex">
           {mode === 'desktop' ? <><Eye size={12} />{t('live.desktopRo')}</> : t('live.browserInter')}
         </span>
@@ -378,8 +388,9 @@ export function LocalLive() {
       </div>
       {mode === 'desktop' ? (
         <img
-          src="/api/admin/screen/live"
-          alt="host desktop"
+          key={`${quality}-${mon}`}
+          src={`/api/admin/screen/live?q=${quality}&mon=${mon}`}
+          alt={t('live.desktopAlt')}
           draggable={false}
           className="min-h-0 flex-1 select-none rounded-lg border border-border bg-black object-contain"
         />

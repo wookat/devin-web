@@ -157,7 +157,7 @@ function PrHeader({ id, prUrl, info, mergeStatus, checks, pendingReviewId, autho
       </div>
       <div>
         <div className="text-[12px] text-muted-foreground">{repoPath} #{info?.number}</div>
-        <h2 className="text-[17px] font-semibold leading-snug">{info?.title || 'Pull request'}</h2>
+        <h2 className="text-[17px] font-semibold leading-snug">{info?.title || t('pr.pullRequest')}</h2>
       </div>
       <div className="flex flex-wrap items-center gap-1.5 text-[12px]">
         {author?.avatar_url && <img loading="lazy" decoding="async" src={author.avatar_url} alt="" className="size-5 rounded-full" />}
@@ -184,7 +184,7 @@ function PrHeader({ id, prUrl, info, mergeStatus, checks, pendingReviewId, autho
       <div className="relative min-h-[46px] rounded-[10px] border border-border p-2 text-[13px]">
         <button
           onClick={() => setMergedOpen((o) => !o)}
-          aria-label={pill.label === 'Merged' ? 'Merged — view checks, reviewers, assignees, and labels' : undefined}
+          aria-label={pill.label === 'Merged' ? t('pr.mergedAria') : undefined}
           className="flex h-7 w-full cursor-pointer items-center gap-2 rounded-md text-left"
         >
           <GitPullRequest size={14} className="text-muted-foreground" />
@@ -195,7 +195,7 @@ function PrHeader({ id, prUrl, info, mergeStatus, checks, pendingReviewId, autho
           <div className="absolute left-0 top-full z-30 mt-1 w-80 rounded-lg border border-border bg-background p-3 shadow-lg">
             {(() => {
               const ms = mergeStatus as { checks_pending?: boolean; checks_failing?: boolean } | null
-              const label = ms?.checks_failing ? 'Some checks failed' : ms?.checks_pending ? 'Checks pending' : 'All checks passed'
+              const label = ms?.checks_failing ? t('pr.checksFail') : ms?.checks_pending ? t('pr.checksPending') : t('pr.checksPass')
               const cls = ms?.checks_failing ? 'bg-red-500 text-red-600' : ms?.checks_pending ? 'bg-amber-500 text-amber-600' : 'bg-emerald-500 text-emerald-600'
               return (
                 <div className="mb-3 border-b border-border pb-3">
@@ -236,7 +236,7 @@ function PrHeader({ id, prUrl, info, mergeStatus, checks, pendingReviewId, autho
                 </div>
               )
             })()}
-            {([['Reviewers', reviewers || [], 'No reviewers'], ['Assignees', assignees || [], 'No assignees']] as const).map(([title, people, empty]) => (
+            {([[t('pr.reviewers'), reviewers || [], t('pr.noReviewers')], [t('pr.assignees'), assignees || [], t('pr.noAssignees')]] as const).map(([title, people, empty]) => (
               <div key={title} className="mb-3">
                 <div className="mb-1 text-[13px] font-medium">{title}</div>
                 {people.length ? people.map((u) => (

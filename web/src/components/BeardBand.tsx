@@ -8,7 +8,7 @@ import { cn } from '@/lib/utils'
 //   open → border-transparent + shadow-L2 + (light: bg-elevated / dark: elevated-transparent
 //   = white/5) · eyebrow hangs absolute bottom-full px-1.5 items py-1.5 · beard items
 //   flex-nowrap items-center gap-1 px-1 pt-2.5 pb-2.5 (chrome inset).
-export default function BeardBand({ band, chin, children, className, wrapClassName, onBandHeight, cardRef, bareCard }: {
+export default function BeardBand({ band, chin, children, className, wrapClassName, cardRef, bareCard }: {
   band?: ReactNode
   chin?: ReactNode
   children: ReactNode
@@ -16,7 +16,7 @@ export default function BeardBand({ band, chin, children, className, wrapClassNa
   /** Outer column width class — sessions use the official 740; the draft
    *  page narrows to 692 to line up with the cards below it. */
   wrapClassName?: string
-  onBandHeight?: (h: number) => void
+
   cardRef?: React.Ref<HTMLDivElement>
   /** Drop the inner card chrome entirely — the draft page keeps only two
    *  layers (wax + its own inner surface), not the official three. */
@@ -34,17 +34,14 @@ export default function BeardBand({ band, chin, children, className, wrapClassNa
     const el = eyebrowRef.current
     if (!openTop || !el) {
       setBandH(0)
-      onBandHeight?.(0)
       return
     }
     const ro = new ResizeObserver(() => {
-      const h = el.getBoundingClientRect().height
-      setBandH(h)
-      onBandHeight?.(h)
+      setBandH(el.getBoundingClientRect().height)
     })
     ro.observe(el)
     return () => ro.disconnect()
-  }, [openTop, onBandHeight])
+  }, [openTop])
 
   useEffect(() => {
     const el = chinRef.current

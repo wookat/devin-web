@@ -4,6 +4,7 @@ import { useTranslation } from 'react-i18next'
 import { ArrowLeft, ChevronDown, FileText, Folder, FolderOpen, FolderPlus, Pencil, Trash2 } from 'lucide-react'
 import { adminFetch } from '@/lib/api'
 import { cn } from '@/lib/utils'
+import { FileIcon } from '@/lib/fileIcon'
 
 interface DirList {
   cwd: string
@@ -253,7 +254,7 @@ export default function DirPicker({ value, onChange, repos, recents, primaryCwd,
                       />
                     ) : (
                       <span className="flex min-w-0 flex-1 items-center gap-2 rounded-md px-2 py-1.5 text-[13px] leading-[18px] text-muted-foreground" title={f.path}>
-                        <FileText size={13} className="shrink-0" />
+                        <FileIcon path={f.name} size={13} className="shrink-0" />
                         <span className="min-w-0 flex-1 truncate">{f.name}</span>
                         <span className="shrink-0 text-[11px]">{f.size > 1048576 ? `${(f.size / 1048576).toFixed(1)}M` : f.size > 1024 ? `${Math.round(f.size / 1024)}K` : `${f.size}B`}</span>
                       </span>

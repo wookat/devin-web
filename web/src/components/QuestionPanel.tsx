@@ -1,4 +1,5 @@
 import { useState } from 'react'
+import { useTranslation } from 'react-i18next'
 import { ChevronLeft, ChevronRight, Check, X } from 'lucide-react'
 import { cn } from '@/lib/utils'
 
@@ -22,6 +23,7 @@ export default function QuestionPanel({ questions, onSubmit, onDismiss, disabled
   onDismiss: () => void
   disabled?: boolean
 }) {
+  const { t } = useTranslation()
   const [idx, setIdx] = useState(0)
   const [picked, setPicked] = useState<string[][]>(() => questions.map(() => []))
   const q = questions[Math.min(idx, questions.length - 1)]
@@ -51,18 +53,18 @@ export default function QuestionPanel({ questions, onSubmit, onDismiss, disabled
         <p className="min-w-0 flex-1 text-[14px] leading-5 text-foreground">{q.question}</p>
         {questions.length > 1 && (
           <div className="flex shrink-0 items-center" role="presentation">
-            <button aria-label="Previous question" disabled={idx === 0} onClick={() => setIdx(idx - 1)} className={NAV_BTN}>
+            <button aria-label={t('composer.qPrev')} disabled={idx === 0} onClick={() => setIdx(idx - 1)} className={NAV_BTN}>
               <ChevronLeft size={16} />
             </button>
             <span className="w-9 text-center text-[13px] leading-[18px] tabular-nums text-muted-foreground/70">
-              {idx + 1} of {questions.length}
+              {t('composer.qOf', { i: idx + 1, n: questions.length })}
             </span>
-            <button aria-label="Next question" disabled={last} onClick={() => setIdx(idx + 1)} className={NAV_BTN}>
+            <button aria-label={t('composer.qNext')} disabled={last} onClick={() => setIdx(idx + 1)} className={NAV_BTN}>
               <ChevronRight size={16} />
             </button>
           </div>
         )}
-        <button onClick={onDismiss} aria-label="Dismiss" className={NAV_BTN}>
+        <button onClick={onDismiss} aria-label={t('common.dismiss')} className={NAV_BTN}>
           <X size={16} />
         </button>
       </div>
@@ -114,7 +116,7 @@ export default function QuestionPanel({ questions, onSubmit, onDismiss, disabled
             onClick={() => finish(picked)}
             className="flex h-6 cursor-pointer items-center gap-[3px] rounded-[6px] border border-border bg-card px-2 text-[12px] font-medium leading-4 text-foreground hover:bg-accent disabled:pointer-events-none disabled:opacity-50"
           >
-            <span>{last ? 'Submit' : 'Next'}</span>
+            <span>{last ? t('composer.qSubmit') : t('composer.qNextBtn')}</span>
           </button>
         </div>
       )}

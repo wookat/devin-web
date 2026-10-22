@@ -1,4 +1,5 @@
 import { forwardRef, useEffect, useImperativeHandle, useRef, type ReactNode } from 'react'
+import { useTranslation } from 'react-i18next'
 import { cn } from '@/lib/utils'
 import { showPillTooltip } from '@/lib/pillTooltip'
 
@@ -97,6 +98,7 @@ const ComposerEditor = forwardRef<
     disabled?: boolean
   }
 >(function ComposerEditor({ value, onChange, onKeyDown, placeholder, placeholderNode, className, onFiles, disabled = false }, ref) {
+  const { t } = useTranslation()
   const elRef = useRef<HTMLDivElement>(null)
 
   // External resets (send/queue clears input): rewrite DOM only when the
@@ -169,7 +171,7 @@ const ComposerEditor = forwardRef<
       contentEditable={!disabled}
       role="textbox"
       aria-multiline="true"
-      aria-label="Message Devin"
+      aria-label={t('composer.ariaMsg')}
       data-placeholder={placeholderNode != null ? '' : placeholder}
       aria-placeholder={placeholder}
       onInput={() => { if (!disabled && elRef.current) onChange(serialize(elRef.current)) }}

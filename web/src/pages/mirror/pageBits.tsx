@@ -25,25 +25,25 @@ function CommandPalette({ sessions, onClose, onTheme, onToggleSidebar }: {
   const [mode, setMode] = useState<'home' | 'search'>('home')
   const [submenu, setSubmenu] = useState<'none' | 'go' | 'theme'>('none')
   const nav = (path: string) => { window.location.assign(path) }
-  type Cmd = { label: string; run: () => void; icon: ReactNode; group?: string; shortcut?: string; render?: ReactNode }
+  type Cmd = { id?: string; label: string; run: () => void; icon: ReactNode; group?: string; shortcut?: string; render?: ReactNode }
   const rootCmds: Cmd[] = [
     {
-      label: 'Start session with a prompt…',
+      label: t('pal.startPrompt'),
       run: () => nav('/admin/new'),
       icon: <DwMark size={16} />,
-      render: <><span>{t('pal.startSession')}</span><span className="text-muted-foreground"> with a prompt…</span></> },
-    { label: 'Search sessions…', run: () => { setMode('search'); setQ('') }, icon: <Search size={16} /> },
-    { group: 'Actions', label: 'Go to…', run: () => { setSubmenu('go'); setQ('') }, icon: <ArrowUpRight size={16} /> },
-    { group: 'Actions', label: 'Change theme…', run: () => { setSubmenu('theme'); setQ('') }, icon: <Languages size={16} /> },
-    { group: 'Actions', label: 'Toggle sidebar', run: onToggleSidebar, icon: <PanelLeft size={16} />, shortcut: 'Ctrl B' },
+      render: <><span>{t('pal.startSession')}</span><span className="text-muted-foreground">{t('pal.withPrompt')}</span></> },
+    { id: 'search', label: t('pal.searchSessions'), run: () => { setMode('search'); setQ('') }, icon: <Search size={16} /> },
+    { id: 'goto', group: t('pal.actions'), label: t('pal.goto'), run: () => { setSubmenu('go'); setQ('') }, icon: <ArrowUpRight size={16} /> },
+    { id: 'theme', group: t('pal.actions'), label: t('pal.changeTheme'), run: () => { setSubmenu('theme'); setQ('') }, icon: <Languages size={16} /> },
+    { id: 'sidebar', group: t('pal.actions'), label: t('pal.toggleSidebar'), run: onToggleSidebar, icon: <PanelLeft size={16} />, shortcut: 'Ctrl B' },
   ]
   const submenuCmds: Record<'go' | 'theme', Cmd[]> = {
     go: [
-      { label: 'New session', run: () => nav('/admin/new'), icon: <Plus size={16} /> },
-      { label: 'All sessions', run: () => nav('/'), icon: <List size={16} /> },
+      { label: t('pal.newSession'), run: () => nav('/admin/new'), icon: <Plus size={16} /> },
+      { label: t('pal.allSessions'), run: () => nav('/'), icon: <List size={16} /> },
     ],
     theme: (['light', 'dark', 'system'] as Theme[]).map((value) => ({
-      label: value === 'light' ? 'Light mode' : value === 'dark' ? 'Dark mode' : 'System',
+      label: value === 'light' ? t('pal.lightMode') : value === 'dark' ? t('pal.darkMode') : t('pal.system'),
       run: () => { onTheme(value); onClose() },
       icon: value === 'light' ? <Lightbulb size={16} /> : value === 'dark' ? <CircleDot size={16} /> : <Laptop size={16} /> })) }
   const cmds: Cmd[] = submenu !== 'none'
@@ -75,7 +75,7 @@ function CommandPalette({ sessions, onClose, onTheme, onToggleSidebar }: {
           if (e.key === 'Backspace' && !q && submenu !== 'none') { e.preventDefault(); backToRoot() }
           if (e.key === 'ArrowDown') { e.preventDefault(); setSel((s) => Math.min(s + 1, filtered.length - 1)) }
           if (e.key === 'ArrowUp') { e.preventDefault(); setSel((s) => Math.max(s - 1, 0)) }
-          if (e.key === 'Enter' && filtered[clamped]) { filtered[clamped].run(); if (submenu === 'none' && mode === 'home' && filtered[clamped].label !== 'Search sessions…' && !['Go to…', 'Change theme…'].includes(filtered[clamped].label)) onClose() }
+          if (e.key === 'Enter' && filtered[clamped]) { filtered[clamped].run(); if (submenu === 'none' && mode === 'home' && filtered[clamped].id !== 'search' && !['goto', 'theme'].includes(filtered[clamped].id ?? '')) onClose() }
         }}
       >
         <div className={cn(
@@ -100,7 +100,7 @@ function CommandPalette({ sessions, onClose, onTheme, onToggleSidebar }: {
               }
               if (e.key === 'Backspace' && !q && submenu !== 'none') { e.preventDefault(); backToRoot() }
             }}
-            placeholder={submenu === 'go' ? 'Search in Go to…' : submenu === 'theme' ? 'Search in Theme…' : mode === 'search' ? 'Search sessions…' : 'Type a command or search…'}
+            placeholder={submenu === 'go' ? t('pal.searchGo') : submenu === 'theme' ? t('pal.searchTheme') : mode === 'search' ? t('pal.searchSessions') : t('pal.searchCmd')}
             className={cn('min-w-0 flex-1 bg-transparent outline-none placeholder:text-muted-foreground', submenu !== 'none' ? 'text-[17px] leading-[26px]' : 'text-[14px] leading-[20px]')}
           />
         </div>
@@ -112,7 +112,7 @@ function CommandPalette({ sessions, onClose, onTheme, onToggleSidebar }: {
               <button
                 onClick={() => {
                   c.run()
-                  if (submenu === 'none' && mode === 'home' && !['Search sessions…', 'Go to…', 'Change theme…'].includes(c.label)) onClose()
+                  if (submenu === 'none' && mode === 'home' && !['search', 'goto', 'theme'].includes(c.id ?? '')) onClose()
                 }}
                 onMouseEnter={() => setSel(i)}
                 className={cn('group/menu-item text-[14px] text-foreground relative flex min-h-10 w-full cursor-pointer select-none items-center gap-2 rounded-[6px] px-3 py-2 text-left outline-none', i === clamped ? 'bg-tint-secondary' : '')}
@@ -125,9 +125,9 @@ function CommandPalette({ sessions, onClose, onTheme, onToggleSidebar }: {
           ))}
           {submenu === 'none' && mode === 'home' && (
             <div className="mt-2 flex items-center gap-3 border-t border-black/[.06] px-3 py-3 text-[12px] text-muted-foreground dark:border-white/[.08]">
-              <span><kbd className="rounded bg-black/[.06] px-1.5 py-0.5 font-mono text-[11px]">↑</kbd> <kbd className="rounded bg-black/[.06] px-1.5 py-0.5 font-mono text-[11px]">↓</kbd> Navigate</span>
-              <span><kbd className="rounded bg-black/[.06] px-1.5 py-0.5 font-mono text-[11px]">esc</kbd> Close</span>
-              <span className="ml-auto"><kbd className="rounded bg-black/[.06] px-1.5 py-0.5 font-mono text-[11px]">↵</kbd> Select</span>
+              <span><kbd className="rounded bg-black/[.06] px-1.5 py-0.5 font-mono text-[11px]">↑</kbd> <kbd className="rounded bg-black/[.06] px-1.5 py-0.5 font-mono text-[11px]">↓</kbd> {t('pal.navigate')}</span>
+              <span><kbd className="rounded bg-black/[.06] px-1.5 py-0.5 font-mono text-[11px]">esc</kbd> {t('common.close')}</span>
+              <span className="ml-auto"><kbd className="rounded bg-black/[.06] px-1.5 py-0.5 font-mono text-[11px]">↵</kbd> {t('pal.select')}</span>
           </div>
           )}
           {submenu === 'none' && mode === 'search' && (

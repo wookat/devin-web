@@ -98,9 +98,9 @@ function ComputerPanel({ id, items, mt, asleep, onWake, canControl, showLiveDesk
     return () => document.removeEventListener('mousedown', handle)
   }, [qOpen])
   const qualityOptions: { value: StreamQuality; label: string; description: string }[] = [
-    { value: 'auto', label: 'Auto', description: 'Follows your connection' },
-    { value: 'sharp', label: 'Sharp', description: 'Sharpest picture, most bandwidth' },
-    { value: 'saver', label: 'Data saver', description: 'Lowest bandwidth' },
+    { value: 'auto', label: t('cp.qAuto'), description: t('cp.qAutoD') },
+    { value: 'sharp', label: t('cp.qSharp'), description: t('cp.qSharpD') },
+    { value: 'saver', label: t('cp.qSaver'), description: t('cp.qSaverD') },
   ]
   const qualityLabel = qualityOptions.find((option) => option.value === quality)?.label || 'Auto'
   if (!shots.length) {
@@ -109,18 +109,18 @@ function ComputerPanel({ id, items, mt, asleep, onWake, canControl, showLiveDesk
     if (!canControl) {
       return (
         <div className="p-4 text-xs text-muted-foreground">
-          No computer activity yet.
+          {t('cp.noActivity')}
         </div>
       )
     }
-    return <LocalLive />
+    return <LocalLive quality={quality} />
   }
   return (
     <div ref={rootRef} className="flex h-full flex-col gap-2 bg-background p-3">
       {canControl && showLiveDesktop && live
-        ? <LocalLive />
+        ? <LocalLive quality={quality} />
         : cur && mt
-        ? <img loading="lazy" decoding="async" src={screenshotUrl(id, cur.key, mt)} alt="Devin's Computer" className="min-h-0 h-full w-full flex-1 object-contain" />
+        ? <img loading="lazy" decoding="async" src={screenshotUrl(id, cur.key, mt)} alt={t('cp.desktopAlt')} className="min-h-0 h-full w-full flex-1 object-contain" />
         : <div className="flex flex-1 items-center justify-center text-[13px] text-muted-foreground"><Loader2 size={14} className="mr-1.5 animate-spin" /> {t('cmp.connecting')}</div>}
       <div
         ref={sliderRef}
@@ -196,7 +196,7 @@ function ComputerPanel({ id, items, mt, asleep, onWake, canControl, showLiveDesk
             className="flex h-7 cursor-default items-center gap-1.5 rounded-full border border-border px-2.5 disabled:opacity-100"
           >
             <span className="size-1.5 rounded-full bg-black/25" />
-            Live
+            {t('cp.live')}
           </button>
         ) : (
           <button
@@ -206,7 +206,7 @@ function ComputerPanel({ id, items, mt, asleep, onWake, canControl, showLiveDesk
             className="flex h-7 cursor-pointer items-center gap-1.5 rounded-full border border-black/[0.06] px-2.5 text-[13px] font-medium text-muted-foreground disabled:cursor-default disabled:opacity-100 dark:border-white/[0.06]"
           >
             <span className={cn('size-2 rounded-full', live ? 'bg-[#f53b3a]' : 'bg-black/25')} />
-            Live
+            {t('cp.live')}
           </button>
         )}
         <div className="ml-auto flex items-center gap-1">
@@ -246,7 +246,7 @@ function ComputerPanel({ id, items, mt, asleep, onWake, canControl, showLiveDesk
           )}
           <button
             onClick={() => full ? void document.exitFullscreen() : void rootRef.current?.requestFullscreen()}
-            aria-label={full ? 'Exit full screen' : 'Full screen'}
+            aria-label={full ? t('computer.exitFullscreen') : t('computer.fullscreen')}
             className="flex size-7 shrink-0 cursor-pointer items-center justify-center rounded-full hover:bg-accent hover:text-foreground"
           >
             {full ? <Shrink size={13} /> : <Expand size={13} />}

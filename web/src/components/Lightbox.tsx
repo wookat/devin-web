@@ -1,4 +1,5 @@
 import { useEffect, useState } from 'react'
+import { useTranslation } from 'react-i18next'
 import { createPortal } from 'react-dom'
 import { Download, ChevronLeft, ChevronRight } from 'lucide-react'
 
@@ -33,6 +34,7 @@ function collectGallery(initial: GalleryImage): GalleryImage[] {
 }
 
 export function LightboxOverlay({ src: initialSrc, alt, onClose }: { src: string; alt?: string; onClose: () => void }) {
+  const { t } = useTranslation()
   const [gallery] = useState<GalleryImage[]>(() => collectGallery({ src: abs(initialSrc), alt: alt || '' }))
   const [idx, setIdx] = useState(() => Math.max(0, gallery.findIndex((g) => g.src === abs(initialSrc))))
   const total = gallery.length
@@ -62,7 +64,7 @@ export function LightboxOverlay({ src: initialSrc, alt, onClose }: { src: string
         onClick={onClose}
         role="dialog"
         aria-modal="true"
-        aria-label="Image preview"
+        aria-label={t('att.imgPreview')}
       >
         <div className="pointer-events-none flex max-h-[98vh] max-w-[98vw] flex-col items-center gap-2 outline-none">
           <div className="relative flex w-full items-center justify-center px-10">
@@ -71,7 +73,7 @@ export function LightboxOverlay({ src: initialSrc, alt, onClose }: { src: string
                 type="button"
                 onClick={(e) => { e.stopPropagation(); step(-1) }}
                 className={`${navBtn} absolute left-0`}
-                aria-label="Previous"
+                aria-label={t('att.prev')}
               >
                 <ChevronLeft size={20} strokeWidth={1.75} />
               </button>
@@ -88,7 +90,7 @@ export function LightboxOverlay({ src: initialSrc, alt, onClose }: { src: string
                 type="button"
                 onClick={(e) => { e.stopPropagation(); step(1) }}
                 className={`${navBtn} absolute right-0`}
-                aria-label="Next"
+                aria-label={t('att.next')}
               >
                 <ChevronRight size={20} strokeWidth={1.75} />
               </button>
@@ -108,7 +110,7 @@ export function LightboxOverlay({ src: initialSrc, alt, onClose }: { src: string
               href={cur.src}
               download={name}
               className="inline-flex size-6 shrink-0 items-center justify-center rounded-md text-muted-foreground hover:bg-tint-secondary hover:text-foreground"
-              aria-label="Download"
+              aria-label={t('common.download')}
             >
               <Download size={14} />
             </a>

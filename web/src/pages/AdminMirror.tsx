@@ -603,7 +603,7 @@ export default function AdminMirrorPage() {
   // Draft cwd change → re-index for the new workspace.
   useEffect(() => { if (isDraft) setIndexedPaths(null) }, [isDraft, draftCwd])
   const editorRef = useRef<ComposerEditorHandle>(null)
-  const [bandH, setBandH] = useState(0)
+  const composerWrapRef = useRef<HTMLDivElement | null>(null)
 
   // Composer trigger token at end of input: `/` = commands+skills, `@` =
   // mention categories. `!`/`$` (playbooks/secrets) have no local data source,
@@ -837,13 +837,16 @@ export default function AdminMirrorPage() {
   const [scAnchor, setScAnchor] = useState<{ id: string; ts: string } | null>(null)
   const [translations, setTranslations] = useState<Record<string, string>>({})
   const mediaTok = detail?.media_token || ''
+  // Chat surfaces always own their scroll — the browser's async scroll restore
+  // fires a mid-list scroll event during load that would otherwise kill the
+  // bottom pin before the first message batch even lands.
+  useEffect(() => {
+    try {
+      window.history.scrollRestoration = 'manual'
+    } catch { /* non-fatal */ }
+  }, [])
   const scrollRef = useRef<HTMLDivElement>(null)
   const stickBottom = useRef(true)
-  // Programmatic scroll corrections (virtualizer measurement adjustments,
-  // the ResizeObserver pin) also fire `scroll` — only a real user gesture may
-  // unstick the bottom anchor, or the transcript falls off the live edge
-  // whenever a row above the viewport re-measures.
-  const userScrollUntil = useRef(0)
   const anchor = useRef<{ id: string; offset: number } | null>(null)
   // Virtualized transcript anchors: event-id → virtual-row index plus the
   // virtualizer instance. Both are populated late in render (the row model
@@ -851,25 +854,16 @@ export default function AdminMirrorPage() {
   const eidToRowRef = useRef<Map<string, number>>(new Map())
   const tlVirtRef = useRef<{ scrollToIndex: (index: number, opts?: { align?: 'start' | 'center' | 'end' | 'auto'; behavior?: 'auto' | 'smooth' }) => void } | null>(null)
   const listRef = useRef<HTMLDivElement>(null)
-  // Fast-scroll placeholder mode: during a hard scrollbar drag the virtual
-  // window slides faster than heavy rows (markdown/mermaid/diffs) can mount —
-  // replacing mounted row bodies with measured-height placeholders keeps the
-  // drag at 60fps and mounts real content ~200ms after the motion settles.
-  // Gate on VELOCITY (>2.5px/ms ≈ 3000px/s): gentle wheel reading must keep
-  // real rows, not flash placeholders on every tick.
-  const [tlFastScroll, setTlFastScroll] = useState(false)
-  const tlFastTimer = useRef(0)
-  const tlProbe = useRef({ t: 0, y: 0 })
-  // Programmatic scroll writes (bottom pins, anchor restores) are stamped
-  // here; the velocity gate ignores events inside the window — otherwise a
-  // big RO pin lands as one huge-dy scroll event, re-triggers fast mode,
-  // placeholders unmount remeasure, the pin fires again… an oscillation.
-  const progScrollUntil = useRef(0)
-  const markProgScroll = () => { progScrollUntil.current = performance.now() + 250 }
-  // Adaptive size estimates: seed estimates from the running average of
-  // actually-measured rows so deep jumps stop drifting ~1000px mid-correction.
-  const tlRowH = useRef(96)
-  const tlWorkH = useRef(220)
+  // Last real-scroll timestamp — window trims wait for scroll-idle so a
+  // boundWindow cut can never yank content mid-drag.
+  const lastScrollAt = useRef(0)
+  const trimTimer = useRef(0)
+  // Load-window pin guard: transient not-near scroll events while content is
+  // still arriving (browser scroll restoration, virtualizer settles) are NOT
+  // user intent — without this they permanently kill the bottom pin and a
+  // refresh lands mid-list instead of on the latest message.
+  const bootGuardUntil = useRef(0)
+  const userTookOver = useRef(false)
 
   /** Remember the top-most visible event so a background refresh doesn't shift the view. */
   const captureAnchor = useCallback(() => {
@@ -1043,23 +1037,54 @@ export default function AdminMirrorPage() {
       void prefetchPromise.catch(() => {})
     }
     // Bound the displayed window: streamed sessions would otherwise grow
-    // `items` without limit (mergeItems never evicts) until the DOM chokes.
-    // Drop the OLDEST excess — `cursor` is the index (into the server items
-    // array) of the oldest item on screen, so sliding it forward by the drop
-    // keeps scroll-up refetches contiguous: the trimmed range comes back as
-    // ordinary older pages. (`eidx` is the LOG index, not the items index —
-    // using it as the cursor landed back-pages misaligned.)
+    // `items` without limit (mergeItems never evicts). Drop the OLDEST
+    // excess — but ONLY at scroll-idle: a mid-drag trim removes rows above
+    // the viewport, every surviving row's offset shifts, and nothing
+    // compensated scrollTop → the content under the cursor teleports and
+    // the scrollbar thumb jumps (the visible flicker). The cap is a memory
+    // bound, not a DOM bound — virtualization mounts ~15 rows regardless —
+    // so deferring 700ms costs nothing.
     const boundWindow = () => {
       const cid = idRef.current
-      window.setTimeout(() => {
+      window.clearTimeout(trimTimer.current)
+      trimTimer.current = window.setTimeout(() => {
         if (idRef.current !== cid) return
+        if (Date.now() - lastScrollAt.current < 700) { boundWindow(); return }
         const cut = olderRef.current.length + itemsRef.current.length - 600
         if (cut <= 0) return
-        if (!isVisitor) setCursor((prev) => String((parseInt(prev ?? '0', 10) || 0) + cut))
-        const dropO = Math.min(olderRef.current.length, cut)
+        // Never trim the row the anchor will restore onto — keep a buffer
+        // band above the viewport so the cut can only eat truly offscreen
+        // history.
+        captureAnchor()
+        const aid = anchor.current?.id
+        let safeCut = cut
+        if (aid) {
+          const ai = [...olderRef.current, ...itemsRef.current].findIndex((it) => it.id === aid)
+          if (ai >= 0) safeCut = Math.min(cut, Math.max(0, ai - 24))
+        }
+        if (safeCut <= 0) { anchor.current = null; return }
+        const cutN = safeCut
+        const dropO = Math.min(olderRef.current.length, cutN)
+        // Re-anchor the keyset cursor to the smallest eidx left displayed —
+        // index arithmetic on a seq boundary pointed back-pages INSIDE the
+        // live window → duplicate prepend → trim → refetch loop.
+        if (!isVisitor) setCursor((prev) => {
+          if (prev == null) return prev
+          let b = Infinity
+          for (const it of olderRef.current.slice(dropO)) {
+            if (typeof it.eidx === 'number' && it.eidx < b) b = it.eidx
+          }
+          for (const it of itemsRef.current.slice(cutN - dropO)) {
+            if (typeof it.eidx === 'number' && it.eidx < b) b = it.eidx
+          }
+          return b === Infinity ? prev : String(b)
+        })
+        // The [items, older] layout effect puts the anchored row back at the
+        // same pixel offset, making the trim invisible. (Pinned-at-bottom
+        // viewers need nothing: the RO pin keeps them on the live edge.)
         if (dropO) setOlder((prev) => prev.slice(dropO))
-        if (cut - dropO > 0) setItems((prev) => prev.slice(cut - dropO))
-      }, 0)
+        if (cutN - dropO > 0) setItems((prev) => prev.slice(cutN - dropO))
+      }, 700)
     }
     // Lazy peek: opening the session only reads the server-side snapshot —
     // no session/load, so devin never sees "activity" and the timestamp stays
@@ -1082,7 +1107,12 @@ export default function AdminMirrorPage() {
           if (!alive) return
           // A stale boot copy paints instantly; pull the revalidated page right after.
           if (first && stale && followUp == null) followUp = window.setTimeout(() => { if (!alive) return; followUp = null; load() }, 800)
-          if (first || r.reset) {
+          // A generation change mid-window (peek gen-0 → live gen-N, or a
+          // server-side rebuild bumping gen) can't merge — `e${i}` ids belong
+          // to different item spaces and would union into duplicate rows that
+          // the next reset then wipes (the visible flicker). Swap wholesale.
+          const genFlip = windowGen.current !== (r.gen ?? 0)
+          if (first || r.reset || genFlip) {
             // First fetch replaces the restored client snapshot wholesale
             // (it is stale by definition); `reset` means the server log was
             // rebuilt — ids collided, merge is unsafe. Either way: swap the
@@ -1240,6 +1270,7 @@ export default function AdminMirrorPage() {
     }
     if (gi == null) return
     stickBottom.current = false
+    userTookOver.current = true
     const row = gi
     requestAnimationFrame(() => tlVirtRef.current?.scrollToIndex(row, { align: 'center' }))
     const cleanUrl = new URL(window.location.href)
@@ -1278,6 +1309,7 @@ export default function AdminMirrorPage() {
     const virt = tlVirtRef.current
     if (gi == null || !virt) return false
     stickBottom.current = false
+    userTookOver.current = true
     // Instant jump to the estimated position, then refine onto the mounted
     // node — far jumps accumulate estimate error (folded events have no node,
     // so the group row stays the landing point).
@@ -1287,6 +1319,20 @@ export default function AdminMirrorPage() {
       node?.scrollIntoView({ block: align === 'start' ? 'start' : 'center', behavior: 'smooth' })
     })
     return true
+  }, [])
+  // Bottom-anchored scroll — the ONE canonical "go to latest" for every
+  // jump-bottom affordance (footer pill + index popup row). The stick latch
+  // engages BEFORE the jump so the resize pin owns the landing: a smooth
+  // scrollTo(scrollHeight) lands short because mid-path virtualizer mounts
+  // keep growing scrollHeight past the stale target, and the smooth scroll's
+  // own not-near scroll events would clear the latch again. Instant jump →
+  // the resulting scroll event is `near` → latch holds → every subsequent
+  // measurement correction keeps the REAL bottom (composer tail) in view.
+  const scrollToBottom = useCallback(() => {
+    stickBottom.current = true
+    userTookOver.current = false
+    const el = scrollRef.current
+    if (el) el.scrollTop = el.scrollHeight
   }, [])
   // `<ref_file>` chip click: official opens the file in the editor; the mirror lands on
   // the matching entry of the Changes panel (nothing to open when the file was never edited)
@@ -1313,8 +1359,6 @@ export default function AdminMirrorPage() {
     const startId = idRef.current
     olderBusy.current = true
     setLoadingOlder(true)
-    const el = scrollRef.current
-    const prevHeight = el?.scrollHeight ?? 0
     try {
       const pageCursor = cursor
       const prefetched = olderPrefetch.current
@@ -1326,12 +1370,14 @@ export default function AdminMirrorPage() {
         : sessionFetch<TimelinePage>(`/timeline?limit=300&cursor=${encodeURIComponent(pageCursor)}`)
       const r = await request
       if (idRef.current !== startId) return
+      // Anchor BEFORE the prepend: the [items, older] layout effect puts
+      // this row back at the same pixel offset. scrollHeight deltas only
+      // measure the virtualizer's ESTIMATES — the viewport landed off by
+      // the estimate error for a frame before measurements corrected it
+      // (the blank flash on every pull).
+      captureAnchor()
       setOlder((prev) => [...r.items.map((it) => ({ ...it, pageCursor })), ...prev])
       if (!r.error) setCursor(r.next_cursor)
-      // keep the reader anchored on what they were already looking at
-      requestAnimationFrame(() => {
-        if (el) { markProgScroll(); el.scrollTop += el.scrollHeight - prevHeight }
-      })
     } catch { /* leave cursor in place so the user can retry */ } finally {
       olderBusy.current = false
       setLoadingOlder(false)
@@ -1352,7 +1398,6 @@ export default function AdminMirrorPage() {
     const startId = idRef.current
     olderBusy.current = true
     setLoadingOlder(true)
-    const el = scrollRef.current
     const target = new Date(ts).getTime()
     let cur: string | null = cursor
     try {
@@ -1368,12 +1413,11 @@ export default function AdminMirrorPage() {
         const r: TimelinePage = await request
         if (idRef.current !== startId) break
         if (r.error) break
-        const prevHeight = el?.scrollHeight ?? 0
+        captureAnchor()
         setOlder((prev) => [...r.items.map((it) => ({ ...it, pageCursor })), ...prev])
         cur = r.next_cursor
         setCursor(r.next_cursor)
         await new Promise((res) => requestAnimationFrame(res))
-        if (el) { markProgScroll(); el.scrollTop += el.scrollHeight - prevHeight }
         if (r.items.some((it) => it.id === eventId)) break
         if (r.items[0] && new Date(r.items[0].ts).getTime() <= target) break
       }
@@ -1429,7 +1473,6 @@ export default function AdminMirrorPage() {
     const el = scrollRef.current
     if (!el) return
     if (stickBottom.current) {
-      markProgScroll()
       el.scrollTop = el.scrollHeight
       return
     }
@@ -1438,29 +1481,31 @@ export default function AdminMirrorPage() {
     if (!a) return
     const node = el.querySelector<HTMLElement>(`[data-eid="${CSS.escape(a.id)}"]`)
     if (node) {
-      markProgScroll()
       el.scrollTop += node.getBoundingClientRect().top - el.getBoundingClientRect().top - a.offset
     }
     anchor.current = null
-  }, [items])
+  }, [items, older])
 
-  useLayoutEffect(() => {
-    const el = scrollRef.current
-    if (el && stickBottom.current) { markProgScroll(); el.scrollTop = el.scrollHeight }
-  }, [bandH])
+  // First data has arrived — for the settle window afterwards, not-near scroll
+  // events are treated as transient (restores/measurements) and re-pinned
+  // unless the user has already taken over with a real gesture.
+  useEffect(() => {
+    if (loaded) bootGuardUntil.current = Date.now() + 1500
+  }, [loaded])
 
   // While stickBottom holds, ANY total-size change (virtual rows measuring in,
-  // stream appends, prepended pages) re-pins the view to the true bottom —
-  // this is what makes refresh land on the newest message instead of wherever
-  // the first estimate pass left it.
+  // stream appends, prepended pages, composer growth) re-pins the view to the
+  // true bottom — this is what makes refresh land on the newest message
+  // instead of wherever the first estimate pass left it.
   useEffect(() => {
     const el = scrollRef.current
     const list = listRef.current
     if (!el || !list) return
     const ro = new ResizeObserver(() => {
-      if (stickBottom.current) { markProgScroll(); el.scrollTop = el.scrollHeight }
+      if (stickBottom.current) el.scrollTop = el.scrollHeight
     })
     ro.observe(list)
+    if (composerWrapRef.current) ro.observe(composerWrapRef.current)
     return () => ro.disconnect()
   }, [loaded])
 
@@ -1498,21 +1543,24 @@ const groups = useMemo(() => groupItems(allItems, sessionWorking), [allItems, se
   const tlVirt = useVirtualizer({
     count: vRows.length,
     getScrollElement: () => scrollRef.current,
-    estimateSize: (i) => (vRows[i]?.kind === 'g' ? (vRows[i]!.g!.type === 'work' ? tlWorkH.current : tlRowH.current) : 64),
+    // Estimates must match REAL row heights or every mount produces a
+    // measure delta the virtualizer compensates with a scrollTop write —
+    // that's the scrollbar bounce. Work groups render collapsed ~28px
+    // EventRows (memo'd, expand on click) + header chrome; flat rows are
+    // messages with body-length-scaled height. A wrong-by-thousands
+    // estimate made each mounted group kick the scrollbar mid-drag.
+    estimateSize: (i) => {
+      const r = vRows[i]
+      if (!r || r.kind !== 'g' || !r.g) return 64
+      const g = r.g
+      if (g.type === 'work') return g.items.length * 28 + 56
+      const len = g.item.body?.length ?? 0
+      return Math.max(56, 56 + Math.ceil(len / 90) * 19)
+    },
     getItemKey: (i) => vRows[i]?.key ?? i,
-    overscan: 8,
-  })
-  // Rolling estimates from measured rows — shrink-grows toward reality as the
-  // user scrolls, so unmeasured regions estimate closer each pass.
-  useEffect(() => {
-    let n = 0, sum = 0, wn = 0, wsum = 0
-    for (const vi of tlVirt.getVirtualItems()) {
-      const r = vRows[vi.index]
-      if (r?.kind !== 'g' || !r.g) continue
-      if (r.g.type === 'work') { wn++; wsum += vi.size } else { n++; sum += vi.size }
-    }
-    if (n) tlRowH.current = Math.round(sum / n)
-    if (wn) tlWorkH.current = Math.round(wsum / wn)
+    // ~2 viewports mounted either side — a hard jump lands on real rows
+    // instead of an unmounted spacer gap.
+    overscan: 16,
   })
   // Resize drift above the viewport shifts scrollTop back into place; growth
   // at/under the viewport (live tail) must not move what the user is reading.
@@ -1798,7 +1846,7 @@ const groups = useMemo(() => groupItems(allItems, sessionWorking), [allItems, se
         setDismissedQ(pending.id)
         setInput('')
       } catch (e) {
-        reportSendError(e, 'Failed to send message. Try again.')
+        reportSendError(e, t('am.sendFail'))
       } finally { setSending(false) }
       return
     }
@@ -1848,7 +1896,7 @@ const groups = useMemo(() => groupItems(allItems, sessionWorking), [allItems, se
           setOptimisticVersion(selectedVersion)
           setSelectedVersion((pendingVersion) => pendingVersion === selectedVersion ? null : pendingVersion)
         } catch {
-          setSendErr('Failed to switch model')
+          setSendErr(t('am.modelFail'))
         }
       }
       graduateTl.current?.() // sending is interaction — start the real load now
@@ -1883,7 +1931,7 @@ const groups = useMemo(() => groupItems(allItems, sessionWorking), [allItems, se
       pendingPreviewRef.current = []
       setItems((prev) => prev.filter((it) => it.id !== echo.id))
       if (preset === undefined && !messageSent) { setInput((cur) => cur || draft.input); setStaged((cur) => (cur.length ? cur : draft.staged)); setDraftQuotes((cur) => (cur.length ? cur : draft.quotes)) }
-      reportSendError(e, 'Failed to send message. Try again.')
+      reportSendError(e, t('am.sendFail'))
     } finally { setSending(false) }
   }
 
@@ -1905,7 +1953,7 @@ const groups = useMemo(() => groupItems(allItems, sessionWorking), [allItems, se
       await reloadTl.current?.()
     } catch (e) {
       setInterrupted(it) // resend failed — put the banner back
-      reportSendError(e, 'Failed to send message. Try again.')
+      reportSendError(e, t('am.sendFail'))
     }
   }
   const dismissInterrupted = () => {
@@ -1956,7 +2004,7 @@ const groups = useMemo(() => groupItems(allItems, sessionWorking), [allItems, se
       setInput('')
       setControlMsg(t('menu.successorSent'))
     } catch (e) {
-      reportSendError(e, 'Failed to send message. Try again.')
+      reportSendError(e, t('am.sendFail'))
     } finally { setSending(false) }
   }
 
@@ -1988,7 +2036,7 @@ const groups = useMemo(() => groupItems(allItems, sessionWorking), [allItems, se
       })
       setDismissedQ(pending.id)
     } catch (e) {
-      reportSendError(e, 'Failed to submit answer. Try again.')
+      reportSendError(e, t('am.answerFail'))
     } finally { setSending(false) }
   }
 
@@ -2093,6 +2141,115 @@ const groups = useMemo(() => groupItems(allItems, sessionWorking), [allItems, se
       return files.filter((file) => file.url !== url)
     })
   }
+
+  const composerEl = (
+    <ComposerFooter
+      effShowPanel={effShowPanel}
+      showJump={showJump}
+      onScrollBottom={scrollToBottom}
+      isDraft={isDraft}
+      isVisitor={isVisitor}
+      id={id}
+      caps={caps}
+      sendErr={sendErr}
+      send={send}
+      interrupted={interrupted}
+      resumeInterrupted={resumeInterrupted}
+      dismissInterrupted={dismissInterrupted}
+      subDead={subDead}
+      respawnSub={respawnSub}
+      controlMsg={controlMsg}
+      persona={persona}
+      personaBusy={personaBusy}
+      cyclePersonaMode={cyclePersonaMode}
+      askPersonaNow={askPersonaNow}
+      envBannerGone={envBannerGone}
+      items={items}
+      dismissEnvBanner={dismissEnvBanner}
+      draftTarget={draftTarget}
+      setDraftTarget={setDraftTarget}
+      draftSshCwd={draftSshCwd}
+      setDraftSshCwd={setDraftSshCwd}
+      draftCwd={draftCwd}
+      setDraftCwd={setDraftCwd}
+      recentCwds={recentCwds}
+      composerMeta={composerMeta}
+      setComposerMeta={setComposerMeta}
+      draftAgent={draftAgent}
+      setDraftAgent={setDraftAgent}
+      queued={queued}
+      setQueued={setQueued}
+      queueOpReq={queueOpReq}
+      queueReorder={queueReorder}
+      queueEditStart={queueEditStart}
+      queueOp={queueOp}
+      queueSend={queueSend}
+      queueEditSubmit={queueEditSubmit}
+      editingQ={editingQ}
+      pending={pending}
+      answerQuestion={answerQuestion}
+      setDismissedQ={setDismissedQ}
+      sending={sending}
+      suggestions={suggestions}
+      atCat={atCat}
+      setAtCat={setAtCat}
+      trigger={trigger}
+      sugIdx={sugIdx}
+      setSugIdx={setSugIdx}
+      applySuggestion={applySuggestion}
+      openMention={openMention}
+      findings={findings}
+      setFindings={setFindings}
+      scanState={scanState}
+      setScanState={setScanState}
+      confirmSendOpen={confirmSendOpen}
+      setConfirmSendOpen={setConfirmSendOpen}
+      confirmedDraftRef={confirmedDraftRef}
+      autoSendRef={autoSendRef}
+      setAutoSendTick={setAutoSendTick}
+      setSelectedVersion={setSelectedVersion}
+      modeOpen={modeOpen}
+      setModeOpen={setModeOpen}
+      sModeOpen={sModeOpen}
+      setSModeOpen={setSModeOpen}
+      input={input}
+      setInput={setInput}
+      mode={mode}
+      draftQuotes={draftQuotes}
+      setDraftQuotes={setDraftQuotes}
+      staged={staged}
+      removeStaged={removeStaged}
+      mediaTok={mediaTok}
+      editorRef={editorRef}
+      statusState={statusState}
+      upload={upload}
+      uploading={uploading}
+      sendWith={sendWith}
+      workSend={workSend}
+      status={status}
+      control={control}
+      controlling={controlling}
+      localModeGroup={localModeGroup}
+      localModeOpt={localModeOpt}
+      localModeCurrent={localModeCurrent}
+      modelPillLabel={modelPillLabel}
+      cfgFetched={cfgFetched}
+      pillVersion={pillVersion}
+      localCfg={localCfg}
+      effortGroup={effortGroup}
+      speedGroup={speedGroup}
+      extraGroups={extraGroups}
+      chooseLocalOption={chooseLocalOption}
+      chooseLocalOptions={chooseLocalOptions}
+      detail={detail}
+      sessionAgent={sessionAgent}
+      selQuote={selQuote}
+      setSelQuote={setSelQuote}
+      stageQuoteDraft={stageQuoteDraft}
+      quoteDraftFrom={quoteDraftFrom}
+      nav={nav}
+    />
+  )
 
   return (
     <div ref={rootRef} className="relative flex h-dvh overflow-hidden bg-background" style={{ '--dw-rpct': String(dragPct.current ?? rightPct), '--dw-left-w': `${dragLeftW.current ?? leftW}px` } as React.CSSProperties}>
@@ -2214,21 +2371,26 @@ const groups = useMemo(() => groupItems(allItems, sessionWorking), [allItems, se
           ref={scrollRef}
           onScroll={(e) => {
             const el = e.currentTarget
-            const now = performance.now()
-            const dt = now - tlProbe.current.t, dy = Math.abs(el.scrollTop - tlProbe.current.y)
-            tlProbe.current = { t: now, y: el.scrollTop }
-            // Browsers coalesce programmatic scrollTop sets — one 21000px
-            // jump may arrive as a single event with dt≈1s. Velocity dy/dt
-            // alone (>2.5px/ms ≈ 3000px/s) is the honest gate for both real
-            // scrollbar drags (dt≈16ms) and coalesced jumps.
-            if (dt > 8 && dy / dt > 2.5 && now > progScrollUntil.current) {
-              if (!tlFastScroll) setTlFastScroll(true)
-              window.clearTimeout(tlFastTimer.current)
-              tlFastTimer.current = window.setTimeout(() => setTlFastScroll(false), 200)
-            }
             const near = el.scrollHeight - el.scrollTop - el.clientHeight < 60
-            // Unstick only inside a user-gesture window — see userScrollUntil.
-            stickBottom.current = near ? true : (Date.now() < userScrollUntil.current ? false : stickBottom.current)
+            // Position-derived stick state: every NON-user scroll source is
+            // distance-preserving (virtualizer measure-adjusts shift
+            // scrollTop and scrollHeight equally) or bottom-landing (the
+            // pins) — so a not-near scroll can only be the user moving away.
+            // Scrollbar drags emit no wheel/pointer/key events at all; the
+            // old gesture window never saw them, so the bottom pin fought
+            // every drag — each stream resize yanked scrollTop back to the
+            // edge = the bouncing scrollbar + strobing viewport.
+            if (near) {
+              stickBottom.current = true
+            } else if (!userTookOver.current && Date.now() < bootGuardUntil.current) {
+              // Load-window transient (scroll restore / measure settle): not
+              // user intent — re-pin instead of dropping the bottom latch.
+              el.scrollTop = el.scrollHeight
+              stickBottom.current = true
+            } else {
+              stickBottom.current = false
+            }
+            if (!near) lastScrollAt.current = Date.now()
             setShowJump(!near)
             // Official backfills older history automatically as you approach the top
             // (bundle: tail_window_backfill, backfillStatus loading/idle) — no button.
@@ -2236,24 +2398,21 @@ const groups = useMemo(() => groupItems(allItems, sessionWorking), [allItems, se
             updateIdxActive()
           }}
           onWheel={(e) => {
-            userScrollUntil.current = Date.now() + 400
             // An upward wheel unsticks IMMEDIATELY — during heavy streaming the
             // bottom-pin observer can otherwise win the race against the queued
             // scroll event and yank the user back to the live edge.
-            if (e.deltaY < 0) stickBottom.current = false
-          }}
-          onTouchMove={() => { userScrollUntil.current = Date.now() + 400 }}
-          onPointerDown={(e) => {
-            const el = e.currentTarget
-            // Scrollbar drag lands in the element's trailing-edge strip.
-            if (e.clientX > el.getBoundingClientRect().right - 20) userScrollUntil.current = Date.now() + 400
+            if (e.deltaY < 0) {
+              stickBottom.current = false
+              userTookOver.current = true
+            }
           }}
           onKeyDown={(e) => {
-            userScrollUntil.current = Date.now() + 400
-            if (e.key === 'PageUp' || e.key === 'Home' || e.key === 'ArrowUp') stickBottom.current = false
+            if (e.key === 'PageUp' || e.key === 'Home' || e.key === 'ArrowUp') {
+              stickBottom.current = false
+              userTookOver.current = true
+            }
           }}
-          style={isDraft ? undefined : { paddingBottom: 20 + bandH }}
-          className={cn('min-h-0 flex-1 overflow-y-auto pt-[20px] px-4 @[448px]/chat-pane:px-6', effShowPanel && 'max-md:hidden', isDraft && 'hidden')}
+          className={cn('flex min-h-0 flex-1 flex-col overflow-y-auto px-4 pt-[20px] @[448px]/chat-pane:px-6', effShowPanel && 'max-md:hidden', isDraft && 'hidden')}
         >
           {connLost && (
             <div className="sticky top-0 z-10 mx-auto mb-2 w-fit rounded-full border border-amber-500/30 bg-amber-500/10 px-3 py-1 text-[12px] leading-[16px] text-amber-600 dark:text-amber-400">
@@ -2269,7 +2428,7 @@ const groups = useMemo(() => groupItems(allItems, sessionWorking), [allItems, se
           {loaded && tlError === 'mirror_not_configured' && <p className="text-xs text-muted-foreground">{t('menu.mirrorNotConfigured')}</p>}
           {loaded && tlError === 'token_expired' && <p className="text-xs text-amber-600">{t('menu.mirrorTokenExpired')}</p>}
           {loaded && tlError && tlError !== 'mirror_not_configured' && tlError !== 'token_expired' && <p className="text-xs text-red-600">{t('menu.mirrorReadFailed', { err: tlError })}</p>}
-          <div className="mx-auto max-w-[692px]"><div ref={listRef} className="[&>*:first-child]:mt-0 [&>*:last-child]:mb-0" style={{ height: tlVirt.getTotalSize(), position: 'relative' }}>
+          <div className="mx-auto w-full max-w-[692px] shrink-0"><div ref={listRef} className="[&>*:first-child]:mt-0 [&>*:last-child]:mb-0" style={{ height: tlVirt.getTotalSize(), position: 'relative' }}>
             {tlVirt.getVirtualItems().map((vi) => {
               const row = vRows[vi.index]
               return (
@@ -2281,133 +2440,34 @@ const groups = useMemo(() => groupItems(allItems, sessionWorking), [allItems, se
                   ) : row.kind === 'tail' ? (
                     <StatusTail statusState={statusState} actionRequired={actionRequired} woke={woke} controlling={controlling} onResume={() => void control('resume')} isVisitor={isVisitor} detail={detail} />
                   ) : row.g ? (
-                    // Fast-scroll placeholder: a measured-height stand-in while
-                    // the window is in hard motion — real content mounts when
-                    // scrolling settles (~200ms). Height is pinned to vi.size
-                    // so re-measurement is a no-op and the scrollbar never jumps.
-                    tlFastScroll ? (
-                      <div aria-hidden style={{ height: vi.size }} />
-                    ) : (
                     // keyed by the newest member: history backfill prepends older items and may
                     // extend the group backwards, which must not remount it (would drop open state)
                     <TimelineGroup g={row.g} isLast={row.gi === groups.length - 1} id={id} isVisitor={isVisitor} isSub={isSub} caps={caps} detail={detail} status={status} panel={panel} mediaTok={mediaTok} permResolved={permResolved} secretProvided={secretProvided} provideSecret={provideSecret} wf={wf} onOpenWfRun={(runId) => { setWfRunId(runId || null); openTab('agents') }} onOpenPr={openPr} onOpenPermission={(it) => { setPermSide(it); setShowPanel(true) }} envSuperseded={envSuperseded} messageHeaders={messageHeaders} translations={translations} onTranslated={(itemId, tr) => setTranslations((p) => ({ ...p, [itemId]: tr }))} onFileRef={onFileRef} openFileTab={openFileTab} jumpToQuote={jumpToQuote} onSelQuote={setSelQuote} quoteGuardUntil={quoteGuardUntil} onControlMsg={setControlMsg} onSideChat={(it) => { setScAnchor({ id: it.id, ts: it.ts }); openTab('sidechat') }} onStepChanges={onStepChanges} onOpenProgress={onOpenProgress} onOpenSubagent={onOpenSubagent} worklogJump={worklogJump} tailThoughtId={tailThoughtId} urlPrs={urlPrs} urlFiles={urlFiles} />
-                    )
                   ) : null}
                 </div>
               )
             })}
           </div></div>
+          {/* Session mode: the composer rides INSIDE the scroll element as a
+              sticky tail — in flow it is the last item (so no message is ever
+              hidden behind it and no band-height measuring is needed); off the
+              bottom it sticks to the scrollport bottom. The scrollbar spans the
+              full pane height and stays hoverable; the fade is pointer-transparent
+              so text under it stays selectable and wheel-scrollable. */}
+          {!isDraft && (
+            <div ref={composerWrapRef} className="pointer-events-none sticky bottom-0 z-30 mt-auto w-full bg-gradient-to-t from-background via-background/85 to-transparent pt-10">
+              <div className="pointer-events-auto">{composerEl}</div>
+            </div>
+          )}
         </div>
-        <SessionIndex entries={indexEntries} active={idxActive} scrollRef={scrollRef} stickBottom={stickBottom} cursor={cursor} loadUntil={loadUntil} allItems={allItems} pullRequests={detail?.session.pull_requests} queued={queued} onJump={(eid) => scrollToRow(eid, 'start')} />
+        <SessionIndex entries={indexEntries} active={idxActive} scrollRef={scrollRef} stickBottom={stickBottom} userTookOver={userTookOver} cursor={cursor} olderPending={loadingOlder} loadUntil={loadUntil} allItems={allItems} pullRequests={detail?.session.pull_requests} queued={queued} onJump={(eid) => scrollToRow(eid, 'start')} onScrollBottom={scrollToBottom} />
         </div>
 
-        <ComposerFooter
-          effShowPanel={effShowPanel}
-          showJump={showJump}
-          scrollRef={scrollRef}
-          setBandH={setBandH}
-          isDraft={isDraft}
-          isVisitor={isVisitor}
-          id={id}
-          caps={caps}
-          sendErr={sendErr}
-          send={send}
-          interrupted={interrupted}
-          resumeInterrupted={resumeInterrupted}
-          dismissInterrupted={dismissInterrupted}
-          subDead={subDead}
-          respawnSub={respawnSub}
-          controlMsg={controlMsg}
-          persona={persona}
-          personaBusy={personaBusy}
-          cyclePersonaMode={cyclePersonaMode}
-          askPersonaNow={askPersonaNow}
-          envBannerGone={envBannerGone}
-          items={items}
-          dismissEnvBanner={dismissEnvBanner}
-          draftTarget={draftTarget}
-          setDraftTarget={setDraftTarget}
-          draftSshCwd={draftSshCwd}
-          setDraftSshCwd={setDraftSshCwd}
-          draftCwd={draftCwd}
-          setDraftCwd={setDraftCwd}
-          recentCwds={recentCwds}
-          composerMeta={composerMeta}
-          setComposerMeta={setComposerMeta}
-          draftAgent={draftAgent}
-          setDraftAgent={setDraftAgent}
-          queued={queued}
-          setQueued={setQueued}
-          queueOpReq={queueOpReq}
-          queueReorder={queueReorder}
-          queueEditStart={queueEditStart}
-          queueOp={queueOp}
-          queueSend={queueSend}
-          queueEditSubmit={queueEditSubmit}
-          editingQ={editingQ}
-          pending={pending}
-          answerQuestion={answerQuestion}
-          setDismissedQ={setDismissedQ}
-          sending={sending}
-          suggestions={suggestions}
-          atCat={atCat}
-          setAtCat={setAtCat}
-          trigger={trigger}
-          sugIdx={sugIdx}
-          setSugIdx={setSugIdx}
-          applySuggestion={applySuggestion}
-          openMention={openMention}
-          findings={findings}
-          setFindings={setFindings}
-          scanState={scanState}
-          setScanState={setScanState}
-          confirmSendOpen={confirmSendOpen}
-          setConfirmSendOpen={setConfirmSendOpen}
-          confirmedDraftRef={confirmedDraftRef}
-          autoSendRef={autoSendRef}
-          setAutoSendTick={setAutoSendTick}
-          setSelectedVersion={setSelectedVersion}
-          modeOpen={modeOpen}
-          setModeOpen={setModeOpen}
-          sModeOpen={sModeOpen}
-          setSModeOpen={setSModeOpen}
-          input={input}
-          setInput={setInput}
-          mode={mode}
-          draftQuotes={draftQuotes}
-          setDraftQuotes={setDraftQuotes}
-          staged={staged}
-          removeStaged={removeStaged}
-          mediaTok={mediaTok}
-          editorRef={editorRef}
-          statusState={statusState}
-          upload={upload}
-          uploading={uploading}
-          sendWith={sendWith}
-          workSend={workSend}
-          status={status}
-          control={control}
-          controlling={controlling}
-          localModeGroup={localModeGroup}
-          localModeOpt={localModeOpt}
-          localModeCurrent={localModeCurrent}
-          modelPillLabel={modelPillLabel}
-          cfgFetched={cfgFetched}
-          pillVersion={pillVersion}
-          localCfg={localCfg}
-          effortGroup={effortGroup}
-          speedGroup={speedGroup}
-          extraGroups={extraGroups}
-          chooseLocalOption={chooseLocalOption}
-          chooseLocalOptions={chooseLocalOptions}
-          detail={detail}
-          sessionAgent={sessionAgent}
-          selQuote={selQuote}
-          setSelQuote={setSelQuote}
-          stageQuoteDraft={stageQuoteDraft}
-          quoteDraftFrom={quoteDraftFrom}
-          nav={nav}
-        />
+        {/* Draft mode keeps the composer in flow (it anchors the centered
+            hero); session mode renders it inside the scroll element — see the
+            sticky tail above. */}
+        {isDraft && <div>{composerEl}</div>}
+
         {isDraft && loaded && (
           // Desktop New-Space lower segment: Local env · Choose folder ·
           // Go-to-sessions row, then Recent projects + starter suggestions.

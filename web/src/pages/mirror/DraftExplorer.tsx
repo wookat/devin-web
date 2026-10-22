@@ -1,8 +1,9 @@
 import { useEffect, useState } from 'react'
 import { useTranslation } from 'react-i18next'
-import { ChevronDown, ChevronRight } from 'lucide-react'
+import { ChevronDown, ChevronRight, Folder } from 'lucide-react'
 import { adminFetch } from '@/lib/api'
 import CodeView from '@/components/CodeView'
+import { FileIcon } from '@/lib/fileIcon'
 
 /* Draft-page project explorer — browse the picked workspace before the
  * session exists (fs/list + fs/file; read-only CodeView preview). */
@@ -38,6 +39,7 @@ function DraftExplorer({ root }: { root: string }) {
             }}
           >
             {e.dir ? (isOpen ? <ChevronDown size={12} className="shrink-0 text-muted-foreground" /> : <ChevronRight size={12} className="shrink-0 text-muted-foreground" />) : <span className="w-3 shrink-0" />}
+            {e.dir ? <Folder size={12} className="shrink-0 text-muted-foreground" /> : <FileIcon path={e.name} size={12} className="shrink-0" />}
             <span className="min-w-0 flex-1 truncate">{e.name}</span>
           </button>
           {e.dir && isOpen && renderDir(fp, depth + 1)}

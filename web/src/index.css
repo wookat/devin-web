@@ -1,4 +1,4 @@
-@import "tailwindcss";
+﻿@import "tailwindcss";
 
 @custom-variant dark (&:where(.dark, .dark *));
 
@@ -212,6 +212,21 @@ body { @apply bg-background text-foreground antialiased; font-size: 14px; line-h
 @keyframes menu-in { from { transform: scale(0.98); opacity: 0; } }
 .menu-in { animation: menu-in 40ms cubic-bezier(0.76, 0, 0.24, 1); transform-origin: top right; }
 
+/* Official transcript index popup (table-of-contents.js): spring-eased slide
+   in from translateX(20px) + fade over 300ms cubic-bezier(0.16,1,0.3,1);
+   exit is a quick 80ms fade + translateX(10px). The Y-centering lives in the
+   keyframes themselves — animating `translate` would otherwise stomp the
+   utility's -50% (both fill-forward to `translate:0 0` and drop the centering). */
+@keyframes dw-toc-in {
+  from { opacity: 0; translate: 20px -50%; }
+  to { opacity: 1; translate: 0 -50%; }
+}
+@keyframes dw-toc-out {
+  to { opacity: 0; translate: 10px -50%; }
+}
+.dw-toc-pop { translate: 0 -50%; animation: dw-toc-in 300ms cubic-bezier(0.16, 1, 0.3, 1) both; }
+.dw-toc-pop.dw-toc-pop-out { animation: dw-toc-out 80ms ease-in both; }
+
 .wg-gutter-time {
   opacity: 0;
   transition: opacity 150ms;
@@ -259,4 +274,40 @@ body { @apply bg-background text-foreground antialiased; font-size: 14px; line-h
   [data-slot='sidebar'][data-state='expanded'] {
     width: var(--dw-left-w, 300px);
   }
+}
+
+/* Official-style session drag ghost (DragOverlay row clone): an elevated
+   translucent card floating under the pointer — bg-card/40-ish fill, L4
+   shadow, backdrop blur. The overlay positions it; pointer-events off. */
+.dw-drag-ghost {
+  pointer-events: none;
+  border-radius: 6px;
+  background: rgba(245,245,245,.6);
+  backdrop-filter: blur(4px);
+  box-shadow: 0 12px 32px -8px rgba(0,0,0,.18), 0 4px 12px -4px rgba(0,0,0,.1);
+}
+.dark .dw-drag-ghost {
+  background: rgba(38,38,38,.55);
+  box-shadow: 0 12px 32px -8px rgba(0,0,0,.5), 0 4px 12px -4px rgba(0,0,0,.3);
+}
+
+/* Compact pill shown while dragging a folder section header (DragOverlay). */
+.dw-drag-pill {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  max-width: 220px;
+  padding: 4px 12px;
+  border-radius: 999px;
+  font-size: 12px;
+  font-weight: 500;
+  color: var(--color-muted-foreground);
+  pointer-events: none;
+  background: rgba(245,245,245,.85);
+  backdrop-filter: blur(4px);
+  box-shadow: 0 12px 32px -8px rgba(0,0,0,.18), 0 4px 12px -4px rgba(0,0,0,.1);
+}
+.dark .dw-drag-pill {
+  background: rgba(38,38,38,.8);
+  box-shadow: 0 12px 32px -8px rgba(0,0,0,.5), 0 4px 12px -4px rgba(0,0,0,.3);
 }

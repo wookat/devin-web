@@ -6,6 +6,14 @@ import { cn } from '@/lib/utils'
 
 const FEEDBACK_CATEGORIES = ['Incorrect code', 'Did not follow instructions', 'Incomplete', 'Other']
 
+/** Display labels for the upstream-submitted English category strings. */
+const FEEDBACK_LABELS: Record<string, string> = {
+  'Incorrect code': 'dlg.catIncorrect',
+  'Did not follow instructions': 'dlg.catNoFollow',
+  'Incomplete': 'dlg.catIncomplete',
+  'Other': 'dlg.catOther',
+}
+
 /** Official-style Good/Bad response dialog (POST /api/sessions/<id>/feedback upstream). */
 function FeedbackDialog({ variant, onClose, onSubmit }: {
   variant: 'positive' | 'negative'
@@ -23,7 +31,7 @@ function FeedbackDialog({ variant, onClose, onSubmit }: {
       <div className="w-full max-w-sm rounded-xl border border-border bg-background p-4 shadow-lg" onClick={(e) => e.stopPropagation()}>
         <p className="flex items-center gap-2 text-[14px] font-medium leading-[20px]">
           {negative ? <ThumbsDown size={15} /> : <ThumbsUp size={15} />}
-          {negative ? 'Bad response' : 'Good response'}
+          {negative ? t('sc.bad') : t('sc.good')}
         </p>
         <p className="mt-1 text-[13px] leading-[18px] text-muted-foreground">{t('dlg.tellMore')}</p>
         {negative && (
@@ -34,7 +42,7 @@ function FeedbackDialog({ variant, onClose, onSubmit }: {
                 onClick={() => setCats((p) => p.includes(cat) ? p.filter((x) => x !== cat) : [...p, cat])}
                 className={cn('cursor-pointer rounded-full border px-2.5 py-1 text-[12px] leading-[16px]', cats.includes(cat) ? 'border-foreground bg-foreground text-background' : 'border-border text-muted-foreground hover:text-foreground')}
               >
-                {cat}
+                {t(FEEDBACK_LABELS[cat] ?? cat)}
               </button>
             ))}
           </div>
@@ -42,7 +50,7 @@ function FeedbackDialog({ variant, onClose, onSubmit }: {
         <Textarea
           value={comment}
           onChange={(e) => setComment(e.target.value)}
-          placeholder={negative ? 'Add more details... (Optional but highly appreciated!)' : 'Add more details... (Optional)'}
+          placeholder={negative ? t('dlg.detailsPhNeg') : t('dlg.detailsPh')}
           rows={3}
           className="mt-3 w-full text-[13px]"
         />
@@ -60,7 +68,7 @@ function FeedbackDialog({ variant, onClose, onSubmit }: {
             disabled={busy}
             className="cursor-pointer rounded-md px-3 py-1.5 text-[13px] text-muted-foreground hover:text-foreground disabled:opacity-50"
           >
-            Skip
+            {t('dlg.skip')}
           </button>
           <button
             onClick={async () => {
@@ -78,7 +86,7 @@ function FeedbackDialog({ variant, onClose, onSubmit }: {
             disabled={busy}
             className="cursor-pointer rounded-md bg-foreground px-3 py-1.5 text-[13px] text-background disabled:opacity-50"
           >
-            {busy ? 'Submitting...' : 'Submit'}
+            {busy ? t('scc.submitting') : t('scc.submit')}
           </button>
         </div>
       </div>

@@ -73,7 +73,7 @@ function AutomationRequestBody({ args }: { args: AutomationArgs }) {
             <div className="flex flex-col gap-1">
               <span className="text-[13px] font-medium leading-[18px]">{t('perm.agentType')}</span>
               <span className="text-[13px] leading-[18px] text-muted-foreground">
-                {action.type === 'start_session' ? 'Start new session' : action.type}
+                {action.type === 'start_session' ? t('perm.startSession') : action.type}
               </span>
             </div>
             {action.prompt && (
@@ -123,7 +123,7 @@ function PermissionCard({ item, sessionId, resolved, onOpenSidebar }: { item: Ti
       item={item}
       resolved={state || undefined}
       busy={busy}
-      error={err ? 'This request is no longer open' : undefined}
+      error={err ? t('perm.reqClosed') : undefined}
       onRespond={viewer().caps.canResolvePermission ? (a) => void respond(a) : undefined}
       onOpenSidebar={onOpenSidebar}
     >
@@ -188,7 +188,7 @@ function PermissionSidebarPanel({ item }: { item: TimelineItem }) {
                 <div className="text-[13px] text-muted-foreground">{t('perm.typeDesc')}</div>
               </div>
               <span className="flex shrink-0 items-center gap-1 rounded-md border border-border px-2.5 py-1 text-[13px] text-muted-foreground">
-                {action.type === 'start_session' ? 'Start new session' : action.type}
+                {action.type === 'start_session' ? t('perm.startSession') : action.type}
                 <ChevronDown size={12} />
               </span>
             </div>

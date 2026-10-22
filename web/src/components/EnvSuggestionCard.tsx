@@ -62,10 +62,10 @@ export default function EnvSuggestionCard({ item, supersededBy, onApprove, appro
   let footer: ReactNode
   if (accepted && prUrl) {
     footer = (
-      <Footer text="Changes apply once the PR is merged">
+      <Footer text={t('env.mergedApply')}>
         <a href={prUrl} target="_blank" rel="noopener noreferrer" className={secondary} onClick={(e) => e.stopPropagation()}>
           <CircleCheck size={14} className="text-green-600" />
-          {pullNumber ? `View PR #${pullNumber}` : 'View PR'}
+          {pullNumber ? t('env.viewPrN', { n: pullNumber }) : t('env.viewPr')}
         </a>
       </Footer>
     )
@@ -74,11 +74,11 @@ export default function EnvSuggestionCard({ item, supersededBy, onApprove, appro
       <Footer text={settingsUrl ? <a href={settingsUrl} target="_blank" rel="noopener noreferrer" className="text-blue-600 hover:underline" onClick={(e) => e.stopPropagation()}>{t('env.viewInSettings')}</a> : undefined}>
         {buildUrl ? (
           <a href={buildUrl} target="_blank" rel="noopener noreferrer" className={secondary} onClick={(e) => e.stopPropagation()}>
-            <CircleCheck size={14} className="text-green-600" />View build
+            <CircleCheck size={14} className="text-green-600" />{t('env.viewBuild')}
           </a>
         ) : (
           <button type="button" disabled className={secondary}>
-            <CircleCheck size={14} className="text-green-600" />Saved to environment
+            <CircleCheck size={14} className="text-green-600" />{t('env.savedEnv')}
           </button>
         )}
       </Footer>
@@ -106,8 +106,8 @@ export default function EnvSuggestionCard({ item, supersededBy, onApprove, appro
     )
   } else if (saving) {
     footer = (
-      <Footer text={git ? 'Creating PR…' : 'Saving…'}>
-        <button type="button" disabled className={primary}><Loader2 size={14} className="animate-spin" />{git ? 'Creating PR…' : 'Saving…'}</button>
+      <Footer text={git ? t('env.creatingPr') : t('common.saving')}>
+        <button type="button" disabled className={primary}><Loader2 size={14} className="animate-spin" />{git ? t('env.creatingPr') : t('common.saving')}</button>
       </Footer>
     )
   } else if (superseded) {
@@ -121,7 +121,7 @@ export default function EnvSuggestionCard({ item, supersededBy, onApprove, appro
             document.querySelector(`[data-eid="${superseded}"]`)?.scrollIntoView({ behavior: 'smooth', block: 'center' })
           }}
         >
-          View newer suggestion
+          {t('env.viewNewer')}
         </button>
       </Footer>
     )
@@ -171,7 +171,7 @@ export default function EnvSuggestionCard({ item, supersededBy, onApprove, appro
           <div className={cn(outdated && 'opacity-50 grayscale')}>
             {es?.summary && <p className="px-3 pb-2.5 pt-2 text-[13px] leading-[18px] text-muted-foreground">{es.summary}</p>}
             <p className="px-3 pb-2.5 text-[12px] text-muted-foreground">
-              {org ? 'Applies to this org' : scope ? `Applies to this scope: ${scope}` : 'Applies to this repo'}
+              {org ? t('env.appliesOrg') : scope ? t('env.appliesScope', { scope }) : t('env.appliesRepo')}
             </p>
             {lines.length > 0 && (
               <div className="relative mx-3 mb-2 overflow-hidden rounded-md border border-border">

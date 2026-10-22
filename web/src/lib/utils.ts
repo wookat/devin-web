@@ -22,3 +22,12 @@ export function fmtTime(iso: string): string {
   const d = new Date(iso)
   return d.toLocaleString(i18n.language === 'zh' ? 'zh-CN' : 'en-US', { month: 'numeric', day: 'numeric', hour: '2-digit', minute: '2-digit' })
 }
+
+/** Subagent profile ids (subagent_explore / agent-general / bg…) → readable labels. */
+export function subProfileLabel(profile: string): string {
+  if (!profile) return ''
+  const key = `lib.prof.${profile.replace(/[^a-zA-Z0-9]/g, '_').toLowerCase()}`
+  const tr = i18n.t(key)
+  if (tr !== key) return tr
+  return profile.replace(/[_-]+/g, ' ').replace(/\b\w/g, (c) => c.toUpperCase())
+}

@@ -1,4 +1,5 @@
 import { useEffect, useMemo, useRef, useState } from 'react'
+import { useTranslation } from 'react-i18next'
 import type { RefObject } from 'react'
 import { ChevronDown, ChevronUp, X } from 'lucide-react'
 import { OSearch } from '../../components/officialIcons'
@@ -10,6 +11,7 @@ import { findItemText } from './panelTabs'
  * position state + the window keydown listener; renders null while closed
  * (state persists across open/close, matching the pre-extraction page). */
 function FindInSession({ items, scrollRef, onJump }: { items: TimelineItem[]; scrollRef: RefObject<HTMLDivElement>; onJump?: (eid: string) => boolean }) {
+  const { t } = useTranslation()
   const [findOpen, setFindOpen] = useState(false)
   const [findQ, setFindQ] = useState('')
   const [findPos, setFindPos] = useState(0)
@@ -69,17 +71,17 @@ function FindInSession({ items, scrollRef, onJump }: { items: TimelineItem[]; sc
           if (e.key === 'Enter') { e.preventDefault(); if (findHits.length) setFindPos((p) => (p + (e.shiftKey ? -1 : 1) + findHits.length) % findHits.length) }
           if (e.key === 'Escape') setFindOpen(false)
         }}
-        placeholder="Find in session"
+        placeholder={t('common.findInSession')}
         className="w-44 bg-transparent text-[12px] outline-none placeholder:text-muted-foreground"
       />
       <span className="min-w-[42px] text-center text-[11px] tabular-nums text-muted-foreground">
         {findQ ? `${findHits.length ? Math.min(findPos, findHits.length - 1) + 1 : 0}/${findHits.length}` : ''}
       </span>
-      <button type="button" aria-label="Previous match" className="rounded p-0.5 hover:bg-accent disabled:opacity-40" disabled={!findHits.length}
+      <button type="button" aria-label={t('common.prevMatch')} className="rounded p-0.5 hover:bg-accent disabled:opacity-40" disabled={!findHits.length}
         onClick={() => setFindPos((p) => (p - 1 + findHits.length) % findHits.length)}><ChevronUp size={14} /></button>
-      <button type="button" aria-label="Next match" className="rounded p-0.5 hover:bg-accent disabled:opacity-40" disabled={!findHits.length}
+      <button type="button" aria-label={t('common.nextMatch')} className="rounded p-0.5 hover:bg-accent disabled:opacity-40" disabled={!findHits.length}
         onClick={() => setFindPos((p) => (p + 1) % findHits.length)}><ChevronDown size={14} /></button>
-      <button type="button" aria-label="Close find" className="rounded p-0.5 hover:bg-accent" onClick={() => setFindOpen(false)}><X size={14} /></button>
+      <button type="button" aria-label={t('common.closeFind')} className="rounded p-0.5 hover:bg-accent" onClick={() => setFindOpen(false)}><X size={14} /></button>
     </div>
   )
 }

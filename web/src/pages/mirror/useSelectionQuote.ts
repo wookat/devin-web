@@ -6,6 +6,7 @@
  * round-trip renders real QuoteChips.
  */
 import { useEffect, useRef, useState } from 'react'
+import i18n from '@/i18n'
 import { type TimelineItem } from '@/components/Timeline'
 import { type DraftQuote, type SelQuote } from './ComposerFooter'
 
@@ -22,7 +23,7 @@ export function useSelectionQuote({ isVisitor, isDraft, isSub, allItemsRef }: {
   const quoteGuardUntil = useRef(0)
   const quoteDraftFrom = (q: QuoteSrc, caption: string): DraftQuote => ({
     kind: q.kind ?? 'message',
-    label: q.kind === 'worklog' ? 'Worklog' : q.author === 'devin' ? 'Devin message' : 'User message',
+    label: q.kind === 'worklog' ? i18n.t('quote.worklog') : q.author === 'devin' ? i18n.t('quote.devinMsg') : i18n.t('quote.userMsg'),
     text: q.text, eventId: q.eventId, tsMs: q.tsMs, author: q.author,
     ...(q.endEventId ? { endEventId: q.endEventId } : {}),
     ...(caption ? { caption } : {}),

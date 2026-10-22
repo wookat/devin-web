@@ -1,3 +1,4 @@
+import { useTranslation } from 'react-i18next'
 import AttachmentCard from './AttachmentCard'
 import QuoteChip from './QuoteChip'
 import RepoChips from './RepoChips'
@@ -46,6 +47,7 @@ export default function UserAttachments({
   onOpenTab?: (href: string, name: string, raw?: boolean) => void
   onQuoteNavigate?: (quote: QuoteAttachment) => void
 }) {
+  const { t } = useTranslation()
   if (attachments.length === 0 && repos.length === 0 && quotes.length === 0 && secrets.length === 0) return null
   const files = attachments.filter((a) => kindOf(a.name) === 'file')
   const videos = attachments.filter((a) => kindOf(a.name) === 'video')
@@ -56,7 +58,7 @@ export default function UserAttachments({
   return (
     <div
       role="group"
-      aria-label="Attachments"
+      aria-label={t('att.attachments')}
       className={cn(
         'flex min-w-0 max-w-full flex-col gap-1.5',
         own ? 'ml-auto items-end' : 'ml-0 items-start',

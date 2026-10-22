@@ -96,7 +96,9 @@ function PanelContent({ panel, displayedPanelKeys, permSide, isVisitor, tabs, fi
       case 'files': return <AttachmentsPanel messages={detailMsgs} sessionId={id} mt={mediaTok} onOpenTab={openFileTab} />
       case 'dashboard': return <div className="p-3"><Dashboard data={dashboard.data} updatedAt={dashboard.updatedAt} /></div>
       case 'sidechat': return isVisitor ? null : <SidechatPanel id={id} anchor={scAnchor} onStage={onStage} />
-      case 'editor': return isVisitor ? null : <WorkspacePanel id={id} />
+      // key={id}: unkeyed, A's dirs/files/tabs persist into B's session AND
+      // mem.set writes A's state under B's key — the stale-repo switch bug.
+      case 'editor': return isVisitor ? null : <WorkspacePanel key={id} id={id} />
       case 'resources': return isVisitor ? null : <ResourcesPanel id={id} />
       case 'agents': return isVisitor ? null : wf.runs.length ? (
         <AgentsPanel
@@ -121,7 +123,7 @@ function PanelContent({ panel, displayedPanelKeys, permSide, isVisitor, tabs, fi
     { key: 'worklog', label: t('panels.worklog'), description: t('panels.worklog_d'), MenuIcon: PANELS.worklog.MenuIcon, onClick: () => openTab('worklog') },
     { key: 'agents', label: t('panels.agents'), description: t('panels.agents_d'), MenuIcon: PANELS.agents.MenuIcon, onClick: () => openTab('agents') },
     { key: 'sidechat', label: t('panels.sidechat'), description: t('panels.sidechat_d'), MenuIcon: PANELS.sidechat.MenuIcon, onClick: () => openTab('sidechat') },
-    ...(newestPr ? [{ key: 'pull-requests', label: 'Pull requests', description: 'View proposed code changes', MenuIcon: PanelPullRequestIcon, onClick: () => openPr(newestPr.pr_url) }] : []),
+    ...(newestPr ? [{ key: 'pull-requests', label: t('panels.prs.label'), description: t('panels.prs_d'), MenuIcon: PanelPullRequestIcon, onClick: () => openPr(newestPr.pr_url) }] : []),
   ]
   const showLanding = !isVisitor && displayedPanelKeys.length === 0
   return (

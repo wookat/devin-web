@@ -4,7 +4,7 @@ import { createPortal } from 'react-dom'
 import { useNavigate } from 'react-router-dom'
 import { ArrowLeft, Clock, FolderOpen, Laptop } from 'lucide-react'
 import { OExpand } from '../../components/officialIcons'
-import { type AdminSession } from '@/lib/api'
+import { adminFetch, type AdminSession } from '@/lib/api'
 import { type ViewerCaps } from '@/lib/viewer'
 import { fmtWorkedDur } from '@/components/Timeline'
 import { PrStateIcon } from '@/components/PrCards'
@@ -94,7 +94,7 @@ function HeaderBar({ isVisitor, sidebar, setPeek, setSidebar, detail, isDraft, c
           data-slot="sidebar-trigger"
           onClick={() => { setPeek(false); setSidebar(true) }}
           className="flex size-7 shrink-0 cursor-pointer items-center justify-center rounded-md text-muted-foreground hover:bg-accent hover:text-foreground focus-visible:bg-accent focus-visible:text-foreground"
-          aria-label="Expand sidebar"
+          aria-label={t('sp.expandSb')}
         >
           <OExpand size={16} />
         </button>
@@ -106,16 +106,23 @@ function HeaderBar({ isVisitor, sidebar, setPeek, setSidebar, detail, isDraft, c
           className="flex h-7 shrink-0 cursor-pointer items-center gap-1 rounded-md px-1.5 text-[12px] text-muted-foreground hover:bg-accent hover:text-foreground"
         >
           <ArrowLeft size={13} />
-          <span className="max-w-[160px] truncate max-md:max-w-[80px]">{detail.session.parent_title ?? 'Parent'}</span>
+          <span className="max-w-[160px] truncate max-md:max-w-[80px]">{detail.session.parent_title ?? t('ag.parent')}</span>
         </button>
       )}
-      <h1 className="min-w-0 flex-1 truncate text-[13px] leading-[18px] max-md:min-w-[120px]">{isDraft ? t('menu.newSession') : current?.title || current?.devin_title || detail?.session.title || detail?.session.devin_title || '…'}</h1>
+      <TitleDropdown
+        isDraft={isDraft}
+        title={current?.title || current?.devin_title || detail?.session.title || detail?.session.devin_title || '…'}
+        parentId={detail?.session.parent_devin_id}
+        parentTitle={detail?.session.parent_title}
+        kids={treeNode?.children || []}
+        onNav={(sid) => nav(`/admin/${sid}`)}
+      />
       {headerPrs.length > 0 && (!isVisitor || caps.showChanges) && (
         <div className="relative min-w-0 shrink-0">
           <button
             ref={prChipRef}
             type="button"
-            aria-label={`${headerPrs.length} pull requests`}
+            aria-label={t('menu.prCount', { n: headerPrs.length })}
             aria-expanded={prMenuOpen}
             onClick={() => setPrMenuOpen((open) => !open)}
             className={cn(
@@ -174,14 +181,14 @@ function HeaderBar({ isVisitor, sidebar, setPeek, setSidebar, detail, isDraft, c
       {!isVisitor && detail?.session.cwd && (
         <span
           title={detail.session.cwd}
-          className="flex h-5 min-w-0 max-w-[280px] items-center gap-1 overflow-hidden truncate whitespace-nowrap rounded-[6px] px-1.5 font-mono text-[11px] leading-4 text-muted-foreground [background:var(--muted)]"
+          className="flex h-5 min-w-0 max-w-[280px] items-center gap-1 overflow-hidden truncate whitespace-nowrap rounded-[6px] px-1.5 font-mono text-[11px] leading-4 text-muted-foreground [background:var(--muted)] max-md:hidden"
         >
           <FolderOpen size={11} className="shrink-0" />
           <span className="min-w-0 truncate" style={{ direction: 'rtl', textAlign: 'left' }}>{detail.session.cwd}</span>
         </span>
       )}
       {!isVisitor && workSecs > 0 && (
-        <span title="Work time" className="flex h-5 items-center gap-1 rounded-[6px] px-1.5 text-[11px] font-medium tabular-nums leading-4 text-muted-foreground [background:var(--muted)]">
+        <span title={t('menu.workTime')} className="flex h-5 items-center gap-1 rounded-[6px] px-1.5 text-[11px] font-medium tabular-nums leading-4 text-muted-foreground [background:var(--muted)]">
           <Clock size={11} /> {fmtWorkedDur(workSecs * 1000)}
         </span>
       )}
@@ -193,8 +200,8 @@ function HeaderBar({ isVisitor, sidebar, setPeek, setSidebar, detail, isDraft, c
       {!effShowPanel && !isDraft && (
         <button
           onClick={() => setShowPanel(true)}
-          aria-label="Show tabs panel"
-          title="Show tabs panel"
+          aria-label={t('tabs.showPanel')}
+          title={t('tabs.showPanel')}
           className="flex size-7 cursor-pointer items-center justify-center rounded-[6px] text-muted-foreground hover:bg-accent hover:text-foreground"
         >
           <PanelHideTabsIcon size={18} />
@@ -202,6 +209,105 @@ function HeaderBar({ isVisitor, sidebar, setPeek, setSidebar, detail, isDraft, c
       )}
       </div>
     </header>
+  )
+}
+
+/* Title dropdown — official-style header affordance: clicking the title
+ * opens a compact popover with parent navigation (child sessions), child
+ * session links (parents), and an inline rename entry. The title itself
+ * swaps to a borderless input for editing (same model as the tree row). */
+function TitleDropdown({ isDraft, title, parentId, parentTitle, kids, onNav }: {
+  isDraft: boolean
+  title: string
+  parentId?: string | null
+  parentTitle?: string | null
+  kids: MirrorTreeSession[]
+  onNav: (sid: string) => void
+}) {
+  const { t } = useTranslation()
+  const [open, setOpen] = useState(false)
+  const [editing, setEditing] = useState(false)
+  const [draft, setDraft] = useState('')
+  const btnRef = useRef<HTMLButtonElement>(null)
+  const hasLinks = !!parentId || kids.length > 0
+  useEffect(() => {
+    if (!open) return
+    const onKey = (e: KeyboardEvent) => { if (e.key === 'Escape') { e.preventDefault(); setOpen(false) } }
+    window.addEventListener('keydown', onKey)
+    return () => window.removeEventListener('keydown', onKey)
+  }, [open])
+  const commit = async (v: string) => {
+    setEditing(false)
+    const title2 = v.trim()
+    if (!title2 || title2 === title) return
+    // Route id is needed for the rename endpoint — derive from location.
+    const sid = decodeURIComponent(location.pathname.split('/admin/')[1] || '').split('?')[0]
+    if (!sid) return
+    await adminFetch('/api/admin/mirror/session-title', { method: 'POST', body: JSON.stringify({ devin_id: sid, title: title2 }) }).catch(() => null)
+  }
+  if (editing) {
+    return (
+      <input
+        autoFocus
+        ref={(el) => el?.select()}
+        value={draft}
+        onChange={(e) => setDraft(e.target.value)}
+        onBlur={() => void commit(draft)}
+        onKeyDown={(e) => {
+          if (e.key === 'Escape') { setEditing(false); setDraft(title) }
+          if (e.key === 'Enter') (e.currentTarget as HTMLInputElement).blur()
+        }}
+        className="h-auto min-w-0 flex-1 select-text rounded-none border-none bg-transparent p-0 text-[13px] leading-[18px] text-foreground shadow-none outline-none"
+      />
+    )
+  }
+  return (
+    <div className="relative min-w-0 flex-1">
+      <button
+        ref={btnRef}
+        type="button"
+        aria-haspopup="menu"
+        aria-expanded={open || undefined}
+        onClick={() => !isDraft && setOpen((v) => !v)}
+        onDoubleClick={() => { if (!isDraft) { setDraft(title); setEditing(true) } }}
+        title={isDraft ? undefined : t('menu.titleNavHint')}
+        className={cn('block min-w-0 max-w-full truncate text-left text-[13px] leading-[18px]', !isDraft && 'cursor-pointer rounded px-0.5 hover:bg-accent')}
+      >
+        {isDraft ? t('menu.newSession') : title}
+      </button>
+      {open && createPortal(
+        <>
+          <div className="fixed inset-0 z-40" onClick={() => setOpen(false)} />
+          <div
+            role="menu"
+            style={{ left: Math.max(5, (btnRef.current?.getBoundingClientRect().left ?? 5)), top: (btnRef.current?.getBoundingClientRect().bottom ?? 0) + 4 }}
+            className="menu-in fixed z-[60] w-[260px] max-w-[calc(100vw-10px)] rounded-[10px] bg-[rgba(255,255,255,0.94)] p-1 text-[13px] leading-[18px] outline outline-1 outline-black/[.06] shadow-[0_10px_15px_-3px_rgba(0,0,0,0.1),0_4px_6px_-2px_rgba(0,0,0,0.05)] backdrop-blur-[8px] dark:bg-[#1f1f1f]/[.94]"
+          >
+            {parentId && (
+              <button role="menuitem" onClick={() => { setOpen(false); onNav(parentId) }} className="flex w-full cursor-pointer items-center gap-2 rounded-[6px] px-2 py-1.5 text-left hover:bg-accent">
+                <ArrowLeft size={13} className="shrink-0 text-muted-foreground" />
+                <span className="min-w-0 flex-1 truncate text-muted-foreground">{t('menu.parentSession')}</span>
+                <span className="min-w-0 max-w-[120px] truncate">{parentTitle ?? parentId}</span>
+              </button>
+            )}
+            {kids.length > 0 && (
+              <>
+                <div className="px-2 pb-0.5 pt-1.5 text-[11px] text-muted-foreground">{t('menu.childSessions')}</div>
+                {kids.slice(0, 12).map((k) => (
+                  <button key={k.devin_id} role="menuitem" onClick={() => { setOpen(false); onNav(k.devin_id) }} className="flex w-full cursor-pointer items-center gap-2 rounded-[6px] px-2 py-1.5 text-left hover:bg-accent">
+                    <span className="min-w-0 flex-1 truncate">{k.title || k.devin_id}</span>
+                  </button>
+                ))}
+              </>
+            )}
+            <button role="menuitem" onClick={() => { setOpen(false); setDraft(title); setEditing(true) }} className="flex w-full cursor-pointer items-center gap-2 rounded-[6px] px-2 py-1.5 text-left text-muted-foreground hover:bg-accent hover:text-foreground">
+              {t('menu.renameSession')}
+            </button>
+          </div>
+        </>,
+        document.body,
+      )}
+    </div>
   )
 }
 

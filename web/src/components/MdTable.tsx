@@ -1,4 +1,5 @@
 import { Children, createContext, isValidElement, useContext, useLayoutEffect, useRef, useState, type ReactElement, type ReactNode } from 'react'
+import { useTranslation } from 'react-i18next'
 import type { Element as HastElement, ElementContent } from 'hast'
 import { ArrowDown, ArrowUp, ArrowUpDown, Check, Copy } from 'lucide-react'
 
@@ -276,6 +277,7 @@ function useColumnSizing() {
 /* ---- components wired into react-markdown ---- */
 
 export function MdTable({ node, children }: { node?: HastElement; children?: ReactNode }) {
+  const { t } = useTranslation()
   const [sort, setSort] = useState<Sort>(null)
   const [copied, setCopied] = useState(false)
   const rows = hastRows(node)
@@ -295,7 +297,7 @@ export function MdTable({ node, children }: { node?: HastElement; children?: Rea
         <span className="absolute right-2 top-2 z-10 inline-flex rounded-[8px] border border-border-secondary bg-elevated p-[2px] shadow-sm opacity-0 focus-within:opacity-100 [div:hover>&]:opacity-100">
           <button
             type="button"
-            aria-label="Copy table"
+            aria-label={t('md.copyTable')}
             onClick={copy}
             className="inline-flex size-6 shrink-0 cursor-pointer items-center justify-center rounded-[6px] bg-transparent text-muted-foreground hover:bg-tint-secondary hover:text-foreground"
           >
@@ -339,11 +341,12 @@ export function MdTr({ children }: { children?: ReactNode }) {
 }
 
 function SortTh({ col, children }: { col: number; children?: ReactNode }) {
+  const { t } = useTranslation()
   const ctx = useContext(TableCtx)
   const dir = ctx?.sort?.col === col ? ctx.sort.dir : null
   const label = (() => {
     const text = Children.toArray(children).map((c) => (typeof c === 'string' || typeof c === 'number' ? String(c) : '')).join('').trim()
-    return text ? `Sort by ${text}` : `Sort column ${col + 1}`
+    return text ? t('md.sortBy', { col: text }) : t('md.sortCol', { n: col + 1 })
   })()
   const Icon = dir === 'asc' ? ArrowUp : dir === 'desc' ? ArrowDown : ArrowUpDown
   return (

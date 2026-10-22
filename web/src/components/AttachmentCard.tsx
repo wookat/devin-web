@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useState } from 'react'
+import { useTranslation } from 'react-i18next'
 import { Download, Code2, Copy, Link2, Check, Eye } from 'lucide-react'
 import { LightboxImage } from './Lightbox'
 import Markdown from './Markdown'
@@ -65,6 +66,7 @@ const awaitingMediaToken = (href: string) => /[?&]mt=(?:&|$)/.test(href)
 /** Official inline .md attachment: 360px tinted card — header (name + View code /
  *  Copy content / Copy link / Download) over a 50%-scaled rendered-markdown thumbnail. */
 function MdPreviewCard({ name, href, ts, onOpenTab }: { name: string; href: string; ts?: string; onOpenTab: (href: string, name: string, raw?: boolean) => void }) {
+  const { t } = useTranslation()
   const [text, setText] = useState<string | null>(null)
   const [done, setDone] = useState('')
   useEffect(() => {
@@ -81,12 +83,12 @@ function MdPreviewCard({ name, href, ts, onOpenTab }: { name: string; href: stri
         <button onClick={() => onOpenTab(href, name)} className="min-w-0 flex-1 cursor-pointer truncate text-left text-[13px] text-foreground hover:underline">
           {name}
         </button>
-        <button aria-label="View code" title="View code" onClick={() => onOpenTab(href, name, true)} className={abtn}>
+        <button aria-label={t('att.viewCode')} title={t('att.viewCode')} onClick={() => onOpenTab(href, name, true)} className={abtn}>
           <Code2 size={16} />
         </button>
         <button
-          aria-label="Copy content"
-          title="Copy content"
+          aria-label={t('att.copyContent')}
+          title={t('att.copyContent')}
           disabled={!text}
           onClick={() => { if (text) { navigator.clipboard.writeText(text); flash('content') } }}
           className={abtn}
@@ -94,8 +96,8 @@ function MdPreviewCard({ name, href, ts, onOpenTab }: { name: string; href: stri
           {done === 'content' ? <Check size={16} /> : <Copy size={16} />}
         </button>
         <button
-          aria-label="Copy link"
-          title="Copy link"
+          aria-label={t('att.copyLink')}
+          title={t('att.copyLink')}
           onClick={() => {
             const q = new URLSearchParams({ tab: name })
             const ms = ts ? new Date(ts).getTime() : NaN
@@ -107,7 +109,7 @@ function MdPreviewCard({ name, href, ts, onOpenTab }: { name: string; href: stri
         >
           {done === 'link' ? <Check size={16} /> : <Link2 size={16} />}
         </button>
-        <a aria-label="Download" title="Download" href={href} download={name} className={abtn}>
+        <a aria-label={t('common.download')} title={t('common.download')} href={href} download={name} className={abtn}>
           <Download size={16} />
         </a>
       </div>
@@ -183,6 +185,7 @@ function fmtSize(n: number): string {
 /** Official user-uploaded attachment chip: 38px doc-icon tile + name/size column +
  *  hover-revealed View / Download buttons (group-hover opacity). */
 function FileChip({ name, href, onOpenTab }: { name: string; href: string; onOpenTab?: (href: string, name: string, raw?: boolean) => void }) {
+  const { t } = useTranslation()
   const [size, setSize] = useState<number | null>(null)
   useEffect(() => {
     if (awaitingMediaToken(href)) return
@@ -247,13 +250,13 @@ function FileChip({ name, href, onOpenTab }: { name: string; href: string; onOpe
         {size !== null && <span className="text-[12px] font-normal text-muted-foreground">{fmtSize(size)}</span>}
       </div>
       {view && (
-        <button aria-label="View attachment" title="View attachment" onClick={(e) => { e.preventDefault(); e.stopPropagation(); view() }} className={cn(hbtn, 'ml-0.5')}>
+        <button aria-label={t('att.view')} title={t('att.view')} onClick={(e) => { e.preventDefault(); e.stopPropagation(); view() }} className={cn(hbtn, 'ml-0.5')}>
           <Eye size={16} />
         </button>
       )}
       <button
-        aria-label="Download attachment"
-        title="Download"
+        aria-label={t('att.download')}
+        title={t('common.download')}
         onClick={(e) => {
           e.preventDefault()
           e.stopPropagation()

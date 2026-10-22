@@ -128,7 +128,7 @@ function FileViewerPanel({ href: href0, name, initialRaw, versions }: { href: st
         <span className="min-w-0 flex-1 truncate text-[13px] text-foreground">{name}</span>
         <div className="flex shrink-0 items-center gap-px">
           {isMd && (
-            <button aria-label={raw ? 'Preview markdown' : 'View code'} title={raw ? 'Preview markdown' : 'View code'} onClick={() => setRaw(!raw)} className={cn(abtn, raw && 'bg-accent text-foreground')}>
+            <button aria-label={raw ? t('vp.previewMd') : t('vp.viewCode')} title={raw ? t('vp.previewMd') : t('vp.viewCode')} onClick={() => setRaw(!raw)} className={cn(abtn, raw && 'bg-accent text-foreground')}>
               <Code2 size={16} />
             </button>
           )}
@@ -267,6 +267,12 @@ function ShellPanel({ items }: { items: TimelineItem[] }) {
     return list
   }, [items])
   const shellIds = useMemo(() => [...new Set(cmds.map((c) => c.shellId))], [cmds])
+  // Official terminal tabs carry friendly names — raw ACP exec ids never leak.
+  const shellLabel = useMemo(() => {
+    const m = new Map<string, string>()
+    shellIds.forEach((sid, i) => m.set(sid, `${t('vp.terminalN', { n: i + 1 })}`))
+    return m
+  }, [shellIds, t])
   const [q, setQ] = useState('')
   const [selId, setSelId] = useState<string | null>(null)
   const sel = (selId && cmds.find((c) => c.id === selId)) || cmds[cmds.length - 1]
@@ -286,24 +292,25 @@ function ShellPanel({ items }: { items: TimelineItem[] }) {
               const last = [...cmds].reverse().find((c) => c.shellId === sid)
               if (last) setSelId(last.id)
             }}
+            title={sid}
             className={cn(
-              'shrink-0 cursor-pointer rounded-md px-2 py-1 font-mono text-[12px] leading-[16px]',
+              'shrink-0 cursor-pointer rounded-md px-2 py-1 text-[12px] leading-[16px]',
               sel?.shellId === sid ? 'bg-accent text-foreground' : 'text-muted-foreground hover:text-foreground',
             )}
           >
-            {sid}
+            {shellLabel.get(sid) ?? sid}
           </button>
         ))}
       </div>
-      <div className="relative flex min-h-0 flex-1 overflow-hidden border-t border-b border-border bg-white px-3 py-2 shell-app--xterm-container">
+      <div className="relative flex min-h-0 flex-1 overflow-hidden border-t border-b border-border bg-card px-3 py-2 shell-app--xterm-container">
         <div className="h-full w-full overflow-auto">
           {sel?.terminal
             ? <TerminalBlock fill text={fullTerminal ?? sel.terminal} className="mt-0 h-full min-h-0 rounded-none border-0 bg-transparent" />
-            : <p className="font-mono text-[12px] text-muted-foreground">{sel ? '(no output captured)' : ''}</p>}
+            : <p className="font-mono text-[12px] text-muted-foreground">{sel ? t('vp.noOutput') : ''}</p>}
         </div>
       </div>
       <div className="flex h-[45%] shrink-0 flex-col">
-        <div className="sticky top-0 z-10 shrink-0 border-b border-border bg-white">
+        <div className="sticky top-0 z-10 shrink-0 border-b border-border bg-card">
           <div
             className="mx-1 grid gap-x-3 px-1 py-1.5 text-[14px] leading-[20px]"
             style={{ gridTemplateColumns: 'minmax(67%,1fr) minmax(0px,60px) minmax(0px,85px)' }}

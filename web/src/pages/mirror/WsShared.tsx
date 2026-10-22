@@ -1,7 +1,8 @@
 import { useCallback, useEffect, useState } from 'react'
 import { useTranslation } from 'react-i18next'
-import { Folder as FolderIcon, FileCode, FileText, FileSpreadsheet, FileImage, FileVideo, FileAudio, FileArchive, FileWarning, Save } from 'lucide-react'
+import { FileWarning, Save } from 'lucide-react'
 import { cn } from '@/lib/utils'
+import { FileIcon } from '@/lib/fileIcon'
 
 // ---------------------------------------------------------------------------
 // Shared workspace helpers: path/kind tables, git tint, file-type icon,
@@ -41,18 +42,10 @@ function gitTitle(t: (k: string) => string, s?: string) {
   return ({ M: t('ws.gitM'), U: t('ws.gitU'), A: t('ws.gitA'), D: t('ws.gitD'), R: t('ws.gitR'), C: t('ws.gitC') } as Record<string, string>)[s ?? ''] ?? s
 }
 
+// TypeIcon delegates to the shared per-format FileIcon (lib/fileIcon) — same
+// table the changes tree / search results / pickers render with.
 function TypeIcon({ path, dir, size = 14, className }: { path: string; dir?: boolean; size?: number; className?: string }) {
-  const cls = cn('shrink-0', className)
-  if (dir) return <FolderIcon size={size} className={cn(cls, 'text-muted-foreground')} />
-  const e = ext(path)
-  if (KINDS[e] === 'image') return <FileImage size={size} className={cn(cls, 'text-purple-500')} />
-  if (e === 'pdf') return <FileText size={size} className={cn(cls, 'text-red-500')} />
-  if (e === 'docx' || e === 'doc') return <FileText size={size} className={cn(cls, 'text-blue-500')} />
-  if (KINDS[e] === 'xlsx' || e === 'csv') return <FileSpreadsheet size={size} className={cn(cls, 'text-green-600')} />
-  if (KINDS[e] === 'av') return e.match(/mp3|wav|ogg|m4a|flac|aac/) ? <FileAudio size={size} className={cn(cls, 'text-pink-500')} /> : <FileVideo size={size} className={cn(cls, 'text-pink-500')} />
-  if (e === 'zip' || e === 'tar' || e === 'gz' || e === '7z' || e === 'rar') return <FileArchive size={size} className={cn(cls, 'text-amber-600')} />
-  if (e === 'md' || e === 'markdown' || e === 'txt' || e === 'log') return <FileText size={size} className={cn(cls, 'text-muted-foreground')} />
-  return <FileCode size={size} className={cn(cls, e === 'html' || e === 'htm' ? 'text-orange-500' : e === 'css' ? 'text-sky-500' : e === 'js' || e === 'jsx' ? 'text-yellow-500' : e === 'ts' || e === 'tsx' ? 'text-blue-500' : e === 'json' ? 'text-slate-500' : 'text-teal-600')} />
+  return <FileIcon path={path} dir={dir} size={size} className={className} />
 }
 
 interface MenuPos { x: number; y: number }

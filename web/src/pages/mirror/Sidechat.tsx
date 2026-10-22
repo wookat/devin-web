@@ -1,5 +1,6 @@
 import { useEffect, useState } from 'react'
 import { useTranslation } from 'react-i18next'
+import i18n from '@/i18n'
 import { Loader2, Copy, Check, ArrowUp, Square, Link2, MessageSquarePlus, SquarePen, Brain, Wrench, Reply, ThumbsUp, ThumbsDown, Languages, GitFork, TextQuote } from 'lucide-react'
 import { adminFetch } from '@/lib/api'
 import { visibleInterval } from '@/lib/poll'
@@ -69,7 +70,7 @@ function MessageToolbar({ text, eid, ts, tab, onSideChat, onStartNewSession, onF
       {onTranslated && text.trim() && (
         <button
           aria-label={t('sc.translate')}
-          title={translating ? 'Translating...' : 'Translate'}
+          title={translating ? t('sc.translating') : t('sc.translate')}
           disabled={translating}
           onClick={async () => {
             setTranslating(true)
@@ -184,15 +185,15 @@ function SidechatPanel({ id, anchor, onStage }: { id: string; anchor: { id: stri
     setMerging(true)
     setErr(null)
     try {
-      const lines = [`# Side chat transcript`, ``, `Branched from message:`, ``, `> ${current.label}`, ``]
+      const lines = [t('sc.transcriptTitle'), ``, `${t('sc.branched')}:`, ``, `> ${current.label}`, ``]
       for (const m of current.messages) {
         if (m.role === 'thinking' || m.role === 'action') continue
-        lines.push(`## ${m.role === 'user' ? 'User' : 'Devin'}`, ``, m.content, ``)
+        lines.push(`## ${m.role === 'user' ? t('common.user') : 'Devin'}`, ``, m.content, ``)
       }
       const name = `sidechat-${current.anchor_event_id.replace(/^event-/, '').slice(-8)}.md`
       const r = await adminFetch<{ ok: boolean; url?: string; name?: string; size?: number; error?: string }>(`/api/admin/session/${id}/upload-stage?filename=${encodeURIComponent(name)}`, { method: 'POST', body: new File([lines.join('\n')], name, { type: 'text/markdown' }) })
       if (r.ok && r.url) onStage?.({ url: r.url, name: r.name || name, size: r.size || 0 })
-      else setErr(r.error || 'merge failed')
+      else setErr(r.error || t('sc.mergeFail'))
     } catch (e) {
       setErr((e as Error).message)
     } finally {
@@ -244,7 +245,7 @@ function SidechatPanel({ id, anchor, onStage }: { id: string; anchor: { id: stri
                   selected === t.anchor_event_id ? 'border-foreground/30 bg-accent' : 'border-border text-muted-foreground hover:bg-accent',
                 )}
               >
-                {t.label.slice(0, 60) || 'Side chat'}
+                {t.label.slice(0, 60) || i18n.t('sc.sidechat')}
               </button>
             ))}
           </div>
@@ -258,12 +259,12 @@ function SidechatPanel({ id, anchor, onStage }: { id: string; anchor: { id: stri
               <MessageSquarePlus size={15} />
             </span>
             <div className="min-w-0 flex-1">
-              <p className="text-[13px] leading-[18px] font-medium">Branched from message</p>
+              <p className="text-[13px] leading-[18px] font-medium">{t('sc.branched')}</p>
               <p className="mt-0.5 line-clamp-3 whitespace-pre-wrap border-l-2 border-green-500 pl-2 text-[12px] leading-[17px] text-muted-foreground">{current.label}</p>
             </div>
             <button
-              aria-label="Merge into main chat"
-              title="Merge into main chat"
+              aria-label={t('sc.merge')}
+              title={t('sc.merge')}
               onClick={() => void merge()}
               disabled={merging}
               className="flex size-6 shrink-0 cursor-pointer items-center justify-center rounded-[6px] text-muted-foreground hover:bg-accent hover:text-foreground disabled:opacity-40"
@@ -306,15 +307,15 @@ function SidechatPanel({ id, anchor, onStage }: { id: string; anchor: { id: stri
             value={text}
             onChange={(e) => setText(e.target.value)}
             onKeyDown={(e) => { if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); send() } }}
-            placeholder={current?.messages.length ? 'Ask a follow-up...' : anchorId ? 'Ask a question...' : 'Select a message first (New side chat)'}
+            placeholder={current?.messages.length ? t('sc.followUp') : anchorId ? t('sc.askQ') : t('sc.selectFirst')}
             disabled={!anchorId}
             rows={1}
             className="min-h-9 flex-1 resize-none text-[13px]"
           />
           {current?.pending_request_id ? (
             <button
-              aria-label="Stop"
-              title="Stop"
+              aria-label={t('composer.stop')}
+              title={t('composer.stop')}
               onClick={cancel}
               className="flex size-8 shrink-0 items-center justify-center rounded-full bg-foreground text-background"
             >
@@ -322,7 +323,7 @@ function SidechatPanel({ id, anchor, onStage }: { id: string; anchor: { id: stri
             </button>
           ) : (
             <button
-              aria-label="Send side chat message"
+              aria-label={t('sc.send')}
               onClick={send}
               disabled={!anchorId || !text.trim() || sending}
               className="flex size-8 shrink-0 items-center justify-center rounded-full bg-foreground text-background disabled:opacity-40"

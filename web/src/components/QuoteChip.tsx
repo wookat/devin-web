@@ -1,4 +1,5 @@
 import { useState } from 'react'
+import { useTranslation } from 'react-i18next'
 import type { QuoteAttachment } from '../../shared/quotes'
 import { LightboxImage } from './Lightbox'
 import { cn } from '@/lib/utils'
@@ -16,6 +17,7 @@ export function quoteHasTarget(q: QuoteAttachment): boolean {
 }
 
 export default function QuoteChip({ quote, onNavigate }: { quote: QuoteAttachment; onNavigate?: (quote: QuoteAttachment) => void }) {
+  const { t } = useTranslation()
   // Official quote-pill: with a caption the primary line is the “caption” and
   // the secondary line the quoted text; without one the primary line is the
   // quoted text (truncated) and the secondary line the artifact label
@@ -23,9 +25,9 @@ export default function QuoteChip({ quote, onNavigate }: { quote: QuoteAttachmen
   const isPreview = quote.kind === 'preview'
   const hasCaption = quote.caption !== undefined
   const top = hasCaption
-    ? isPreview ? quote.text || quote.label || 'Preview element' : quote.text
+    ? isPreview ? quote.text || quote.label || t('quote.previewEl') : quote.text
     : quote.label
-  const main = hasCaption ? `\u201c${quote.caption}\u201d` : isPreview ? quote.text || 'Preview element' : quote.text
+  const main = hasCaption ? `\u201c${quote.caption}\u201d` : isPreview ? quote.text || t('quote.previewEl') : quote.text
   const clickable = !!(onNavigate && quoteHasTarget(quote))
   // Official screenshot provider renders nothing when the image fails to load.
   const [shotFailed, setShotFailed] = useState(false)
@@ -66,7 +68,7 @@ export default function QuoteChip({ quote, onNavigate }: { quote: QuoteAttachmen
   )
   if (clickable) {
     return (
-      <button type="button" data-quote-chip className={cls} onClick={() => onNavigate?.(quote)} aria-label={`Quoted ${quote.label}`}>
+      <button type="button" data-quote-chip className={cls} onClick={() => onNavigate?.(quote)} aria-label={t('quote.quoted', { label: quote.label })}>
         {inner}
       </button>
     )

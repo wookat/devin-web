@@ -1,4 +1,5 @@
 import { useEffect, useState } from 'react'
+import { useTranslation } from 'react-i18next'
 import ReactMarkdown from 'react-markdown'
 import remarkGfm from 'remark-gfm'
 import { Copy, Check, WrapText } from 'lucide-react'
@@ -19,6 +20,7 @@ const LANG_ALIAS: Record<string, string> = {
  *  rounded-10 bordered card, mono 12/20, shiki github-light/dark tokens,
  *  hover toolbar (Wrap lines / Copy code) hanging off the top-right edge. */
 function CodeBlock({ code, lang }: { code: string; lang?: string }) {
+  const { t } = useTranslation()
   const [copied, setCopied] = useState(false)
   const [wrap, setWrap] = useState(false)
   const [hl, setHl] = useState<{ key: string; lines: Tok[][] } | null>(null)
@@ -51,10 +53,10 @@ function CodeBlock({ code, lang }: { code: string; lang?: string }) {
     <div className="my-4 [&:first-child]:mt-0 [&:last-child]:mb-0">
       <div className="group/code relative isolate w-full rounded-[10px] border border-border bg-card pt-3 font-mono text-[12px] leading-[20px]">
         <div className="absolute -top-3 right-2 z-10 min-w-fit opacity-0 focus-within:opacity-100 group-hover/code:opacity-100">
-          <div aria-label="Actions" className="flex h-7 min-w-fit items-center gap-px whitespace-nowrap rounded-[8px] border border-border bg-card p-px shadow-sm">
+          <div aria-label={t('md.actions')} className="flex h-7 min-w-fit items-center gap-px whitespace-nowrap rounded-[8px] border border-border bg-card p-px shadow-sm">
             <button
               type="button"
-              aria-label="Wrap lines"
+              aria-label={t('md.wrapLines')}
               aria-pressed={wrap}
               onClick={() => setWrap((w) => !w)}
               className={`inline-flex size-6 cursor-pointer items-center justify-center rounded-[6px] hover:bg-accent hover:text-foreground ${wrap ? 'bg-accent text-foreground' : 'text-muted-foreground'}`}
@@ -63,7 +65,7 @@ function CodeBlock({ code, lang }: { code: string; lang?: string }) {
             </button>
             <button
               type="button"
-              aria-label="Copy code"
+              aria-label={t('md.copyCode')}
               onClick={() => {
                 void navigator.clipboard.writeText(text)
                 setCopied(true)

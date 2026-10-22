@@ -26,7 +26,7 @@ function EditorPanel({ id }: { id: string }) {
 
   if (err) return <div className="p-3 text-[13px] text-red-500">{err}</div>
   if (!link) return <div className="p-3 text-[13px] text-muted-foreground">{t('ws.loadingEditor')}</div>
-  return <iframe src={link} title="Editor" className="h-full w-full border-0" allow="clipboard-read; clipboard-write" />
+  return <iframe src={link} title={t('tabs.editor')} className="h-full w-full border-0" allow="clipboard-read; clipboard-write" />
 }
 
 // ---------------------------------------------------------------------------
@@ -263,14 +263,14 @@ function WorkspacePanel({ id }: { id: string }) {
   }
 
   const tabMenuItems = (p: string): CtxItem[] => [
-    { label: 'Close', onClick: () => closeTab(p) },
-    { label: 'Close Others', onClick: () => closeOthers(p) },
-    { label: 'Close All to the Left', onClick: () => closeSide(p, 'left') },
-    { label: 'Close All to the Right', onClick: () => closeSide(p, 'right') },
+    { label: t('common.close'), onClick: () => closeTab(p) },
+    { label: t('tabs.closeOthers'), onClick: () => closeOthers(p) },
+    { label: t('tabs.closeLeft'), onClick: () => closeSide(p, 'left') },
+    { label: t('tabs.closeRight'), onClick: () => closeSide(p, 'right') },
     { sep: true, label: '' },
-    { label: 'Copy Path', onClick: () => void navigator.clipboard.writeText(cwd ? `${cwd}/${p}` : p) },
-    { label: 'Copy Relative Path', onClick: () => void navigator.clipboard.writeText(p) },
-    { label: 'Reveal in Tree', onClick: () => { const parts = parentOf(p).split('/'); let acc = ''; setExpanded((x) => { const n = { ...x }; for (const s of parts) { if (!s) continue; acc = acc ? `${acc}/${s}` : s; n[acc] = true } return n }) } },
+    { label: t('ws.copyPath'), onClick: () => void navigator.clipboard.writeText(cwd ? `${cwd}/${p}` : p) },
+    { label: t('ws.copyRelPath'), onClick: () => void navigator.clipboard.writeText(p) },
+    { label: t('tabs.revealInTree'), onClick: () => { const parts = parentOf(p).split('/'); let acc = ''; setExpanded((x) => { const n = { ...x }; for (const s of parts) { if (!s) continue; acc = acc ? `${acc}/${s}` : s; n[acc] = true } return n }) } },
   ]
 
   const rawUrl = (p: string) => `/api/admin/session/${id}/file-raw?path=${encodeURIComponent(p)}`

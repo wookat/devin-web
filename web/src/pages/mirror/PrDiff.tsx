@@ -1,6 +1,7 @@
 import { cloneElement, useEffect, useMemo, useState } from 'react'
 import { useTranslation } from 'react-i18next'
 import { ChevronDown, ChevronUp, Copy, Check, Plus, MoreHorizontal, MessageSquare, Bug as BugIcon, ChevronsUpDown, FileCode2 } from 'lucide-react'
+import { FileIcon } from '@/lib/fileIcon'
 import Markdown from '@/components/Markdown'
 import { blockWordDiff, changedAfterRanges, otherSideLine, type WordSeg } from '@/lib/diff'
 import { buildPrDiffRows, type PrDiffRow as PrDiffRowT } from '@/lib/prDiffRows'
@@ -204,9 +205,10 @@ function PrDiffFile({ f, rawBase, viewedKey, threadLines, onGoToThread, bugsAt, 
   return (
     <div className="overflow-hidden rounded-[10px] border border-border-secondary bg-elevated">
       <div className="flex h-[42px] w-full items-center gap-1.5 border-b border-border-secondary px-2 py-1.5 text-[12px]">
-        <button onClick={() => setOpen((o) => !o)} aria-label={bodyOpen ? 'Collapse file' : 'Expand file'} className="flex size-7 shrink-0 cursor-pointer items-center justify-center rounded-[6px] text-muted-foreground hover:bg-accent hover:text-foreground">
+        <button onClick={() => setOpen((o) => !o)} aria-label={bodyOpen ? t('pr.collapseFile') : t('pr.expandFile')} className="flex size-7 shrink-0 cursor-pointer items-center justify-center rounded-[6px] text-muted-foreground hover:bg-accent hover:text-foreground">
           <ChevronDown size={18} className={cn('shrink-0 transition-transform', !bodyOpen && '-rotate-90')} />
         </button>
+        <FileIcon path={f.file_path} size={14} className="shrink-0" />
         <span className="min-w-0 flex-1 truncate font-sans text-[13px]" title={f.file_path}>{f.old_file_path && f.old_file_path !== f.file_path ? `${f.old_file_path} → ` : ''}{f.file_path}</span>
         <button aria-label={t('pr.copyPath')} title={t('pr.copyPath')} onClick={() => { void navigator.clipboard.writeText(f.file_path) }} className="flex size-7 shrink-0 cursor-pointer items-center justify-center rounded-[6px] text-muted-foreground hover:bg-accent hover:text-foreground">
           <Copy size={18} />
@@ -228,7 +230,7 @@ function PrDiffFile({ f, rawBase, viewedKey, threadLines, onGoToThread, bugsAt, 
           >
             {viewed && <Check size={10} />}
           </span>
-          {viewed ? 'Viewed' : 'Mark as viewed'}
+          {viewed ? t('pr.viewed') : t('pr.markViewed')}
         </label>
         {isMd && (
           <button
@@ -294,9 +296,9 @@ function PrDiffFile({ f, rawBase, viewedKey, threadLines, onGoToThread, bugsAt, 
               const bar = (
                 <div className="col-span-2 flex h-8 items-center bg-tint-blue">
                   <div className="flex items-center gap-3.5 pl-[2ch] text-[12px]">
-                    {!row.top && <button type="button" aria-label={`Expand ${Math.min(5, row.hidden.length)} lines above`} onClick={() => reveal('before')} className="inline-flex cursor-pointer items-center gap-1 text-[rgba(13,133,185,0.85)] dark:text-blue-400"><ChevronUp size={12} />5 lines</button>}
-                    <button type="button" aria-label={`Expand all ${row.hidden.length} lines`} onClick={revealAll} className="inline-flex cursor-pointer items-center gap-1 text-[rgba(13,133,185,0.85)] dark:text-blue-400"><ChevronsUpDown size={12} />All {row.hidden.length} lines</button>
-                    {!row.bottom && <button type="button" aria-label={`Expand ${Math.min(5, row.hidden.length)} lines below`} onClick={() => reveal('after')} className="inline-flex cursor-pointer items-center gap-1 text-[rgba(13,133,185,0.85)] dark:text-blue-400"><ChevronDown size={12} />5 lines</button>}
+                    {!row.top && <button type="button" aria-label={t('chg.expandAbove', { n: Math.min(5, row.hidden.length) })} onClick={() => reveal('before')} className="inline-flex cursor-pointer items-center gap-1 text-[rgba(13,133,185,0.85)] dark:text-blue-400"><ChevronUp size={12} />5 lines</button>}
+                    <button type="button" aria-label={t('chg.expandAll', { n: row.hidden.length })} onClick={revealAll} className="inline-flex cursor-pointer items-center gap-1 text-[rgba(13,133,185,0.85)] dark:text-blue-400"><ChevronsUpDown size={12} />All {row.hidden.length} lines</button>
+                    {!row.bottom && <button type="button" aria-label={t('chg.expandBelow', { n: Math.min(5, row.hidden.length) })} onClick={() => reveal('after')} className="inline-flex cursor-pointer items-center gap-1 text-[rgba(13,133,185,0.85)] dark:text-blue-400"><ChevronDown size={12} />5 lines</button>}
                   </div>
                 </div>
               )
@@ -330,7 +332,7 @@ function PrDiffFile({ f, rawBase, viewedKey, threadLines, onGoToThread, bugsAt, 
                   {onAddComment && lineNo ? <button aria-label={t('pr.addComment')} onClick={() => { setComposerLine(lineNo); setComposerText(''); setComposerErr('') }} className="absolute -left-1.5 z-10 hidden size-4 cursor-pointer items-center justify-center rounded-[4px] bg-blue-500 text-white group-hover:flex"><Plus size={12} /></button> : null}
                   <span className="min-w-0 flex-1">{row.segs ? <WordDiffLine segs={row.segs} kind={row.kind === 'del' ? 'del' : 'add'} /> : row.text}</span>
                   {threadCount ? <button aria-label={t('pr.gotoComment')} onClick={onGoToThread} className="mr-1 flex shrink-0 cursor-pointer items-center gap-0.5 self-center rounded-[4px] px-1 text-[10px] text-amber-600 hover:bg-amber-500/20 dark:text-amber-400"><MessageSquare size={11} />{threadCount}</button> : null}
-                  {lineNo && bugItems ? <button aria-label={openBugs.has(lineNo) ? 'Collapse comment' : 'Expand comment'} aria-expanded={openBugs.has(lineNo)} onClick={() => setOpenBugs((current) => { const next = new Set(current); if (next.has(lineNo)) next.delete(lineNo); else next.add(lineNo); return next })} className="mr-1 flex size-6 shrink-0 cursor-pointer items-center justify-center self-center rounded-[6px] border border-border bg-background hover:bg-accent"><BugIcon size={13} className="text-red-500" /></button> : null}
+                  {lineNo && bugItems ? <button aria-label={openBugs.has(lineNo) ? t('pr.collapseComment') : t('pr.expandComment')} aria-expanded={openBugs.has(lineNo)} onClick={() => setOpenBugs((current) => { const next = new Set(current); if (next.has(lineNo)) next.delete(lineNo); else next.add(lineNo); return next })} className="mr-1 flex size-6 shrink-0 cursor-pointer items-center justify-center self-center rounded-[6px] border border-border bg-background hover:bg-accent"><BugIcon size={13} className="text-red-500" /></button> : null}
                 </span>
                 </div>
                 {lineNo && composerLine === lineNo && onAddComment ? <PrInlineComposer f={f} line={lineNo} onAddComment={onAddComment} onClose={() => setComposerLine(0)} /> : null}
@@ -402,7 +404,7 @@ function PrDiffFile({ f, rawBase, viewedKey, threadLines, onGoToThread, bugsAt, 
                         ) : null}
                         {rn && bugsAt?.get(rn) ? (
                           <button
-                            aria-label={openBugs.has(rn) ? 'Collapse comment' : 'Expand comment'}
+                            aria-label={openBugs.has(rn) ? t('pr.collapseComment') : t('pr.expandComment')}
                             aria-expanded={openBugs.has(rn)}
                             onClick={() => setOpenBugs((s) => { const ns = new Set(s); if (ns.has(rn)) ns.delete(rn); else ns.add(rn); return ns })}
                             className="mr-1 flex size-6 shrink-0 cursor-pointer items-center justify-center self-center rounded-[6px] border border-border bg-background hover:bg-accent"
@@ -454,7 +456,7 @@ function PrDiffFile({ f, rawBase, viewedKey, threadLines, onGoToThread, bugsAt, 
                 ) : null}
                 {lineNo && bugsAt?.get(lineNo) ? (
                   <button
-                    aria-label={openBugs.has(lineNo) ? 'Collapse comment' : 'Expand comment'}
+                    aria-label={openBugs.has(lineNo) ? t('pr.collapseComment') : t('pr.expandComment')}
                     aria-expanded={openBugs.has(lineNo)}
                     onClick={() => setOpenBugs((s) => { const ns = new Set(s); if (ns.has(lineNo)) ns.delete(lineNo); else ns.add(lineNo); return ns })}
                     className="mr-1 flex size-7 shrink-0 cursor-pointer items-center justify-center self-center rounded-[6px] border border-border bg-background hover:bg-accent"
@@ -577,7 +579,7 @@ function PrAnalysisPromo({ prUrl, analyzing, error, onRun }: { prUrl: string; an
         Your <span className="text-[rgba(13,133,185,0.85)] dark:text-blue-400">{t('pr.reviewSettings')}</span> didn't auto-trigger Devin's AI analysis for this commit. Run it manually to organize diffs, detect moved code, and flag potential bugs.
       </p>
       <button disabled={analyzing} onClick={onRun} className={cn('h-8 w-full max-w-[640px] rounded-[6px] text-[13px] font-medium text-white', analyzing ? 'cursor-not-allowed bg-[#3b82f6]/50' : 'cursor-pointer bg-[#3b82f6] hover:bg-[#2563eb]')}>
-        {analyzing ? 'Launching…' : "Run Devin's AI analysis"}
+        {analyzing ? t('pr.launching') : t('pr.runAnalysis')}
       </button>
       {error && <span className="text-[12px] text-red-500">Failed: {error}</span>}
       <button onClick={dismiss} className="cursor-pointer text-[13px] text-muted-foreground hover:text-foreground">{t('common.dismiss')}</button>

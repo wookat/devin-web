@@ -150,9 +150,9 @@ export function PermissionRequestCard({ item, resolved, busy, error, onRespond, 
   const { t } = useTranslation()
   const p = item.permission
   if (!p) return null
-  const title = p.title || item.title || `Devin is requesting permission for ${p.toolName || 'unknown'}`
+  const title = p.title || item.title || t('scc.reqPerm', { tool: p.toolName || t('scc.unknown') })
   if (resolved) {
-    const text = p.resolvedTitles?.[resolved] || `Permission ${resolved} for ${p.toolName || 'unknown'}`
+    const text = p.resolvedTitles?.[resolved] || t('scc.permResolved', { state: t(resolved === 'approved' ? 'scc.approved' : 'scc.denied'), tool: p.toolName || t('scc.unknown') })
     return (
       <div data-eid={item.id} data-testid="transcript-approval-resolved" className="group/event-item relative my-2 flex items-start gap-2 text-[13px] leading-[18px] text-muted-foreground">
         {p.workflow && <Workflow size={14} className="mt-0.5 shrink-0" />}
@@ -197,16 +197,16 @@ export function PermissionRequestCard({ item, resolved, busy, error, onRespond, 
             <div className="flex flex-wrap items-center gap-2 pt-0.5">
               <button type="button" disabled={disabled} onClick={() => onRespond('approve')} className={cn(PERM_BTN, PERM_BTN_VARIANT.accent)}>
                 <Check size={14} />
-                {busy === 'approve' ? 'Approving…' : p.localMachine ? 'Allow once' : 'Approve'}
+                {busy === 'approve' ? t('scc.approving') : p.localMachine ? t('scc.allowOnce') : t('scc.approve')}
               </button>
               {allowSession && (
                 <button type="button" disabled={disabled} onClick={() => onRespond('approve_session')} className={cn(PERM_BTN, PERM_BTN_VARIANT.secondary)}>
-                  {busy === 'approve_session' ? 'Allowing…' : 'Allow for this session'}
+                  {busy === 'approve_session' ? t('scc.allowing') : t('scc.allowSession')}
                 </button>
               )}
               <button type="button" disabled={disabled} onClick={() => onRespond('deny')} className={cn(PERM_BTN, PERM_BTN_VARIANT.destructive)}>
                 <X size={14} />
-                {busy === 'deny' ? 'Denying…' : 'Deny'}
+                {busy === 'deny' ? t('scc.denying') : t('scc.deny')}
               </button>
               {error && <span className="text-[12px] text-red-600">{error}</span>}
             </div>
@@ -256,8 +256,8 @@ export function PermissionRequestCard({ item, resolved, busy, error, onRespond, 
               ))}
               {p.workflow && (
                 <div className="flex flex-wrap gap-x-3 text-[13px] leading-[18px] text-muted-foreground">
-                  {p.workflow.scriptLineCount != null && <span>{p.workflow.scriptLineCount} lines</span>}
-                  {p.workflow.timeoutSecs != null && <span>Timeout: {p.workflow.timeoutSecs}s</span>}
+                  {p.workflow.scriptLineCount != null && <span>{t('scc.scriptLines', { n: p.workflow.scriptLineCount })}</span>}
+                  {p.workflow.timeoutSecs != null && <span>{t('scc.timeout', { s: p.workflow.timeoutSecs })}</span>}
                 </div>
               )}
             </>
@@ -272,10 +272,10 @@ export function PermissionRequestCard({ item, resolved, busy, error, onRespond, 
             onClick={() => onRespond('approve')}
             className={cn(PERM_BTN, p.actionPrimary ? PERM_BTN_VARIANT.primary : PERM_BTN_VARIANT.accent)}
           >
-            {busy === 'approve' ? 'Approving…' : p.actionLabel}
+            {busy === 'approve' ? t('scc.approving') : p.actionLabel}
           </button>
           <button type="button" disabled={disabled} onClick={() => onRespond('deny')} className={cn(PERM_BTN, PERM_BTN_VARIANT.secondary)}>
-            {busy === 'deny' ? 'Denying…' : 'Deny'}
+            {busy === 'deny' ? t('scc.denying') : t('scc.deny')}
           </button>
           {error && <span className="text-[12px] text-red-600">{error}</span>}
         </div>
@@ -317,7 +317,7 @@ export function SecretRequestCard({ item, provided, onProvide }: {
         {provided ? (
           <div className="flex items-center gap-1.5 text-[13px] leading-[18px] text-green-600">
             <Check size={16} />
-            Secret saved
+            {t('scc.secretSaved')}
           </div>
         ) : (
           <div className="text-[12px] leading-[16px] text-muted-foreground">{t('scc.saveFuture')}</div>
@@ -353,7 +353,7 @@ export function SecretRequestCard({ item, provided, onProvide }: {
       {provided || done ? (
         <div className="flex items-center gap-1.5 text-[13px] leading-[18px] text-green-600">
           <Check size={16} />
-          Secret provided
+          {t('scc.secretProvided')}
         </div>
       ) : onProvide ? (
         <>
@@ -362,7 +362,7 @@ export function SecretRequestCard({ item, provided, onProvide }: {
             onClick={() => setOpen(true)}
             className="h-6 w-fit cursor-pointer self-start rounded-md border border-border bg-card px-2 text-[12px] font-medium leading-[16px] text-foreground hover:bg-muted"
           >
-            {totp ? 'Provide 2FA Secret' : 'Provide Secret'}
+            {totp ? t('scc.provide2fa') : t('scc.provideSecret')}
           </button>
           {open && (
             <div className="fixed inset-0 z-50 flex items-end justify-center bg-black/40 p-0 sm:items-center sm:p-4" onClick={() => setOpen(false)}>
@@ -371,7 +371,7 @@ export function SecretRequestCard({ item, provided, onProvide }: {
                 onClick={(e) => e.stopPropagation()}
                 className="flex w-full flex-col gap-2 rounded-t-2xl bg-card p-5 shadow-xl sm:max-w-md sm:rounded-2xl"
               >
-                <h2 className="text-[15px] font-semibold leading-5">{totp ? 'Provide 2FA Secret' : 'Provide Secret'}</h2>
+                <h2 className="text-[15px] font-semibold leading-5">{totp ? t('scc.provide2fa') : t('scc.provideSecret')}</h2>
                 {req.note && <p className="text-[13px] leading-[18px] text-muted-foreground">{req.note}</p>}
                 {err && <div className="text-[12px] text-red-600">{err}</div>}
                 <input
@@ -379,7 +379,7 @@ export function SecretRequestCard({ item, provided, onProvide }: {
                   autoComplete="off"
                   autoFocus
                   value={value}
-                  placeholder={totp ? 'TOTP secret or QR code' : req.name}
+                  placeholder={totp ? t('scc.totpPh') : req.name}
                   onChange={(e) => setValue(e.target.value)}
                   className="h-8 w-full rounded-md border border-border bg-background px-2.5 font-mono text-[13px] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/50"
                 />
@@ -390,7 +390,7 @@ export function SecretRequestCard({ item, provided, onProvide }: {
                     disabled={!value.trim() || busy}
                     className="h-7 cursor-pointer rounded-md bg-foreground px-3 text-[12px] font-medium text-background disabled:cursor-default disabled:opacity-50"
                   >
-                    {busy ? 'Submitting…' : 'Submit'}
+                    {busy ? t('scc.submitting') : t('scc.submit')}
                   </button>
                 </div>
               </form>

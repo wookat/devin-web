@@ -89,7 +89,7 @@ function SessionMenu({ detail, id, isSub, isDevinSession, current, treeNode, fol
       <button
         ref={settingsButtonRef}
         type="button"
-        aria-label="Session settings"
+        aria-label={t('menu.sessSettings')}
         aria-expanded={settingsOpen}
         onClick={() => toggleHeaderMenu()}
         className={cn('flex size-7 cursor-pointer items-center justify-center rounded-[6px] text-muted-foreground hover:bg-accent hover:text-foreground [&_svg]:size-[18px]', settingsOpen && 'bg-accent')}
@@ -101,7 +101,7 @@ function SessionMenu({ detail, id, isSub, isDevinSession, current, treeNode, fol
         <div
           role="menu"
           onKeyDown={(e) => { if (e.key === 'Escape') { e.preventDefault(); closeHeaderMenus() } }}
-          className="absolute right-0 top-8 z-20 w-[280px] max-w-[calc(100vw-10px)] overflow-hidden rounded-[10px] bg-[rgba(255,255,255,0.94)] p-0 text-[13px] leading-[18px] outline outline-1 outline-black/[.06] shadow-[0_10px_15px_-3px_rgba(0,0,0,0.1),0_4px_6px_-2px_rgba(0,0,0,0.05)] backdrop-blur-[8px] dark:bg-[#1f1f1f]/[.94]"
+          className="absolute right-0 top-8 z-[60] w-[280px] max-w-[calc(100vw-10px)] overflow-hidden rounded-[10px] bg-[rgba(255,255,255,0.94)] p-0 text-[13px] leading-[18px] outline outline-1 outline-black/[.06] shadow-[0_10px_15px_-3px_rgba(0,0,0,0.1),0_4px_6px_-2px_rgba(0,0,0,0.05)] backdrop-blur-[8px] dark:bg-[#1f1f1f]/[.94]"
         >
           {/* Session-scoped actions only — app prefs live in /settings,
               service ops in the sidebar org menu / LocalDock gear. */}
@@ -129,7 +129,7 @@ function SessionMenu({ detail, id, isSub, isDevinSession, current, treeNode, fol
               onClick={() => { setRenameDraft(current?.title || current?.devin_title || ''); setSettingsSub('rename') }}
               className={settingsRowCls}
             >
-              <Pencil size={14} className="text-muted-foreground" /> Rename
+              <Pencil size={14} className="text-muted-foreground" /> {t('menu.renameSession')}
             </button>
           )}
           {!isSub && <div className="relative">
@@ -143,7 +143,7 @@ function SessionMenu({ detail, id, isSub, isDevinSession, current, treeNode, fol
               }}
               className={settingsRowCls}
             >
-              <FolderIcon size={14} className="text-muted-foreground" /> Folder
+              <FolderIcon size={14} className="text-muted-foreground" /> {t('menu.folder')}
               {treeNode?.folder && <span className="ml-auto max-w-24 truncate text-[12px] text-muted-foreground">{treeNode.folder}</span>}
               <ChevronRight size={13} className={cn('text-muted-foreground', !treeNode?.folder && 'ml-auto')} />
             </button>
@@ -175,7 +175,7 @@ function SessionMenu({ detail, id, isSub, isDevinSession, current, treeNode, fol
                     }}
                     className={settingsRowCls}
                   >
-                    <X size={13} className="text-muted-foreground" /> Remove from folder
+                    <X size={13} className="text-muted-foreground" /> {t('tree.removeFromFolder')}
                   </button>
                 )}
                 {folderOrder.length === 0 && <p className="px-2 py-1.5 text-[12px] text-muted-foreground">{t('tree.noFolders')}</p>}
@@ -217,7 +217,7 @@ function SessionMenu({ detail, id, isSub, isDevinSession, current, treeNode, fol
             }}
             className={settingsRowCls}
           >
-            {copied ? <Check size={13} /> : <Link2 size={13} className="text-muted-foreground" />} Copy session link
+            {copied ? <Check size={13} /> : <Link2 size={13} className="text-muted-foreground" />} {copied ? t('menu.linkCopied') : t('menu.copyLink')}
           </button>
           {/* Verified live on local acp: uploads the transcript to
               Cognition and returns an app.devin.ai share URL. Devin-private
@@ -229,7 +229,7 @@ function SessionMenu({ detail, id, isSub, isDevinSession, current, treeNode, fol
               if (!confirm(t('menu.shareToCloudConfirm'))) return
               const r = await adminFetch<{ ok: boolean; url?: string; error?: string }>(`/api/admin/session/${id}/share`, { method: 'POST', body: JSON.stringify({}) }).catch(() => null)
               if (r?.ok && r.url) { navigator.clipboard.writeText(r.url); setControlMsg(t('menu.sharedOk', { url: r.url })) }
-              else setControlMsg(r?.error || 'Share failed')
+              else setControlMsg(r?.error || t('menu.shareFailed'))
             }}
             className={settingsRowCls}
           >
@@ -287,12 +287,12 @@ function SessionMenu({ detail, id, isSub, isDevinSession, current, treeNode, fol
                 setSettingsOpen(false); setSettingsSub('none')
                 const action = detail.session.subagent?.isBackground ? 'foreground' : 'background'
                 const r = await adminFetch<{ ok: boolean; error?: string }>(`/api/admin/session/${id}/control`, { method: 'POST', body: JSON.stringify({ action }) }).catch(() => null)
-                setControlMsg(r?.ok ? `Subagent → ${action}` : r?.error || 'Control failed')
+                setControlMsg(r?.ok ? t('menu.subagentAction', { action }) : r?.error || t('menu.ctrlFailed'))
                 reloadDetail()
               }}
               className={settingsRowCls}
             >
-              <Laptop size={13} className="text-muted-foreground" /> {detail.session.subagent.isBackground ? 'Bring to foreground' : 'Send to background'}
+              <Laptop size={13} className="text-muted-foreground" /> {detail.session.subagent.isBackground ? t('menu.bringFg') : t('menu.sendBg')}
             </button>
           )}
           {!isSub && (
@@ -333,8 +333,8 @@ function SessionMenu({ detail, id, isSub, isDevinSession, current, treeNode, fol
           <div className="px-2 pb-1 pt-1.5 text-[12px] leading-[18px] text-muted-foreground">
             <div className="flex justify-between"><span>{t('am.userMsgs')}</span><span className="text-foreground">{userMsgCount}</span></div>
             {detail.session.platform && <div className="flex justify-between"><span>{t('am.platform')}</span><span className="text-foreground">{detail.session.platform}</span></div>}
+            {detail.session.cwd && <div className="flex justify-between gap-2"><span className="shrink-0">{t('am.projectPath')}</span><span className="min-w-0 truncate text-foreground" title={detail.session.cwd} dir="rtl">{detail.session.cwd}</span></div>}
             {detail.session.subagent && <div className="flex justify-between"><span>{t('am.subagent')}</span><span className="text-foreground">{[detail.session.subagent.profile, detail.session.subagent.model].filter(Boolean).join(' · ') || detail.session.subagent.agentId}</span></div>}
-            {detail.dashboard_url && <p className="break-all pt-1 text-[11px] leading-[15px]">{t('tabs.dashboardPush')}：POST {window.location.origin}{detail.dashboard_url}</p>}
           </div>
           </div>
         </div>

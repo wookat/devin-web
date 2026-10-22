@@ -217,7 +217,7 @@ function PrDiscussion({ discussion, h, posting, postErr, postComment }: {
                   value={replyText}
                   onChange={(e) => setReplyText(e.target.value)}
                   onKeyDown={(e) => { if ((e.metaKey || e.ctrlKey) && e.key === 'Enter') void submitReply(it.th.id) }}
-                  placeholder="Reply to this thread..."
+                  placeholder={t('pr.replyPh')}
                   className="min-h-14 w-full resize-none rounded-md bg-background p-2.5 text-[13px] placeholder:text-muted-foreground focus:outline-none"
                 />
                 <div className="flex items-center justify-end gap-2 border-t border-border px-2 py-1.5">
@@ -228,7 +228,7 @@ function PrDiscussion({ discussion, h, posting, postErr, postComment }: {
                     onClick={() => void submitReply(it.th.id, true)}
                     className={cn('rounded-md border border-border px-2.5 py-1 text-[12px] font-medium', replying || !replyText.trim() ? 'cursor-not-allowed opacity-50' : 'cursor-pointer hover:bg-accent')}
                   >
-                    {(pendingReplies[it.th.id] || []).length || it.th.comments.some((c) => c.pending) ? 'Add to review' : 'Start a review'}
+                    {(pendingReplies[it.th.id] || []).length || it.th.comments.some((c) => c.pending) ? t('pr.addReview') : t('pr.startReview')}
                   </button>
                   <button
                     disabled={replying || !replyText.trim()}
@@ -255,7 +255,7 @@ function PrDiscussion({ discussion, h, posting, postErr, postComment }: {
                   className="flex cursor-pointer items-center gap-1 text-[12px] text-muted-foreground hover:text-foreground disabled:opacity-50"
                 >
                   <Check size={12} />
-                  {it.th.is_resolved ? 'Mark unresolved' : 'Mark resolved'}
+                  {it.th.is_resolved ? t('pr.markUnresolved') : t('pr.markResolved')}
                 </button>
               </div>
             )}

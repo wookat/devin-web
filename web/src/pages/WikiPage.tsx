@@ -165,7 +165,7 @@ function WikiHome() {
                   value={addVal}
                   onChange={(e) => setAddVal(e.target.value)}
                   onKeyDown={(e) => { if (e.key === 'Enter') void addRepo(); if (e.key === 'Escape') setAdding(false) }}
-                  placeholder="owner/repo — e.g. facebook/react"
+                  placeholder={t('wiki.ownerRepoPh')}
                   className="h-8 min-w-0 flex-1 rounded-[6px] border border-border-secondary bg-background px-2 text-[13px] outline-none placeholder:text-muted-foreground"
                 />
                 <button

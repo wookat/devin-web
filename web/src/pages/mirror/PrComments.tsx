@@ -28,7 +28,7 @@ function ReactionPicker({ onPick }: { onPick: (content: string) => void }) {
           <input autoFocus value={q} onChange={(e) => setQ(e.target.value)} className="mb-2 w-full rounded-md border border-border bg-background px-2 py-1 text-[12px] focus:outline-none" />
           <div className="flex flex-wrap gap-1">
             {shown.map(([content, emoji, label]) => (
-              <button key={content} aria-label={label} title={label} onClick={() => { onPick(content); setOpen(false) }} className="flex size-7 cursor-pointer items-center justify-center rounded-md text-[15px] hover:bg-accent">{emoji}</button>
+              <button key={content} aria-label={t('pr.react.'+content)} title={t('pr.react.'+content)} onClick={() => { onPick(content); setOpen(false) }} className="flex size-7 cursor-pointer items-center justify-center rounded-md text-[15px] hover:bg-accent">{emoji}</button>
             ))}
           </div>
         </div>
@@ -99,11 +99,11 @@ function ReactionRow({ commentId, reactions, reacting, onToggle }: { commentId: 
   const items = [...REACTION_SET.filter(([content]) => quick.includes(content)), ...extra]
   return (
     <div className="mt-1.5 flex items-center gap-1">
-      {items.map(([content, emoji, label]) => {
+      {items.map(([content, emoji]) => {
         const grp = reactions?.find((x) => x.content === content)
         const has = !!grp?.viewer_reacted
         return (
-          <button key={content} aria-label={label} title={label} disabled={reacting === `${commentId}:${content}`} onClick={() => onToggle(commentId, content, has)} className={cn('flex h-6 cursor-pointer items-center gap-1 rounded-full border px-2 text-[12px] disabled:opacity-50', has ? 'border-blue-500/40 bg-blue-500/10' : 'border-border hover:bg-accent')}>
+          <button key={content} aria-label={t('pr.react.'+content)} title={t('pr.react.'+content)} disabled={reacting === `${commentId}:${content}`} onClick={() => onToggle(commentId, content, has)} className={cn('flex h-6 cursor-pointer items-center gap-1 rounded-full border px-2 text-[12px] disabled:opacity-50', has ? 'border-blue-500/40 bg-blue-500/10' : 'border-border hover:bg-accent')}>
             {emoji}
             {grp && grp.count > 0 ? <span className="tabular-nums">{grp.count}</span> : null}
           </button>

@@ -149,8 +149,8 @@ function TabStrip({ isVisitor, caps, allItems, detail, treeNode, id, mediaTok, p
           const closeButton = (onClose: () => void, active: boolean) => (
             <button
               type="button"
-              aria-label="Close tab"
-              title="Close tab"
+              aria-label={t('tabs.closeTab')}
+              title={t('tabs.closeTab')}
               onClick={(e) => { e.stopPropagation(); onClose() }}
               className={cn('absolute inset-0 flex size-[22px] cursor-pointer items-center justify-center rounded-[4px] hover:bg-accent',
                 active ? 'opacity-100' : 'opacity-0 group-hover:opacity-100')}
@@ -226,8 +226,8 @@ function TabStrip({ isVisitor, caps, allItems, detail, treeNode, id, mediaTok, p
               setAddAnchor({ left: Math.max(5, Math.min(r.left, window.innerWidth - 5 - 226)), top: r.bottom + 2 })
               setAddOpen(!addOpen)
             }}
-            aria-label="Add tab"
-            title="Add tab"
+            aria-label={t('tabs.addTab')}
+            title={t('tabs.addTab')}
             className="flex size-7 cursor-pointer items-center justify-center rounded-[6px] text-muted-foreground hover:bg-accent"
           >
             <PanelAddTabIcon size={18} />
@@ -241,7 +241,7 @@ function TabStrip({ isVisitor, caps, allItems, detail, treeNode, id, mediaTok, p
             <input
               value={addQ}
               onChange={(e) => setAddQ(e.target.value)}
-              placeholder="Search"
+              placeholder={t('common.search')}
               autoFocus={!window.matchMedia('(any-pointer: coarse)').matches}
               className="mb-1 w-full border-b border-border bg-transparent px-2 py-1.5 text-[13px] leading-[18px] outline-none placeholder:text-muted-foreground"
             />
@@ -341,15 +341,15 @@ function TabStrip({ isVisitor, caps, allItems, detail, treeNode, id, mediaTok, p
         {panelTabMenu && (
           <CtxMenu
             pos={{ x: panelTabMenu.x, y: panelTabMenu.y }}
-            items={[{ label: 'Close', onClick: panelTabMenu.close }]}
+            items={[{ label: t('common.close'), onClick: panelTabMenu.close }]}
             onClose={() => setPanelTabMenu(null)}
           />
         )}
       </div>
       <button
         onClick={() => setFullWidth(!fullWidth)}
-        aria-label={fullWidth ? 'Exit full width' : 'Full width'}
-        title={fullWidth ? 'Exit full width' : 'Full width'}
+        aria-label={fullWidth ? t('tabs.exitFullW') : t('tabs.fullW')}
+        title={fullWidth ? t('tabs.exitFullW') : t('tabs.fullW')}
         className="flex size-7 shrink-0 cursor-pointer items-center justify-center rounded-[6px] text-muted-foreground hover:bg-accent max-md:hidden"
       >
         <PanelFullWidthIcon size={18} />
@@ -357,8 +357,8 @@ function TabStrip({ isVisitor, caps, allItems, detail, treeNode, id, mediaTok, p
       <button
         type="button"
         onClick={() => setShowPanel(false)}
-        aria-label="Hide tabs panel"
-        title="Hide tabs panel"
+        aria-label={t('tabs.hidePanel')}
+        title={t('tabs.hidePanel')}
         className="flex size-7 shrink-0 cursor-pointer items-center justify-center rounded-[6px] text-muted-foreground hover:bg-accent"
       >
         <PanelHideTabsIcon size={18} />

@@ -217,7 +217,7 @@ function AgentsPanel({ runs, selected, onSelect, agentEvents, devinId, onOpenSes
         <div className="flex flex-col gap-1">
           <div className="flex items-center gap-3">
             <h1 className="min-w-0 truncate text-lg font-semibold">
-              {title ? `Workflow: ${title}` : 'Workflow run'}
+              {title ? t('ag.wfTitle', { title }) : t('ag.wfRun')}
             </h1>
             <div className="ml-auto flex items-center gap-1">
               {failed && <span className="shrink-0 rounded-md bg-red-500/10 px-1.5 py-0.5 text-[12px] font-medium text-red-600">{t('ag.failed')}</span>}
@@ -255,7 +255,7 @@ function AgentsPanel({ runs, selected, onSelect, agentEvents, devinId, onOpenSes
             aria-valuemin={0}
             aria-valuemax={totalSlots}
             aria-valuenow={settled}
-            aria-valuetext={`${settled} of ${totalSlots} agents settled`}
+            aria-valuetext={t('ag.agentsSettled', { settled, total: totalSlots })}
             className="flex h-1.5 w-full gap-px overflow-hidden rounded-full bg-muted"
           >
             {completed > 0 && <div className="bg-green-600" style={{ width: `${(completed / totalSlots) * 100}%` }} />}
@@ -340,7 +340,7 @@ function AgentsPanel({ runs, selected, onSelect, agentEvents, devinId, onOpenSes
                                   {a.metadata?.vm_mode === 'shared' && (
                                     <span
                                       className="flex-shrink-0 rounded bg-muted px-1 text-[11px] leading-[16px] text-muted-foreground"
-                                      title="No separate session — this agent runs as a subagent on the orchestrator session's machine and bills to it"
+                                      title={t('ag.sharedVmTip')}
                                     >
                                       Shared VM
                                     </span>

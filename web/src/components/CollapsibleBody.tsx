@@ -1,5 +1,6 @@
 import { useEffect, useRef, useState, type ReactNode } from 'react'
 import { ChevronDown, ChevronUp } from 'lucide-react'
+import { useTranslation } from 'react-i18next'
 import { cn } from '@/lib/utils'
 
 const CLAMP = 298
@@ -7,6 +8,7 @@ const MASK = 'linear-gradient(black calc(100% - 76px), rgba(0, 0, 0, 0.15) calc(
 
 /** Official user-message clamp: bodies taller than 298px collapse with a bottom fade. */
 export default function CollapsibleBody({ children }: { children: ReactNode }) {
+  const { t } = useTranslation()
   const ref = useRef<HTMLDivElement>(null)
   const [overflowing, setOverflowing] = useState(false)
   const [expanded, setExpanded] = useState(false)
@@ -37,7 +39,7 @@ export default function CollapsibleBody({ children }: { children: ReactNode }) {
       {overflowing && (
         <button
           type="button"
-          aria-label={expanded ? 'Collapse' : 'Expand'}
+          aria-label={expanded ? t('common.collapse') : t('common.expand')}
           onClick={(e) => { e.stopPropagation(); setExpanded(!expanded) }}
           className={cn(
             'relative z-10 -mt-5 flex h-[20px] w-full items-center justify-center',

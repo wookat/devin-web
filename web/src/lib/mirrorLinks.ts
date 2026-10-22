@@ -25,11 +25,11 @@ export function mirrorHref(href: string | undefined): MirrorHref {
   return to ? { kind: 'internal', to } : { kind: 'inert', title: i18n.t('ml.pageMissing') }
 }
 
-/** Admin mirror route for an upstream `devin-<hex>` (or bare hex) session id. */
+/** Admin mirror route for a local session id. The `/admin/d/<hex>` resolver
+ *  only exists for upstream console links (`resolve` is a 404 stub in local
+ *  mode) — sessions open directly at /admin/<id>. */
 export function sessionMirrorPath(devinId: string): string {
-  // sub:<root>:<aid> child sessions are already local — no resolve hop.
-  if (devinId.startsWith('sub:')) return `/admin/${devinId}`
-  return `/admin/d/${devinId.replace(/^devin-/, '')}`
+  return `/admin/${devinId}`
 }
 
 /** Admin mirror route that opens a PR's review panel inside its session. */
