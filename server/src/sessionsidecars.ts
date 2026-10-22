@@ -18,15 +18,7 @@
  */
 import fs from "node:fs";
 import path from "node:path";
-import type { SessionDb } from "./sessiondb.js";
-
-export interface LogEntry {
-  ts: number;
-  /** Per-session monotonic sequence — survives ring eviction and gives
-   * timeline items stable `e<seq>` ids across rebuilds and disk backfills. */
-  seq?: number;
-  update: Record<string, unknown>;
-}
+import type { SessionDb, LogEntry } from "./sessiondb.js";
 
 /** A live sidecar scan's open fds; `dead` stops routing after a mid-scan
  * wipe so a dead generation never repopulates fresh sidecar files. */

@@ -7,6 +7,7 @@ import fs from "node:fs";
 import path from "node:path";
 import type { ApiContext } from "./routes.js";
 import { MAX_UPDATES_PER_SESSION } from "./sessionlog.js";
+import type { LogEntry } from "./sessiondb.js";
 import { loadInflight } from "./sessionplace.js";
 
 // ---------------------------------------------------------------------------
@@ -717,8 +718,6 @@ function noteUpdate(ctx: ApiContext, sessionId: string) {
 // tail snapshot — instant "newest messages" view while a replay is in flight
 // ---------------------------------------------------------------------------
 
-type LogEntry = { ts: number; seq?: number; update: Record<string, unknown> };
-
 /** Complete pre-reload logs (memory only): the view to show while the fresh
  * replay streams in, so the UI stays on the newest messages instead of
  * watching mid-history scroll by. */
@@ -780,7 +779,7 @@ function snippet(items: DwItem[]): string {
 
 
 export {
-  type FileUpdate, type DwItem, type TlState, type LogEntry,
+  type FileUpdate, type DwItem, type TlState,
   buildTimelineFrom, buildTimeline, noteUpdate, tlCache, tlReset,
   tailSnapshot, persistTail, snapshotItems, buildMessages, snippet,
 };

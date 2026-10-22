@@ -42,6 +42,17 @@ export interface StoredEntry {
   update: Record<string, unknown>;
 }
 
+/** One session-log line (file or memory) — the canonical LogEntry, owned by
+ * the storage layer so every consumer imports from here (previously
+ * duplicated in dwtimeline and sessionsidecars). */
+export interface LogEntry {
+  ts: number;
+  /** Per-session monotonic sequence — survives ring eviction and gives
+   * timeline items stable `e<seq>` ids across rebuilds and disk backfills. */
+  seq?: number;
+  update: Record<string, unknown>;
+}
+
 interface FileUpdateLike {
   file_path: string;
   lines_added: number;

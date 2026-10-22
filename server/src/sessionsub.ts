@@ -7,7 +7,8 @@
  */
 import type { ApiContext } from "./routes.js";
 import { isRateLimitError, retryAfterSeconds } from "./accounts.js";
-import { buildTimelineFrom, type DwItem, type LogEntry } from "./dwtimeline.js";
+import { buildTimelineFrom, type DwItem } from "./dwtimeline.js";
+import type { LogEntry } from "./sessiondb.js";
 import { loadInflight, loadEpoch, sessionHost } from "./sessionplace.js";
 
 /** Server boot — the acp subagent registry is process-local, so any agent

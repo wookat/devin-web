@@ -12,7 +12,8 @@ import { brokerEnabled, brokerList, brokerOnEvent, readOffsets, clearOffsets, ty
 import { agentById, DEFAULT_AGENT } from "./agents.js";
 import { remapLegacyCwd } from "./store.js";
 import { loadReg, meta, noteLastUsed } from "./dwstore.js";
-import { noteUpdate, persistTail, tlCache, tailSnapshot, type LogEntry } from "./dwtimeline.js";
+import { noteUpdate, persistTail, tlCache, tailSnapshot } from "./dwtimeline.js";
+import type { LogEntry } from "./sessiondb.js";
 import { initCfgState, isSessionLocked, loadWithRetry, captureLoadResponse } from "./sessioncfg.js";
 import { queueList, queueFlush, restoreQueues, bindQueueDeps, queuedSessions } from "./sessionqueue.js";
 import { restoreSendErrors } from "./sendhealth.js";

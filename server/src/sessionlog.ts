@@ -1,7 +1,8 @@
 import fs from "node:fs";
 import path from "node:path";
 import { SessionDb } from "./sessiondb.js";
-import { Sidecars, eachFileLine, type LogEntry } from "./sessionsidecars.js";
+import { Sidecars, eachFileLine } from "./sessionsidecars.js";
+import type { LogEntry } from "./sessiondb.js";
 
 export const MAX_UPDATES_PER_SESSION = 5000;
 const MAX_SESSIONS = 200;

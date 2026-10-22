@@ -12,8 +12,6 @@ function textOf(content: unknown): string {
   return c?.text ?? "";
 }
 
-const CHUNK_KINDS = MSG_KINDS;
-
 /**
  * Merge consecutive streaming chunks of the same kind into one entry, so the
  * transcript renders one paragraph (and one "You" header) per message instead
@@ -24,7 +22,7 @@ function coalesceChunks(entries: Array<{ ts: number; update: AnyUpdate }>): Arra
   for (const e of entries) {
     const kind = e.update.sessionUpdate;
     const prev = out[out.length - 1];
-    if (prev && kind && CHUNK_KINDS.has(kind) && prev.update.sessionUpdate === kind) {
+    if (prev && kind && MSG_KINDS.has(kind) && prev.update.sessionUpdate === kind) {
       // Agent/thought chunks are token fragments (concatenate raw); user
       // chunks are whole blocks, and may even be separate prompts when the
       // agent produced nothing in between — keep them apart with a blank line.
