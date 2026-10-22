@@ -2085,7 +2085,7 @@ const groups = useMemo(() => groupItems(allItems, sessionWorking), [allItems, se
           {loaded && tlError === 'mirror_not_configured' && <p className="text-xs text-muted-foreground">{t('menu.mirrorNotConfigured')}</p>}
           {loaded && tlError === 'token_expired' && <p className="text-xs text-amber-600">{t('menu.mirrorTokenExpired')}</p>}
           {loaded && tlError && tlError !== 'mirror_not_configured' && tlError !== 'token_expired' && <p className="text-xs text-red-600">{t('menu.mirrorReadFailed', { err: tlError })}</p>}
-          <div className="mx-auto max-w-[692px]"><div className="[&>*:first-child]:mt-0 [&>*:last-child]:mb-0">
+          <div className="mx-auto max-w-[692px]"><div className="tl-cv [&>*:first-child]:mt-0 [&>*:last-child]:mb-0">
             {loaded && cursor && (
               <div className="mb-4" aria-hidden>
                 <TimelineSkeleton rows={3} />
