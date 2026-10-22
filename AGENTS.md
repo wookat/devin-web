@@ -201,8 +201,10 @@ route code never changes.
   rewrites `sessionCwd` and would bounce it to the other pooled acp).
 - Server module map (sessionio/localweb are GONE — full graph in
   docs/architecture.md): `lweb/` = the web-frontend route family
-  (`index.ts` dispatch shell · `admin/` five route families —
-  system/registry/fsbrowse/newsession/persession · `share.ts` the
+  (`index.ts` dispatch shell · `admin/` route families —
+  system/registry/fsbrowse/newsession, persession.ts the per-session
+  DISPATCHER over sessionfiles/sessiontimeline/sessioncontrol/
+  sessionlifecycle · `share.ts` the
   /api/share/* tree · `session.ts` sessionSubs + sub:* machinery).
   `httputil.ts` = the ONE json/readBody/readJson/UNSUPPORTED set.
   `env.ts` = the ONE owner of every `DEVIN_WEB_*` env read in the backend
@@ -245,8 +247,10 @@ route code never changes.
   (open-turns.json), `sessionplace.ts` (loadedOn/sessionHost/
   loadEpoch/loadInflight), `sessionlive.ts` (inflight/drain gate/
   adoptedTurns/gracefulExit+offsets), `sendhealth.ts` (send-errors).
-  `dwtimeline.ts` = log→DwItem builder + tlCache + noteUpdate deltas +
-  tail snapshots; `dwstore.ts` = dw.json registry
+  `dwtimeline.ts` = log→DwItem builder + tlCache + noteUpdate deltas;
+  `dwtailsnap.ts` = the timeline tail-snapshot subsystem (persistTail/
+  snapshotItems/tailSnapshot, `tl/*.json` disk tail cache);
+  `dwstore.ts` = dw.json registry
   (meta/folders/pins/lastConfig). `sessionSubs` in `lweb/session.ts` is
   the shared admin/share subroute table — add identical-semantics subs
   there (message/upload/file-contents/dashboard), keep sanitized
@@ -262,17 +266,26 @@ route code never changes.
   `_local` log entry → `DwItem.attachments` → `TimelineItem.attachments`.
   Legacy `ATTACHMENT:"url"` marker lines in old persisted tails are still
   parsed by `splitAttachments` as fallback — keep it.
-- `AdminMirror.tsx` = the page component only (~4.4k). Everything else lives in
-  `web/src/pages/mirror/`: glyphs, treeCache, composerMeta, timelineUtil,
-  dialogs, VoiceButton, Sidechat, ResourcePanels, TimelineRows, Permission,
-  ChangesPanel, ComputerPanel, attachments, ViewerPanels, ProgressPanels,
-  PrPanel, WorkspacePanel, AgentsPanel, panelTabs, statusReduce, SessionTree,
-  pageBits, QuotePill (selection-quote pill + dark-quote tokens),
-  useCollapseLevel (composer overflow-hysteresis hook), DraftExplorer
-  (draft-page fs browser), SessionMenu (header gear menu — owns its whole
-  open/sub/position state cluster), SessionIndex (right-edge minimap + jump
-  popup; idxActive stays parent-side for the scroll handler), TimelineGroups
-  (groups.map row dispatch TimelineGroup + StatusTail status footer).
+- `AdminMirror.tsx` = the page coordinator (~2.6k). Everything else lives in
+  `web/src/pages/mirror/`: HeaderBar, TabStrip, FindInSession, SidebarRail,
+  panelRender (tab→panel dispatch), glyphs, treeCache, composerMeta,
+  timelineUtil, dialogs, VoiceButton, Sidechat, ResourcePanels, TimelineRows,
+  Permission, ChangesPanel, ComputerPanel, attachments, ViewerPanels,
+  ProgressPanels, AgentsPanel, panelTabs, statusReduce, pageBits, QuotePill
+  (selection-quote pill + dark-quote tokens), useCollapseLevel (composer
+  overflow-hysteresis hook), DraftExplorer (draft-page fs browser),
+  SessionMenu (header gear menu — owns its whole open/sub/position state
+  cluster), SessionIndex (right-edge minimap + jump popup; idxActive stays
+  parent-side for the scroll handler), TimelineGroups (groups.map row
+  dispatch TimelineGroup + StatusTail status footer).
+  Component families: SessionTree.tsx = tree dispatcher over
+  TreeRow/TreeMenus/TreeSection/treePrefs; ComposerFooter.tsx = footer core
+  over ComposerChin/ComposerBands/ComposerPopovers/ComposerToolbar;
+  PrPanel.tsx = data/sub-tab core over PrHeader/PrDiff/PrComments/
+  PrDiscussion; WorkspacePanel.tsx = editor panel core over
+  WsShared/WorkspaceMedia/WorkspaceViewers. Settings.tsx/SecurityPage.tsx =
+  rail+dispatch shells over web/src/pages/settings/* and
+  web/src/pages/security/* section modules.
 - `session/new` and `session/load` carry `modes` + `configOptions` in the
   RESPONSE, not notifications — captured via `captureLoadResponse`. Old loaded
   sessions get the last-seen agent-level config as fallback (`lastAgentCfg`).

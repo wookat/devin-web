@@ -101,6 +101,8 @@ sessionprompt    sessionsub     sessionview    ── level-1 engines/read-model
                 ctl Buffer framing, 10s call timeout)
   dwtimeline (log→DwItem, tlCache, noteUpdate) → sessionlog /
                 sessiondb (SQLite WAL store)
+  dwtailsnap (timeline tail snapshots: persistTail/snapshotItems/
+                tl/*.json disk cache) → dwtimeline, sessionlog
   sessionlog = append + ring + disk mirror. The ring is a BOUNDED CACHE:
                 get() lazy-hydrates 5k entries from readDisk on miss once
                 per process; replayHold blanks reads between clear() and
@@ -187,7 +189,7 @@ a load-probe over live acps before giving up.
 | File | Owns |
 |---|---|
 | `lweb/index.ts` | thin shell: flags, admin auth seam, SSH host resolver, dashboard prologue (auth-gated writes), tree dispatch |
-| `lweb/admin/` | `/api/admin/*` — coordinator + system/registry/fsbrowse/newsession/persession families |
+| `lweb/admin/` | `/api/admin/*` — coordinator + system/registry/fsbrowse/newsession families; persession.ts = per-session dispatcher over sessionfiles/sessiontimeline/sessioncontrol/sessionlifecycle |
 | `lweb/share.ts` | `/api/share/*` — opt-in via meta.shared, workspace-confined+realpath file-contents |
 | `lweb/session.ts` | sessionSubs table (shared admin/share subroutes), handleSubSession, fork/handoff, sub-agent rows |
 | `httputil.ts` | the ONE json/readBody/readJson/UNSUPPORTED set (gzip, 50MB) |
