@@ -9,7 +9,7 @@ import { findItemText } from './panelTabs'
  * data-eid rows inside the transcript scroll container. Owns open/query/
  * position state + the window keydown listener; renders null while closed
  * (state persists across open/close, matching the pre-extraction page). */
-function FindInSession({ items, scrollRef }: { items: TimelineItem[]; scrollRef: RefObject<HTMLDivElement> }) {
+function FindInSession({ items, scrollRef, onJump }: { items: TimelineItem[]; scrollRef: RefObject<HTMLDivElement>; onJump?: (eid: string) => boolean }) {
   const [findOpen, setFindOpen] = useState(false)
   const [findQ, setFindQ] = useState('')
   const [findPos, setFindPos] = useState(0)
@@ -41,12 +41,20 @@ function FindInSession({ items, scrollRef }: { items: TimelineItem[]; scrollRef:
   useEffect(() => { setFindPos(0) }, [findQ])
   useEffect(() => {
     if (!findCur) return
-    const node = scrollRef.current?.querySelector<HTMLElement>(`[data-eid="${CSS.escape(findCur)}"]`)
-    if (!node) return
-    node.scrollIntoView({ block: 'center' })
-    node.classList.add('dw-find-hit')
-    return () => node.classList.remove('dw-find-hit')
-  }, [findCur, scrollRef])
+    let node: HTMLElement | null | undefined
+    // Virtualized rows: the hit may be unmounted — jump by row index first,
+    // then refine on the actual node once it mounts a frame later.
+    const jumped = onJump?.(findCur) ?? false
+    const apply = () => {
+      node = scrollRef.current?.querySelector<HTMLElement>(`[data-eid="${CSS.escape(findCur)}"]`)
+      if (!node) return
+      node.scrollIntoView({ block: 'center' })
+      node.classList.add('dw-find-hit')
+    }
+    if (jumped) requestAnimationFrame(apply)
+    else apply()
+    return () => node?.classList.remove('dw-find-hit')
+  }, [findCur, scrollRef, onJump])
 
   if (!findOpen) return null
   return (

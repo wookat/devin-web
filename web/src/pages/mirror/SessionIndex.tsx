@@ -9,7 +9,7 @@ import { indexPreview } from './attachments'
 
 /* Official session index: right-edge minimap of tick bars; popup (280px, opens left) lists user
    messages, item click scrolls the timeline while the popup stays open. */
-function SessionIndex({ entries, active, scrollRef, stickBottom, cursor, loadUntil, allItems, pullRequests, queued }: {
+function SessionIndex({ entries, active, scrollRef, stickBottom, cursor, loadUntil, allItems, pullRequests, queued, onJump }: {
   entries: TimelineItem[]
   active: string | null
   scrollRef: RefObject<HTMLDivElement | null>
@@ -19,6 +19,7 @@ function SessionIndex({ entries, active, scrollRef, stickBottom, cursor, loadUnt
   allItems: TimelineItem[]
   pullRequests: SessionDetail['session']['pull_requests']
   queued: { id: string; text: string }[]
+  onJump?: (eid: string) => boolean
 }) {
   const { t } = useTranslation()
   const [indexOpen, setIndexOpen] = useState(false)
@@ -77,36 +78,31 @@ function SessionIndex({ entries, active, scrollRef, stickBottom, cursor, loadUnt
                     }}
                     onMouseLeave={() => setIdxTip(null)}
                     onClick={async () => {
-                      // events folded into a collapsed work group have no rendered row; fall back to the nearest by timestamp
+                      // Virtualized transcript: jump by row index — rows folded
+                      // into a collapsed work group share the group's row.
                       stickBottom.current = false
-                      let node = scrollRef.current?.querySelector(`[data-eid="${CSS.escape(it.id)}"]`)
-                      if (!node && cursor) {
+                      if (!(onJump?.(it.id) ?? false) && cursor) {
                         // entry beyond the loaded window — backfill history first (official full-history index jump)
                         await loadUntil(it.id, it.ts)
                         await new Promise((res) => requestAnimationFrame(res))
-                        node = scrollRef.current?.querySelector(`[data-eid="${CSS.escape(it.id)}"]`)
-                        // backfilled toward the target but its row may be folded into a
-                        // work group: land on the oldest loaded row rather than stale state
-                        if (!node) node = scrollRef.current?.querySelector('[data-eid]')
                       }
-                      if (!node) {
+                      if (!(onJump?.(it.id) ?? false)) {
                         const target = new Date(it.ts).getTime()
                         const byDist = [...allItems].sort(
                           (a, b) => Math.abs(new Date(a.ts).getTime() - target) - Math.abs(new Date(b.ts).getTime() - target),
                         )
                         for (const cand of byDist) {
-                          node = scrollRef.current?.querySelector(`[data-eid="${CSS.escape(cand.id)}"]`) ?? null
-                          if (node) break
+                          if (onJump?.(cand.id)) break
                         }
                       }
-                      if (node) {
-                        node.scrollIntoView({ block: 'start' })
-                        // Official jump feedback: the landed row is marked once.
-                        // (dw-find-hit is a static outline, not an animation —
-                        // clear it on a timer, not animationend.)
-                        node.classList.add('dw-find-hit')
-                        window.setTimeout(() => node!.classList.remove('dw-find-hit'), 1600)
-                      }
+                      // Official jump feedback: mark the landed row once it mounts.
+                      requestAnimationFrame(() => {
+                        const node = scrollRef.current?.querySelector<HTMLElement>(`[data-eid="${CSS.escape(it.id)}"]`)
+                        if (node) {
+                          node.classList.add('dw-find-hit')
+                          window.setTimeout(() => node.classList.remove('dw-find-hit'), 1600)
+                        }
+                      })
                     }}
                     className={cn('flex w-full cursor-pointer items-center gap-2 rounded-[6px] px-2 py-1.5 text-left text-[13px] leading-[18px] hover:bg-accent', it.id === idxActive && 'bg-accent')}
                   >

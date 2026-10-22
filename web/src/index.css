@@ -242,12 +242,6 @@ body { @apply bg-background text-foreground antialiased; font-size: 14px; line-h
   animation: wg-shine 2s linear infinite;
 }
 
-/* Transcript viewport culling: each timeline group stays mounted (anchors,
- * find-in-page and scrollIntoView still auto-reveal) but offscreen groups
- * skip layout+paint entirely. `auto` remembers the last rendered size so the
- * scrollbar stays stable while older pages prepend above. Unsupported
- * browsers ignore both properties. */
-.tl-cv > * {
-  content-visibility: auto;
-  contain-intrinsic-size: auto 240px;
-}
+/* NOTE: content-visibility:auto was tried for transcript culling and
+ * reverted — Edge/Chromium STATUS_BREAKPOINT renderer crashes when older
+ * pages prepend above the viewport while cull estimates are active. */

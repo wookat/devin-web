@@ -3,6 +3,7 @@
  * Extracted modules live in ./mirror/ (components, panels, tree, utils).
  */
 import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react'
+import { useVirtualizer } from '@tanstack/react-virtual'
 import { useTranslation } from 'react-i18next'
 import { Link, useLocation, useNavigate, useParams } from 'react-router-dom'
 import { Loader2, Settings2, Copy, Check, Archive, ArchiveRestore, Plus, FileText, Circle, ArrowUp, Square, Expand, Code, UploadCloud, Folder as FolderIcon, Pencil, Lightbulb, Info, Image as ImageIcon, AlertTriangle, MessageSquare, Sparkles, TextQuote, CornerDownLeft } from 'lucide-react'
@@ -800,6 +801,11 @@ export default function AdminMirrorPage() {
   const scrollRef = useRef<HTMLDivElement>(null)
   const stickBottom = useRef(true)
   const anchor = useRef<{ id: string; offset: number } | null>(null)
+  // Virtualized transcript anchors: event-id → virtual-row index plus the
+  // virtualizer instance. Both are populated late in render (the row model
+  // depends on allItems/groups) — refs keep early-declared callbacks working.
+  const eidToRowRef = useRef<Map<string, number>>(new Map())
+  const tlVirtRef = useRef<{ scrollToIndex: (index: number, opts?: { align?: 'start' | 'center' | 'end' | 'auto'; behavior?: 'auto' | 'smooth' }) => void } | null>(null)
 
   /** Remember the top-most visible event so a background refresh doesn't shift the view. */
   const captureAnchor = useCallback(() => {
@@ -1152,26 +1158,26 @@ export default function AdminMirrorPage() {
   // Copy link deep links: official ?ts=<epoch ms> (legacy #e-<eventId> still honored)
   useEffect(() => {
     if (!loaded) return
-    let node: Element | null = null
+    let gi: number | null = null
     const tsParam = new URLSearchParams(location.search).get('ts')
     if (tsParam) {
       const target = Number(tsParam)
-      // nearest event by timestamp that actually has a rendered row
-      // (events folded into a collapsed group have no data-eid node)
+      // nearest event by timestamp that maps to a virtual row
       const byDist = [...items].sort(
         (a, b) => Math.abs(new Date(a.ts).getTime() - target) - Math.abs(new Date(b.ts).getTime() - target),
       )
       for (const it of byDist) {
-        node = scrollRef.current?.querySelector(`[data-eid="${CSS.escape(it.id)}"]`) ?? null
-        if (node) break
+        const row = eidToRowRef.current.get(it.id)
+        if (row != null) { gi = row; break }
       }
     } else if (location.hash.startsWith('#e-')) {
       const eid = decodeURIComponent(location.hash.slice(3))
-      node = scrollRef.current?.querySelector(`[data-eid="${CSS.escape(eid)}"]`) ?? null
+      gi = eidToRowRef.current.get(eid) ?? null
     }
-    if (!node) return
+    if (gi == null) return
     stickBottom.current = false
-    node.scrollIntoView({ block: 'center' })
+    const row = gi
+    requestAnimationFrame(() => tlVirtRef.current?.scrollToIndex(row, { align: 'center' }))
     const cleanUrl = new URL(window.location.href)
     cleanUrl.searchParams.delete('ts')
     if (cleanUrl.hash.startsWith('#e-')) cleanUrl.hash = ''
@@ -1203,11 +1209,19 @@ export default function AdminMirrorPage() {
     setUserPickedActiveTab(true)
     setShowPanel(true)
   }, [isVisitor])
-  const scrollToRow = useCallback((eventId: string): boolean => {
-    const node = scrollRef.current?.querySelector(`[data-eid="${CSS.escape(eventId)}"]`)
-    if (!node) return false
+  const scrollToRow = useCallback((eventId: string, align: 'start' | 'center' | 'end' | 'auto' = 'center'): boolean => {
+    const gi = eidToRowRef.current.get(eventId)
+    const virt = tlVirtRef.current
+    if (gi == null || !virt) return false
     stickBottom.current = false
-    node.scrollIntoView({ block: 'center', behavior: 'smooth' })
+    // Instant jump to the estimated position, then refine onto the mounted
+    // node — far jumps accumulate estimate error (folded events have no node,
+    // so the group row stays the landing point).
+    virt.scrollToIndex(gi, { align, behavior: 'auto' })
+    requestAnimationFrame(() => {
+      const node = scrollRef.current?.querySelector<HTMLElement>(`[data-eid="${CSS.escape(eventId)}"]`)
+      node?.scrollIntoView({ block: align === 'start' ? 'start' : 'center', behavior: 'smooth' })
+    })
     return true
   }, [])
   // `<ref_file>` chip click: official opens the file in the editor; the mirror lands on
@@ -1376,6 +1390,43 @@ const sessionWorking = ['working', 'running', 'resumed', 'restored'].includes(
   detail?.session.status_enum_raw || detail?.session.status || '',
 )
 const groups = useMemo(() => groupItems(allItems, sessionWorking), [allItems, sessionWorking])
+  // Virtualized transcript rows: [older-page skeleton?] + groups + StatusTail.
+  // Only rows near the viewport mount — long sessions keep a bounded DOM
+  // (content-visibility was tried and reverted: Chromium STATUS_BREAKPOINT
+  // crashes on prepend-while-culled). Keys are stable across prepends so
+  // measured heights carry over.
+  const vRows = useMemo(() => {
+    const rows: { key: string; kind: 'sk' | 'g' | 'tail'; g: (typeof groups)[number] | null; gi: number }[] = []
+    if (loaded && cursor) rows.push({ key: 'sk', kind: 'sk', g: null, gi: -1 })
+    groups.forEach((g, gi) => {
+      const key = g.type === 'work' ? (gi === groups.length - 1 ? 'w-tail' : `w${g.items[g.items.length - 1]?.id ?? gi}`) : g.item.id
+      rows.push({ key, kind: 'g', g, gi })
+    })
+    rows.push({ key: 'tail', kind: 'tail', g: null, gi: -1 })
+    return rows
+  }, [groups, loaded, cursor])
+  const eidToRow = useMemo(() => {
+    const m = new Map<string, number>()
+    vRows.forEach((r, i) => {
+      if (!r.g) return
+      if (r.g.type === 'work') for (const it of r.g.items) m.set(it.id, i)
+      else m.set(r.g.item.id, i)
+    })
+    return m
+  }, [vRows])
+  const tlVirt = useVirtualizer({
+    count: vRows.length,
+    getScrollElement: () => scrollRef.current,
+    estimateSize: (i) => (vRows[i]?.kind === 'g' ? (vRows[i]!.g!.type === 'work' ? 220 : 96) : 64),
+    getItemKey: (i) => vRows[i]?.key ?? i,
+    overscan: 8,
+  })
+  // Resize drift above the viewport shifts scrollTop back into place; growth
+  // at/under the viewport (live tail) must not move what the user is reading.
+  // (Instance property in v3.14 — not a constructor option.)
+  tlVirt.shouldAdjustScrollPositionOnItemSizeChange = (item, _delta, virt) => item.start < (virt.scrollOffset ?? 0)
+  eidToRowRef.current = eidToRow
+  tlVirtRef.current = tlVirt
   const messageHeaders = useMemo(() => {
     const out = new Map<string, boolean>()
     let previousAuthor: string | undefined
@@ -2055,7 +2106,7 @@ const groups = useMemo(() => groupItems(allItems, sessionWorking), [allItems, se
           </div>
         )}
         <div className={cn('@container/chat-pane relative flex min-h-0 flex-1 flex-col', isDraft && 'hidden')}>
-        <FindInSession items={allItems} scrollRef={scrollRef} />
+        <FindInSession items={allItems} scrollRef={scrollRef} onJump={scrollToRow} />
         <div
           ref={scrollRef}
           onScroll={(e) => {
@@ -2085,21 +2136,28 @@ const groups = useMemo(() => groupItems(allItems, sessionWorking), [allItems, se
           {loaded && tlError === 'mirror_not_configured' && <p className="text-xs text-muted-foreground">{t('menu.mirrorNotConfigured')}</p>}
           {loaded && tlError === 'token_expired' && <p className="text-xs text-amber-600">{t('menu.mirrorTokenExpired')}</p>}
           {loaded && tlError && tlError !== 'mirror_not_configured' && tlError !== 'token_expired' && <p className="text-xs text-red-600">{t('menu.mirrorReadFailed', { err: tlError })}</p>}
-          <div className="mx-auto max-w-[692px]"><div className="tl-cv [&>*:first-child]:mt-0 [&>*:last-child]:mb-0">
-            {loaded && cursor && (
-              <div className="mb-4" aria-hidden>
-                <TimelineSkeleton rows={3} />
-              </div>
-            )}
-            {groups.map((g, gi) => (
-              // keyed by the newest member: history backfill prepends older items and may
-              // extend the group backwards, which must not remount it (would drop open state)
-              <TimelineGroup key={g.type === 'work' ? (gi === groups.length - 1 ? 'w-tail' : `w${g.items[g.items.length - 1]?.id ?? gi}`) : g.item.id} g={g} isLast={gi === groups.length - 1} id={id} isVisitor={isVisitor} isSub={isSub} caps={caps} detail={detail} status={status} panel={panel} mediaTok={mediaTok} permResolved={permResolved} secretProvided={secretProvided} provideSecret={provideSecret} wf={wf} onOpenWfRun={(runId) => { setWfRunId(runId || null); openTab('agents') }} onOpenPr={openPr} onOpenPermission={(it) => { setPermSide(it); setShowPanel(true) }} envSuperseded={envSuperseded} messageHeaders={messageHeaders} translations={translations} onTranslated={(itemId, tr) => setTranslations((p) => ({ ...p, [itemId]: tr }))} onFileRef={onFileRef} openFileTab={openFileTab} jumpToQuote={jumpToQuote} onSelQuote={setSelQuote} quoteGuardUntil={quoteGuardUntil} onControlMsg={setControlMsg} onSideChat={(it) => { setScAnchor({ id: it.id, ts: it.ts }); openTab('sidechat') }} onStepChanges={onStepChanges} onOpenProgress={onOpenProgress} onOpenSubagent={onOpenSubagent} worklogJump={worklogJump} tailThoughtId={tailThoughtId} urlPrs={urlPrs} urlFiles={urlFiles} />
-            ))}
-            <StatusTail statusState={statusState} actionRequired={actionRequired} woke={woke} controlling={controlling} onResume={() => void control('resume')} isVisitor={isVisitor} detail={detail} />
+          <div className="mx-auto max-w-[692px]"><div className="[&>*:first-child]:mt-0 [&>*:last-child]:mb-0" style={{ height: tlVirt.getTotalSize(), position: 'relative' }}>
+            {tlVirt.getVirtualItems().map((vi) => {
+              const row = vRows[vi.index]
+              return (
+                <div key={vi.key} data-index={vi.index} ref={tlVirt.measureElement} style={{ position: 'absolute', top: 0, left: 0, width: '100%', transform: `translateY(${vi.start}px)` }}>
+                  {!row || row.kind === 'sk' ? (
+                    <div className="mb-4" aria-hidden>
+                      <TimelineSkeleton rows={3} />
+                    </div>
+                  ) : row.kind === 'tail' ? (
+                    <StatusTail statusState={statusState} actionRequired={actionRequired} woke={woke} controlling={controlling} onResume={() => void control('resume')} isVisitor={isVisitor} detail={detail} />
+                  ) : row.g ? (
+                    // keyed by the newest member: history backfill prepends older items and may
+                    // extend the group backwards, which must not remount it (would drop open state)
+                    <TimelineGroup g={row.g} isLast={row.gi === groups.length - 1} id={id} isVisitor={isVisitor} isSub={isSub} caps={caps} detail={detail} status={status} panel={panel} mediaTok={mediaTok} permResolved={permResolved} secretProvided={secretProvided} provideSecret={provideSecret} wf={wf} onOpenWfRun={(runId) => { setWfRunId(runId || null); openTab('agents') }} onOpenPr={openPr} onOpenPermission={(it) => { setPermSide(it); setShowPanel(true) }} envSuperseded={envSuperseded} messageHeaders={messageHeaders} translations={translations} onTranslated={(itemId, tr) => setTranslations((p) => ({ ...p, [itemId]: tr }))} onFileRef={onFileRef} openFileTab={openFileTab} jumpToQuote={jumpToQuote} onSelQuote={setSelQuote} quoteGuardUntil={quoteGuardUntil} onControlMsg={setControlMsg} onSideChat={(it) => { setScAnchor({ id: it.id, ts: it.ts }); openTab('sidechat') }} onStepChanges={onStepChanges} onOpenProgress={onOpenProgress} onOpenSubagent={onOpenSubagent} worklogJump={worklogJump} tailThoughtId={tailThoughtId} urlPrs={urlPrs} urlFiles={urlFiles} />
+                  ) : null}
+                </div>
+              )
+            })}
           </div></div>
         </div>
-        <SessionIndex entries={indexEntries} active={idxActive} scrollRef={scrollRef} stickBottom={stickBottom} cursor={cursor} loadUntil={loadUntil} allItems={allItems} pullRequests={detail?.session.pull_requests} queued={queued} />
+        <SessionIndex entries={indexEntries} active={idxActive} scrollRef={scrollRef} stickBottom={stickBottom} cursor={cursor} loadUntil={loadUntil} allItems={allItems} pullRequests={detail?.session.pull_requests} queued={queued} onJump={(eid) => scrollToRow(eid, 'start')} />
         </div>
 
         <ComposerFooter
