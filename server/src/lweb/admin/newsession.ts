@@ -164,7 +164,7 @@ export async function handleNewSession(ctx: ApiContext, req: IncomingMessage, re
     // stay hidden — their existing sessions still run via meta.agent).
     const checks = await Promise.all(listAgents().map(async (a) => [a, a.disabled ? null : await agentCheck(a)] as const));
     const agents = checks.filter(([, c]) => c?.installed).map(([a]) => ({ id: a.id, label: a.label }));
-    json(res, 200, { commands, skills: scanLocalSkills(ctx), playbooks: [], secrets: [], macros: [], repos, sessions, primary_cwd: ctx.primaryCwd, cfg, last_config: loadReg(ctx).lastConfig ?? {}, agents, ssh_hosts: (loadReg(ctx).prefs?.sshHosts ?? []).map(publicSshHost) });
+    json(res, 200, { commands, skills: scanLocalSkills(ctx), playbooks: [], secrets: [], macros: [], repos, sessions, primary_cwd: ctx.primaryCwd, cfg, last_config: (loadReg(ctx).lastConfigAgent ?? "devin") === (wantAgent || "devin") ? (loadReg(ctx).lastConfig ?? {}) : {}, agents, ssh_hosts: (loadReg(ctx).prefs?.sshHosts ?? []).map(publicSshHost) });
     return true;
   }
 

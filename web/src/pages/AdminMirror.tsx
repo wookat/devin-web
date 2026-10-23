@@ -344,7 +344,7 @@ export default function AdminMirrorPage() {
     // cfgFetched only when the cache already carries a model group — otherwise
     // hold "…" until composer-meta returns the real agent config (no "Ultra"
     // flash on a model-less cached config).
-    if (isDraft) { setLocalCfg(lastSeenLocalCfg); setCfgFetched(lastSeenLocalCfg?.model != null); return }
+    if (isDraft) { const c = lastCfgByAgent.get(draftAgent) ?? null; setLocalCfg(c); setCfgFetched(c?.model != null); return }
     // Warm-start ONLY from this session's own cached config — never from a
     // different session the module-level cache happens to remember.
     setLocalCfg(lastSeenCfgBySid.get(id) ?? null, id)
@@ -361,11 +361,13 @@ export default function AdminMirrorPage() {
   // the mode/model pills show real values before any session exists (official
   // home shows the same pills on its new-session composer).
   useEffect(() => {
-    if (!isDraft || isVisitor || lastSeenLocalCfg) return
-    void adminFetch<ComposerMetaT>('/api/admin/composer-meta')
+    if (!isDraft || isVisitor) return
+    const cachedCfg = lastCfgByAgent.get(draftAgent)
+    if (cachedCfg) { setLocalCfg(cachedCfg); setCfgFetched(true); return }
+    void adminFetch<ComposerMetaT>(`/api/admin/composer-meta?agent=${draftAgent ?? ""}`)
       .then((m) => {
         setComposerMeta((prev) => prev ?? m)
-        if (!m.cfg || lastSeenLocalCfg) return
+        if (!m.cfg) return
         const cfg: LocalCfg = { ...m.cfg }
         const lc = m.last_config ?? {}
         if (lc.mode ?? lc._mode) cfg.mode = lc.mode ?? lc._mode ?? cfg.mode
@@ -377,11 +379,12 @@ export default function AdminMirrorPage() {
           }
         }
         lastSeenLocalCfg = cfg
+        lastCfgByAgent.set(draftAgent, cfg)
         setLocalCfg(cfg)
         setCfgFetched(true)
       })
       .catch(() => {})
-  }, [isDraft, isVisitor])
+  }, [isDraft, isVisitor, draftAgent])
   const chooseLocalOptions = (pairs: { configId: string; value: string }[]) => {
     setModeOpen(false); setSModeOpen(false)
     graduateTl.current?.() // config write is a real op — graduate first
@@ -399,7 +402,7 @@ export default function AdminMirrorPage() {
         ? { ...prev.model, current: modelHit.value, currentName: prev.model.options.find((o) => o.value === modelHit.value)?.name ?? modelHit.value }
         : prev.model
       const next = { ...prev, options, model, ...(modeHit ? { mode: modeHit.value } : {}) }
-      if (isDraft) lastSeenLocalCfg = next
+      if (isDraft) { lastSeenLocalCfg = next; lastCfgByAgent.set(draftAgent, next) }
       return next
     })
     if (isDraft) {

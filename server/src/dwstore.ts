@@ -69,6 +69,9 @@ interface DwRegistry {
   dashboards: Record<string, unknown>;
   /** Last model/mode/effort/speed picked — applied to new sessions. */
   lastConfig?: Record<string, string>;
+  /** Which agent lastConfig was journaled on — cross-agent picks must not
+   * overlay another agent's cfg on the draft composer. */
+  lastConfigAgent?: string;
   /** Server-side web preferences — unlike browser localStorage these
    * act even with no tab open (auto-resume runs on boot). */
   prefs?: { autoResume?: boolean; persona?: { mode?: string; webhook?: string; maxPerHour?: number }; sshHosts?: { name?: string; target: string; cwd?: string; auth?: "agent" | "password" | "key"; password?: string; keyPath?: string; passphrase?: string }[] };
@@ -186,9 +189,10 @@ function meta(ctx: ApiContext, id: string): DwSessionMeta {
 
 
 /** Last model/mode/effort/speed the user picked — applied to new sessions. */
-function noteLastUsed(ctx: ApiContext, configId: string, value: string) {
+function noteLastUsed(ctx: ApiContext, configId: string, value: string, agentId = "devin") {
   const r = loadReg(ctx);
   r.lastConfig = { ...(r.lastConfig ?? {}), [configId]: value };
+  r.lastConfigAgent = agentId;
   saveReg();
 }
 

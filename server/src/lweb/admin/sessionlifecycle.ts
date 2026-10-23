@@ -87,7 +87,7 @@ export async function handleSessionLifecycle(ctx: ApiContext, req: IncomingMessa
         echoTs: Date.now(),
       });
     }
-    noteLastUsed(ctx, isMode ? "mode" : configId, value);
+    noteLastUsed(ctx, isMode ? "mode" : configId, value, meta(ctx, id).agent ?? "devin");
     // Per-session stickiness: devin does not persist model across loads —
     // journal the pick on the session meta so sessionConfig can re-overlay
     // it after every refresh/restart instead of falling back to "high".
