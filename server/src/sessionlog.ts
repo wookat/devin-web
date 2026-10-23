@@ -285,7 +285,11 @@ export class SessionLog {
     this.folds.delete(fk);
     clearTimeout(f.timer);
     const merged = { ...f.base, content: { ...(f.base.content as Record<string, unknown> | undefined), text: f.texts.join("") } };
-    this.appendRaw(f.sid, merged);
+    // Dedup key = the FIRST chunk's key, not the joined text: pre-fold rows
+    // stored per-chunk keys so a replayed fold hits on chunk 1 and skips the
+    // whole message (one query instead of ~600), while folded rows replaying
+    // produce the same key symmetrically.
+    this.appendRaw(f.sid, merged, dedupKey(f.base));
   }
 
   private flushSessionFolds(sessionId: string) {
@@ -296,10 +300,10 @@ export class SessionLog {
     for (const [fk, f] of this.folds) if (fk.startsWith(sessionId + "|")) { clearTimeout(f.timer); this.folds.delete(fk); }
   }
 
-  private appendRaw(sessionId: string, update: Record<string, unknown>): boolean {
+  private appendRaw(sessionId: string, update: Record<string, unknown>, dedupOverride?: string): boolean {
     // Any append makes a previous "empty disk" hydrate verdict stale.
     this.hydrated.delete(sessionId);
-    const key = dedupKey(update);
+    const key = dedupOverride ?? dedupKey(update);
     // Replay-scoped dedup: while a session/load stream is arriving, an
     // update whose content key already sits in the store is a replayed
     // copy — skipped (and a stored `_local` optimistic row graduates to
