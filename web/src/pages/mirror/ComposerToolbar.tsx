@@ -75,6 +75,16 @@ function ComposerToolbar({ isVisitor, caps, uploading, upload, isDraft, openMent
   // Pill menus portal to body (the pill group clips overflow for collapse
   // measurement, so in-tree absolute menus would be cut off).
   const sModeBtnRef = useRef<HTMLButtonElement | null>(null)
+  // Shared pill-menu placement: right-anchored to the button, but clamped so
+  // the menu stays inside the viewport — the plain `right:` anchor let menus
+  // overflow off the left edge on narrow screens (and kissed the right edge
+  // with no margin). Width itself shrinks when the viewport can't fit it.
+  const pillMenu = (btn: HTMLElement, w: number) => {
+    const r = btn.getBoundingClientRect()
+    const width = Math.min(w, window.innerWidth - 16)
+    const right = Math.max(8, Math.min(window.innerWidth - r.right, window.innerWidth - 8 - width))
+    return { style: { bottom: window.innerHeight - r.top + 6, right, maxHeight: r.top - 14, width } as React.CSSProperties }
+  }
   const modelBtnRef = useRef<HTMLButtonElement | null>(null)
   const sendOptBtnRef = useRef<HTMLButtonElement | null>(null)
 
@@ -131,10 +141,10 @@ function ComposerToolbar({ isVisitor, caps, uploading, upload, isDraft, openMent
   // Model pill — toolbar right cluster (collapse tiers drive icon/text). The
   // menu is driven exclusively by the agent's advertised config: when no real
   // model group exists there is nothing to pick, so the pill hides instead of
-  // painting stale cloud capability rows; while the fetch is in flight it
-  // shows "…".
+  // painting stale cloud capability rows; while the fetch is in flight the
+  // pill simply isn't rendered (no "…" placeholder).
   const modelPillEl = (alwaysText: boolean) => {
-    if (cfgFetched && !localCfg?.model) return null
+    if (!cfgFetched || !localCfg?.model) return null
     const iconMode = !alwaysText && pillTier >= 1
     return (
       <div className="relative">
@@ -142,15 +152,15 @@ function ComposerToolbar({ isVisitor, caps, uploading, upload, isDraft, openMent
           ref={modelBtnRef}
           onClick={() => { setModeOpen((v) => !v); setSModeOpen(false) }}
           aria-label={t('composer.selectMode')}
-          title={modelPillLabel ?? (cfgFetched ? (VERSION_LABEL[pillVersion] ?? pillVersion) : '…')}
+          title={modelPillLabel ?? (VERSION_LABEL[pillVersion] ?? pillVersion)}
           className={cn('flex h-7 cursor-pointer items-center overflow-hidden whitespace-nowrap rounded-full text-[13px] leading-[18px] text-muted-foreground hover:bg-tint-secondary hover:text-foreground', iconMode ? 'size-7 justify-center' : 'max-w-[240px] gap-[3px] px-[6px]', modeOpen && 'bg-tint-secondary text-foreground')}
         >
           {iconMode && <Sparkles size={18} className="shrink-0" />}
-          {!iconMode && <span className="min-w-0 truncate">{modelPillLabel ?? (cfgFetched ? (VERSION_LABEL[pillVersion] ?? pillVersion) : '…')}</span>}
+          {!iconMode && <span className="min-w-0 truncate">{modelPillLabel ?? (VERSION_LABEL[pillVersion] ?? pillVersion)}</span>}
         </button>
         {modeOpen && <div className="fixed inset-0 z-10" onClick={() => setModeOpen(false)} />}
         {modeOpen && modelBtnRef.current && createPortal(
-          <div role="menu" style={{ bottom: window.innerHeight - modelBtnRef.current.getBoundingClientRect().top + 6, right: window.innerWidth - modelBtnRef.current.getBoundingClientRect().right, maxHeight: modelBtnRef.current.getBoundingClientRect().top - 14 }} className={cn('fixed z-50 flex flex-col overflow-hidden rounded-[10px] bg-[rgba(255,255,255,0.94)] shadow-[0_10px_15px_-3px_rgba(0,0,0,0.1),0_4px_6px_-2px_rgba(0,0,0,0.05)] outline outline-1 outline-black/[0.06] backdrop-blur-[8px] dark:bg-[#1f1f1f]/[0.94] dark:outline-white/[0.06] [transition:transform_40ms_cubic-bezier(0.76,0,0.24,1),scale_40ms_cubic-bezier(0.76,0,0.24,1),opacity_40ms_cubic-bezier(0.76,0,0.24,1)]', localCfg?.model ? 'w-[248px] max-h-[70vh]' : 'w-[220px]')}>
+          <div role="menu" {...pillMenu(modelBtnRef.current, localCfg?.model ? 248 : 220)} className={cn('menu-in fixed z-50 flex flex-col overflow-hidden rounded-[10px] bg-white/[.94] text-popover-foreground shadow-[0_10px_15px_-3px_rgba(0,0,0,0.1),0_4px_6px_-2px_rgba(0,0,0,0.05)] outline outline-1 outline-black/[.08] backdrop-blur-[8px] dark:bg-[#1f1f1f]/[.94] dark:outline-white/[.04] dark:-outline-offset-1', localCfg?.model && 'max-h-[70vh]')}>
             <div className={cn('min-h-0 flex-1', localCfg?.model ? 'overflow-y-auto' : 'overflow-hidden p-1')}>
             {localCfg?.model ? (
               <ModelPicker
@@ -247,7 +257,7 @@ function ComposerToolbar({ isVisitor, caps, uploading, upload, isDraft, openMent
                             <span className="ml-auto truncate text-[11px] text-muted-foreground">{localModeOpt?.name ?? localModeCurrent}</span>
                           </button>
                         )}
-                        {pillTier >= 2 && (!cfgFetched || localCfg?.model) && (
+                        {pillTier >= 2 && localCfg?.model && (
                           <button
                             role="menuitem"
                             onClick={() => { setAttachOpen(false); setModeOpen(true) }}
@@ -255,7 +265,7 @@ function ComposerToolbar({ isVisitor, caps, uploading, upload, isDraft, openMent
                           >
                             <Sparkles size={16} className="text-muted-foreground" />
                             Model
-                            <span className="ml-auto truncate text-[11px] text-muted-foreground">{modelPillLabel ?? (cfgFetched ? (VERSION_LABEL[pillVersion] ?? pillVersion) : '…')}</span>
+                            <span className="ml-auto truncate text-[11px] text-muted-foreground">{modelPillLabel ?? (VERSION_LABEL[pillVersion] ?? pillVersion)}</span>
                           </button>
                         )}
                         {pillTier >= 3 && detail?.session.context_usage?.used != null && detail.session.context_usage.size ? (
@@ -328,7 +338,7 @@ function ComposerToolbar({ isVisitor, caps, uploading, upload, isDraft, openMent
                   </button>
                   {sModeOpen && <div className="fixed inset-0 z-10" onClick={() => setSModeOpen(false)} />}
                   {sModeOpen && sModeBtnRef.current && createPortal(
-                    <div role="menu" style={{ bottom: window.innerHeight - sModeBtnRef.current.getBoundingClientRect().top + 6, right: window.innerWidth - sModeBtnRef.current.getBoundingClientRect().right, maxHeight: sModeBtnRef.current.getBoundingClientRect().top - 14 }} className="fixed z-50 flex w-[260px] flex-col overflow-hidden rounded-[10px] bg-[rgba(255,255,255,0.94)] shadow-[0_10px_15px_-3px_rgba(0,0,0,0.1),0_4px_6px_-2px_rgba(0,0,0,0.05)] outline outline-1 outline-black/[0.06] backdrop-blur-[8px] dark:bg-[#1f1f1f]/[0.94] dark:outline-white/[0.06]">
+                    <div role="menu" {...pillMenu(sModeBtnRef.current, 260)} className="menu-in fixed z-50 flex flex-col overflow-hidden rounded-[10px] bg-white/[.94] text-popover-foreground shadow-[0_10px_15px_-3px_rgba(0,0,0,0.1),0_4px_6px_-2px_rgba(0,0,0,0.05)] outline outline-1 outline-black/[.08] backdrop-blur-[8px] dark:bg-[#1f1f1f]/[.94] dark:outline-white/[.04] dark:-outline-offset-1">
                       <div className="min-h-0 flex-1 overflow-y-auto p-1">
                         <div className="px-2 py-[5px] text-[11px] font-medium uppercase tracking-wide text-muted-foreground">{localModeGroup.name ?? t('composer.sessionMode')}</div>
                         {localModeGroup.options!.map((opt) => {
@@ -438,7 +448,7 @@ function ComposerToolbar({ isVisitor, caps, uploading, upload, isDraft, openMent
                   </div>
                   {sendOptOpen && <div className="fixed inset-0 z-10" onClick={() => setSendOptOpen(false)} />}
                   {sendOptOpen && sendOptBtnRef.current && createPortal(
-                    <div role="menu" style={{ bottom: window.innerHeight - sendOptBtnRef.current.getBoundingClientRect().top + 6, right: window.innerWidth - sendOptBtnRef.current.getBoundingClientRect().right, maxHeight: sendOptBtnRef.current.getBoundingClientRect().top - 14 }} className="fixed z-50 w-[270px] overflow-y-auto rounded-[10px] bg-[rgba(255,255,255,0.94)] shadow-[0_10px_15px_-3px_rgba(0,0,0,0.1),0_4px_6px_-2px_rgba(0,0,0,0.05)] outline outline-1 outline-black/[0.06] backdrop-blur-[8px] dark:bg-[#1f1f1f]/[0.94] dark:outline-white/[0.06] [transition:transform_40ms_cubic-bezier(0.76,0,0.24,1),scale_40ms_cubic-bezier(0.76,0,0.24,1),opacity_40ms_cubic-bezier(0.76,0,0.24,1)]">
+                    <div role="menu" {...pillMenu(sendOptBtnRef.current, 270)} className="menu-in fixed z-50 overflow-y-auto rounded-[10px] bg-white/[.94] text-popover-foreground shadow-[0_10px_15px_-3px_rgba(0,0,0,0.1),0_4px_6px_-2px_rgba(0,0,0,0.05)] outline outline-1 outline-black/[.08] backdrop-blur-[8px] dark:bg-[#1f1f1f]/[.94] dark:outline-white/[.04] dark:-outline-offset-1">
                       <div className="p-1">
                         {/* Official More send options menu (sampled live): Add to queue · Ctrl ⏎; width w-[270px] per bundle */}
                         {/* Working-session escape: interrupts the live turn and
