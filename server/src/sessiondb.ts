@@ -150,6 +150,17 @@ export class SessionDb {
   private sScanPage;
   private sLastMsg;
   private sUpdEntry;
+  /** Write batching: every streamed chunk used to be its own autocommit —
+   *  fsync + WAL frame + native alloc churn per entry, which ballooned the
+   *  process arena (2GB RSS on a ~150MB heap). Appends queue here and land
+   *  in one transaction per ~120ms window; reads that need consistency
+   *  flush first, and pendByKey/pendSids keep the hot dedup/probe paths
+   *  correct without flushing. */
+  private pend: { sid: string; seq: number; gen: number; ts: number; kind: string; bytes: number; data: string; dedup: string | null }[] = [];
+  private pendOps: (() => void)[] = [];
+  private pendByKey = new Map<string, { seq: number; gen: number; ts: number; local: boolean }>();
+  private pendSids = new Set<string>();
+  private flushTimer: NodeJS.Timeout | null = null;
 
   constructor(file: string) {
     this.db = new DatabaseSync(file);
@@ -265,6 +276,32 @@ export class SessionDb {
     setInterval(() => {
       try { this.db.exec("PRAGMA wal_checkpoint(TRUNCATE)"); } catch { /* busy — next round */ }
     }, 60_000).unref();
+    // A kill mid-window must not strand queued writes — 'exit' runs them
+    // synchronously (better-sqlite3 calls are sync, safe in exit handlers).
+    process.once("exit", () => { try { this.flush(); } catch {} });
+  }
+
+  private armFlush() {
+    if (this.flushTimer) return;
+    this.flushTimer = setTimeout(() => this.flush(), 120);
+    this.flushTimer.unref();
+  }
+
+  /** Commit the queued write batch — one BEGIN/COMMIT for the whole window.
+   *  Called by the timer, by read paths needing consistency, and on exit. */
+  flush() {
+    if (this.flushTimer) { clearTimeout(this.flushTimer); this.flushTimer = null; }
+    if (!this.pend.length && !this.pendOps.length) return;
+    const rows = this.pend; this.pend = [];
+    const ops = this.pendOps; this.pendOps = [];
+    this.pendByKey.clear();
+    this.pendSids.clear();
+    try {
+      this.db.exec("BEGIN");
+      for (const r of rows) this.sInsEvent.run(r.sid, r.seq, r.gen, r.ts, r.kind, r.bytes, r.data, r.dedup);
+      for (const op of ops) op();
+      this.db.exec("COMMIT");
+    } catch { try { this.db.exec("ROLLBACK"); } catch {} }
   }
 
   private putBlob(text: string): string {
@@ -326,7 +363,10 @@ export class SessionDb {
    * their stored form may carry {$blob} refs. */
   append(sessionId: string, seq: number, gen: number, ts: number, update: Record<string, unknown>, dedup: string | null = null): Record<string, unknown> {
     const t = this.transform(update);
-    this.sInsEvent.run(sessionId, seq, gen, ts, String(update.sessionUpdate ?? ""), t.bytes, JSON.stringify(t.update), dedup);
+    this.pend.push({ sid: sessionId, seq, gen, ts, kind: String(update.sessionUpdate ?? ""), bytes: t.bytes, data: JSON.stringify(t.update), dedup });
+    this.pendSids.add(sessionId);
+    if (dedup) this.pendByKey.set(`${sessionId}|${dedup}`, { seq, gen, ts, local: update._local === true || update._local === 1 });
+    this.armFlush();
     return t.update;
   }
 
@@ -335,6 +375,8 @@ export class SessionDb {
    *  replayed authoritative twin can graduate them — hot path never parses
    *  row payloads. */
   dedupGet(sessionId: string, dedup: string): { seq: number; gen: number; ts: number; local: boolean } | null {
+    const p = this.pendByKey.get(`${sessionId}|${dedup}`);
+    if (p) return p; // queued row — authoritative, no flush needed
     const r = this.sDedupGet.get(sessionId, dedup) as { seq: number; gen: number; ts: number; loc: unknown } | undefined;
     if (!r) return null;
     return { seq: r.seq, gen: r.gen, ts: r.ts, local: r.loc === true || r.loc === 1 };
@@ -343,6 +385,7 @@ export class SessionDb {
   /** Rows still missing a content key — the lazy backfill feed for
    *  sessions whose history predates the dedup column. */
   *dedupRows(sessionId: string): Generator<{ seq: number; gen: number; data: string }> {
+    this.flush();
     let g = -1, q = -1;
     for (;;) {
       const rows = this.sDedupPage.all(sessionId, g, g, q, 2000) as { seq: number; gen: number; data: string }[];
@@ -352,7 +395,9 @@ export class SessionDb {
   }
 
   dedupSet(sessionId: string, gen: number, seq: number, dedup: string) {
-    this.sDedupSet.run(dedup, sessionId, gen, seq);
+    this.pendOps.push(() => this.sDedupSet.run(dedup, sessionId, gen, seq));
+    this.pendByKey.set(`${sessionId}|${dedup}`, { seq, gen, ts: 0, local: false });
+    this.armFlush();
   }
 
   /** Overwrite a stored row in place — the `_local` graduation path: a
@@ -360,10 +405,13 @@ export class SessionDb {
    *  same seq, so nothing shifts and no duplicate appears. */
   updateStored(sessionId: string, gen: number, seq: number, ts: number, update: Record<string, unknown>) {
     const t = this.transform(update);
-    this.sUpdEntry.run(ts, JSON.stringify(t.update), sessionId, gen, seq);
+    const data = JSON.stringify(t.update);
+    this.pendOps.push(() => this.sUpdEntry.run(ts, data, sessionId, gen, seq));
+    this.armFlush();
   }
 
   readAll(sessionId: string): StoredEntry[] {
+    this.flush();
     const rows = this.sAll.all(sessionId, sessionId) as { seq: number; ts: number; data: string }[];
     const out: StoredEntry[] = [];
     for (const r of rows) {
@@ -376,6 +424,7 @@ export class SessionDb {
    * memory rings; a full readAll on a near-million-row session blocks the
    * event loop for tens of seconds (supervisor then kills the backend). */
   readTail(sessionId: string, limit: number): StoredEntry[] {
+    this.flush();
     const rows = this.sTail.all(sessionId, sessionId, limit) as { seq: number; ts: number; data: string }[];
     const out: StoredEntry[] = [];
     for (let i = rows.length - 1; i >= 0; i--) {
@@ -388,6 +437,7 @@ export class SessionDb {
   /** Row-by-row generator — lets callers pull the full history in batches
    * and yield the event loop between them (deep backfill). */
   *each(sessionId: string): Generator<StoredEntry> {
+    this.flush();
     let after = -1;
     for (;;) {
       const rows = this.sPage.all(sessionId, sessionId, after, 2000) as { seq: number; ts: number; data: string }[];
@@ -400,27 +450,33 @@ export class SessionDb {
   }
 
   has(sessionId: string): boolean {
+    if (this.pendSids.has(sessionId)) return true; // queued-only session
+    this.flush();
     return this.sHas.get(sessionId) != null;
   }
 
   /** Max seq of the current gen — the resume point for seq assignment. */
   maxSeq(sessionId: string): number {
+    this.flush();
     const r = this.sMaxSeq.get(sessionId, sessionId) as { m: number | null } | undefined;
     return r?.m ?? -1;
   }
 
   maxSeqInGen(sessionId: string, gen: number): number {
+    this.flush();
     const r = this.sMaxSeqInGen.get(sessionId, gen) as { m: number | null } | undefined;
     return r?.m ?? -1;
   }
 
   /** Highest stored gen for the session (-1 when none) — the live slice. */
   maxGen(sessionId: string): number {
+    this.flush();
     const r = this.sMaxGen.get(sessionId) as { g: number } | undefined;
     return r?.g ?? -1;
   }
 
   maxTs(sessionId: string): number | null {
+    this.flush();
     const r = this.sMaxTs.get(sessionId) as { t: number | null } | undefined;
     return r?.t ?? null;
   }
@@ -428,28 +484,33 @@ export class SessionDb {
   /** Sum of ORIGINAL serialized event sizes — the true history weight,
    * unaffected by blob dedup. */
   totalBytes(sessionId: string): number {
+    this.flush();
     const r = this.sSumBytes.get(sessionId) as { b: number } | undefined;
     return r?.b ?? 0;
   }
 
   deleteSession(sessionId: string) {
+    this.flush();
     this.sDel.run(sessionId);
   }
 
   /** Drop one generation — failed-replay rollback: the previous gen's rows
    * immediately become visible again under the max-gen filter. */
   deleteGen(sessionId: string, gen: number) {
+    this.flush();
     this.sDelGen.run(sessionId, gen);
   }
 
   /** Successful replay commits — drop every older generation's rows. */
   deleteOlderGens(sessionId: string, gen: number) {
+    this.flush();
     this.sDelOlder.run(sessionId, gen);
   }
 
   /** Subagent-relevant rows of one generation in seq order — the DB-side
    * sidecar scan source (replaces byte-range file scans). */
   *scanRows(sessionId: string, gen: number, fromSeq: number, toSeq: number) {
+    this.flush();
     let after = fromSeq - 1;
     for (;;) {
       const rows = this.sScanPage.all(sessionId, gen, after, toSeq, 500) as { seq: number; ts: number; data: string }[];
@@ -461,6 +522,7 @@ export class SessionDb {
   /** Newest user/agent message assembled from the chunk tail — cheap enough
    *  for list views (one bounded DESC query, no ring hydration). */
   lastMessage(sessionId: string): { body: string; ts: number } | null {
+    this.flush();
     const rows = this.sLastMsg.all(sessionId, 600) as { ts: number; data: string }[];
     const updates: { ts: number; update: Record<string, unknown> }[] = [];
     for (const r of rows) {
@@ -492,6 +554,7 @@ export class SessionDb {
    * `eachLine(cb)` supplies the streaming line reader so a near-GB file
    * never materializes as one string. Returns the gen written. */
   importLines(sessionId: string, eachLine: (cb: (line: string) => void) => void): number {
+    this.flush(); // own BEGIN below must not nest inside the write batch
     const gen = this.maxGen(sessionId) + 1;
     let n = 0;
     this.db.exec("BEGIN");
@@ -525,6 +588,7 @@ export class SessionDb {
   /** Aggregate counters for the /api/admin/modules health surface — three
    * indexed COUNTs, cheap on a multi-GB db. */
   stats(): { sessions: number; events: number; blobs: number; storedBytes: number } {
+    this.flush();
     const g = (sql: string, col: string) =>
       Number((this.db.prepare(sql).get() as Record<string, unknown> | undefined)?.[col] ?? 0);
     return {
@@ -536,6 +600,7 @@ export class SessionDb {
   }
 
   close() {
+    this.flush();
     try { this.db.close(); } catch {}
   }
 }

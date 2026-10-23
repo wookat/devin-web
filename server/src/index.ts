@@ -437,6 +437,21 @@ httpServer.listen(PORT, HOST, async () => {
   }, 4000);
   startAutomations(ctx);
   resumeScans(ctx);
+  // RSS watchdog — native allocator retention (sqlite churn, buffers) can
+  // hold RSS far above the JS heap on Windows and never returns it. Past
+  // the cap, take the same graceful exit a restart uses: markGracefulExit
+  // journals broker offsets + open turns, the supervisor respawns cleanly.
+  const rssLimitMb = Number(process.env.DEVIN_WEB_RSS_LIMIT_MB ?? 1536);
+  if (rssLimitMb > 0) {
+    setInterval(() => {
+      const rss = process.memoryUsage().rss / 1048576;
+      if (rss > rssLimitMb) {
+        console.error(`[watchdog] rss ${Math.round(rss)}MB > ${rssLimitMb}MB — graceful restart for memory reclaim`);
+        try { markGracefulExit(); } catch {}
+        process.exit(0);
+      }
+    }, 60_000).unref();
+  }
   // One-time migration sweep: import every legacy .jsonl mirror into the
   // SQLite event store (per-file imports also fire lazily on first touch —
   // this just makes it eager so no session waits on a cold import later).
