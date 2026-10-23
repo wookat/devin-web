@@ -180,7 +180,7 @@ export async function handleNewSession(ctx: ApiContext, req: IncomingMessage, re
       shell: a.shell === true,
       custom: !!a.custom,
       enabled: !a.disabled,
-      installed: probe ? (await probeAgent(a)) : null,
+      check: probe ? (await agentCheck(a)) : null,
     })));
     json(res, 200, { agents: rows });
     return true;

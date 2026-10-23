@@ -56,9 +56,27 @@ export async function handleSessionLifecycle(ctx: ApiContext, req: IncomingMessa
       const prev = responseCfg.get(id);
       responseCfg.set(id, { ...(prev ?? {}), configOptions: (prev?.configOptions ?? []).map((o) => (o as { id?: string }).id === "model" ? { ...o, currentValue: value } : o), echoTs: Date.now() });
     }
-    // setSessionConfigOption returns the full refreshed configOptions — keep them.
+    // setSessionConfigOption returns a full configOptions snapshot — but a
+    // pick like "SWE-2 · max" posts model AND thought_level in parallel, and
+    // each echo carries EVERY group's currentValue from the moment that one
+    // write landed. Whichever response arrives last would clobber the other's
+    // fresh value (the pill then showed the stale "high" instead of "max").
+    // Merge instead of replace: the group we just set adopts the echo
+    // wholesale; untouched groups take only the echo's options refresh
+    // (thought_level re-advertises per-model levels when model changes)
+    // while keeping the currentValue we already believe.
     const ropts = (result as { configOptions?: ConfigOption[] } | null)?.configOptions;
-    if (ropts) responseCfg.set(id, { ...(responseCfg.get(id) ?? {}), configOptions: ropts, echoTs: Date.now() });
+    if (ropts) {
+      const prevOpts = responseCfg.get(id)?.configOptions ?? [];
+      const setId = isMode ? "mode" : configId;
+      const merged = ropts.map((g) => {
+        const p = prevOpts.find((x) => x.id === g.id);
+        if (!p) return g;
+        return g.id === setId ? { ...p, ...g } : { ...g, currentValue: p.currentValue };
+      });
+      const missing = prevOpts.filter((p) => !ropts.some((g) => g.id === p.id));
+      responseCfg.set(id, { ...(responseCfg.get(id) ?? {}), configOptions: [...merged, ...missing], echoTs: Date.now() });
+    }
     if (isMode) {
       const prev = responseCfg.get(id);
       // Update both layers: modes.currentModeId AND the configOptions

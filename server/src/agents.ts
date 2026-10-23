@@ -332,6 +332,13 @@ export async function agentCheck(agent: AgentDef): Promise<AgentCheck> {
     }
   } catch (err) {
     result.detail = err instanceof Error ? err.message : String(err);
+    // Version probe crashed (e.g. opencode's bun build exits 0xC0000409 on
+    // --version while `acp` works fine) — fall back to PATH resolution:
+    // present-but-uncooperative still counts as installed for pickers.
+    try {
+      const w = await execP((process.platform === "win32" ? "where " : "command -v ") + agent.command, { timeout: 5000 });
+      if (w.stdout.trim()) { result.installed = true; result.detail = "on PATH; version probe failed: " + result.detail; }
+    } catch { /* truly absent */ }
   }
   checkCache.set(agent.id, { at: Date.now(), result });
   return result;
