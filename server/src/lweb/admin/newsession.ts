@@ -156,7 +156,10 @@ export async function handleNewSession(ctx: ApiContext, req: IncomingMessage, re
     // session exists (same lastAgentCfg fallback sessionConfig uses).
     const wantAgent = url.searchParams.get("agent") ?? "";
     const ac = wantAgent ? agentCfg(wantAgent) : undefined;
-    const cfg = (ac && (ac.configOptions?.length || ac.modes) ? { options: ac.configOptions ?? null, modes: ac.modes } as unknown as ReturnType<typeof sessionConfig> : null) ?? sessionConfig(ctx, sessions[0]?.id ?? "");
+    const EMPTY_CFG = { options: null, mode: null, commands: [], model: null } as unknown as ReturnType<typeof sessionConfig>;
+    const cfg = wantAgent
+      ? (ac && (ac.configOptions?.length || ac.modes) ? { options: ac.configOptions ?? null, modes: ac.modes } as unknown as ReturnType<typeof sessionConfig> : EMPTY_CFG)
+      : sessionConfig(ctx, sessions[0]?.id ?? "");
     // Enabled agents for the draft picker's dropdown (disabled entries
     // stay hidden — their existing sessions still run via meta.agent).
     const checks = await Promise.all(listAgents().map(async (a) => [a, a.disabled ? null : await agentCheck(a)] as const));
