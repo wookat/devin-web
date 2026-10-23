@@ -175,12 +175,21 @@ function loadReg(ctx: ApiContext): DwRegistry {
   return reg!;
 }
 
-function saveReg() {
+let saveTimer: NodeJS.Timeout | null = null;
+function writeRegSync() {
   try {
     fs.mkdirSync(path.dirname(regFile), { recursive: true });
     fs.writeFileSync(regFile, JSON.stringify(reg));
   } catch { /* best-effort */ }
 }
+/** Coalesce bursts (replay meta updates write several fields per call) into
+ *  one disk flush; a process exit still flushes synchronously via 'exit'. */
+function saveReg() {
+  if (saveTimer) return;
+  saveTimer = setTimeout(() => { saveTimer = null; writeRegSync(); }, 300);
+  saveTimer.unref();
+}
+process.on("exit", () => { if (saveTimer) { saveTimer = null; writeRegSync(); } });
 
 function meta(ctx: ApiContext, id: string): DwSessionMeta {
   const r = loadReg(ctx);

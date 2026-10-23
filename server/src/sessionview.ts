@@ -34,7 +34,7 @@ export function sessionConfig(ctx: ApiContext, id: string): SessionConfig {
   // take option ids a newer event hasn't already covered — otherwise the
   // oldest logged update (e.g. the load-time push) would clobber fresh
   // setSessionConfigOption echoes stored in responseCfg.
-  const log = ctx.sessionLog.get(id);
+  const log = ctx.sessionLog.peek(id) ?? ctx.sessionLog.readDiskTail(id, 2000);
   const cfgCovered = new Set<string>();
   for (let i = log.length - 1; i >= 0; i--) {
     const u = log[i].update as Record<string, unknown>;
@@ -250,7 +250,28 @@ export interface ListedSession {
   agent?: string;
 }
 
-export async function listLocalSessions(ctx: ApiContext): Promise<ListedSession[]> {
+/** The listing costs a full paginated session/list RPC walk (hundreds of
+ *  sessions → several round-trips + a registry merge) while callers hit it
+ *  from every sidebar poll, admin list, composer-meta, and diagnose — often
+ *  several times per second. A 4s TTL + in-flight coalescing collapses
+ *  that to one refresh per window. */
+let listCache: { at: number; out: ListedSession[] } | null = null;
+let listInflight: Promise<ListedSession[]> | null = null;
+const LIST_TTL_MS = 4000;
+
+export function listLocalSessions(ctx: ApiContext): Promise<ListedSession[]> {
+  if (listCache && Date.now() - listCache.at < LIST_TTL_MS) return Promise.resolve(listCache.out);
+  listInflight ??= listLocalSessionsUncached(ctx)
+    .then((out) => { listCache = { at: Date.now(), out }; return out; })
+    .finally(() => { listInflight = null; });
+  return listInflight;
+}
+
+/** After a session create/archive/delete, drop the snapshot so the next
+ *  read rebuilds immediately instead of waiting out the TTL. */
+export function listLocalSessionsInvalidate() { listCache = null; }
+
+async function listLocalSessionsUncached(ctx: ApiContext): Promise<ListedSession[]> {
   const out: ListedSession[] = [];
   let dirty = false;
   try {

@@ -18,10 +18,8 @@ export function useShikiTokens(text: string, name: string, debounceMs = 0): Tok[
     const lang = LANGS[ext]
     if (!lang) { setLines(null); return }
     const run = () =>
-      import('shiki')
-        .then(({ codeToTokens }) =>
-          codeToTokens(text, { lang: lang as 'markdown', themes: { light: 'github-light', dark: 'github-dark' }, defaultColor: false }),
-        )
+      import('../lib/hl')
+        .then(({ codeTokens }) => codeTokens(text, lang))
         .then((r) => {
           if (dead) return
           setLines(r.tokens.map((l) => l.map((t) => {

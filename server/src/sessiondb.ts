@@ -208,6 +208,10 @@ export class SessionDb {
     ).get() != null;
     if (!hasDedupCol) this.db.exec("ALTER TABLE events ADD COLUMN dedup TEXT");
     this.db.exec("CREATE INDEX IF NOT EXISTS idx_events_dedup ON events(session_id,dedup)");
+    // (session_id,kind,seq) serves the lastMessage tail probe — without it
+    // a per-session message lookup scans every tool_call row since the last
+    // message, which on noisy sessions is thousands of rows per list poll.
+    this.db.exec("CREATE INDEX IF NOT EXISTS idx_events_kind ON events(session_id,kind,seq DESC)");
     this.db.exec("PRAGMA user_version=2");
     this.sInsEvent = this.db.prepare(
       "INSERT OR REPLACE INTO events(session_id,seq,gen,ts,kind,bytes,data,dedup) VALUES (?,?,?,?,?,?,?,?)",

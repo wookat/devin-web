@@ -22,6 +22,10 @@ export default defineConfig({
         // bulk of the bundle, xterm/dnd follow. App code stays in the entry.
         manualChunks(id: string) {
           if (!id.includes("node_modules")) return;
+          // Lang/theme registrations stay OUT of the shared chunk — they're
+          // dynamically imported per language in lib/hl.ts and must split so
+          // only the grammars actually used ever download.
+          if (/[\\/]@shikijs[\\/](langs|themes)[\\/]/.test(id)) return;
           if (id.includes("shiki") || id.includes("@shikijs") || id.includes("vscode-textmate") || id.includes("oniguruma")) return "shiki";
           if (id.includes("@xterm")) return "xterm";
           if (id.includes("@dnd-kit")) return "dnd";

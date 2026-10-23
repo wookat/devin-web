@@ -30,11 +30,8 @@ function CodeBlock({ code, lang }: { code: string; lang?: string }) {
     let dead = false
     const l = lang ? (LANG_ALIAS[lang.toLowerCase()] || lang.toLowerCase()) : ''
     if (!l || l === 'text') return
-    import('shiki')
-      .then(({ codeToTokens, bundledLanguages }) => {
-        if (!(l in bundledLanguages)) throw new Error('unknown lang')
-        return codeToTokens(text, { lang: l as 'markdown', themes: { light: 'github-light', dark: 'github-dark' }, defaultColor: false })
-      })
+    import('../lib/hl')
+      .then(({ codeTokens }) => codeTokens(text, l))
       .then((r) => {
         if (dead) return
         setHl({
