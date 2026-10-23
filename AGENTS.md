@@ -188,6 +188,12 @@ route code never changes.
 
 ## Gotchas
 
+- Dashboard push convention: agents write
+  `<cwd>/.devin-web-dashboard.json` ({title, widgets[]}; widget types in
+  scripts/dashboard-mcp.mjs TOOLS) — the session dashboard GET falls back to
+  that file when dw.json has no entry. The MCP wrapper
+  (scripts/dashboard-mcp.mjs) is opt-in via DEVIN_WEB_DASHBOARD_MCP=1;
+  the plain file write is the default path (no resident process).
 - Sessions' spawn-time cwd inside devin's store still says
   `devin-workbench-local` (the upstream project name) — `remapLegacyCwd()`
   (store.ts) rewrites that path segment on every `sessionCwd.set` +

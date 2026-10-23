@@ -12,16 +12,17 @@ import type { TerminalRunner } from "./terminal.js";
 import { DEFAULT_AGENT, agentCommandLine, type AgentDef } from "./agents.js";
 import { sshSpawn } from "./ssh.js";
 import { featureEnabled } from "./edition.js";
-import { noDashboardMcp } from "./env.js";
+import { dashboardMcpOn } from "./env.js";
 import { brokerEnabled, brokerSpawn, brokerAttach, brokerOnExit, type ProcHandle } from "./acpbroker.js";
 
 // Dashboard MCP: injected into every session/new so agents can push the
 // kanban (widgets) without the raw HTTP push API. Lives outside dist/, so
-// the path resolves off the compiled module's location. Kill-switch:
-// DEVIN_WEB_NO_DASHBOARD_MCP or a non-local edition flag.
+// the path resolves off the compiled module's location. Opt-IN via
+// DEVIN_WEB_DASHBOARD_MCP=1 — the plain file convention is the default
+// write path (no resident process, works on pre-existing sessions).
 const DASHBOARD_MCP = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..", "..", "scripts", "dashboard-mcp.mjs");
 function dashboardMcpServers(cwd: string): { name: string; command: string; args: string[]; env: { name: string; value: string }[] }[] {
-  if (!featureEnabled("dashboardMcp") || noDashboardMcp() || !existsSync(DASHBOARD_MCP)) return [];
+  if (!featureEnabled("dashboardMcp") || !dashboardMcpOn() || !existsSync(DASHBOARD_MCP)) return [];
   return [{ name: "devin-web-dashboard", command: process.execPath, args: [DASHBOARD_MCP], env: [{ name: "DEVIN_WEB_SESSION_CWD", value: cwd }] }];
 }
 
