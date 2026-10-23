@@ -275,7 +275,7 @@ async function ensureHandoffSession(ctx: ApiContext): Promise<string> {
     const acp = await ctx.manager.get(ctx.primaryCwd);
     const s = await acp.newSession(ctx.primaryCwd);
     ctx.sessionCwd.set(s.sessionId, ctx.primaryCwd);
-    captureLoadResponse(s.sessionId, s);
+    captureLoadResponse(s.sessionId, s, acp.agent?.id ?? "devin");
       markLoadedOn(s.sessionId, acp);
     const mm = meta(ctx, s.sessionId);
     mm.title = "🍴 Fork 交接"; mm.folder = ".persona";

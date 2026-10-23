@@ -51,7 +51,7 @@ async function doLoad(ctx: ApiContext, acp: DevinAcp, id: string, cwd: string): 
   const hasLog = ctx.sessionLog.get(id).length > 0;
   if (hasLog) ctx.sessionLog.beginDedupReplay(id);
   try {
-    captureLoadResponse(id, await loadWithRetry(acp, id, cwd));
+    captureLoadResponse(id, await loadWithRetry(acp, id, cwd), acp.agent?.id ?? "devin");
     // A successful reload rebuilt session state from the store — its
     // subagent registry is fresh: agents spawned before this moment have
     // no live handle even though their transcripts replay fine.

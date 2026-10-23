@@ -207,7 +207,7 @@ async function ensureReviewSession(ctx: ApiContext): Promise<string> {
     const acp = await ctx.manager.get(dir);
     const s = await acp.newSession(dir);
     ctx.sessionCwd.set(s.sessionId, dir);
-    captureLoadResponse(s.sessionId, s);
+    captureLoadResponse(s.sessionId, s, acp.agent?.id ?? "devin");
       markLoadedOn(s.sessionId, acp);
     const mm = meta(ctx, s.sessionId);
     mm.title = "🔍 PR review"; mm.folder = ".persona";

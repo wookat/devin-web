@@ -119,7 +119,7 @@ async function ensurePersonaSession(ctx: ApiContext): Promise<string> {
     const acp = await ctx.manager.get(cwd);
     const s = await acp.newSession(cwd);
     ctx.sessionCwd.set(s.sessionId, cwd);
-    captureLoadResponse(s.sessionId, s);
+    captureLoadResponse(s.sessionId, s, acp.agent?.id ?? "devin");
       markLoadedOn(s.sessionId, acp);
     const mm = meta(ctx, s.sessionId);
     mm.title = "🎭 分身"; mm.folder = ".persona";

@@ -109,7 +109,7 @@ async function runScan(ctx: ApiContext, scan: DwSecurityScan) {
       ctx.store.addAgentSession(s.sessionId, agent.id, scan.cwd);
     }
     ctx.sessionCwd.set(s.sessionId, remapLegacyCwd(scan.cwd));
-    captureLoadResponse(s.sessionId, s);
+    captureLoadResponse(s.sessionId, s, acp.agent?.id ?? "devin");
       markLoadedOn(s.sessionId, acp);
     const mm = meta(ctx, s.sessionId);
     mm.title = `🛡 ${scan.repo_name}`;

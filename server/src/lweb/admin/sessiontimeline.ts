@@ -267,7 +267,7 @@ async function ensureSidechat(ctx: ApiContext, id: string, anchorRaw: string): P
     const acp = await ctx.manager.get(cwd);
     const s = await acp.newSession(cwd);
     ctx.sessionCwd.set(s.sessionId, cwd);
-    captureLoadResponse(s.sessionId, s);
+    captureLoadResponse(s.sessionId, s, acp.agent?.id ?? "devin");
     markLoadedOn(s.sessionId, acp);
     const cm = meta(ctx, s.sessionId);
     cm.title = "💬 侧聊"; cm.folder = ".persona"; cm.hidden = true; cm.sidechatFor = id;
