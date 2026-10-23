@@ -72,6 +72,9 @@ export function initCfgState(dir: string) {
         ...(j.configOptions?.length ? { configOptions: j.configOptions } : {}),
         ...(j.modes ? { modes: j.modes } : {}),
       };
+      // Legacy top-level cfg predates the byAgent split — it was journaled by
+      // devin sessions only, so it seeds devin's slot until a load refreshes.
+      if (lastAgentCfg) cfgByAgent.set("devin", lastAgentCfg);
     }
     if (j.commands?.length) lastAgentCommands = j.commands;
     for (const [sid, c] of Object.entries(j.bySession ?? {})) if (c && typeof c === "object") responseCfg.set(sid, c);
