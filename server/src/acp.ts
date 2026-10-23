@@ -5,11 +5,25 @@ import { EventEmitter } from "node:events";
 import path from "node:path";
 import os from "node:os";
 import fs from "node:fs/promises";
+import { existsSync } from "node:fs";
+import { fileURLToPath } from "node:url";
 import * as acp from "@agentclientprotocol/sdk";
 import type { TerminalRunner } from "./terminal.js";
 import { DEFAULT_AGENT, agentCommandLine, type AgentDef } from "./agents.js";
 import { sshSpawn } from "./ssh.js";
+import { featureEnabled } from "./edition.js";
+import { noDashboardMcp } from "./env.js";
 import { brokerEnabled, brokerSpawn, brokerAttach, brokerOnExit, type ProcHandle } from "./acpbroker.js";
+
+// Dashboard MCP: injected into every session/new so agents can push the
+// kanban (widgets) without the raw HTTP push API. Lives outside dist/, so
+// the path resolves off the compiled module's location. Kill-switch:
+// DEVIN_WEB_NO_DASHBOARD_MCP or a non-local edition flag.
+const DASHBOARD_MCP = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..", "..", "scripts", "dashboard-mcp.mjs");
+function dashboardMcpServers(cwd: string): { name: string; command: string; args: string[]; env: { name: string; value: string }[] }[] {
+  if (!featureEnabled("dashboardMcp") || noDashboardMcp() || !existsSync(DASHBOARD_MCP)) return [];
+  return [{ name: "devin-web-dashboard", command: process.execPath, args: [DASHBOARD_MCP], env: [{ name: "DEVIN_WEB_SESSION_CWD", value: cwd }] }];
+}
 
 export interface DevinAcpEvents {
   onSessionUpdate: (sessionId: string, update: unknown) => void;
@@ -501,7 +515,7 @@ export class DevinAcp {
   }
 
   async newSession(cwd: string) {
-    return this.conn.newSession({ cwd, mcpServers: [] });
+    return this.conn.newSession({ cwd, mcpServers: dashboardMcpServers(cwd) });
   }
 
   /** True when the agent advertised `sessionCapabilities.fork` at initialize
@@ -518,7 +532,7 @@ export class DevinAcp {
   /** ACP `session/fork` — clone a session on the same process (unstable SDK
    *  surface; only call when supportsFork). */
   async forkSession(sessionId: string, cwd: string) {
-    return this.conn.unstable_forkSession({ sessionId, cwd, mcpServers: [] });
+    return this.conn.unstable_forkSession({ sessionId, cwd, mcpServers: dashboardMcpServers(cwd) });
   }
 
   async loadSession(sessionId: string, cwd: string) {
@@ -526,7 +540,7 @@ export class DevinAcp {
     // update — the desktop relies on cognition.ai/eventId (+ timestamp) to
     // anchor sidechain threads; without it they never appear.
     return this.conn.loadSession({
-      sessionId, cwd, mcpServers: [],
+      sessionId, cwd, mcpServers: dashboardMcpServers(cwd),
       update_meta: {
         "cognition.ai/eventId": true,
         "cognition.ai/timestamp": true,

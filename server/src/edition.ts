@@ -21,10 +21,12 @@ export type Feature =
   | "quotas"          // per-user usage limits
   | "audit"           // audit log + compliance exports
   | "adminKey"        // DEVIN_WEB_ADMIN_KEY gate on /api/admin/*
-  | "security" | "wiki" | "automations" | "persona" | "share";
+  | "security" | "wiki" | "automations" | "persona" | "share"
+  | "dashboardMcp";
 
 const EVERYTHING = {
   adminKey: true, security: true, wiki: true, automations: true, persona: true, share: true,
+  dashboardMcp: true,
 } satisfies Partial<Record<Feature, boolean>>;
 
 const FEATURES: Record<Edition, Partial<Record<Feature, boolean>>> = {

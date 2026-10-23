@@ -64,3 +64,8 @@ export function allowedHostsRaw(): string {
 export function acpBrokerSock(): string {
   return process.env.DEVIN_WEB_ACP_BROKER || "";
 }
+
+/** Opt-out of injecting the dashboard MCP server into new sessions. */
+export function noDashboardMcp(): boolean {
+  return !!process.env.DEVIN_WEB_NO_DASHBOARD_MCP;
+}

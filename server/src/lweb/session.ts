@@ -248,7 +248,15 @@ export const sessionSubs: Record<string, (ctx: ApiContext, id: string, req: Inco
     }
   },
   "dashboard:GET": async (ctx, id, _req, res) => {
-    json(res, 200, { dashboard: loadReg(ctx).dashboards[id] ?? null });
+    // dw.json entry wins; fall back to the workspace file the dashboard
+    // MCP server writes (<cwd>/.devin-web-dashboard.json).
+    let dashboard = loadReg(ctx).dashboards[id] ?? null;
+    if (!dashboard) {
+      try {
+        dashboard = JSON.parse(fs.readFileSync(path.join(cwdFor(ctx, id), ".devin-web-dashboard.json"), "utf8"));
+      } catch { /* no file board */ }
+    }
+    json(res, 200, { dashboard });
   },
 };
 sessionSubs["upload-stage:POST"] = sessionSubs["upload:POST"];
