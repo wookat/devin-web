@@ -1046,7 +1046,22 @@
     "wfTitle": "工作流：{{title}}",
     "wfRun": "工作流运行",
     "sharedVmTip": "没有独立会话——此 agent 作为子代理运行在编排会话的机器上，用量计入该会话",
-    "agentsSettled": "{{total}} 个代理中已结束 {{settled}} 个"
+    "agentsSettled": "{{total}} 个代理中已结束 {{settled}} 个",
+    "intro": "全量注册表——未安装的条目不出现在新会话选择器，但可在此接入或检查。",
+    "reprobe": "重新检查",
+    "custom": "自定义",
+    "disabledTag": "已停用",
+    "noProbe": "未检查",
+    "installed": "已安装",
+    "missing": "未安装",
+    "remove": "移除",
+    "addTitle": "添加自定义 agent",
+    "add_id": "id（唯一）",
+    "add_label": "显示名",
+    "add_command": "命令",
+    "add_args": "参数（空格分隔）",
+    "add": "添加",
+    "saved": "已保存"
   },
   "cp": {
     "timeline": "会话时间线",
@@ -1375,7 +1390,8 @@
       "cli": "Devin CLI",
       "service": "服务",
       "diag": "诊断",
-      "about": "关于"
+      "about": "关于",
+      "agents": "Agent 接入"
     },
     "tabDesc": {
       "preferences": "界面、会话与侧栏偏好",
@@ -1385,7 +1401,8 @@
       "cli": "Devin CLI 命令与云端隧道",
       "service": "服务状态、重启/构建、运行日志",
       "diag": "链路体检、模块与发送检查",
-      "about": "版本与构建信息"
+      "about": "版本与构建信息",
+      "agents": "ACP agent 注册表：安装检查、启用开关与自定义接入"
     },
     "hub": "总览",
     "hubDesc": "本地实例的全部设置项",

@@ -1045,7 +1045,22 @@
     "wfTitle": "Workflow: {{title}}",
     "wfRun": "Workflow run",
     "sharedVmTip": "No separate session — this agent runs as a subagent on the orchestrator session's machine and bills to it",
-    "agentsSettled": "{{settled}} of {{total}} agents settled"
+    "agentsSettled": "{{settled}} of {{total}} agents settled",
+    "intro": "Full registry — entries missing locally are hidden from the new-session picker but configurable here.",
+    "reprobe": "Re-probe",
+    "custom": "custom",
+    "disabledTag": "disabled",
+    "noProbe": "not probed",
+    "installed": "installed",
+    "missing": "not installed",
+    "remove": "Remove",
+    "addTitle": "Add a custom agent",
+    "add_id": "id (unique)",
+    "add_label": "label",
+    "add_command": "command",
+    "add_args": "args (space-separated)",
+    "add": "Add",
+    "saved": "Saved"
   },
   "cp": {
     "timeline": "Session timeline",
@@ -1374,7 +1389,8 @@
       "cli": "Devin CLI",
       "service": "Service",
       "diag": "Diagnostics",
-      "about": "About"
+      "about": "About",
+      "agents": "Agents"
     },
     "tabDesc": {
       "preferences": "Interface, session and sidebar preferences",
@@ -1384,7 +1400,8 @@
       "cli": "Devin CLI commands and cloud tunnels",
       "service": "Status, restart/rebuild, logs",
       "diag": "Chain doctor, module and send checks",
-      "about": "Version and build info"
+      "about": "Version and build info",
+      "agents": "ACP agent registry: install checks, enable toggles, custom entries"
     },
     "hub": "Overview",
     "hubDesc": "All settings for this local instance",

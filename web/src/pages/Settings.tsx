@@ -7,6 +7,7 @@ import { AccountsTab } from '@/pages/settings/AccountsSection'
 import { ResourcesTab } from '@/pages/settings/ResourcesSection'
 import { SshTab } from '@/pages/settings/SshSection'
 import { CliTab } from '@/pages/settings/CliSection'
+import { AgentsTab } from '@/pages/settings/AgentsSection'
 import { ServiceTab, AboutTab } from '@/pages/settings/ServiceSection'
 import { DiagTab } from '@/pages/settings/DiagSection'
 
@@ -39,6 +40,7 @@ const TABS: { key: string; group: 'personal' | 'instance'; cat: string; icon: Re
   { key: 'resources', group: 'instance', cat: 'resources', icon: <Boxes size={16} /> },
   { key: 'ssh', group: 'instance', cat: 'products', icon: <Server size={16} /> },
   { key: 'cli', group: 'instance', cat: 'products', icon: <SquareTerminal size={16} /> },
+  { key: 'agents', group: 'instance', cat: 'products', icon: <Boxes size={16} /> },
   { key: 'service', group: 'instance', cat: 'administration', icon: <Wrench size={16} /> },
   { key: 'diag', group: 'instance', cat: 'administration', icon: <Stethoscope size={16} /> },
   { key: 'about', group: 'instance', cat: 'organization', icon: <Info size={16} /> },
@@ -148,6 +150,8 @@ export default function Settings() {
             {tab === 'ssh' && <SshTab />}
 
             {tab === 'cli' && <CliTab />}
+
+            {tab === 'agents' && <AgentsTab />}
 
             {tab === 'service' && <ServiceTab setMsg={setPrefsMsg} />}
 
