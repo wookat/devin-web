@@ -10,7 +10,11 @@ import path from "node:path";
 import { fileURLToPath } from "node:url";
 import type { ApiContext } from "../../routes.js";
 import { isSupervised, noSupervisor } from "../../env.js";
-import { brokerEnabled } from "../../acpbroker.js";
+import { brokerEnabled, brokerList } from "../../acpbroker.js";
+import { sessionHost } from "../../sessionplace.js";
+import { listLocalSessions } from "../../sessionview.js";
+import { tlStats } from "../../dwtimeline.js";
+import os from "node:os";
 import { streamScreen, injectInput } from "../../screen.js";
 import { loadReg } from "../../dwstore.js";
 import { sendPreflight } from "../../sessionprompt.js";
@@ -270,6 +274,85 @@ export async function handleSystem(ctx: ApiContext, req: IncomingMessage, res: S
   if (p === "/api/admin/diagnose" && m === "GET") {
     const { diagnose } = await import("../../diagnose.js");
     json(res, 200, await diagnose(ctx));
+    return true;
+  }
+
+  // GET /api/admin/resources/system — the Settings → 资源 monitor: host OS
+  // totals, this backend's memory split, every devin-web process in the
+  // tree (supervisor/broker/backend/acp children — other-process RSS needs
+  // a WMI probe, ~300ms, only while the page polls), live session counts,
+  // per-session ring occupancy, and data-dir file sizes.
+  if (p === "/api/admin/resources/system" && m === "GET") {
+    const mb = (n: number) => Math.round((n / 1048576) * 10) / 10;
+    const mu = process.memoryUsage();
+    let procs: { pid: number; name: string; mb: number; role: string }[] = [];
+    try {
+      const out = await new Promise<string>((resolve) => {
+        const pr = spawn("powershell", ["-NoProfile", "-Command",
+          "Get-CimInstance Win32_Process -Filter \"Name='node.exe' or Name='devin.exe' or Name='opencode.exe'\" | Select-Object ProcessId,Name,WorkingSetSize,CommandLine | ConvertTo-Json -Compress"],
+          { windowsHide: true });
+        let buf = "";
+        const to = setTimeout(() => { try { pr.kill(); } catch {} }, 6000);
+        pr.stdout.on("data", (d) => { buf += d; });
+        pr.on("exit", () => { clearTimeout(to); resolve(buf); });
+        pr.on("error", () => { clearTimeout(to); resolve(""); });
+      });
+      const raw = JSON.parse(out || "[]");
+      const arr = Array.isArray(raw) ? raw : [raw];
+      for (const r of arr) {
+        const cmd = String(r.CommandLine ?? "");
+        let role = "other";
+        if (cmd.includes("supervisor.mjs")) role = "supervisor";
+        else if (cmd.includes("acp-broker.mjs")) role = "broker";
+        else if (cmd.includes("dist\\server\\index.js") || cmd.includes("dist/server/index.js")) role = "backend";
+        else if (/\sacp(\s|$)|--experimental-acp|--mode[ =]acp/.test(cmd)) role = "acp";
+        procs.push({ pid: Number(r.ProcessId), name: String(r.Name ?? "?"), mb: mb(Number(r.WorkingSetSize ?? 0)), role });
+      }
+      procs.sort((a, b) => b.mb - a.mb);
+    } catch { /* WMI probe failed — backend-only numbers still ship */ }
+    const broker = brokerEnabled ? await brokerList().catch(() => []) : [];
+    const sessPerAcp = new Map<string, number>();
+    for (const acp of sessionHost.values()) {
+      const k = acp.brokerId ?? `pid:${acp.pid}`;
+      sessPerAcp.set(k, (sessPerAcp.get(k) ?? 0) + 1);
+    }
+    const rssByPid = new Map(procs.map((p) => [p.pid, p.mb]));
+    const rings = ctx.sessionLog.stats();
+    const metas = loadReg(ctx).sessions;
+    const sessions = await listLocalSessions(ctx).catch(() => [] as Awaited<ReturnType<typeof listLocalSessions>>);
+    openTurnsLoad(ctx);
+    const size = (f: string) => { try { return fs.statSync(path.join(ctx.store.dataDir, f)).size; } catch { return 0; } };
+    json(res, 200, {
+      os: {
+        platform: `${os.platform()}/${os.arch()}`, cpus: os.cpus().length,
+        totalMb: mb(os.totalmem()), freeMb: mb(os.freemem()), usedMb: mb(os.totalmem() - os.freemem()),
+        loadAvg: os.loadavg(), uptimeSec: Math.round(os.uptime()),
+      },
+      backend: {
+        pid: process.pid, rssMb: mb(mu.rss), heapUsedMb: mb(mu.heapUsed), heapTotalMb: mb(mu.heapTotal),
+        externalMb: mb(mu.external), buffersMb: mb(mu.arrayBuffers ?? 0), uptimeSec: Math.round(process.uptime()),
+      },
+      procs,
+      acps: broker.map((a) => ({
+        acpId: a.acpId, pid: a.pid, mb: rssByPid.get(a.pid) ?? null, cwd: a.cwd,
+        key: a.key, account: a.account, exited: a.exited,
+        sessions: sessPerAcp.get(a.acpId) ?? 0,
+      })),
+      sessions: {
+        total: sessions.length,
+        loadedHere: sessionHost.size,
+        inflight: inflight.size,
+        openTurns: openTurns.size,
+        locked: sessions.filter((s) => s.locked).length,
+        rings: { sessions: rings.sessions, entries: rings.entries, hydrated: rings.hydrated },
+        tl: tlStats(),
+        topRings: rings.top.map((r) => ({ ...r, title: metas[r.id]?.title ?? null })),
+      },
+      dataDir: {
+        sessionlogDbMb: mb(size("sessionlog.db")), walMb: mb(size("sessionlog.db-wal")),
+        dwJsonKb: Math.round(size("dw.json") / 1024),
+      },
+    });
     return true;
   }
   if (p === "/api/admin/repair" && m === "POST") {

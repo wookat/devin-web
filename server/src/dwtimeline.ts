@@ -746,8 +746,16 @@ function snippet(items: DwItem[]): string {
 }
 
 
+/** Timeline cache occupancy — each held session keeps its built item array;
+ *  surfaced on the resources page so retention is visible. */
+function tlStats() {
+  let items = 0;
+  for (const st of tlCache.values()) items += st.items.length;
+  return { sessions: tlCache.size, items };
+}
+
 export {
   type FileUpdate, type DwItem, type TlState,
-  buildTimelineFrom, buildTimeline, noteUpdate, tlCache, tlReset,
+  buildTimelineFrom, buildTimeline, noteUpdate, tlCache, tlReset, tlStats,
   buildMessages, snippet,
 };

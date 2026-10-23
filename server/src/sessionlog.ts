@@ -436,11 +436,17 @@ export class SessionLog {
     return this.logs.get(sessionId) ?? null;
   }
 
-  /** Ring occupancy for the diagnose memory panel. */
+  /** Ring occupancy for the diagnose memory panel + the resources page's
+   *  per-session footprint table (top rings first). */
   stats() {
     let entries = 0;
-    for (const l of this.logs.values()) entries += l.length;
-    return { sessions: this.logs.size, entries, hydrated: this.hydrated.size };
+    const perSession: { id: string; entries: number }[] = [];
+    for (const [id, l] of this.logs) {
+      entries += l.length;
+      if (l.length) perSession.push({ id, entries: l.length });
+    }
+    perSession.sort((a, b) => b.entries - a.entries);
+    return { sessions: this.logs.size, entries, hydrated: this.hydrated.size, top: perSession.slice(0, 15) };
   }
 
   /** Newest user/agent message text for list views — the db path is one
