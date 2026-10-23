@@ -61,6 +61,103 @@ export const AGENTS: Record<string, AgentDef> = {
     multiSession: false,
     versionArgs: ["--version"],
   },
+  // ── Third-party ACP CLIs ──────────────────────────────────────────────
+  // npm-installed CLIs are .cmd/.ps1 shims on Windows → shell: true.
+  // multiSession: false — one process per session until pooling is proven.
+  // Wrong/absent binaries surface through the agentCheck probe; per-user
+  // overrides land in <dataDir>/agents.json (same fields).
+  opencode: {
+    id: "opencode",
+    label: "OpenCode",
+    command: "opencode",
+    args: ["acp"],
+    multiSession: false,
+    versionArgs: ["--version"],
+    shell: true,
+  },
+  codex: {
+    id: "codex",
+    label: "Codex",
+    command: "codex",
+    args: ["acp"],
+    multiSession: false,
+    versionArgs: ["--version"],
+    shell: true,
+  },
+  claude: {
+    id: "claude",
+    label: "Claude Code",
+    command: "claude-code-acp",
+    args: [],
+    multiSession: false,
+    versionArgs: ["--version"],
+    shell: true,
+  },
+  gemini: {
+    id: "gemini",
+    label: "Gemini CLI",
+    command: "gemini",
+    args: ["--experimental-acp"],
+    multiSession: false,
+    versionArgs: ["--version"],
+    shell: true,
+  },
+  qwen: {
+    id: "qwen",
+    label: "Qwen Code",
+    command: "qwen",
+    args: ["--experimental-acp"],
+    multiSession: false,
+    versionArgs: ["--version"],
+    shell: true,
+  },
+  kimi: {
+    id: "kimi",
+    label: "Kimi",
+    command: "kimi",
+    args: ["acp"],
+    multiSession: false,
+    versionArgs: ["--version"],
+    shell: true,
+  },
+  goose: {
+    id: "goose",
+    label: "Goose",
+    command: "goose",
+    args: ["acp"],
+    multiSession: false,
+    versionArgs: ["--version"],
+    shell: true,
+  },
+  // Command names below are best-known-but-unverified on this machine —
+  // agentCheck reports install/auth status honestly either way.
+  zcode: {
+    id: "zcode",
+    label: "Z Code",
+    command: "zcode",
+    args: ["acp"],
+    multiSession: false,
+    versionArgs: ["--version"],
+    shell: true,
+  },
+  deepseek: {
+    id: "deepseek",
+    label: "DeepSeek",
+    command: "deepseek",
+    args: ["acp"],
+    multiSession: false,
+    versionArgs: ["--version"],
+    shell: true,
+  },
+  harness: {
+    id: "harness",
+    label: "Harness",
+    command: "harness",
+    args: ["acp"],
+    multiSession: false,
+    versionArgs: ["--version"],
+    shell: true,
+  },
 };
 
 export const DEFAULT_AGENT = AGENTS.devin;
