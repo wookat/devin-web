@@ -606,7 +606,9 @@ const WorkGroup = memo(function WorkGroup({ items, seconds, sessionId, mt, defau
     ? new Date(firstTs).toLocaleTimeString(undefined, { hour: 'numeric', minute: '2-digit' }).replace(/ [AP]M$/, '')
     : ''
   return (
-    <div className="group/wg relative pb-5">
+    // my-2.5: symmetric gap — was pb-5 (20px bottom, 0 top), which left the
+    // space below a work group visibly larger than above it.
+    <div className="group/wg relative my-2.5">
       <div className="wg-time-host relative">
       <div
         onClick={() => setOpen(!open)}

@@ -2,7 +2,8 @@ import { useCallback, useEffect, useRef, useState } from 'react'
 import { useTranslation } from 'react-i18next'
 import { createPortal } from 'react-dom'
 import { useNavigate } from 'react-router-dom'
-import { ChevronRight, Check, ArrowUpRight, Square, Link2, X, RotateCcw, Laptop, Folder as FolderIcon, Pencil, Share2, GitFork } from 'lucide-react'
+import { ChevronRight, Check, ArrowUpRight, Square, Link2, X, RotateCcw, Laptop, Folder as FolderIcon, Pencil, Share2, GitFork, Clock } from 'lucide-react'
+import { fmtWorkedDur } from '@/components/Timeline'
 import { OArchive } from '../../components/officialIcons'
 import { adminFetch, type AdminSession } from '@/lib/api'
 import { Combo } from '@/components/ui'
@@ -17,7 +18,7 @@ const settingsSeparatorCls = 'mx-2 h-[9px] bg-border bg-clip-content py-1'
 /* Header gear menu — session-scoped actions only (app prefs live in
  * /settings, service ops in the sidebar org menu / LocalDock gear). Owns the
  * whole open/sub-menu/position state cluster. */
-function SessionMenu({ detail, id, isSub, isDevinSession, current, treeNode, folderOrder, userMsgCount, reloadDetail, loadTree, onControlMsg }: {
+function SessionMenu({ detail, id, isSub, isDevinSession, current, treeNode, folderOrder, userMsgCount, reloadDetail, loadTree, onControlMsg, workSecs }: {
   detail: SessionDetail | null
   id: string
   isSub: boolean
@@ -28,6 +29,7 @@ function SessionMenu({ detail, id, isSub, isDevinSession, current, treeNode, fol
   userMsgCount: number
   reloadDetail: () => void
   loadTree: () => void
+  workSecs: number
   onControlMsg: (msg: string) => void
 }) {
   const { t } = useTranslation()
@@ -106,6 +108,12 @@ function SessionMenu({ detail, id, isSub, isDevinSession, current, treeNode, fol
           {/* Session-scoped actions only — app prefs live in /settings,
               service ops in the sidebar org menu / LocalDock gear. */}
           <div className="p-1">
+          {workSecs > 0 && (
+            <div className="flex w-full select-none items-center gap-2 rounded-[6px] px-2 py-1.5 text-muted-foreground [&>svg]:mx-px [&>svg]:size-4 [&>svg]:shrink-0">
+              <Clock /> {t('menu.workTime')}
+              <span className="ml-auto tabular-nums">{fmtWorkedDur(workSecs * 1000)}</span>
+            </div>
+          )}
           {settingsSub === 'rename' ? (
             <input
               autoFocus

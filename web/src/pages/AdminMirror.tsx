@@ -40,6 +40,9 @@ import { TabStrip } from './mirror/TabStrip'
 import { FindInSession } from './mirror/FindInSession'
 
 let lastSeenLocalCfg: LocalCfg | null = null
+/** cfg cache per agent — switching the draft picker must show THAT
+ *  agent's models/modes, not whatever the last session echoed. */
+const lastCfgByAgent = new Map<string, LocalCfg>()
 // Per-session cfg cache — session A's config must never warm-start session B
 // (module-level sharing was the "previous model / Ultra" flash on navigation).
 const lastSeenCfgBySid = new Map<string, LocalCfg>()
@@ -543,6 +546,10 @@ export default function AdminMirrorPage() {
   const [editingQ, setEditingQ] = useState<string | null>(null)
   const editingQRef = useRef<string | null>(null)
   useEffect(() => { editingQRef.current = editingQ }, [editingQ])
+  // Queue is per-session server-side — drop the previous session's snapshot on
+  // id switch so its band never bleeds into the next session before the first
+  // timeline poll lands.
+  useEffect(() => { setQueued([]); setEditingQ(null) }, [id])
   const [composerMeta, setComposerMeta] = useState<ComposerMetaT | null>(null)
   // Official draft precheck (POST /api/devin-coach/precheck, debounced on composer
   // changes with a stable per-mount draft_id); findings drive the coach hint row.
@@ -890,8 +897,9 @@ export default function AdminMirrorPage() {
   } = useSessionTreeData({ isVisitor, isDraft, id, booted })
   const unreadSessions = useMemo(() => tree.filter((s) => s.is_unread), [tree])
   // "Recent" dirs for the draft workspace picker = cwds of existing sessions
-  // (tree order is already most-recently-updated first).
-  const recentCwds = useMemo(() => [...new Set(tree.map((s) => s.cwd).filter((c): c is string => !!c))].slice(0, 8), [tree])
+  // (tree order is already most-recently-updated first). SSH sessions carry
+  // remote paths — exclude them from the local dir list.
+  const recentCwds = useMemo(() => [...new Set(tree.filter((s) => !s.ssh).map((s) => s.cwd).filter((c): c is string => !!c))].slice(0, 8), [tree])
   const registering = useRef(false)
   const openTreeSession = useCallback(async (s: MirrorTreeSession) => {
     if (window.innerWidth < 768) setSidebar(false)
@@ -2412,7 +2420,12 @@ const groups = useMemo(() => groupItems(allItems, sessionWorking), [allItems, se
               userTookOver.current = true
             }
           }}
-          className={cn('flex min-h-0 flex-1 flex-col overflow-y-auto px-4 pt-[20px] @[448px]/chat-pane:px-6', effShowPanel && 'max-md:hidden', isDraft && 'hidden')}
+          // scrollbar-gutter both-edges: a classic (layout) scrollbar eats
+          // the RIGHT side of the content box only, leaving the column
+          // off-center vs the page (left pad < right pad+bar). both-edges
+          // reserves a matching gutter on the left so the visible side
+          // margins stay equal; overlay scrollbars (touch) reserve 0.
+          className={cn('flex min-h-0 flex-1 flex-col overflow-y-auto px-4 pt-[20px] @[448px]/chat-pane:px-6 [scrollbar-gutter:stable_both-edges]', effShowPanel && 'max-md:hidden', isDraft && 'hidden')}
         >
           {connLost && (
             <div className="sticky top-0 z-10 mx-auto mb-2 w-fit rounded-full border border-amber-500/30 bg-amber-500/10 px-3 py-1 text-[12px] leading-[16px] text-amber-600 dark:text-amber-400">

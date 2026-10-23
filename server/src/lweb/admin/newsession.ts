@@ -13,7 +13,7 @@ import { sessionConfig, sessionStatus, listLocalSessions } from "../../sessionvi
 import { dispatchPrompt } from "../../sessionprompt.js";
 import {markLoadedOn } from "../../sessionplace.js";
 import { isDraining } from "../../sessionlive.js";
-import { captureLoadResponse } from "../../sessioncfg.js";
+import { captureLoadResponse, agentCfg } from "../../sessioncfg.js";
 import { agentById, listAgents, probeAgent, saveUserAgents } from "../../agents.js";
 import { publicSshHost } from "../../ssh.js";
 import { json, readJson } from "../../httputil.js";
@@ -76,7 +76,7 @@ export async function handleNewSession(ctx: ApiContext, req: IncomingMessage, re
     }
     ctx.sessionCwd.set(s.sessionId, ssh ? cwd : remapLegacyCwd(cwd));
     if (ssh) ctx.sessionSsh.set(s.sessionId, ssh);
-    captureLoadResponse(s.sessionId, s);
+    captureLoadResponse(s.sessionId, s, agent.id);
         // Pin the owning process or the next prompt re-loads onto a pooled
     // acp and devin rejects it ("already open in another process").
     markLoadedOn(s.sessionId, acp);
@@ -109,10 +109,28 @@ export async function handleNewSession(ctx: ApiContext, req: IncomingMessage, re
   }
 
   if (p === "/api/admin/composer-meta" && m === "GET") {
-    const sessions = (await listLocalSessions(ctx)).slice(0, 30).map((s) => ({ id: s.id, title: s.title, snippet: "" }));
+    const listed = await listLocalSessions(ctx);
+    const sessions = listed.slice(0, 30).map((s) => ({ id: s.id, title: s.title, snippet: "" }));
     // slash commands + repos from any currently-loaded session's config
     let commands: { command: string; description: string; hint?: string }[] = [];
-    const repos = (ctx.store.workspaces() ?? []).map((w) => ({ name: String(w).split(/[\\/]/).pop() || String(w), org: String(w) }));
+    // Workspace dirs — feeds the @工作区 mention, the draft dir picker's
+    // 项目 group, and the scan dialog's cwd dropdown. Derived live: cwds of
+    // known sessions (MRU by updated, ssh remotes excluded) unioned with
+    // the legacy dw.json workspaces list — its only writer is the old
+    // POST /api/sessions route, so session dirs are the reliable source.
+    const reg = loadReg(ctx);
+    const seenDir = new Set<string>();
+    const normDir = (w: string) => w.replace(/[\\/]+/g, "/").replace(/\/+$/, "").toLowerCase();
+    const repos = [
+      ...listed
+        .filter((s) => !reg.sessions[s.id]?.ssh)
+        .sort((a, b) => (b.updated || "").localeCompare(a.updated || ""))
+        .map((s) => s.cwd),
+      ...(ctx.store.workspaces() ?? []),
+    ]
+      .filter((w) => !!w && !seenDir.has(normDir(w)) && (seenDir.add(normDir(w)), true))
+      .slice(0, 50)
+      .map((w) => ({ name: String(w).replace(/[\\/]+$/, "").split(/[\\/]/).pop() || String(w), org: String(w) }));
     // best-effort: pull commands from the most recently-active logged session
     let newest = 0;
     for (const s of sessions) {
@@ -136,7 +154,9 @@ export async function handleNewSession(ctx: ApiContext, req: IncomingMessage, re
     // Draft-page cfg: agent-level modes/configOptions/model so the
     // /admin/new composer shows the real mode+model pills before any
     // session exists (same lastAgentCfg fallback sessionConfig uses).
-    const cfg = sessionConfig(ctx, sessions[0]?.id ?? "");
+    const wantAgent = url.searchParams.get("agent") ?? "";
+    const ac = wantAgent ? agentCfg(wantAgent) : undefined;
+    const cfg = (ac && (ac.configOptions?.length || ac.modes) ? { options: ac.configOptions ?? null, modes: ac.modes } as unknown as ReturnType<typeof sessionConfig> : null) ?? sessionConfig(ctx, sessions[0]?.id ?? "");
     // Enabled agents for the draft picker's dropdown (disabled entries
     // stay hidden — their existing sessions still run via meta.agent).
     const agents = listAgents().filter((a) => !a.disabled).map((a) => ({ id: a.id, label: a.label }));

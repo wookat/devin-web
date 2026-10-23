@@ -121,9 +121,9 @@ export default function ModelPicker({ model, effortGroup, speedGroup, extraGroup
   const [pins, setPins] = useState<string[]>(() => readList(PINS_KEY))
   const [recent, setRecent] = useState<string[]>(() => readList(RECENT_KEY))
   const [hover, setHover] = useState<Row | null>(null)
-  const [detailPos, setDetailPos] = useState<{ left: number; top: number } | null>(null)
+  const [detailPos, setDetailPos] = useState<{ left: number; top: number; width: number } | null>(null)
   const [effortMenu, setEffortMenu] = useState(false)
-  const [grpSub, setGrpSub] = useState<{ id: string; left: number; top: number } | null>(null)
+  const [grpSub, setGrpSub] = useState<{ id: string; left: number; top: number; width: number } | null>(null)
   const leaveTimer = useRef<ReturnType<typeof setTimeout> | null>(null)
   const cancelLeave = () => { if (leaveTimer.current) { clearTimeout(leaveTimer.current); leaveTimer.current = null } }
   const scheduleLeave = () => { cancelLeave(); leaveTimer.current = setTimeout(() => { setHover(null); setEffortMenu(false) }, 120) }
@@ -198,12 +198,19 @@ export default function ModelPicker({ model, effortGroup, speedGroup, extraGroup
   const restRows = famRows.filter((r) => !pins.includes(pinOf(r)) && !recentRows.includes(r) && match(r))
   const topFiltered = topRows.filter(match)
 
+  // Side-panel placement shared by the hover detail card and the group
+  // submenu: opens to the row's right, flipping left when it would overflow
+  // the viewport (mobile widths can't fit a right-side card at all).
+  const sidePos = (r: DOMRect, w: number) => ({
+    left: r.right + 6 + w <= window.innerWidth - 8 ? r.right + 6 : Math.max(8, r.left - 6 - w),
+    width: Math.min(w, window.innerWidth - 16),
+  })
   const openDetail = (row: Row, el: HTMLElement) => {
     cancelLeave()
     const r = el.getBoundingClientRect()
     setHover(row)
     setEffortMenu(false)
-    setDetailPos({ left: r.right + 6, top: Math.min(r.top - 6, Math.max(8, window.innerHeight - 380)) })
+    setDetailPos({ ...sidePos(r, 240), top: Math.min(r.top - 6, Math.max(8, window.innerHeight - 380)) })
   }
 
   const Section = ({ title, rows }: { title: string; rows: Row[] }) => rows.length === 0 ? null : (
@@ -239,7 +246,9 @@ export default function ModelPicker({ model, effortGroup, speedGroup, extraGroup
       <div className="flex items-center gap-2 border-b border-border/60 px-2.5 py-2">
         <Search size={14} className="shrink-0 text-muted-foreground" />
         <input
-          autoFocus
+          // Keyboard pop on touch devices must not fire just for opening
+          // the picker — only autofocus where a real keyboard exists.
+          autoFocus={typeof matchMedia === 'function' && matchMedia('(pointer:fine)').matches}
           value={q}
           onChange={(e) => setQ(e.target.value)}
           placeholder={t('composer.mdlSearch')}
@@ -269,7 +278,7 @@ export default function ModelPicker({ model, effortGroup, speedGroup, extraGroup
               const cur = String(o.currentValue ?? '')
               const curName = o.options!.find((x) => x.value === cur)?.name ?? cur
               return (
-                <div key={gid} onMouseEnter={(e) => { setHover(null); const r = e.currentTarget.getBoundingClientRect(); setGrpSub({ id: gid, left: r.right + 6, top: r.top - 4 }) }} onMouseLeave={() => setGrpSub(null)}>
+                <div key={gid} onMouseEnter={(e) => { setHover(null); const r = e.currentTarget.getBoundingClientRect(); setGrpSub({ id: gid, ...sidePos(r, 200), top: r.top - 4 }) }} onMouseLeave={() => setGrpSub(null)}>
                   <div role="menuitem" className="flex h-8 w-full cursor-pointer select-none items-center gap-2 rounded-[7px] px-2 text-[13px] hover:bg-tint-secondary">
                     <span className="flex size-4 shrink-0 items-center justify-center text-muted-foreground"><SlidersHorizontal size={13} /></span>
                     <span className="shrink-0">{o.name ?? gid}</span>
@@ -277,7 +286,7 @@ export default function ModelPicker({ model, effortGroup, speedGroup, extraGroup
                     <ChevronDown size={13} className="shrink-0 -rotate-90 text-muted-foreground" />
                   </div>
                   {grpSub?.id === gid && createPortal(
-                    <div role="menu" onMouseEnter={() => setGrpSub(grpSub)} onMouseLeave={() => setGrpSub(null)} style={{ left: grpSub.left, top: grpSub.top }} className="fixed z-50 w-[200px] overflow-y-auto rounded-[10px] bg-[rgba(255,255,255,0.96)] p-1 shadow-[0_10px_15px_-3px_rgba(0,0,0,0.1),0_4px_6px_-2px_rgba(0,0,0,0.05)] outline outline-1 outline-black/[0.06] backdrop-blur-[8px] dark:bg-[#1f1f1f]/[0.96] dark:outline-white/[0.06]">
+                    <div role="menu" onMouseEnter={() => setGrpSub(grpSub)} onMouseLeave={() => setGrpSub(null)} style={{ left: grpSub.left, top: grpSub.top, width: grpSub.width }} className="fixed z-50 overflow-y-auto rounded-[10px] bg-[rgba(255,255,255,0.96)] p-1 shadow-[0_10px_15px_-3px_rgba(0,0,0,0.1),0_4px_6px_-2px_rgba(0,0,0,0.05)] outline outline-1 outline-black/[0.06] backdrop-blur-[8px] dark:bg-[#1f1f1f]/[0.96] dark:outline-white/[0.06]">
                       {o.options!.map((opt) => (
                         <button key={opt.value} role="menuitemradio" aria-checked={cur === opt.value} onClick={() => onPick(gid, opt.value)} className="flex h-[30px] w-full cursor-pointer select-none items-center gap-2 rounded-[6px] px-2 py-[5px] text-[13px] outline-none hover:bg-tint-secondary">
                           <span className="flex h-4 w-[18px] shrink-0 items-center justify-center text-muted-foreground">{cur === opt.value && <Check size={14} />}</span>
@@ -297,8 +306,8 @@ export default function ModelPicker({ model, effortGroup, speedGroup, extraGroup
         <div
           onMouseEnter={cancelLeave}
           onMouseLeave={scheduleLeave}
-          style={{ left: detailPos.left, top: detailPos.top }}
-          className="fixed z-50 w-[240px] rounded-[12px] bg-[rgba(255,255,255,0.96)] p-3 shadow-[0_10px_15px_-3px_rgba(0,0,0,0.1),0_4px_6px_-2px_rgba(0,0,0,0.05)] outline outline-1 outline-black/[0.06] backdrop-blur-[8px] dark:bg-[#1f1f1f]/[0.96] dark:outline-white/[0.06]"
+          style={{ left: detailPos.left, top: detailPos.top, width: detailPos.width }}
+          className="fixed z-50 rounded-[12px] bg-[rgba(255,255,255,0.96)] p-3 shadow-[0_10px_15px_-3px_rgba(0,0,0,0.1),0_4px_6px_-2px_rgba(0,0,0,0.05)] outline outline-1 outline-black/[0.06] backdrop-blur-[8px] dark:bg-[#1f1f1f]/[0.96] dark:outline-white/[0.06]"
         >
           <div className="flex items-start justify-between gap-2">
             <div className="min-w-0">

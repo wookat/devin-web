@@ -26,6 +26,8 @@ interface MirrorTreeSession {
   tags?: string[]
   keep_alive_until?: string
   cwd?: string | null
+  /** SSH-hosted session — cwd is a path on the remote host, not local. */
+  ssh?: string | null
   created_at?: string | null
   /** devin `_meta` lock: some acp holds the session open. Harmless when
    *  `loaded_here` (this web is the holder); otherwise another app. */

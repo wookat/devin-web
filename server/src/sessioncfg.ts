@@ -100,7 +100,12 @@ function persistAgentCfg() {
   });
 }
 
-export function captureLoadResponse(id: string, r: unknown) {
+/** cfg captured per agent — switching the draft picker to a different
+ *  agent must show THAT agent's models/modes, not the last session's. */
+const cfgByAgent = new Map<string, { configOptions?: ConfigOption[]; modes?: unknown }>();
+export function agentCfg(agentId: string) { return cfgByAgent.get(agentId); }
+
+export function captureLoadResponse(id: string, r: unknown, agentId = "devin") {
   if (!r || typeof r !== "object") return;
   const res = r as { configOptions?: ConfigOption[]; modes?: { currentModeId: string; availableModes?: { id: string; name?: string }[] }; models?: { modelId?: string; availableModels?: { modelId?: string; id?: string; name?: string }[] }; availableCommands?: SessionConfig["commands"] };
   // Non-devin agents expose ACP-standard models/modes instead of
@@ -116,6 +121,7 @@ export function captureLoadResponse(id: string, r: unknown) {
     opts = [...(opts ?? []), { id: "mode", name: "Mode", type: "select", currentValue: res.modes.currentModeId, _acp: true, options: res.modes.availableModes.map((m) => ({ value: String(m.id), name: String(m.name ?? m.id) })) } as ConfigOption];
   }
   responseCfg.set(id, { configOptions: opts ?? undefined, modes: res.modes ?? undefined, commands: res.availableCommands ?? undefined, echoTs: Date.now() });
+  cfgByAgent.set(agentId, { configOptions: opts ?? undefined, modes: res.modes ?? undefined });
   if (res.availableCommands?.length) lastAgentCommands = res.availableCommands;
   if (opts?.length || res.modes) {
     lastAgentCfg = {

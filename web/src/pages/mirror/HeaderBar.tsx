@@ -2,11 +2,10 @@ import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } fr
 import { useTranslation } from 'react-i18next'
 import { createPortal } from 'react-dom'
 import { useNavigate } from 'react-router-dom'
-import { ArrowLeft, Clock, FolderOpen, Laptop } from 'lucide-react'
+import { ArrowLeft, FolderOpen, Laptop } from 'lucide-react'
 import { OExpand } from '../../components/officialIcons'
 import { adminFetch, type AdminSession } from '@/lib/api'
 import { type ViewerCaps } from '@/lib/viewer'
-import { fmtWorkedDur } from '@/components/Timeline'
 import { PrStateIcon } from '@/components/PrCards'
 import { PanelHideTabsIcon } from '@/components/panelTabIcons'
 import { cn } from '@/lib/utils'
@@ -187,15 +186,10 @@ function HeaderBar({ isVisitor, sidebar, setPeek, setSidebar, detail, isDraft, c
           <span className="min-w-0 truncate" style={{ direction: 'rtl', textAlign: 'left' }}>{detail.session.cwd}</span>
         </span>
       )}
-      {!isVisitor && workSecs > 0 && (
-        <span title={t('menu.workTime')} className="flex h-5 items-center gap-1 rounded-[6px] px-1.5 text-[11px] font-medium tabular-nums leading-4 text-muted-foreground [background:var(--muted)]">
-          <Clock size={11} /> {fmtWorkedDur(workSecs * 1000)}
-        </span>
-      )}
       </div>
       <div className="flex shrink-0 items-center gap-px pl-1">
       {!isVisitor && (
-      <SessionMenu detail={detail} id={id} isSub={isSub} isDevinSession={isDevinSession} current={current} treeNode={treeNode} folderOrder={folderOrder} userMsgCount={userMsgCount} reloadDetail={reloadDetail} loadTree={loadTree} onControlMsg={onControlMsg} />
+      <SessionMenu detail={detail} id={id} isSub={isSub} isDevinSession={isDevinSession} current={current} treeNode={treeNode} folderOrder={folderOrder} userMsgCount={userMsgCount} reloadDetail={reloadDetail} loadTree={loadTree} onControlMsg={onControlMsg} workSecs={workSecs} />
       )}
       {!effShowPanel && !isDraft && (
         <button

@@ -89,7 +89,7 @@ export function loadOnce(ctx: ApiContext, acp: DevinAcp, id: string, cwd: string
 export async function hostFor(ctx: ApiContext, id: string, cwdHint?: string): Promise<{ acp: DevinAcp; set: Set<string>; cwd: string }> {
   const dedicated = ctx.manager.forSession(id);
   const host = sessionHost.get(id);
-  const pinned = host && !host.exited ? host : undefined;
+  let pinned = host && !host.exited ? host : undefined;
   // Which agent CLI owns this session — dedicated agents record it in
   // store.agentSessions; pooled agents remember it in dw.json meta.
   const agent = agentById(ctx.store.agentSession(id)?.agent ?? meta(ctx, id).agent);
@@ -103,6 +103,7 @@ export async function hostFor(ctx: ApiContext, id: string, cwdHint?: string): Pr
   // the live map first, then persisted meta (survives restarts).
   const ssh = ctx.sessionSsh.get(id) ?? meta(ctx, id).ssh ?? null;
   if (ssh) ctx.sessionSsh.set(id, ssh);
+  if (pinned && !ssh) { const k = ctx.sessionCwd.get(id); if (k && remapLegacyCwd(pinned.cwd) !== remapLegacyCwd(k)) { sessionHost.delete(id); pinned = undefined; } }
   const cwd = dedicated?.cwd ?? pinned?.cwd ?? cwdHint ?? ctx.sessionCwd.get(id) ?? ctx.primaryCwd;
   const acp = dedicated ?? pinned ?? await ctx.manager.get(ssh ? cwd : remapLegacyCwd(cwd), agent, ssh);
   ctx.sessionCwd.set(id, cwd);
@@ -172,7 +173,7 @@ export async function claimLockedHolder(ctx: ApiContext, id: string): Promise<Lo
     // session_locked everywhere else. One shot per acp (no retry — wrong
     // candidates fail fast); a hit gets the dedup'd rebuild via loadOnce.
     const cwd = ctx.sessionCwd.get(id) ?? ctx.primaryCwd;
-    for (const a of live) {
+    for (const a of live.filter((x) => x.cwd && remapLegacyCwd(x.cwd) === remapLegacyCwd(cwd))) {
       try { await a.loadSession(id, cwd); } catch { continue; }
       const owner = await loadOnce(ctx, a, id, cwd).catch(() => a);
       markLoadedOn(id, owner);

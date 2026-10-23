@@ -63,7 +63,15 @@ export default function BeardBand({ band, chin, children, className, wrapClassNa
 
   return (
     <div className={cn('relative z-30 mx-auto mt-auto w-full', wrapClassName ?? 'max-w-[740px]')}>
-      <div className="mx-2 mb-2 flex flex-col">
+      {/* mx-2 + px-1.5 below are the official chrome insets — they only make
+       *  sense while the wrap sits at max-width (the 740 column gives the
+       *  card its ~10px/side overhang over the 692 message column). Once the
+       *  chat pane narrows past ~800px the wrap clamps and the fixed chrome
+       *  just becomes dead space: gated off via the chat-pane container
+       *  query. Draft page isn't inside a chat-pane container, so it always
+       *  renders chromeless (its wrap px-6 aligns the card with the cards
+       *  below). */}
+      <div className="mb-2 flex flex-col @[800px]/chat-pane:mx-2">
         <div
           data-beard-open={open}
           data-eyebrow-visible={openTop}
@@ -83,7 +91,11 @@ export default function BeardBand({ band, chin, children, className, wrapClassNa
               )}
             />
           )}
-          <div className="flex w-full flex-col px-1.5" style={{ paddingTop: padTop, paddingBottom: padBottom }}>
+          {/* px-1.5 = the inner card's inset inside the wax frame: always on
+           *  while a band/chin is open (the gray frame must visibly wrap the
+           *  card); when closed and the pane is narrow there is no frame, so
+           *  the card takes the full column instead of leaving dead space. */}
+          <div className={cn('flex w-full flex-col', open ? 'px-1.5' : '@[800px]/chat-pane:px-1.5')} style={{ paddingTop: padTop, paddingBottom: padBottom }}>
             {openTop && (
               <div ref={eyebrowRef} data-eyebrow-row className="absolute bottom-full left-0 right-0 flex flex-col">
                 <div className="relative flex min-w-0 flex-col px-1.5">{band}</div>
