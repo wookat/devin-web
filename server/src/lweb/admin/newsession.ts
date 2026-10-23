@@ -14,7 +14,7 @@ import { dispatchPrompt } from "../../sessionprompt.js";
 import {markLoadedOn } from "../../sessionplace.js";
 import { isDraining } from "../../sessionlive.js";
 import { captureLoadResponse, agentCfg } from "../../sessioncfg.js";
-import { agentById, listAgents, probeAgent, saveUserAgents } from "../../agents.js";
+import { agentById, agentCheck, listAgents, probeAgent, saveUserAgents } from "../../agents.js";
 import { publicSshHost } from "../../ssh.js";
 import { json, readJson } from "../../httputil.js";
 import { scanLocalSkills } from "../admin.js";
@@ -159,7 +159,8 @@ export async function handleNewSession(ctx: ApiContext, req: IncomingMessage, re
     const cfg = (ac && (ac.configOptions?.length || ac.modes) ? { options: ac.configOptions ?? null, modes: ac.modes } as unknown as ReturnType<typeof sessionConfig> : null) ?? sessionConfig(ctx, sessions[0]?.id ?? "");
     // Enabled agents for the draft picker's dropdown (disabled entries
     // stay hidden — their existing sessions still run via meta.agent).
-    const agents = listAgents().filter((a) => !a.disabled).map((a) => ({ id: a.id, label: a.label }));
+    const checks = await Promise.all(listAgents().map(async (a) => [a, a.disabled ? null : await agentCheck(a)] as const));
+    const agents = checks.filter(([, c]) => c?.installed).map(([a]) => ({ id: a.id, label: a.label }));
     json(res, 200, { commands, skills: scanLocalSkills(ctx), playbooks: [], secrets: [], macros: [], repos, sessions, primary_cwd: ctx.primaryCwd, cfg, last_config: loadReg(ctx).lastConfig ?? {}, agents, ssh_hosts: (loadReg(ctx).prefs?.sshHosts ?? []).map(publicSshHost) });
     return true;
   }
