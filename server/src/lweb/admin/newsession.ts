@@ -157,14 +157,15 @@ export async function handleNewSession(ctx: ApiContext, req: IncomingMessage, re
     const wantAgent = url.searchParams.get("agent") ?? "";
     const ac = wantAgent ? agentCfg(wantAgent) : undefined;
     const EMPTY_CFG = { options: null, mode: null, commands: [], model: null } as unknown as ReturnType<typeof sessionConfig>;
+    const peerSid = sessions.find((s) => (meta(ctx, s.id).agent ?? "devin") === (wantAgent || "devin"))?.id;
     const cfg = wantAgent
-      ? (ac && (ac.configOptions?.length || ac.modes) ? agentLevelConfig(ac as { configOptions?: ConfigOption[]; modes?: { currentModeId: string; availableModes?: { id: string; name?: string }[] } | null }) : EMPTY_CFG)
-      : sessionConfig(ctx, sessions[0]?.id ?? "");
+      ? (ac && (ac.configOptions?.length || ac.modes) ? agentLevelConfig(ac as { configOptions?: ConfigOption[]; modes?: { currentModeId: string; availableModes?: { id: string; name?: string }[] } | null }) : (peerSid ? sessionConfig(ctx, peerSid) : EMPTY_CFG))
+      : sessionConfig(ctx, peerSid ?? sessions[0]?.id ?? "");
     // Enabled agents for the draft picker's dropdown (disabled entries
     // stay hidden — their existing sessions still run via meta.agent).
     const checks = await Promise.all(listAgents().map(async (a) => [a, a.disabled ? null : await agentCheck(a)] as const));
     const agents = checks.filter(([, c]) => c?.installed).map(([a]) => ({ id: a.id, label: a.label }));
-    json(res, 200, { commands, skills: scanLocalSkills(ctx), playbooks: [], secrets: [], macros: [], repos, sessions, primary_cwd: ctx.primaryCwd, cfg, last_config: (loadReg(ctx).lastConfigAgent ?? "devin") === (wantAgent || "devin") ? (loadReg(ctx).lastConfig ?? {}) : {}, agents, ssh_hosts: (loadReg(ctx).prefs?.sshHosts ?? []).map(publicSshHost) });
+    json(res, 200, { commands, skills: scanLocalSkills(ctx), playbooks: [], secrets: [], macros: [], repos, sessions, primary_cwd: ctx.primaryCwd, cfg, last_config: loadReg(ctx).lastConfigAgent && loadReg(ctx).lastConfigAgent === (wantAgent || "devin") ? (loadReg(ctx).lastConfig ?? {}) : {}, agents, ssh_hosts: (loadReg(ctx).prefs?.sshHosts ?? []).map(publicSshHost) });
     return true;
   }
 
