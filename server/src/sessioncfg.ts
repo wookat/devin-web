@@ -102,12 +102,24 @@ function persistAgentCfg() {
 
 export function captureLoadResponse(id: string, r: unknown) {
   if (!r || typeof r !== "object") return;
-  const res = r as { configOptions?: ConfigOption[]; modes?: { currentModeId: string; availableModes?: { id: string; name?: string }[] }; availableCommands?: SessionConfig["commands"] };
-  responseCfg.set(id, { configOptions: res.configOptions ?? undefined, modes: res.modes ?? undefined, commands: res.availableCommands ?? undefined, echoTs: Date.now() });
+  const res = r as { configOptions?: ConfigOption[]; modes?: { currentModeId: string; availableModes?: { id: string; name?: string }[] }; models?: { modelId?: string; availableModels?: { modelId?: string; id?: string; name?: string }[] }; availableCommands?: SessionConfig["commands"] };
+  // Non-devin agents expose ACP-standard models/modes instead of
+  // configOptions — synthesize the same group shapes so the UI/set-path
+  // work unchanged. The _acp flag marks synthesized groups so the set
+  // route picks session/set_model|set_mode over set_config_option.
+  let opts = res.configOptions;
+  if (res.models?.availableModels?.length && !opts?.some((o) => o.id === "model")) {
+    const cur = res.models.modelId ?? res.models.availableModels[0]?.modelId ?? res.models.availableModels[0]?.id;
+    opts = [...(opts ?? []), { id: "model", name: "Model", type: "select", currentValue: cur, _acp: true, options: res.models.availableModels.map((m) => ({ value: String(m.modelId ?? m.id ?? ""), name: String(m.name ?? m.modelId ?? m.id ?? "") })) } as ConfigOption];
+  }
+  if (res.modes?.availableModes?.length && !opts?.some((o) => o.id === "mode")) {
+    opts = [...(opts ?? []), { id: "mode", name: "Mode", type: "select", currentValue: res.modes.currentModeId, _acp: true, options: res.modes.availableModes.map((m) => ({ value: String(m.id), name: String(m.name ?? m.id) })) } as ConfigOption];
+  }
+  responseCfg.set(id, { configOptions: opts ?? undefined, modes: res.modes ?? undefined, commands: res.availableCommands ?? undefined, echoTs: Date.now() });
   if (res.availableCommands?.length) lastAgentCommands = res.availableCommands;
-  if (res.configOptions?.length || res.modes) {
+  if (opts?.length || res.modes) {
     lastAgentCfg = {
-      ...(res.configOptions?.length ? { configOptions: res.configOptions } : {}),
+      ...(opts?.length ? { configOptions: opts } : {}),
       ...(res.modes ? { modes: res.modes } : {}),
     };
   }

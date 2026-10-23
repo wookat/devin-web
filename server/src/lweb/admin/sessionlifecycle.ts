@@ -46,9 +46,16 @@ export async function handleSessionLifecycle(ctx: ApiContext, req: IncomingMessa
     // refreshes when the agent repushes config. Route both ids to
     // set_mode so the change actually sticks.
     const isMode = configId === "_mode" || configId === "mode";
+    const isAcpModel = configId === "model" && !!(responseCfg.get(id)?.configOptions as { id?: string; _acp?: boolean }[] | undefined)?.find((o) => o.id === "model")?._acp;
     const result = isMode
       ? await acp.setMode(id, value)
-      : await acp.setConfigOption(id, configId, value);
+      : isAcpModel
+        ? await acp.extMethod(id, "session/set_model", { sessionId: id, modelId: value })
+        : await acp.setConfigOption(id, configId, value);
+    if (isAcpModel) {
+      const prev = responseCfg.get(id);
+      responseCfg.set(id, { ...(prev ?? {}), configOptions: (prev?.configOptions ?? []).map((o) => (o as { id?: string }).id === "model" ? { ...o, currentValue: value } : o), echoTs: Date.now() });
+    }
     // setSessionConfigOption returns the full refreshed configOptions — keep them.
     const ropts = (result as { configOptions?: ConfigOption[] } | null)?.configOptions;
     if (ropts) responseCfg.set(id, { ...(responseCfg.get(id) ?? {}), configOptions: ropts, echoTs: Date.now() });
