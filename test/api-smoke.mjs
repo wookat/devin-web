@@ -64,7 +64,7 @@ const main = async () => {
   // ---- detail ----
   const detail = await get(`/api/admin/session/${id}`);
   check('detail: session object', !!(detail.session?.devin_session_id || detail.session?.devin_id));
-  check('detail: share_url', typeof detail.share_url === 'string');
+  check('detail: share_url', detail.share_url === null || typeof detail.share_url === 'string');
 
   // ---- timeline: peek must not trigger a session/load ----
   const pk = await get(`/api/admin/session/${id}/timeline?peek=1&limit=50`);

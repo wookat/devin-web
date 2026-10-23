@@ -148,6 +148,9 @@ function toolKind(u: Record<string, unknown>): string {
 interface TlState {
   items: DwItem[];
   toolItems: Map<string, DwItem>;
+  /** toolCallId → first-seen iso. it.ts is bumped on every progressive
+   *  update (commands stream in as deltas), so duration needs this. */
+  toolStart: Map<string, string>;
   permItems: Map<string, DwItem>;
   lastMsg: DwItem | null;
   realUser: Set<string>;
@@ -192,7 +195,7 @@ function resolveU(st: TlState, u: Record<string, unknown>): Record<string, unkno
 }
 
 function freshTlState(sid = ""): TlState {
-  return { items: [], toolItems: new Map(), permItems: new Map(), lastMsg: null, realUser: new Set(), localUser: new Map(), seenSeq: -1, logGen: -1, gen: 0, agentToolIds: new Set(), pendingSpawns: [], subCards: new Map(), produced: new Map(), sid };
+  return { items: [], toolItems: new Map(), toolStart: new Map(), permItems: new Map(), lastMsg: null, realUser: new Set(), localUser: new Map(), seenSeq: -1, logGen: -1, gen: 0, agentToolIds: new Set(), pendingSpawns: [], subCards: new Map(), produced: new Map(), sid };
 }
 
 /** Extract output paths a shell command is likely to CREATE: `>`/`>>`
@@ -441,6 +444,7 @@ function tlPush(st: TlState, e: { ts: number; seq?: number; update: Record<strin
         if (p) it.image = { path: p };
       }
       st.toolItems.set(toolId, it);
+      st.toolStart.set(toolId, iso);
       push(it);
     } else {
       it.ts = iso;
@@ -522,7 +526,7 @@ function tlPush(st: TlState, e: { ts: number; seq?: number; update: Record<strin
     // Exec duration: first-seen ts → terminal-status ts. Feeds the terminal
     // history "时长" column (official Command|Duration|Started table).
     if (st2 === "completed" || st2 === "failed") {
-      const startMs = Date.parse(it.ts);
+      const startMs = Date.parse(st.toolStart.get(toolId) ?? it.ts);
       if (Number.isFinite(startMs)) it.durationMs = Math.max(0, Date.parse(iso) - startMs);
     }
     if (st2 === "completed") { it.exitCode = it.exitCode ?? "0"; it.suffix = undefined; }
