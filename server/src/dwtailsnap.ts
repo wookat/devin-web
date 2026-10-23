@@ -17,7 +17,7 @@ const diskTailCache = new Map<string, LogEntry[]>();
 function tailCacheSet(id: string, entries: LogEntry[]) {
   if (diskTailCache.has(id)) diskTailCache.delete(id);
   else if (diskTailCache.size >= TAIL_CACHE_MAX) diskTailCache.delete(diskTailCache.keys().next().value!);
-  tailCacheSet(id, entries);
+  diskTailCache.set(id, entries);
 }
 const TAIL_KEEP = 400;
 const tailWrites = new Map<string, number>();

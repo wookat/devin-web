@@ -616,7 +616,7 @@ const tlCache = new Map<string, TlState>();
 function tlCacheSet(id: string, st: TlState) {
   if (tlCache.has(id)) tlCache.delete(id);
   else if (tlCache.size >= TL_CACHE_MAX) tlCache.delete(tlCache.keys().next().value!);
-  tlCacheSet(id, st);
+  tlCache.set(id, st);
 }
 /** Sessions whose timeline was rebuilt since the last /timeline response —
  * the flag must survive until the timeline endpoint itself consumes it, or a

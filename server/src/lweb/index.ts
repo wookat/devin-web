@@ -71,7 +71,7 @@ export async function handleLocalWb(ctx: ApiContext, req: IncomingMessage, res: 
     // 5xx here surfaces to the client as a fetch failure ("Connection lost") —
     // log it so transient handler errors are distinguishable from a real
     // restart dead-window in server.log.
-    if (status >= 500) console.error(`[route] ${req.method} ${req.url} → ${status}: ${err instanceof Error ? err.message : String(err)}`);
+    if (status >= 500) console.error(`[route] ${req.method} ${req.url} → ${status}: ${err instanceof Error ? (err.stack ?? err.message) : String(err)}`);
     json(res, status, { error: err instanceof Error ? err.message : String(err) });
     return true;
   }
