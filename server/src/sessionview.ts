@@ -118,6 +118,47 @@ export function sessionConfig(ctx: ApiContext, id: string): SessionConfig {
   return out;
 }
 
+/** Agent-level variant of sessionConfig — same _mode synthesis + model
+ *  extraction but no session overlays (no log scan, no meta.lastConfig).
+ *  Used by composer-meta's ?agent= path so a picked agent's cfg shapes
+ *  exactly like a session's. */
+export function agentLevelConfig(base: { configOptions?: ConfigOption[]; modes?: { currentModeId: string; availableModes?: { id: string; name?: string }[] } | null }): SessionConfig {
+  const out: SessionConfig = { options: [...(base.configOptions ?? [])], mode: base.modes?.currentModeId ?? null, commands: [], model: null };
+  const hasModeOpt = out.options.some((o) => o.id === "mode" || /mode/i.test(String(o.id ?? "")));
+  if (!hasModeOpt && base.modes?.availableModes?.length) {
+    out.options.push({
+      id: "_mode",
+      name: "Mode",
+      currentValue: out.mode ?? "",
+      options: base.modes.availableModes.map((m) => ({ value: m.id, name: m.name ?? m.id })),
+    });
+  }
+  const modelOpt = out.options.find((o) => o.id === "model" || /model/i.test(String(o.id ?? "")));
+  if (modelOpt) {
+    const cur = String(modelOpt.currentValue ?? "");
+    const name = modelOpt.options?.find((o) => o.value === cur)?.name ?? cur;
+    out.model = {
+      id: String(modelOpt.id ?? "model"),
+      current: cur,
+      currentName: name,
+      options: (modelOpt.options ?? []).map((o) => {
+        const info = catalogInfo(o.value);
+        return {
+          value: o.value,
+          name: o.name,
+          efforts: info?.efforts ?? [],
+          effortCtl: info?.effortCtl ?? false,
+          family: info?.family,
+          fast: info?.fast ?? false,
+          ctx1m: info?.ctx1m ?? false,
+          prices: info?.prices,
+        };
+      }),
+    };
+  }
+  return out;
+}
+
 /** cloud version pill strings → local model config values */
 export function cloudVersionToModel(version: string, opts: { value: string; name?: string }[]): string | null {
   const has = (v: string) => opts.some((o) => o.value === v);

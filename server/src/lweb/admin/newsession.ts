@@ -9,11 +9,11 @@ import { stageUpload } from "../../uploads.js";
 import { loadReg, saveReg, meta } from "../../dwstore.js";
 import { remapLegacyCwd } from "../../store.js";
 import { buildTimeline } from "../../dwtimeline.js";
-import { sessionConfig, sessionStatus, listLocalSessions } from "../../sessionview.js";
+import { sessionConfig, agentLevelConfig, sessionStatus, listLocalSessions } from "../../sessionview.js";
 import { dispatchPrompt } from "../../sessionprompt.js";
 import {markLoadedOn } from "../../sessionplace.js";
 import { isDraining } from "../../sessionlive.js";
-import { captureLoadResponse, agentCfg } from "../../sessioncfg.js";
+import { captureLoadResponse, agentCfg, type ConfigOption } from "../../sessioncfg.js";
 import { agentById, agentCheck, listAgents, probeAgent, saveUserAgents } from "../../agents.js";
 import { publicSshHost } from "../../ssh.js";
 import { json, readJson } from "../../httputil.js";
@@ -158,7 +158,7 @@ export async function handleNewSession(ctx: ApiContext, req: IncomingMessage, re
     const ac = wantAgent ? agentCfg(wantAgent) : undefined;
     const EMPTY_CFG = { options: null, mode: null, commands: [], model: null } as unknown as ReturnType<typeof sessionConfig>;
     const cfg = wantAgent
-      ? (ac && (ac.configOptions?.length || ac.modes) ? { options: ac.configOptions ?? null, modes: ac.modes } as unknown as ReturnType<typeof sessionConfig> : EMPTY_CFG)
+      ? (ac && (ac.configOptions?.length || ac.modes) ? agentLevelConfig(ac as { configOptions?: ConfigOption[]; modes?: { currentModeId: string; availableModes?: { id: string; name?: string }[] } | null }) : EMPTY_CFG)
       : sessionConfig(ctx, sessions[0]?.id ?? "");
     // Enabled agents for the draft picker's dropdown (disabled entries
     // stay hidden — their existing sessions still run via meta.agent).

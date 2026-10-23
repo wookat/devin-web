@@ -65,6 +65,7 @@ export function initCfgState(dir: string) {
       modes?: { currentModeId: string; availableModes?: { id: string; name?: string }[] };
       commands?: SessionConfig["commands"];
       bySession?: Record<string, ResponseCfgEntry>;
+      byAgent?: Record<string, { configOptions?: ConfigOption[]; modes?: unknown }>;
     };
     if (j.configOptions?.length || j.modes) {
       lastAgentCfg = {
@@ -74,6 +75,7 @@ export function initCfgState(dir: string) {
     }
     if (j.commands?.length) lastAgentCommands = j.commands;
     for (const [sid, c] of Object.entries(j.bySession ?? {})) if (c && typeof c === "object") responseCfg.set(sid, c);
+    for (const [aid, c] of Object.entries(j.byAgent ?? {})) if (c && typeof c === "object") cfgByAgent.set(aid, c);
   } catch { /* cold start — no cache yet */ }
 }
 
@@ -97,6 +99,7 @@ function persistAgentCfg() {
     ...(lastAgentCfg ?? {}),
     commands: lastAgentCommands ?? undefined,
     bySession: bySession.length ? Object.fromEntries(bySession) : undefined,
+    byAgent: cfgByAgent.size ? Object.fromEntries(cfgByAgent) : undefined,
   });
 }
 
