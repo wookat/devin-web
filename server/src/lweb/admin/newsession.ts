@@ -157,7 +157,9 @@ export async function handleNewSession(ctx: ApiContext, req: IncomingMessage, re
     const wantAgent = url.searchParams.get("agent") ?? "";
     const ac = wantAgent ? agentCfg(wantAgent) : undefined;
     const EMPTY_CFG = { options: null, mode: null, commands: [], model: null } as unknown as ReturnType<typeof sessionConfig>;
-    const peerSid = sessions.find((s) => (meta(ctx, s.id).agent ?? "devin") === (wantAgent || "devin"))?.id;
+    const wantA = wantAgent || "devin";
+    const peerSid = sessions.find((s) => (meta(ctx, s.id).agent ?? "devin") === wantA)?.id
+      ?? Object.keys(loadReg(ctx).sessions).find((sid) => (loadReg(ctx).sessions[sid].agent ?? "devin") === wantA);
     const cfg = wantAgent
       ? (ac && (ac.configOptions?.length || ac.modes) ? agentLevelConfig(ac as { configOptions?: ConfigOption[]; modes?: { currentModeId: string; availableModes?: { id: string; name?: string }[] } | null }) : (peerSid ? sessionConfig(ctx, peerSid) : EMPTY_CFG))
       : sessionConfig(ctx, peerSid ?? sessions[0]?.id ?? "");
