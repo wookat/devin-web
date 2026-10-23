@@ -140,7 +140,7 @@ const QUESTION_RE = /(请确认|需要你|你希望|是否|要不要|选哪|怎�
 /** Joined text of the last agent message (streaming chunks since the last
  * user/boundary entry), plus its seq — for dedup against personaLastSeq. */
 function tailQuestion(ctx: ApiContext, id: string): { text: string; seq: number } | null {
-  const log = ctx.sessionLog.get(id);
+  const log = ctx.sessionLog.peek(id) ?? ctx.sessionLog.readDiskTail(id, 300);
   const texts: string[] = [];
   let seq = 0;
   for (let i = log.length - 1; i >= 0 && i > log.length - 300; i--) {

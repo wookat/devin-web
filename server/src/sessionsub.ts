@@ -131,7 +131,7 @@ export function listSubagents(ctx: ApiContext, id: string, scope?: string, entri
     startedAt: null, finishedAt: null, updates: 0, lastText: "", toolId,
   });
   const add = (r: SubagentInfo & { toolId?: string; originTag?: string }) => { rows.push(r); if (!r.agentId.startsWith("spawn:")) byAgent.set(r.agentId, r); };
-  for (const e of entries ?? ctx.sessionLog.get(id)) {
+  for (const e of entries ?? ctx.sessionLog.peek(id) ?? []) {
     const u = e.update;
     const m = (u._meta ?? {}) as Record<string, unknown>;
     // The stream an event belongs to: "root" = the lead agent, an agentId =
@@ -273,7 +273,7 @@ export function listSubagents(ctx: ApiContext, id: string, scope?: string, entri
 const subTlCache = new Map<string, { m: number | null; lastSeq: number; items: DwItem[] }>();
 export function subagentTimeline(ctx: ApiContext, id: string, agentId: string): DwItem[] {
   const key = `${id}${agentId}`;
-  const mem = ctx.sessionLog.get(id);
+  const mem = ctx.sessionLog.peek(id) ?? [];
   const forAgent = (e: LogEntry) => {
     const c = (e.update._meta as Record<string, unknown> | undefined)?.["cognition.ai/subagent_context"] as { parentAgentId?: string } | undefined;
     return c?.parentAgentId === agentId || e.update.toolCallId === agentId;

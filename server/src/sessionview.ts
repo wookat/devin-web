@@ -299,7 +299,7 @@ export async function listLocalSessions(ctx: ApiContext): Promise<ListedSession[
 /** Last message text, scanning only the tail of the log — the sidebar list
  * calls this for every session on every poll, so it must not buildTimeline. */
 export function snippetFromLog(ctx: ApiContext, id: string): string {
-  const log = ctx.sessionLog.get(id);
+  const log = ctx.sessionLog.peek(id) ?? ctx.sessionLog.readDiskTail(id, 300);
   for (let i = log.length - 1; i >= 0 && i > log.length - 100; i--) {
     const u = log[i].update as { sessionUpdate?: string; content?: { text?: string } };
     if ((u.sessionUpdate === "agent_message_chunk" || u.sessionUpdate === "user_message_chunk") && u.content?.text) {

@@ -121,6 +121,17 @@ export async function diagnose(ctx: ApiContext): Promise<{ ok: boolean; checks: 
     ].filter(Boolean).join(" · "),
     fix: pending.length ? "clear-open-turns" : undefined });
 
+  // backend memory: heap vs native split so "500MB RSS" complaints have a
+  // place to look. sessionLog ring stats expose hydrate pressure.
+  try {
+    const mu = process.memoryUsage();
+    const mb = (n: number) => `${(n / 1048576).toFixed(0)}MB`;
+    const rings = ctx.sessionLog.stats?.() as { sessions?: number; entries?: number; hydrated?: number } | undefined;
+    checks.push({ id: "memory", group: "service", label: "Backend memory", level: mu.rss > 1.5e9 ? "warn" : "ok",
+      detail: `rss ${mb(mu.rss)} · heap ${mb(mu.heapUsed)}/${mb(mu.heapTotal)} · ext ${mb(mu.external)} · buffers ${mb(mu.arrayBuffers ?? 0)}` +
+        (rings ? ` · log rings ${rings.sessions}/${rings.entries} entries` : "") });
+  } catch {}
+
   // disk headroom on the data-dir volume
   try {
     const st = fs.statfsSync(ctx.store.dataDir);

@@ -8,7 +8,7 @@ import type { ApiContext } from "../../routes.js";
 import { stageUpload } from "../../uploads.js";
 import { loadReg, saveReg, meta } from "../../dwstore.js";
 import { remapLegacyCwd } from "../../store.js";
-import { buildTimeline } from "../../dwtimeline.js";
+
 import { sessionConfig, agentLevelConfig, sessionStatus, listLocalSessions } from "../../sessionview.js";
 import { dispatchPrompt } from "../../sessionprompt.js";
 import {markLoadedOn } from "../../sessionplace.js";
@@ -24,8 +24,7 @@ export async function handleNewSession(ctx: ApiContext, req: IncomingMessage, re
   if (p === "/api/admin/sessions" && m === "GET") {
     const sessions = (await listLocalSessions(ctx)).map((s) => {
       const m2 = meta(ctx, s.id);
-      const items = ctx.sessionLog.get(s.id).length ? buildTimeline(ctx, s.id).items : [];
-      const lastMsg = [...items].reverse().find((i) => i.kind === "message");
+      const lastMsg = ctx.sessionLog.lastMessage(s.id);
       return {
         id: s.id, devin_session_id: s.id, title: m2.title ?? s.title, devin_title: s.title,
         permission: m2.permission ?? "detailed", archived: m2.archived ? 1 : 0, pinned: m2.pinned ? 1 : 0,
@@ -131,19 +130,16 @@ export async function handleNewSession(ctx: ApiContext, req: IncomingMessage, re
       .filter((w) => !!w && !seenDir.has(normDir(w)) && (seenDir.add(normDir(w)), true))
       .slice(0, 50)
       .map((w) => ({ name: String(w).replace(/[\\/]+$/, "").split(/[\\/]/).pop() || String(w), org: String(w) }));
-    // best-effort: pull commands from the most recently-active logged session
-    let newest = 0;
-    for (const s of sessions) {
-      const log = ctx.sessionLog.get(s.id);
-      const last = log[log.length - 1]?.ts ?? 0;
-      if (last > newest) { newest = last; }
+    // best-effort: pull commands from the most recently-active session —
+    // rank by the listing's `updated` field, not per-session log tails
+    // (the old loop hydrated every listed ring just to find the newest).
+    let newestTs = 0, newestId = "";
+    for (const s of listed) {
+      const t = Date.parse(s.updated) || 0;
+      if (t > newestTs) { newestTs = t; newestId = s.id; }
     }
-    for (const s of sessions) {
-      const log = ctx.sessionLog.get(s.id);
-      if ((log[log.length - 1]?.ts ?? 0) === newest && newest) {
-        commands = sessionConfig(ctx, s.id).commands.map((c) => ({ command: c.name, description: c.description ?? "", hint: c.input?.hint }));
-        break;
-      }
+    if (newestId) {
+      commands = sessionConfig(ctx, newestId).commands.map((c) => ({ command: c.name, description: c.description ?? "", hint: c.input?.hint }));
     }
     // No session replayed its commands yet this boot — the agent-level
     // fallback inside sessionConfig (last load-response / last seen set)

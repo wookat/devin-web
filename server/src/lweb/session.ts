@@ -84,7 +84,7 @@ interface SubTreeRow {
 // miss kicks a background scan and children appear on the next poll.
 const subListCache = new Map<string, { m: number | null; lastSeq: number; rows: SubagentInfo[]; at: number }>();
 export function subsAny(ctx: ApiContext, id: string, scope?: string): SubagentInfo[] {
-  const mem = ctx.sessionLog.get(id);
+  const mem = ctx.sessionLog.peek(id) ?? [];
   // Memory is authoritative only when the ring still covers the whole current
   // generation — clear()+replay restarts seq at 0, so mem[0].seq === 0 means
   // nothing was evicted. A truncated window misses early spawn events and
@@ -163,7 +163,7 @@ export function treeSession(ctx: ApiContext, s: ListedSession) {
     // Lock: devin says some acp holds it; `loaded_here` means that holder is
     // this web (harmless) — otherwise it's another app (desktop/CLI).
     is_locked: s.locked,
-    loaded_here: ctx.sessionLog.get(s.id).length > 0 || loadInflight.has(s.id) || inflight.has(s.id),
+    loaded_here: ctx.sessionLog.has(s.id) || loadInflight.has(s.id) || inflight.has(s.id),
     agent: s.agent ?? "devin",
     persona: personaState(ctx, s.id),
     children: subs.map((a) => subTreeRow(ctx, s.id, s.cwd, a)),
@@ -345,7 +345,7 @@ export async function handleSubSession(
         pull_requests: [], repos: [cwdFor(ctx, parent)],
         cwd: cwdFor(ctx, parent),
         is_locked: false,
-        loaded_here: ctx.sessionLog.get(parent).length > 0,
+        loaded_here: ctx.sessionLog.has(parent),
         context_usage: null,
         parent_devin_id: parent,
         parent_title: meta(ctx, parent).title ?? titleFromLog(ctx, parent) ?? "Parent session",

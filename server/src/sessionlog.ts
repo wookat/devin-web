@@ -1,6 +1,6 @@
 import fs from "node:fs";
 import path from "node:path";
-import { SessionDb, dedupKey } from "./sessiondb.js";
+import { SessionDb, dedupKey, lastMessageFrom } from "./sessiondb.js";
 import { Sidecars, eachFileLine } from "./sessionsidecars.js";
 import type { LogEntry } from "./sessiondb.js";
 import { logMaxMb } from "./env.js";
@@ -417,6 +417,38 @@ export class SessionLog {
       }
     } catch { /* mirror unreadable — stay empty, mark stands */ }
     return cur ?? [];
+  }
+
+  /** Presence probe WITHOUT the lazy hydrate — boolean "has any history"
+   *  checks (loaded_here badges, list views) must not pull a 5k-entry ring
+   *  into memory per call. */
+  has(sessionId: string): boolean {
+    if ((this.logs.get(sessionId)?.length ?? 0) > 0) return true;
+    if (this.db) { this.ensureImported(sessionId); return this.db.has(sessionId); }
+    if (this.dir) { try { return fs.statSync(this.file(sessionId)).size > 0; } catch { return false; } }
+    return false;
+  }
+
+  /** In-memory ring if (and only if) this session is already resident —
+   *  list-view readers fall back to bounded disk tails instead of hydrating
+   *  a 5k-entry ring per session per poll. */
+  peek(sessionId: string): LogEntry[] | null {
+    return this.logs.get(sessionId) ?? null;
+  }
+
+  /** Ring occupancy for the diagnose memory panel. */
+  stats() {
+    let entries = 0;
+    for (const l of this.logs.values()) entries += l.length;
+    return { sessions: this.logs.size, entries, hydrated: this.hydrated.size };
+  }
+
+  /** Newest user/agent message text for list views — the db path is one
+   *  bounded DESC query; the .jsonl path scans a 600-entry tail. */
+  lastMessage(sessionId: string): { body: string; ts: number } | null {
+    if (this.db) { this.ensureImported(sessionId); return this.db.lastMessage(sessionId); }
+    const tail = this.readDiskTail(sessionId, 600);
+    return lastMessageFrom([...tail].reverse().map((e) => ({ ts: e.ts, update: e.update as Record<string, unknown> })));
   }
 
   /** Bumped on every clear() — timeline builders use it to spot a re-replayed

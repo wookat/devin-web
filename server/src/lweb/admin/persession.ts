@@ -68,7 +68,7 @@ export async function handlePerSession(ctx: ApiContext, req: IncomingMessage, re
           pull_requests: [], repos: [cwdFor(ctx, id)],
           cwd: cwdFor(ctx, id),
           is_locked: false,
-          loaded_here: ctx.sessionLog.get(id).length > 0 || loadInflight.has(id) || inflight.has(id),
+          loaded_here: ctx.sessionLog.has(id) || loadInflight.has(id) || inflight.has(id),
           context_usage: lastContextUsage(ctx, id),
           // Owning ACP agent — the client degrades devin-private UI
           // (share/end-session/subagents) for other agents' sessions.

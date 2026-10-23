@@ -142,11 +142,13 @@ export class SessionDb {
   private sDel;
   private sDelGen;
   private sDelOlder;
-  private sScan;
   private sBlob;
   private sDedupGet;
   private sDedupSet;
-  private sDedupNull;
+  private sDedupPage;
+  private sPage;
+  private sScanPage;
+  private sLastMsg;
   private sUpdEntry;
 
   constructor(file: string) {
@@ -230,9 +232,6 @@ export class SessionDb {
     this.sDel = this.db.prepare("DELETE FROM events WHERE session_id=?");
     this.sDelGen = this.db.prepare("DELETE FROM events WHERE session_id=? AND gen=?");
     this.sDelOlder = this.db.prepare("DELETE FROM events WHERE session_id=? AND gen<?");
-    this.sScan = this.db.prepare(
-      "SELECT seq,ts,data FROM events WHERE session_id=? AND gen=? AND seq>=? AND seq<=? AND data LIKE '%subagent%' ORDER BY seq",
-    );
     this.sBlob = this.db.prepare("SELECT data FROM blobs WHERE sha=?");
     this.sDedupGet = this.db.prepare(
       "SELECT seq,gen,ts,json_extract(data,'$._local') AS loc FROM events WHERE session_id=? AND dedup=? LIMIT 1",
@@ -240,12 +239,28 @@ export class SessionDb {
     this.sDedupSet = this.db.prepare(
       "UPDATE events SET dedup=? WHERE session_id=? AND gen=? AND seq=?",
     );
-    this.sDedupNull = this.db.prepare(
-      "SELECT seq,gen,data FROM events WHERE session_id=? AND dedup IS NULL",
+    this.sDedupPage = this.db.prepare(
+      "SELECT seq,gen,data FROM events WHERE session_id=? AND dedup IS NULL AND (gen>? OR (gen=? AND seq>?)) ORDER BY gen,seq LIMIT ?",
+    );
+    this.sPage = this.db.prepare(
+      `SELECT seq,ts,data FROM events WHERE session_id=? AND ${CUR_GEN} AND seq>? ORDER BY seq LIMIT ?`,
+    );
+    this.sScanPage = this.db.prepare(
+      "SELECT seq,ts,data FROM events WHERE session_id=? AND gen=? AND seq>? AND seq<=? AND data LIKE '%subagent%' ORDER BY seq LIMIT ?",
+    );
+    this.sLastMsg = this.db.prepare(
+      "SELECT ts,data FROM events WHERE session_id=? AND kind IN ('agent_message_chunk','user_message_chunk','agent_message','user_message','message') ORDER BY seq DESC LIMIT ?",
     );
     this.sUpdEntry = this.db.prepare(
       "UPDATE events SET ts=?,data=? WHERE session_id=? AND gen=? AND seq=?",
     );
+    // WAL maintenance: passive autocheckpoint can stall for hours under a
+    // busy read mix; a periodic TRUNCATE guarantees the wal file drains and
+    // shrinks. Iterators must never pin readers between event-loop turns —
+    // every streaming accessor below pages via .all() instead.
+    setInterval(() => {
+      try { this.db.exec("PRAGMA wal_checkpoint(TRUNCATE)"); } catch { /* busy — next round */ }
+    }, 60_000).unref();
   }
 
   private putBlob(text: string): string {
@@ -324,7 +339,12 @@ export class SessionDb {
   /** Rows still missing a content key — the lazy backfill feed for
    *  sessions whose history predates the dedup column. */
   *dedupRows(sessionId: string): Generator<{ seq: number; gen: number; data: string }> {
-    for (const r of this.sDedupNull.iterate(sessionId) as Iterable<{ seq: number; gen: number; data: string }>) yield r;
+    let g = -1, q = -1;
+    for (;;) {
+      const rows = this.sDedupPage.all(sessionId, g, g, q, 2000) as { seq: number; gen: number; data: string }[];
+      if (!rows.length) return;
+      for (const r of rows) { g = r.gen; q = r.seq; yield r; }
+    }
   }
 
   dedupSet(sessionId: string, gen: number, seq: number, dedup: string) {
@@ -364,8 +384,14 @@ export class SessionDb {
   /** Row-by-row generator — lets callers pull the full history in batches
    * and yield the event loop between them (deep backfill). */
   *each(sessionId: string): Generator<StoredEntry> {
-    for (const r of this.sAll.iterate(sessionId, sessionId) as Iterable<{ seq: number; ts: number; data: string }>) {
-      try { yield { seq: r.seq, ts: r.ts, update: JSON.parse(r.data) }; } catch { /* corrupt row */ }
+    let after = -1;
+    for (;;) {
+      const rows = this.sPage.all(sessionId, sessionId, after, 2000) as { seq: number; ts: number; data: string }[];
+      if (!rows.length) return;
+      for (const r of rows) {
+        after = r.seq;
+        try { yield { seq: r.seq, ts: r.ts, update: JSON.parse(r.data) }; } catch { /* corrupt row */ }
+      }
     }
   }
 
@@ -420,9 +446,23 @@ export class SessionDb {
   /** Subagent-relevant rows of one generation in seq order — the DB-side
    * sidecar scan source (replaces byte-range file scans). */
   *scanRows(sessionId: string, gen: number, fromSeq: number, toSeq: number) {
-    for (const r of this.sScan.iterate(sessionId, gen, fromSeq, toSeq) as Iterable<{ seq: number; ts: number; data: string }>) {
-      yield r;
+    let after = fromSeq - 1;
+    for (;;) {
+      const rows = this.sScanPage.all(sessionId, gen, after, toSeq, 500) as { seq: number; ts: number; data: string }[];
+      if (!rows.length) return;
+      for (const r of rows) { after = r.seq; yield r; }
     }
+  }
+
+  /** Newest user/agent message assembled from the chunk tail — cheap enough
+   *  for list views (one bounded DESC query, no ring hydration). */
+  lastMessage(sessionId: string): { body: string; ts: number } | null {
+    const rows = this.sLastMsg.all(sessionId, 600) as { ts: number; data: string }[];
+    const updates: { ts: number; update: Record<string, unknown> }[] = [];
+    for (const r of rows) {
+      try { updates.push({ ts: r.ts, update: JSON.parse(r.data) }); } catch { /* corrupt row */ }
+    }
+    return lastMessageFrom(updates);
   }
 
   /** Deep-copy `update` with every {$blob} ref swapped for its payload. */
@@ -494,4 +534,31 @@ export class SessionDb {
   close() {
     try { this.db.close(); } catch {}
   }
+}
+
+/** Assemble the newest user/agent message from a DESC-ordered tail of
+ *  entries (newest first). Chunks sharing one streamingMessageId glue back
+ *  together; a whole non-chunk message only wins when no chunks precede it. */
+export function lastMessageFrom(entries: { ts: number; update: Record<string, unknown> }[]): { body: string; ts: number } | null {
+  let mid: string | null = null;
+  let firstTs = 0;
+  const parts: string[] = [];
+  for (const e of entries) {
+    const u = e.update;
+    const k = u.sessionUpdate as string | undefined;
+    if (!k || (!k.endsWith("_chunk") && k !== "agent_message" && k !== "user_message" && k !== "message")) continue;
+    const m = ((u._meta as Record<string, unknown> | undefined)?.["cognition.ai/streamingMessageId"] as string) ?? null;
+    if (k.endsWith("_chunk")) {
+      if (mid === null && !parts.length) { mid = m; firstTs = e.ts; }
+      else if (m !== mid) break; // crossed into the previous message — done
+      const t = (u.content as Record<string, unknown> | undefined)?.text;
+      parts.unshift(typeof t === "string" ? t : "");
+    } else {
+      if (parts.length) break; // chunks of a newer message win
+      const c = u.content as Record<string, unknown> | undefined;
+      const t = c?.text ?? u.text ?? u.body;
+      if (typeof t === "string" && t) return { body: t, ts: e.ts };
+    }
+  }
+  return parts.length ? { body: parts.join(""), ts: firstTs } : null;
 }
