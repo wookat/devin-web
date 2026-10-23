@@ -270,6 +270,7 @@ export function listSubagents(ctx: ApiContext, id: string, scope?: string, entri
  * Disk reads use a substring needle (the agentId appears in every event of
  * its stream) and an mtime cache — a full parse of a 500MB log per poll
  * would OOM the process. */
+const SUBTL_MAX = 80;
 const subTlCache = new Map<string, { m: number | null; lastSeq: number; items: DwItem[] }>();
 export function subagentTimeline(ctx: ApiContext, id: string, agentId: string): DwItem[] {
   const key = `${id}${agentId}`;
@@ -296,6 +297,7 @@ export function subagentTimeline(ctx: ApiContext, id: string, agentId: string): 
   const items = buildTimelineFrom((mem.length ? [...idx, ...mem.filter((e) => !seen.has(e.seq))] : idx).filter(forAgent), agentId, id, resolve);
   // Cache only a settled read — a missing stream means the scan is still
   // running and the empty result must not stick or the transcript never fills.
-  if (im != null) subTlCache.set(key, { m: im, lastSeq, items });
+  if (im != null) if (!subTlCache.has(key) && subTlCache.size >= SUBTL_MAX) subTlCache.delete(subTlCache.keys().next().value!);
+    subTlCache.set(key, { m: im, lastSeq, items });
   return items;
 }

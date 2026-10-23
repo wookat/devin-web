@@ -608,7 +608,16 @@ function buildTimelineFrom(
   return st.items;
 }
 
+/** Built timeline state per session — items arrays are the biggest
+ *  per-session heap objects after rings, so the cache is LRU-capped
+ *  instead of growing unboundedly across uptime. */
+const TL_CACHE_MAX = 60;
 const tlCache = new Map<string, TlState>();
+function tlCacheSet(id: string, st: TlState) {
+  if (tlCache.has(id)) tlCache.delete(id);
+  else if (tlCache.size >= TL_CACHE_MAX) tlCache.delete(tlCache.keys().next().value!);
+  tlCacheSet(id, st);
+}
 /** Sessions whose timeline was rebuilt since the last /timeline response —
  * the flag must survive until the timeline endpoint itself consumes it, or a
  * detail/panel poll would eat the reset and the client would merge-collide. */
@@ -643,7 +652,7 @@ function buildTimeline(ctx: ApiContext, sessionId: string): { items: DwItem[]; r
     // Must be set BEFORE the seed loop — disk entries carry blob refs that
     // resolve only through this hook.
     st.resolve = (u) => ctx.sessionLog.resolveBlobs(u);
-    tlCache.set(sessionId, st);
+    tlCacheSet(sessionId, st);
     rebuilt = true;
     for (let i = 0; i < src.length; i++) tlPush(st, src[i], i);
     st.seenSeq = src.length ? (src[src.length - 1].seq ?? src.length - 1) : -1;
@@ -701,7 +710,7 @@ function backfillTimeline(ctx: ApiContext, sessionId: string, logGen: number) {
       st.seenSeq = out[out.length - 1].seq ?? out.length - 1;
       st.logGen = logGen;
       st.gen = ++tlGenSeq;
-      tlCache.set(sessionId, st);
+      tlCacheSet(sessionId, st);
       tlReset.add(sessionId);
     } catch { /* next rebuild retries */ }
     finally { backfilling.delete(sessionId); }

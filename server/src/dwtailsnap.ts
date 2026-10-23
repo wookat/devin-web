@@ -12,7 +12,13 @@ import type { LogEntry } from "./sessiondb.js";
 import { buildTimelineFrom, type DwItem } from "./dwtimeline.js";
 
 /** Tail persisted to disk so a post-restart cold open also paints instantly. */
+const TAIL_CACHE_MAX = 120;
 const diskTailCache = new Map<string, LogEntry[]>();
+function tailCacheSet(id: string, entries: LogEntry[]) {
+  if (diskTailCache.has(id)) diskTailCache.delete(id);
+  else if (diskTailCache.size >= TAIL_CACHE_MAX) diskTailCache.delete(diskTailCache.keys().next().value!);
+  tailCacheSet(id, entries);
+}
 const TAIL_KEEP = 400;
 const tailWrites = new Map<string, number>();
 
@@ -24,7 +30,7 @@ function readDiskTail(ctx: ApiContext, id: string): LogEntry[] | null {
   if (diskTailCache.has(id)) return diskTailCache.get(id)!;
   try {
     const raw = JSON.parse(fs.readFileSync(tailFile(ctx, id), "utf8")) as LogEntry[];
-    if (Array.isArray(raw) && raw.length) { diskTailCache.set(id, raw); return raw; }
+    if (Array.isArray(raw) && raw.length) { tailCacheSet(id, raw); return raw; }
   } catch { /* no snapshot */ }
   return null;
 }
@@ -35,7 +41,7 @@ function persistTail(ctx: ApiContext, id: string) {
   tailWrites.set(id, now);
   const entries = ctx.sessionLog.get(id).slice(-TAIL_KEEP);
   if (!entries.length) return;
-  diskTailCache.set(id, entries);
+  tailCacheSet(id, entries);
   try {
     const f = tailFile(ctx, id);
     fs.mkdirSync(path.dirname(f), { recursive: true });

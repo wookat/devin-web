@@ -64,7 +64,7 @@ export class SessionLog {
       db: this.db,
       file: (id) => this.file(id),
       gen: (id) => this.gens.get(id) ?? 0,
-      bumpGen: (id) => this.gens.set(id, (this.gens.get(id) ?? 0) + 1),
+      bumpGen: (id) => { this.dropSessionFolds(id); this.gens.set(id, (this.gens.get(id) ?? 0) + 1); },
     });
     // A server killed mid-replay leaves `<id>.jsonl` partial and the last
     // complete copy stashed as `.jsonl.bak` — put it back on startup.
@@ -250,7 +250,53 @@ export class SessionLog {
 
   /** Returns false when the update was a replayed dupe — callers skip all
    * downstream fan-out (broadcast/rate-limit/noteUpdate) for it. */
+  /** Streaming text chunks fold into ONE stored row per stream — the wire
+   *  emits ~600 rows per agent reply, which dominated the db (83% of all
+   *  rows are streaming fragments), the dedup-hash rate, ring coverage,
+   *  and the native-alloc churn that ballooned RSS. Folding keeps the
+   *  chunk kind + streamingMessageId so every read path (timeline,
+   *  snippets, lastMessage, replays' content dedup — joined text is the
+   *  same payload) works unchanged; only the row count drops. */
+  private static readonly FOLD_KINDS = new Set(["agent_message_chunk", "user_message_chunk", "agent_thought_chunk"]);
+  private static readonly FOLD_MS = 250;
+  private folds = new Map<string, { sid: string; base: Record<string, unknown>; texts: string[]; timer: NodeJS.Timeout }>();
+
   append(sessionId: string, update: Record<string, unknown>): boolean {
+    const kind = String(update.sessionUpdate ?? "");
+    if (SessionLog.FOLD_KINDS.has(kind) && update._local == null) {
+      const streamId = String((update._meta as Record<string, unknown> | undefined)?.["cognition.ai/streamingMessageId"] ?? kind);
+      const fk = `${sessionId}|${kind}|${streamId}`;
+      const text = String((update.content as Record<string, unknown> | undefined)?.text ?? "");
+      const f = this.folds.get(fk);
+      if (f) { f.texts.push(text); return true; }
+      this.flushSessionFolds(sessionId);
+      const timer = setTimeout(() => this.flushFold(fk), SessionLog.FOLD_MS);
+      timer.unref();
+      this.folds.set(fk, { sid: sessionId, base: { ...update }, texts: [text], timer });
+      return true;
+    }
+    this.flushSessionFolds(sessionId);
+    return this.appendRaw(sessionId, update);
+  }
+
+  private flushFold(fk: string) {
+    const f = this.folds.get(fk);
+    if (!f) return;
+    this.folds.delete(fk);
+    clearTimeout(f.timer);
+    const merged = { ...f.base, content: { ...(f.base.content as Record<string, unknown> | undefined), text: f.texts.join("") } };
+    this.appendRaw(f.sid, merged);
+  }
+
+  private flushSessionFolds(sessionId: string) {
+    for (const fk of [...this.folds.keys()]) if (fk.startsWith(sessionId + "|")) this.flushFold(fk);
+  }
+
+  private dropSessionFolds(sessionId: string) {
+    for (const [fk, f] of this.folds) if (fk.startsWith(sessionId + "|")) { clearTimeout(f.timer); this.folds.delete(fk); }
+  }
+
+  private appendRaw(sessionId: string, update: Record<string, unknown>): boolean {
     // Any append makes a previous "empty disk" hydrate verdict stale.
     this.hydrated.delete(sessionId);
     const key = dedupKey(update);
