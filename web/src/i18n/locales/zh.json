@@ -1989,5 +1989,10 @@
   "res.cfgSaveFail": "保存失败",
   "common.saving": "保存中…",
   "common.save": "保存",
-  "common.reset": "重置"
+  "common.reset": "重置",
+  "err": {
+    "title": "页面渲染出错",
+    "reload": "重新加载",
+    "home": "返回首页"
+  }
 }

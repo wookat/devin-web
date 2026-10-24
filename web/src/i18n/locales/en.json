@@ -1989,5 +1989,10 @@
   "res.cfgSaveFail": "Save failed",
   "common.saving": "Saving…",
   "common.save": "Save",
-  "common.reset": "Reset"
+  "common.reset": "Reset",
+  "err": {
+    "title": "Something went wrong",
+    "reload": "Reload",
+    "home": "Back to home"
+  }
 }
