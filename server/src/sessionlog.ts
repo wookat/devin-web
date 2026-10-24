@@ -309,7 +309,33 @@ export class SessionLog {
     // copy — skipped (and a stored `_local` optimistic row graduates to
     // its authoritative twin). `_local` sends themselves never dedup —
     // two identical optimistic texts are legitimately distinct sends.
-    if (this.dedupReplay.has(sessionId) && update._local == null && this.dedupHit(sessionId, key, update)) return false;
+    // `dw_*` rows are OUR synthetic boundaries (turn end / notice), never
+    // replayed content: deduping them by bare-kind key swallows a settle's
+    // marker whenever any older marker exists — observed as completed turns
+    // with no boundary → false "interrupted" banners → heal replays that
+    // re-armed the window and swallowed the next marker too.
+    const kind = String(update.sessionUpdate ?? "");
+    const synthetic = kind.startsWith("dw_");
+    if (update._local == null && !synthetic) {
+      if (this.dedupReplay.has(sessionId) && this.dedupHit(sessionId, key, update)) return false;
+      // Outside a replay window an authoritative twin of a stored `_local`
+      // row still graduates in place — devin's echoed user chunk can land
+      // AFTER turn rows (observed: echo seq'd below the reply → UI drew the
+      // reply above the user message). Re-sent identical text has no _local
+      // twin and appends normally. db-only path (the ring-only degraded
+      // store has no local flag to check).
+      if (!this.dedupReplay.has(sessionId) && this.db) {
+        try {
+          const hit = this.db.dedupGet(sessionId, key);
+          if (hit?.local) {
+            try { this.db.updateStored(sessionId, hit.gen, hit.seq, hit.ts, update); } catch {}
+            const e = this.logs.get(sessionId)?.find((x) => x.seq === hit.seq);
+            if (e) e.update = update;
+            return false;
+          }
+        } catch { /* graduate best-effort */ }
+      }
+    }
     this.dedupSeen.get(sessionId)?.add(key);
     let log = this.logs.get(sessionId);
     if (!log) {

@@ -102,18 +102,37 @@ function isBlobRef(v: unknown): v is { $blob: string } {
  * so a stored row and its replayed twin produce the same key — the replay
  * then appends only the delta it actually has. */
 export function dedupKey(update: Record<string, unknown>): string {
-  const canon = (v: unknown): unknown => {
-    if (Array.isArray(v)) return v.map(canon);
-    if (v && typeof v === "object") {
-      const o = v as Record<string, unknown>;
-      const out: Record<string, unknown> = {};
-      for (const k of Object.keys(o).sort()) {
-        if (k === "_local" || k === "_dwBlobbed") continue;
-        out[k] = canon(o[k]);
+  // Iterative canonicalizer — recursion here overflowed the call stack on
+  // deeply nested tool payloads (same RangeError family as resolveBlobs).
+  const canon = (root: unknown): unknown => {
+    const out: Record<string, unknown> | unknown[] = Array.isArray(root) ? [] : {};
+    const stack: [Record<string, unknown> | unknown[], Record<string, unknown> | unknown[]][] = [
+      [root as Record<string, unknown>, out],
+    ];
+    while (stack.length) {
+      const [s, d] = stack.pop()!;
+      if (Array.isArray(s)) {
+        for (let i = 0; i < s.length; i++) {
+          const v = s[i] as unknown;
+          if (v && typeof v === "object") {
+            const c: Record<string, unknown> | unknown[] = Array.isArray(v) ? [] : {};
+            (d as unknown[])[i] = c;
+            stack.push([v as Record<string, unknown>, c]);
+          } else (d as unknown[])[i] = v;
+        }
+      } else {
+        for (const k of Object.keys(s).sort()) {
+          if (k === "_local" || k === "_dwBlobbed") continue;
+          const v = (s as Record<string, unknown>)[k];
+          if (v && typeof v === "object") {
+            const c: Record<string, unknown> | unknown[] = Array.isArray(v) ? [] : {};
+            (d as Record<string, unknown>)[k] = c;
+            stack.push([v as Record<string, unknown>, c]);
+          } else (d as Record<string, unknown>)[k] = v;
+        }
       }
-      return out;
     }
-    return v;
+    return out;
   };
   const u = canon(update) as Record<string, unknown>;
   const meta = u._meta as Record<string, unknown> | undefined;
@@ -336,31 +355,36 @@ export class SessionDb {
   }
 
   /** Replace big strings in `node` with {$blob} refs (in place). `path`
-   * tracks the JSON path so display-critical fields can be spared. */
+   * tracks the JSON path so display-critical fields can be spared.
+   * Iterative explicit-stack walk — a deeply nested payload (observed in a
+   * 278MB session's tool output) used to overflow the call stack and 500
+   * every read/write path that touched it. */
   private blobify(node: unknown, path: string, kind: string) {
-    const visit = (v: unknown, p: string): unknown => {
-      if (typeof v === "string") {
-        // Message body text is display-critical — keep it inline so the
-        // timeline never needs a blob round-trip for a chat row.
-        if (v.length > BLOB_MIN && !(MSG_KINDS.has(kind) && p.endsWith("text"))) {
-          return { $blob: this.putBlob(v) };
-        }
-        return v;
-      }
-      if (Array.isArray(v)) {
-        for (let i = 0; i < v.length; i++) v[i] = visit(v[i], `${p}.${i}`);
-        return v;
-      }
-      if (typeof v === "object" && v !== null) {
-        for (const [k, val] of Object.entries(v)) {
-          if (isBlobRef(val)) continue;
-          (v as Record<string, unknown>)[k] = visit(val, p ? `${p}.${k}` : k);
-        }
-        return v;
+    const leaf = (v: unknown, p: string): unknown => {
+      if (typeof v !== "string") return v;
+      // Message body text is display-critical — keep it inline so the
+      // timeline never needs a blob round-trip for a chat row.
+      if (v.length > BLOB_MIN && !(MSG_KINDS.has(kind) && p.endsWith("text"))) {
+        return { $blob: this.putBlob(v) };
       }
       return v;
     };
-    return visit(node, path);
+    const stack: { v: Record<string, unknown> | unknown[]; p: string }[] = [];
+    if (node && typeof node === "object") stack.push({ v: node as Record<string, unknown>, p: path });
+    while (stack.length) {
+      const { v, p } = stack.pop()!;
+      const pairs: [string | number, unknown][] = Array.isArray(v)
+        ? v.map((x, i) => [i, x] as [number, unknown])
+        : Object.entries(v);
+      for (const [k, val] of pairs) {
+        if (isBlobRef(val)) continue;
+        const kp = Array.isArray(v) ? `${p}.${k}` : p ? `${p}.${k}` : String(k);
+        const c = leaf(val, kp);
+        if (c !== val) (v as Record<string, unknown>)[k as string] = c;
+        if (c && typeof c === "object" && !isBlobRef(c)) stack.push({ v: c as Record<string, unknown>, p: kp });
+      }
+    }
+    return node;
   }
 
   /** Storage transform: returns the (possibly blob-ref) update to persist
@@ -556,22 +580,34 @@ export class SessionDb {
     return lastMessageFrom(updates);
   }
 
-  /** Deep-copy `update` with every {$blob} ref swapped for its payload. */
+  /** Deep-copy `update` with every {$blob} ref swapped for its payload.
+   * Iterative — the recursive version overflowed the call stack on
+   * pathologically nested tool payloads (RangeError on every timeline
+   * read of a 278MB session). */
   resolveBlobs(update: Record<string, unknown>): Record<string, unknown> {
-    const visit = (v: unknown): unknown => {
-      if (isBlobRef(v)) {
-        const r = this.sBlob.get(v.$blob) as { data: string } | undefined;
-        return r?.data ?? "";
+    const out: Record<string, unknown> | unknown[] = Array.isArray(update) ? [] : {};
+    const stack: [Record<string, unknown> | unknown[], Record<string, unknown> | unknown[]][] = [
+      [update as Record<string, unknown>, out],
+    ];
+    while (stack.length) {
+      const [src, dst] = stack.pop()!;
+      const pairs: [string | number, unknown][] = Array.isArray(src)
+        ? src.map((x, i) => [i, x] as [number, unknown])
+        : Object.entries(src);
+      for (const [k, v] of pairs) {
+        if (isBlobRef(v)) {
+          const r = this.sBlob.get(v.$blob) as { data: string } | undefined;
+          (dst as Record<string, unknown>)[k as string] = r?.data ?? "";
+        } else if (v && typeof v === "object") {
+          const c: Record<string, unknown> | unknown[] = Array.isArray(v) ? [] : {};
+          (dst as Record<string, unknown>)[k as string] = c;
+          stack.push([v as Record<string, unknown>, c]);
+        } else {
+          (dst as Record<string, unknown>)[k as string] = v;
+        }
       }
-      if (Array.isArray(v)) return v.map(visit);
-      if (typeof v === "object" && v !== null) {
-        const o: Record<string, unknown> = {};
-        for (const [k, val] of Object.entries(v)) o[k] = visit(val);
-        return o;
-      }
-      return v;
-    };
-    return visit(update) as Record<string, unknown>;
+    }
+    return out as Record<string, unknown>;
   }
 
   /** Bulk-import JSONL lines (LogEntry-shaped) for one session — becomes the

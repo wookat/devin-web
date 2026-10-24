@@ -246,7 +246,26 @@ export async function ensureLoaded(ctx: ApiContext, id: string): Promise<void> {
       const last = healTried.get(id) ?? 0;
       if (Date.now() - last > 60_000) {
         healTried.set(id, Date.now());
-        void loadOnce(ctx, acp, id, cwd).catch(() => {});
+        void loadOnce(ctx, acp, id, cwd).catch(() => {}).finally(() => {
+          // Logs poisoned before the dw_*-dedup fix keep a completed turn's
+          // tail with NO boundary → the interrupted heuristic flags forever
+          // and every view re-heals. Replay is the authoritative transcript:
+          // if it still ends mid-turn-looking but the last real row is an
+          // agent message, the turn provably finished — seal the tail.
+          if (inflight.has(id) || openTurns.has(id)) return;
+          const log = ctx.sessionLog.get(id);
+          const SKIP = new Set(["usage_update", "session_info_update", "current_mode_update", "config_option_update", "available_commands_update"]);
+          let lastKind = "";
+          for (let i = log.length - 1; i >= 0; i--) {
+            const k = String(log[i].update.sessionUpdate ?? "");
+            if (SKIP.has(k)) continue;
+            lastKind = k; break;
+          }
+          if (lastKind === "agent_message_chunk" && interruptedTurn(ctx, id)) {
+            console.error(`[heal] ${id}: replay done, tail still unbounded on a finished message — sealing with dw_turn_end`);
+            ctx.sessionLog.append(id, { sessionUpdate: "dw_turn_end" });
+          }
+        });
       }
     }
     return;
