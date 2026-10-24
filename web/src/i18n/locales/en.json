@@ -1994,5 +1994,11 @@
     "title": "Something went wrong",
     "reload": "Reload",
     "home": "Back to home"
+  },
+  "lanOpen": {
+    "title": "Open LAN access",
+    "body": "No access key is configured — any device on this network can reach and operate this service.",
+    "fix": "Set one under Service → Access key",
+    "dismiss": "Don't show again"
   }
 }

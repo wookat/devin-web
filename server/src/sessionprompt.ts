@@ -21,6 +21,7 @@ import { noteSendError, lastSendError, type SendCheckStep } from "./sendhealth.j
 import { inflight, isDraining, isGracefulExit, lastActivity } from "./sessionlive.js";
 import { openTurns, openTurnsLoad, openTurnsSave } from "./sessionturns.js";
 import { queueList, queueFlush } from "./sessionqueue.js";
+import { incMetric } from "./metrics.js";
 import { loadedOn, sessionHost } from "./sessionplace.js";
 import { turnSilenceMs } from "./env.js";
 
@@ -380,6 +381,7 @@ export async function promptWithRetry<T>(
 export const turnEndHooks = new Set<(ctx: ApiContext, id: string) => void>();
 
 export function dispatchPrompt(ctx: ApiContext, id: string, text: string, attachments: { url: string; name?: string; mime?: string; size?: number }[] = [], subagentId?: string, respawnRow?: { title: string; task: string; profile: string }) {
+  incMetric("prompts.dispatched");
   // Drain gate: no new turns once a restart is draining — internal callers
   // (queueFlush, auto-resume, subagent relays) no-op; HTTP send-paths were
   // already 503'd before reaching here.

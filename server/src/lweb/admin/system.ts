@@ -17,6 +17,8 @@ import { tlStats } from "../../dwtimeline.js";
 import os from "node:os";
 import { streamScreen, injectInput } from "../../screen.js";
 import { loadReg } from "../../dwstore.js";
+import { psRun } from "../../pshelper.js";
+import { metricsSnapshot } from "../../metrics.js";
 import { sendPreflight } from "../../sessionprompt.js";
 import { recentSendErrors } from "../../sendhealth.js";
 import { inflight, beginDrain, isDraining, drainSince, markGracefulExit } from "../../sessionlive.js";
@@ -287,16 +289,9 @@ export async function handleSystem(ctx: ApiContext, req: IncomingMessage, res: S
     const mu = process.memoryUsage();
     let procs: { pid: number; name: string; mb: number; role: string }[] = [];
     try {
-      const out = await new Promise<string>((resolve) => {
-        const pr = spawn("powershell", ["-NoProfile", "-Command",
-          "Get-CimInstance Win32_Process -Filter \"Name='node.exe' or Name='devin.exe' or Name='opencode.exe'\" | Select-Object ProcessId,Name,WorkingSetSize,CommandLine | ConvertTo-Json -Compress"],
-          { windowsHide: true });
-        let buf = "";
-        const to = setTimeout(() => { try { pr.kill(); } catch {} }, 6000);
-        pr.stdout.on("data", (d) => { buf += d; });
-        pr.on("exit", () => { clearTimeout(to); resolve(buf); });
-        pr.on("error", () => { clearTimeout(to); resolve(""); });
-      });
+      const out = await psRun(
+        "Get-CimInstance Win32_Process -Filter \"Name='node.exe' or Name='devin.exe' or Name='opencode.exe'\" | Select-Object ProcessId,Name,WorkingSetSize,CommandLine | ConvertTo-Json -Compress",
+        6000).catch(() => "");
       const raw = JSON.parse(out || "[]");
       const arr = Array.isArray(raw) ? raw : [raw];
       for (const r of arr) {
@@ -349,11 +344,25 @@ export async function handleSystem(ctx: ApiContext, req: IncomingMessage, res: S
         tl: tlStats(),
         topRings: rings.top.map((r) => ({ ...r, title: metas[r.id]?.title ?? null })),
       },
+      metrics: metricsSnapshot(),
       dataDir: {
         sessionlogDbMb: mb(size("sessionlog.db")), walMb: mb(size("sessionlog.db-wal")),
         dwJsonKb: Math.round(size("dw.json") / 1024),
       },
     });
+    return true;
+  }
+  // POST /api/admin/heapdump — on-demand .heapsnapshot into the data dir for
+  // offline DevTools analysis (the RSS watchdog also dumps one on fire).
+  if (p === "/api/admin/heapdump" && m === "POST") {
+    const { writeHeapSnapshot } = await import("node:v8");
+    const file = path.join(ctx.store.dataDir, `heap-${new Date().toISOString().replace(/[:.]/g, "-")}.heapsnapshot`);
+    try {
+      writeHeapSnapshot(file);
+      json(res, 200, { ok: true, file });
+    } catch (e) {
+      json(res, 500, { ok: false, error: (e as Error).message });
+    }
     return true;
   }
   if (p === "/api/admin/repair" && m === "POST") {

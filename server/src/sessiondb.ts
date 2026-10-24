@@ -27,6 +27,7 @@
  */
 import { DatabaseSync } from "node:sqlite";
 import crypto from "node:crypto";
+import fs from "node:fs";
 
 const BLOB_MIN = 16 * 1024;
 const OFFLOAD_MIN = 64 * 1024;
@@ -162,10 +163,15 @@ export class SessionDb {
   private pendSids = new Set<string>();
   private flushTimer: NodeJS.Timeout | null = null;
 
-  constructor(file: string) {
+  constructor(private file: string) {
     this.db = new DatabaseSync(file);
     this.db.exec("PRAGMA journal_mode=WAL");
     this.db.exec("PRAGMA synchronous=NORMAL");
+    // Deleted rows move to the freelist instead of shrinking the file.
+    // INCREMENTAL lets the maintenance interval hand pages back gradually;
+    // on a pre-existing db it's a no-op until one full VACUUM (the
+    // 'vacuum-logs' repair fix) flips the mode.
+    this.db.exec("PRAGMA auto_vacuum=INCREMENTAL");
     // Schema check: an events table without gen in the PK is the pre-gen
     // layout — drop it; rows re-import from the .jsonl mirror on next touch.
     const sqlRow = this.db.prepare(
@@ -290,6 +296,10 @@ export class SessionDb {
     // every streaming accessor below pages via .all() instead.
     setInterval(() => {
       try { this.db.exec("PRAGMA wal_checkpoint(TRUNCATE)"); } catch { /* busy — next round */ }
+      // Hand freelist pages back to the OS gradually — 256 pages ≈ 1MB/tick,
+      // cheap enough to ride the checkpoint interval; no-op until a full
+      // VACUUM has enabled incremental mode on this file.
+      try { this.db.exec("PRAGMA incremental_vacuum(256)"); } catch { /* busy or mode off */ }
     }, 60_000).unref();
     // A kill mid-window must not strand queued writes — 'exit' runs them
     // synchronously (better-sqlite3 calls are sync, safe in exit handlers).
@@ -617,6 +627,19 @@ export class SessionDb {
     };
     this.statsMemo = { at: Date.now(), v };
     return v;
+  }
+
+  /** Full VACUUM — rewrites the file (a 3GB db takes a while and pauses
+   *  writers), so it's a deliberate repair action, never scheduled. Also
+   *  the only way to flip auto_vacuum=INCREMENTAL on a pre-existing file;
+   *  after this runs the checkpoint interval keeps it lean. */
+  vacuum(): { beforeMb: number; afterMb: number } {
+    this.flush();
+    const size = () => { try { return fs.statSync(this.file).size / 1048576; } catch { return 0; } };
+    const beforeMb = size();
+    this.db.exec("PRAGMA wal_checkpoint(TRUNCATE)");
+    this.db.exec("VACUUM");
+    return { beforeMb: Math.round(beforeMb), afterMb: Math.round(size()) };
   }
 
   close() {

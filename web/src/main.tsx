@@ -19,6 +19,7 @@ import { initTheme } from './lib/theme'
 import { initScrollReveal } from './lib/scrollReveal'
 import { prefetchAdmin, prefetchShare } from './lib/api'
 import { ErrorBoundary } from './components/ErrorBoundary'
+import LanKeyBanner from './components/LanKeyBanner'
 
 initTheme()
 initScrollReveal()
@@ -81,6 +82,7 @@ function mount(boot: RouteModule | null) {
         <ErrorBoundary>
         <Suspense fallback={<div className="flex h-screen items-center justify-center bg-background"><div className="h-5 w-5 animate-spin rounded-full border-2 border-muted-foreground/30 border-t-muted-foreground" /></div>}>
         <RouteTracker />
+        <LanKeyBanner />
         <Routes>
           <Route path="/" element={<LastOrNew />} />
           <Route path="/settings" element={<SettingsPage />} />

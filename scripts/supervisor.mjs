@@ -22,6 +22,7 @@ import { fileURLToPath } from "node:url";
 import crypto from "node:crypto";
 import process from "node:process";
 import { dataDir as resolveDataDir, pubPort, backPort, adminKey, allowedHostsRaw, foreignDevinScanMs, foreignDevinMaxMb, commitEmergencyMb } from "./env.mjs";
+import { psRun } from "./pshelper.mjs";
 
 const repoRoot = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..");
 const PUB_PORT = pubPort();
@@ -148,16 +149,18 @@ setInterval(() => {
       spawn("taskkill", ["/pid", String(pid), "/t", "/f"], { stdio: "ignore", windowsHide: true });
     } else { try { process.kill(pid, "SIGKILL"); } catch {} }
   };
+  let sweeping = false;
   const sweep = () => {
+    if (sweeping) return; // never stack overlapping scans
     if (process.platform === "win32") {
-      execFile("powershell", ["-NoProfile", "-Command",
+      sweeping = true;
+      psRun(
         "$cs=@((Get-Counter '\\Memory\\Committed Bytes','\\Memory\\Commit Limit' -ErrorAction SilentlyContinue).CounterSamples);" +
         "$cb=($cs|Where-Object{$_.Path -match 'ommitted Bytes'}|Select-Object -First 1).CookedValue;" +
         "$cl=($cs|Where-Object{$_.Path -match 'ommit Limit'}|Select-Object -First 1).CookedValue;" +
         "$ps=@(Get-Process devin -ErrorAction SilentlyContinue | Select-Object Id,PagedMemorySize64);" +
-        "Write-Output (@{free=$(if($cl){[math]::Round(($cl-$cb)/1MB)}else{$null});procs=$ps}|ConvertTo-Json -Compress -Depth 3)"],
-        { timeout: 20000, windowsHide: true }, (e, out) => {
-          if (e) { log(`foreign-sweep probe: ${e.message}`); return; }
+        "Write-Output (@{free=$(if($cl){[math]::Round(($cl-$cb)/1MB)}else{$null});procs=$ps}|ConvertTo-Json -Compress -Depth 3)",
+        20000).then((out) => {
           let j; try { j = JSON.parse(String(out).trim().split("\n").pop()); } catch { return; }
           const rows = [].concat(j.procs ?? []).map((p) => ({ pid: p.Id, mb: Math.round((p.PagedMemorySize64 ?? 0) / 1048576) }));
           for (const p of rows) if (p.mb > maxMb) killPid(p.pid, `commit ${p.mb}MB > ${maxMb}MB cap`);
@@ -165,7 +168,7 @@ setInterval(() => {
             const big = rows.filter((p) => p.mb > 2048).sort((a, b) => b.mb - a.mb)[0];
             if (big) killPid(big.pid, `system emergency: free commit ${j.free}MB < ${emergencyMb}MB, fattest devin ${big.mb}MB`);
           }
-        });
+        }).catch((e) => log(`foreign-sweep probe: ${e.message}`)).finally(() => { sweeping = false; });
       return;
     }
     // POSIX: /proc — VmSize for commit-ish, Committed_AS vs CommitLimit for the
@@ -194,10 +197,9 @@ function killOrphanAcps() {
   // Windows: acp children orphaned by a dead backend get reparented nowhere —
   // find devin.exe 'acp' processes whose parent no longer exists and kill them.
   if (process.platform === "win32") {
-    return new Promise((r) =>
-      execFile("powershell", ["-NoProfile", "-Command",
-        "Get-CimInstance Win32_Process -Filter \"name='devin.exe'\" | Where-Object { $_.CommandLine -match 'acp' -and -not (Get-Process -Id $_.ParentProcessId -ErrorAction SilentlyContinue) } | ForEach-Object { Stop-Process -Id $_.ProcessId -Force }"],
-        { timeout: 20000, windowsHide: true }, (e) => { if (e) log(`acp cleanup: ${e.message}`); r(); }));
+    return psRun(
+      "Get-CimInstance Win32_Process -Filter \"name='devin.exe'\" | Where-Object { $_.CommandLine -match 'acp' -and -not (Get-Process -Id $_.ParentProcessId -ErrorAction SilentlyContinue) } | ForEach-Object { Stop-Process -Id $_.ProcessId -Force }",
+      20000).catch((e) => log(`acp cleanup: ${e.message}`)).then(() => {});
   }
   // POSIX: orphans reparent to init (ppid 1) — ps scan for devin acp with
   // ppid==1. The backend's own tree is killed via its process group instead.
@@ -274,9 +276,10 @@ async function clearPortSquatter() {
   // really our dist/server/index.js before killing.
   if (!(await portHeld())) return;
   if (process.platform === "win32") {
-    await new Promise((r) => execFile("powershell", ["-NoProfile", "-Command",
-      `Get-NetTCPConnection -LocalPort ${BACK_PORT} -State Listen -ErrorAction SilentlyContinue | Select-Object -ExpandProperty OwningProcess -Unique | ForEach-Object { $p = Get-CimInstance Win32_Process -Filter "ProcessId=$_" -ErrorAction SilentlyContinue; if ($p -and $p.CommandLine -match 'dist[\\\\/]server[\\\\/]index\\.js') { Stop-Process -Id $_ -Force; "killed $_" } }`],
-      { timeout: 15000, windowsHide: true }, (e, out) => { const t = String(out ?? "").trim(); log(`port squatter: ${t || (e ? e.message : "none")}`); r(); }));
+    await psRun(
+      `Get-NetTCPConnection -LocalPort ${BACK_PORT} -State Listen -ErrorAction SilentlyContinue | Select-Object -ExpandProperty OwningProcess -Unique | ForEach-Object { $p = Get-CimInstance Win32_Process -Filter "ProcessId=$_" -ErrorAction SilentlyContinue; if ($p -and $p.CommandLine -match 'dist[\\\\/]server[\\\\/]index\\.js') { Stop-Process -Id $_ -Force; "killed $_" } }`,
+      15000).then((out) => log(`port squatter: ${String(out ?? "").trim() || "none"}`))
+      .catch((e) => log(`port squatter: ${e.message}`));
   } else {
     await new Promise((r) => execFile("sh", ["-c",
       `for pid in $(lsof -ti tcp:${BACK_PORT} -sTCP:LISTEN 2>/dev/null); do ps -p "$pid" -o command= 2>/dev/null | grep -q "dist/server/index.js" && kill -9 "$pid" && echo "killed $pid"; done; true`],

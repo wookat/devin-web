@@ -505,6 +505,11 @@ export class SessionLog {
     return { sessions: this.logs.size, entries, hydrated: this.hydrated.size, top: perSession.slice(0, 15) };
   }
 
+  /** Full VACUUM passthrough — deliberate repair action (see SessionDb). */
+  vacuum(): { beforeMb: number; afterMb: number } | null {
+    return this.db ? this.db.vacuum() : null;
+  }
+
   /** Newest user/agent message text for list views — the db path is one
    *  bounded DESC query; the .jsonl path scans a 600-entry tail. */
   lastMessage(sessionId: string): { body: string; ts: number } | null {

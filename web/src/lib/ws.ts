@@ -19,6 +19,21 @@ const handlers = new Set<Handler>()
 let ws: WebSocket | null = null
 let retry = 0
 let retryTimer: number | null = null
+// Session-scoped heavy streams (token deltas, terminal output, agent logs)
+// are only sent for these ids; [] = nothing heavy, null = everything
+// (legacy). The mirror page sets its own session id on mount.
+let scope: string[] | null = []
+
+function sendScope(sock: WebSocket) {
+  try { sock.send(JSON.stringify({ type: 'sub', sessions: scope })) } catch { /* not open yet */ }
+}
+
+/** Scope this client's heavy session streams to the given session ids.
+ *  Pass the open session's id; [] receives no streams; null = all. */
+export function setWsSessionScope(ids: string[] | null) {
+  scope = ids
+  if (ws && ws.readyState === WebSocket.OPEN) sendScope(ws)
+}
 
 function ensure() {
   if (ws && (ws.readyState === WebSocket.OPEN || ws.readyState === WebSocket.CONNECTING)) return
@@ -26,7 +41,7 @@ function ensure() {
   const proto = location.protocol === 'https:' ? 'wss' : 'ws'
   const sock = new WebSocket(`${proto}://${location.host}/ws${adminKey() ? `?key=${encodeURIComponent(adminKey())}` : ''}`)
   ws = sock
-  sock.onopen = () => { retry = 0 }
+  sock.onopen = () => { retry = 0; sendScope(sock) }
   sock.onmessage = (m) => {
     let ev: WsEvent
     try { ev = JSON.parse(String(m.data)) as WsEvent } catch { return }

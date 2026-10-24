@@ -10,7 +10,7 @@ import { Loader2, Settings2, Copy, Check, Archive, ArchiveRestore, Plus, FileTex
 import { adminFetch, adminFetchSwr, shareFetchSwr, type PublicMessage, type DashboardData } from '@/lib/api'
 import { adminViewer, visitorViewer, setViewer, sessionFetch, sessionFetchSwr, attachmentUrl, type Viewer, type SharePermission } from '@/lib/viewer'
 import { visibleInterval } from '@/lib/poll'
-import { subscribeWs } from '@/lib/ws'
+import { subscribeWs, setWsSessionScope } from '@/lib/ws'
 import { getTheme, setTheme, type Theme } from '@/lib/theme'
 import { type TimelineItem, workSeconds } from '@/components/Timeline'
 import { envSupersededMap } from '@/components/TimelineMerges'
@@ -1238,11 +1238,15 @@ export default function AdminMirrorPage() {
         void load()
       }
     })
+    // Heavy streams (token deltas, terminal output, agent logs) only flow
+    // for the session this page actually views — ws.ts SCOPED_EVENTS.
+    setWsSessionScope(id && id !== 'new' ? [id] : [])
     const stop = visibleInterval(() => load(), 3_000)
     return () => {
       alive = false
       stop()
       offWs()
+      setWsSessionScope([])
       reloadTl.current = null
       graduateTl.current = null
       if (graduateTimer != null) clearTimeout(graduateTimer)

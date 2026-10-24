@@ -21,6 +21,7 @@ import { openTurns, openTurnsLoad, openTurnsSave, sessionByReqId, type OpenTurn 
 import { loadedOn, sessionHost, markLoadedOn } from "./sessionplace.js";
 import { inflight, adoptedTurns, lastActivity } from "./sessionlive.js";
 import { sessionStatus } from "./sessionview.js";
+import { incMetric } from "./metrics.js";
 import { loadOnce } from "./sessionload.js";
 /** Sessions whose in-flight turn SURVIVED a backend restart (broker mode):
  * the acp kept running so the turn still streams — but its prompt response
@@ -162,6 +163,7 @@ function ensurePromptEvtSub(ctx: ApiContext) {
   if (promptEvtArmed || !brokerEnabled) return;
   promptEvtArmed = true;
   void brokerOnEvent((e) => {
+    if (e.ev === "mem-recycle") incMetric("acp.memRecycles");
     try { onBrokerPromptEvt(ctx, e); } catch { /* events never break the sub */ }
   }).catch(() => { promptEvtArmed = false; });
 }

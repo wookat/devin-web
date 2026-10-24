@@ -56,6 +56,7 @@ import path from "node:path";
 import { spawn, execSync } from "node:child_process";
 import crypto from "node:crypto";
 import { dataDir as resolveDataDir, acpMemScanMs, acpCommitMaxMb, acpCommitBusyMaxMb, commitEmergencyMb } from "./env.mjs";
+import { psRun } from "./pshelper.mjs";
 
 const dataDir = resolveDataDir();
 const sockPath = process.platform === "win32"
@@ -366,10 +367,11 @@ const MEM = {
 };
 const busyOf = (a) => a.prompts.size + a.reqs.size;
 
-/** Snapshot each pid's committed MB + system-wide free commit MB (one
- *  powershell spawn per scan on win32; /proc on posix). Missing/failed
- *  entries are simply absent — callers must tolerate nulls. */
-function measureCommit(pids) {
+/** Snapshot each pid's committed MB + system-wide free commit MB (resident
+ *  pshelper on win32 — a spawn-per-scan blocked the relay loop ~150ms each
+ *  tick; /proc on posix). Missing/failed entries are simply absent —
+ *  callers must tolerate nulls. */
+async function measureCommit(pids) {
   const procs = new Map();
   let sysFreeMB = null;
   if (process.platform === "win32") {
@@ -380,7 +382,7 @@ function measureCommit(pids) {
       "if(-not $cb -and $cs.Count -ge 2){$cb=$cs[0].CookedValue;$cl=$cs[1].CookedValue};" +
       `$ps=@(Get-Process -Id ${pids.join(",")} -ErrorAction SilentlyContinue | Select-Object Id,PagedMemorySize64);` +
       "Write-Output (@{free=$(if($cl){[math]::Round(($cl-$cb)/1MB)}else{$null});procs=$ps}|ConvertTo-Json -Compress -Depth 3)";
-    const out = execSync(`powershell -NoProfile -Command "${script}"`, { stdio: ["ignore", "pipe", "ignore"], timeout: 15000, windowsHide: true }).toString();
+    const out = await psRun(script, 15000);
     const j = JSON.parse(out.trim().split("\n").pop());
     sysFreeMB = j.free ?? null;
     for (const p of [].concat(j.procs ?? [])) procs.set(p.Id, Math.round(p.PagedMemorySize64 / 1048576));
@@ -402,36 +404,39 @@ function measureCommit(pids) {
   return { procs, sysFreeMB };
 }
 
+let memScanBusy = false;
 function memScan() {
+  if (memScanBusy) return; // a wedged probe must not stack up scans
   const live = [...acps.values()].filter((a) => !a.exited && a.proc?.pid);
   if (!live.length) return;
-  let m;
-  try { m = measureCommit(live.map((a) => a.proc.pid)); } catch { return; }
-  for (const a of live) {
-    const mb = m.procs.get(a.proc.pid);
-    if (mb != null) a.lastCommitMb = mb;
-  }
-  // Emergency: the whole box is out of commit — recycle the fattest child
-  // now or unrelated apps start failing allocations within minutes. One per
-  // scan: the next pass re-evaluates and takes the next biggest if needed.
-  if (m.sysFreeMB != null && m.sysFreeMB < MEM.emergencyFreeMb) {
-    const big = live.reduce((x, y) => ((m.procs.get(y.proc.pid) ?? 0) > (m.procs.get(x.proc.pid) ?? 0) ? y : x));
-    const mb = m.procs.get(big.proc.pid) ?? 0;
-    console.error(`[acp-broker] EMERGENCY system free commit ${m.sysFreeMB}MB < ${MEM.emergencyFreeMb}MB — recycling largest acp ${big.id} (pid ${big.proc.pid}, ${mb}MB, busy=${busyOf(big)})`);
-    ctlEvent({ ev: "mem-recycle", id: big.id, pid: big.proc.pid, commitMb: mb, reason: "system-emergency", ts: Date.now() });
-    killAcp(big.id);
-    return;
-  }
-  for (const a of live) {
-    const mb = m.procs.get(a.proc.pid);
-    if (mb == null) continue;
-    const busy = busyOf(a);
-    const cap = busy ? MEM.maxBusyMb : MEM.maxMb;
-    if (mb <= cap) continue;
-    console.error(`[acp-broker] recycling acp ${a.id} (pid ${a.proc.pid}): commit ${mb}MB > ${cap}MB (busy=${busy})`);
-    ctlEvent({ ev: "mem-recycle", id: a.id, pid: a.proc.pid, commitMb: mb, reason: busy ? "over-busy-cap" : "over-cap", ts: Date.now() });
-    killAcp(a.id);
-  }
+  memScanBusy = true;
+  void measureCommit(live.map((a) => a.proc.pid)).then((m) => {
+    for (const a of live) {
+      const mb = m.procs.get(a.proc.pid);
+      if (mb != null) a.lastCommitMb = mb;
+    }
+    // Emergency: the whole box is out of commit — recycle the fattest child
+    // now or unrelated apps start failing allocations within minutes. One per
+    // scan: the next pass re-evaluates and takes the next biggest if needed.
+    if (m.sysFreeMB != null && m.sysFreeMB < MEM.emergencyFreeMb) {
+      const big = live.reduce((x, y) => ((m.procs.get(y.proc.pid) ?? 0) > (m.procs.get(x.proc.pid) ?? 0) ? y : x));
+      const mb = m.procs.get(big.proc.pid) ?? 0;
+      console.error(`[acp-broker] EMERGENCY system free commit ${m.sysFreeMB}MB < ${MEM.emergencyFreeMb}MB — recycling largest acp ${big.id} (pid ${big.proc.pid}, ${mb}MB, busy=${busyOf(big)})`);
+      ctlEvent({ ev: "mem-recycle", id: big.id, pid: big.proc.pid, commitMb: mb, reason: "system-emergency", ts: Date.now() });
+      killAcp(big.id);
+      return;
+    }
+    for (const a of live) {
+      const mb = m.procs.get(a.proc.pid);
+      if (mb == null) continue;
+      const busy = busyOf(a);
+      const cap = busy ? MEM.maxBusyMb : MEM.maxMb;
+      if (mb <= cap) continue;
+      console.error(`[acp-broker] recycling acp ${a.id} (pid ${a.proc.pid}): commit ${mb}MB > ${cap}MB (busy=${busy})`);
+      ctlEvent({ ev: "mem-recycle", id: a.id, pid: a.proc.pid, commitMb: mb, reason: busy ? "over-busy-cap" : "over-cap", ts: Date.now() });
+      killAcp(a.id);
+    }
+  }).catch(() => {}).finally(() => { memScanBusy = false; });
 }
 if (MEM.scanMs > 0) {
   const t = setInterval(memScan, MEM.scanMs);

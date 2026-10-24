@@ -185,6 +185,9 @@ export async function repair(ctx: ApiContext, fixes: string[] | "all"): Promise<
       } else if (fix === "clear-open-turns") {
         const n = clearOpenTurns(ctx);
         results[fix] = `cleared ${n} entr${n === 1 ? "y" : "ies"} — next boot won't replay them`;
+      } else if (fix === "vacuum-logs") {
+        const r = ctx.sessionLog.vacuum();
+        results[fix] = r ? `sessionlog.db ${r.beforeMb}MB → ${r.afterMb}MB` : "no sqlite store (file-mode logs)";
       } else if (fix === "restart-now") {
         results[fix] = "exiting — supervisor respawns immediately";
         setTimeout(() => {

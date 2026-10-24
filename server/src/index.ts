@@ -5,6 +5,7 @@ import path from "node:path";
 import fs from "node:fs";
 import child_process, { execFile } from "node:child_process";
 import { fileURLToPath } from "node:url";
+import { writeHeapSnapshot } from "node:v8";
 import { AcpManager } from "./manager.js";
 import { AccountPool, isRateLimitError, retryAfterSeconds } from "./accounts.js";
 import { agentsCheck, devinCheck, setAgentsDir } from "./agents.js";
@@ -452,9 +453,20 @@ httpServer.listen(PORT, HOST, async () => {
   const rssLimitMb = Number(process.env.DEVIN_WEB_RSS_LIMIT_MB ?? 1536);
   if (rssLimitMb > 0) {
     setInterval(() => {
-      const rss = process.memoryUsage().rss / 1048576;
+      const mu = process.memoryUsage();
+      const rss = mu.rss / 1048576;
       if (rss > rssLimitMb) {
-        console.error(`[watchdog] rss ${Math.round(rss)}MB > ${rssLimitMb}MB — graceful restart for memory reclaim`);
+        // Leave a heap snapshot + the usage breakdown in the log before
+        // exiting — "restart for memory reclaim" without evidence is a
+        // mitigation, not a diagnosis. The .heapsnapshot loads in DevTools.
+        const mb = (n: number) => Math.round(n / 1048576);
+        console.error(`[watchdog] rss ${Math.round(rss)}MB > ${rssLimitMb}MB — graceful restart for memory reclaim ` +
+          `(heapUsed ${mb(mu.heapUsed)} / heapTotal ${mb(mu.heapTotal)} / external ${mb(mu.external)} / arrayBuffers ${mb(mu.arrayBuffers ?? 0)})`);
+        try {
+          const snap = path.join(store.dataDir, `heap-${new Date().toISOString().replace(/[:.]/g, "-")}.heapsnapshot`);
+          writeHeapSnapshot(snap);
+          console.error(`[watchdog] heap snapshot → ${snap}`);
+        } catch (e) { console.error("[watchdog] heap snapshot failed:", e); }
         try { markGracefulExit(); } catch {}
         process.exit(0);
       }

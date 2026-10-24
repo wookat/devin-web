@@ -193,6 +193,27 @@ supervisor sweeps them itself every `DEVIN_WEB_FOREIGN_DEVIN_SCAN_MS`
 rule the fattest devin.exe over 2GB goes first. Logged as
 `foreign-sweep:` lines in supervisor.log.
 
+Probes/observability: `scripts/pshelper.mjs` (mirrored by
+`server/src/pshelper.ts`) runs ONE resident `powershell -Command -` per
+host process behind every periodic probe (broker memScan, foreign-sweep,
+orphan/port sweeps, resources-page WMI) — spawn-per-scan flashed conhost
+windows and `execSync` stalled the broker relay loop. On win32 every
+spawn/execFile carries `windowsHide: true`; the supervisor onlogon task
+runs through a generated hidden `.vbs` launcher (same trick as the
+watchdog). WS backpressure: hub/`/ws/term`/localbrowser all drop-or-
+terminate past an 8MB `bufferedAmount` ceiling; heavy streams
+(`session_update`,`agent_log`,`terminal_output`,`timeline_delta`) are
+session-scoped — clients send `{type:"sub",sessions:[id]}` (web client
+`setWsSessionScope`); unscoped clients get everything (legacy). The RSS
+watchdog logs the full memoryUsage() split and writes a `.heapsnapshot`
+to the data dir on fire; `POST /api/admin/heapdump` dumps on demand.
+`metrics.ts` counts ws.sent/scopedSkips/droppedClients,
+prompts.dispatched, acp.memRecycles → `resources/system.metrics`.
+`sessionlog.db`: auto_vacuum=INCREMENTAL + `incremental_vacuum(256)`
+per checkpoint tick (new dbs; existing needs one VACUUM — repair fix
+`vacuum-logs`). `LanKeyBanner` warns once on non-loopback access with
+no ADMIN_KEY.
+
 ## Test
 
 ```cmd
