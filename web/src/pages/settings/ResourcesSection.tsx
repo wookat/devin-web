@@ -94,7 +94,7 @@ interface SysRes {
   os: { platform: string; cpus: number; totalMb: number; freeMb: number; usedMb: number; loadAvg: number[]; uptimeSec: number }
   backend: { pid: number; rssMb: number; heapUsedMb: number; heapTotalMb: number; externalMb: number; buffersMb: number; uptimeSec: number }
   procs: { pid: number; name: string; mb: number; role: string }[]
-  acps: { acpId: string; pid: number; mb: number | null; cwd: string; key: string | null; account: string | null; exited: boolean; sessions: number }[]
+  acps: { acpId: string; pid: number; mb: number | null; commitMb?: number | null; cwd: string; key: string | null; account: string | null; exited: boolean; sessions: number }[]
   sessions: {
     total: number; loadedHere: number; inflight: number; openTurns: number; locked: number
     rings: { sessions: number; entries: number; hydrated: number }
@@ -196,7 +196,7 @@ function SystemResources() {
                 <span className="w-[56px] shrink-0 text-12 tabular-nums text-muted-foreground">{a.pid}</span>
                 <span className="min-w-0 flex-1 truncate text-12 text-secondary" title={a.cwd}>{a.key ?? a.cwd}</span>
                 <span className="shrink-0 text-12 text-muted-foreground">{a.sessions} {t('set.sysSessUnit')}</span>
-                <span className="shrink-0 text-13 tabular-nums text-foreground">{fmtMb(a.mb)}</span>
+                <span className="shrink-0 text-13 tabular-nums text-foreground" title={`RSS ${fmtMb(a.mb)} · commit ${fmtMb(a.commitMb ?? null)}`}>{fmtMb(a.commitMb ?? a.mb)}</span>
               </div>
             ))}
           </div>

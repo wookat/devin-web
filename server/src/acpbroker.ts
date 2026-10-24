@@ -44,6 +44,11 @@ export interface BrokerAcpInfo {
    *  restores real attribution instead of "(account ?)". */
   account: string | null;
   exited: boolean; exitCode: number | null; bytesOut: number; startedAt: number;
+  /** Last committed-memory reading (MB) taken by the broker's memScan —
+   *  null before the first scan or when the pid probe failed. Commit, not
+   *  RSS: the acp leak is VirtualAlloc'd-but-untouched pages, which RSS
+   *  under-reports until the system commit limit is already gone. */
+  commitMb?: number | null;
   /** Turn ledger — client→agent `session/prompt` requests the broker saw
    *  sent on this acp and never saw answered. Authoritative "turn live"
    *  evidence for turns dispatched under THIS acp's lifetime

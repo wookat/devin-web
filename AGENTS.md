@@ -169,7 +169,10 @@ Commit watchdog: `devin acp` ≤3000.11.92 leaked a PTY per tool call —
 commit in 2.5h, which exhausts the SYSTEM commit limit and crashes
 unrelated apps (EventID 2004 / "虚拟内存不足" — hit on this box
 2026-10-24; fixed upstream in 3000.11.205, update lands on the next acp
-spawn). The broker bounds the blast radius since it owns the children:
+spawn). The 2026-10-24 incident happened AGAIN on 3000.11.205 (three
+acps at 17–26GB → EventID 2004 → desktop killed) — the upstream fix is
+incomplete, so the watchdogs below are the real defense, not a stopgap.
+The broker bounds the blast radius since it owns the children:
 `memScan` every `DEVIN_WEB_ACP_MEM_SCAN_MS` (30s, 0=off) kills any acp
 over `DEVIN_WEB_ACP_COMMIT_MAX_MB` (8192) — or
 `DEVIN_WEB_ACP_COMMIT_BUSY_MAX_MB` (2×) while it still hosts in-flight
@@ -177,8 +180,18 @@ turns (prompts+reqs ledger) — and, if system free commit drops under
 `DEVIN_WEB_COMMIT_EMERGENCY_MB` (3072), recycles the fattest child once
 per scan regardless. Kill rides the normal ev:exit path → open turns
 auto-resume, sessions re-attach on a fresh acp. Env readers live in
-scripts/env.mjs; `list` now reports per-acp `commitMb`, and recycles
-emit ctl `ev:"mem-recycle"` + a broker.log line.
+scripts/env.mjs; `list` reports per-acp `commitMb` (surfaced as
+`commitMb` on `/api/admin/resources/system` — RSS alone can't see this
+leak, it's committed-but-untouched pages), recycles emit ctl
+`ev:"mem-recycle"` + a broker.log line, and every spawn/exit is
+journaled to broker.log for post-mortem pid↔acp correlation.
+**Foreign devin.exe** (acps spawned by a devin CLI session in a
+terminal, editor integrations, …) are invisible to the broker — the
+supervisor sweeps them itself every `DEVIN_WEB_FOREIGN_DEVIN_SCAN_MS`
+(60s, 0=off): any `devin.exe` over `DEVIN_WEB_FOREIGN_DEVIN_MAX_MB`
+(default = busy cap) is killed, and under the same system-emergency
+rule the fattest devin.exe over 2GB goes first. Logged as
+`foreign-sweep:` lines in supervisor.log.
 
 ## Test
 

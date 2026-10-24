@@ -21,7 +21,7 @@ import { spawn, execFile } from "node:child_process";
 import { fileURLToPath } from "node:url";
 import crypto from "node:crypto";
 import process from "node:process";
-import { dataDir as resolveDataDir, pubPort, backPort, adminKey, allowedHostsRaw } from "./env.mjs";
+import { dataDir as resolveDataDir, pubPort, backPort, adminKey, allowedHostsRaw, foreignDevinScanMs, foreignDevinMaxMb, commitEmergencyMb } from "./env.mjs";
 
 const repoRoot = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..");
 const PUB_PORT = pubPort();
@@ -123,6 +123,72 @@ setInterval(() => {
     } catch { /* missing/racing */ }
   }
 }, 60_000).unref();
+
+// ---- foreign devin.exe sweep ------------------------------------------------
+// The broker's memScan only covers ITS OWN acp children — but devin.exe can
+// be spawned elsewhere (a CLI session in a terminal parents `devin.exe acp`
+// children to itself; editor integrations do the same). Those leak identically
+// and are invisible to the broker: three foreign acps reached 17–26GB commit
+// apiece and exhausted the system commit limit (EventID 2004 → desktop session
+// killed) on 2026-10-24, on a FIXED binary — the upstream leak fix is
+// incomplete, so this sweep is the last line of defense for the whole box.
+//   any devin.exe > DEVIN_WEB_FOREIGN_DEVIN_MAX_MB (default = busy cap, 16GB)
+//     → kill — a healthy agent is <0.5GB; 16GB is the leak signature, owner
+//       irrelevant (a broker child past busyCap gets the same verdict there)
+//   system free commit < DEVIN_WEB_COMMIT_EMERGENCY_MB (3072MB)
+//     → kill the fattest devin.exe over 2GB — minutes before unrelated apps
+//       start failing VirtualAlloc
+{
+  const scanMs = foreignDevinScanMs();
+  const maxMb = foreignDevinMaxMb();
+  const emergencyMb = commitEmergencyMb();
+  const killPid = (pid, why) => {
+    log(`foreign-sweep: killing devin pid=${pid} (${why})`);
+    if (process.platform === "win32") {
+      spawn("taskkill", ["/pid", String(pid), "/t", "/f"], { stdio: "ignore", windowsHide: true });
+    } else { try { process.kill(pid, "SIGKILL"); } catch {} }
+  };
+  const sweep = () => {
+    if (process.platform === "win32") {
+      execFile("powershell", ["-NoProfile", "-Command",
+        "$cs=@((Get-Counter '\\Memory\\Committed Bytes','\\Memory\\Commit Limit' -ErrorAction SilentlyContinue).CounterSamples);" +
+        "$cb=($cs|Where-Object{$_.Path -match 'ommitted Bytes'}|Select-Object -First 1).CookedValue;" +
+        "$cl=($cs|Where-Object{$_.Path -match 'ommit Limit'}|Select-Object -First 1).CookedValue;" +
+        "$ps=@(Get-Process devin -ErrorAction SilentlyContinue | Select-Object Id,PagedMemorySize64);" +
+        "Write-Output (@{free=$(if($cl){[math]::Round(($cl-$cb)/1MB)}else{$null});procs=$ps}|ConvertTo-Json -Compress -Depth 3)"],
+        { timeout: 20000 }, (e, out) => {
+          if (e) { log(`foreign-sweep probe: ${e.message}`); return; }
+          let j; try { j = JSON.parse(String(out).trim().split("\n").pop()); } catch { return; }
+          const rows = [].concat(j.procs ?? []).map((p) => ({ pid: p.Id, mb: Math.round((p.PagedMemorySize64 ?? 0) / 1048576) }));
+          for (const p of rows) if (p.mb > maxMb) killPid(p.pid, `commit ${p.mb}MB > ${maxMb}MB cap`);
+          if (j.free != null && j.free < emergencyMb) {
+            const big = rows.filter((p) => p.mb > 2048).sort((a, b) => b.mb - a.mb)[0];
+            if (big) killPid(big.pid, `system emergency: free commit ${j.free}MB < ${emergencyMb}MB, fattest devin ${big.mb}MB`);
+          }
+        });
+      return;
+    }
+    // POSIX: /proc — VmSize for commit-ish, Committed_AS vs CommitLimit for the
+    // system view. `devin` process name match keeps non-agent devin binaries
+    // eligible too — same leak signature, same verdict.
+    try {
+      const mi = fs.readFileSync("/proc/meminfo", "utf8");
+      const ca = Number(mi.match(/Committed_AS:\s+(\d+)/)?.[1]);
+      const cl = Number(mi.match(/CommitLimit:\s+(\d+)/)?.[1]);
+      execFile("ps", ["-eo", "pid=,comm=,vsz="], { timeout: 15000 }, (e, out) => {
+        if (e) return;
+        const rows = String(out).split("\n").map((l) => l.trim().match(/^(\d+)\s+(\S+)\s+(\d+)$/))
+          .filter((m) => m && /devin/i.test(m[2])).map((m) => ({ pid: Number(m[1]), mb: Math.round(Number(m[3]) / 1024) }));
+        for (const p of rows) if (p.mb > maxMb) killPid(p.pid, `vsize ${p.mb}MB > ${maxMb}MB cap`);
+        if (ca && cl && (cl - ca) / 1024 < emergencyMb) {
+          const big = rows.filter((p) => p.mb > 2048).sort((a, b) => b.mb - a.mb)[0];
+          if (big) killPid(big.pid, `system emergency: free commit ${Math.round((cl - ca) / 1024)}MB, fattest devin ${big.mb}MB`);
+        }
+      });
+    } catch { /* no /proc */ }
+  };
+  if (scanMs > 0) { setInterval(sweep, scanMs).unref(); log(`foreign-devin sweep armed: scan=${scanMs}ms cap=${maxMb}MB emergencyFree=${emergencyMb}MB`); }
+}
 
 function killOrphanAcps() {
   // Windows: acp children orphaned by a dead backend get reparented nowhere —
@@ -323,6 +389,10 @@ function serveStatic(req, res, url) {
 function badGateway(res) {
   // JSON marker the frontend can distinguish from a hard connection-refused:
   // backend down but supervisor alive → "restarting" state, not "site dead".
+  // headersSent guard: when the upstream socket errors AFTER its response
+  // head was already piped (backend dies mid-body), a second writeHead
+  // throws ERR_HTTP_HEADERS_SENT — the stream is unsalvageable anyway.
+  if (res.headersSent) { res.destroy(); return; }
   res.writeHead(502, { "content-type": "application/json" }).end(
     JSON.stringify({ error: "backend_unavailable", supervisor: state, restarting: true }));
 }

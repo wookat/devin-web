@@ -47,3 +47,13 @@ export function acpCommitBusyMaxMb() {
 export function commitEmergencyMb() {
   return process.env.DEVIN_WEB_COMMIT_EMERGENCY_MB == null ? 3072 : Number(process.env.DEVIN_WEB_COMMIT_EMERGENCY_MB);
 }
+
+/** Foreign-devin sweep (see supervisor.mjs): devin.exe processes spawned
+ *  OUTSIDE the broker (CLI sessions parent an acp child to themselves) leak
+ *  just the same but are invisible to broker memScan. */
+export function foreignDevinScanMs() {
+  return process.env.DEVIN_WEB_FOREIGN_DEVIN_SCAN_MS == null ? 60_000 : Number(process.env.DEVIN_WEB_FOREIGN_DEVIN_SCAN_MS);
+}
+export function foreignDevinMaxMb() {
+  return Number(process.env.DEVIN_WEB_FOREIGN_DEVIN_MAX_MB) || acpCommitBusyMaxMb();
+}

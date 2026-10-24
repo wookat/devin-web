@@ -327,11 +327,13 @@ function spawnAcp(spec) {
     a.reqs.clear();
     a.prompts.clear();
     a.idMap.clear();
+    console.error(`[acp-broker] acp ${acpId} (pid ${child.pid}) exited code=${code} lastCommitMb=${a.lastCommitMb ?? "?"} bytesOut=${a.bytesOut}`);
     ctlEvent({ ev: "exit", acpId, code });
     if (a.attached && !a.attached.destroyed) a.attached.end();
     journalWrite();
   });
   child.on("error", () => {});
+  console.error(`[acp-broker] spawned ${acpId} pid ${child.pid} (${a.meta.cmd}) account=${a.meta.account ?? "-"} cwd=${spec.cwd}`);
   journalWrite();
   return { acpId, pid: child.pid };
 }
@@ -434,6 +436,7 @@ function memScan() {
 if (MEM.scanMs > 0) {
   const t = setInterval(memScan, MEM.scanMs);
   t.unref?.();
+  console.error(`[acp-broker] commit watchdog armed: scan=${MEM.scanMs}ms cap=${MEM.maxMb}MB busyCap=${MEM.maxBusyMb}MB emergencyFree=${MEM.emergencyFreeMb}MB`);
 }
 
 // ---------------------------------------------------------------------------

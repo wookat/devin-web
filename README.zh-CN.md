@@ -171,6 +171,8 @@ node devin-web.mjs uninstall
 | `DEVIN_WEB_ACP_COMMIT_MAX_MB` | `8192` | 单 acp commit 上限 → 回收 |
 | `DEVIN_WEB_ACP_COMMIT_BUSY_MAX_MB` | `16384` | 承载在途回合时的上限 |
 | `DEVIN_WEB_COMMIT_EMERGENCY_MB` | `3072` | 系统剩余 commit 底线 → 紧急回收 |
+| `DEVIN_WEB_FOREIGN_DEVIN_SCAN_MS` | `60000` | supervisor 对 broker 之外的 devin.exe 周期清扫（0=关） |
+| `DEVIN_WEB_FOREIGN_DEVIN_MAX_MB` | `16384` | 作用于外来 devin.exe 的 commit 上限 |
 | `DEVIN_WEB_LOG_MAX_MB` | `128` | 单会话 `.jsonl` 轮转大小 |
 | `DEVIN_WEB_TURN_SILENCE_MS` | — | 回合静默结算上限（恢复用） |
 | `DEVIN_WEB_NO_SUPERVISOR` | — | `1` = 裸退出，不把 :7791 交给 supervisor |

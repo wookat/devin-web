@@ -182,6 +182,8 @@ All environment variables are optional; sensible defaults for local use.
 | `DEVIN_WEB_ACP_COMMIT_MAX_MB` | `8192` | Per-acp commit ceiling → recycle |
 | `DEVIN_WEB_ACP_COMMIT_BUSY_MAX_MB` | `16384` | Ceiling while acp hosts in-flight turns |
 | `DEVIN_WEB_COMMIT_EMERGENCY_MB` | `3072` | System free-commit floor → emergency recycle |
+| `DEVIN_WEB_FOREIGN_DEVIN_SCAN_MS` | `60000` | Supervisor sweep for devin.exe outside the broker (0=off) |
+| `DEVIN_WEB_FOREIGN_DEVIN_MAX_MB` | `16384` | Commit ceiling applied to foreign devin.exe |
 | `DEVIN_WEB_LOG_MAX_MB` | `128` | Per-session `.jsonl` rotation size |
 | `DEVIN_WEB_TURN_SILENCE_MS` | — | Turn silence settle bound (recovery) |
 | `DEVIN_WEB_NO_SUPERVISOR` | — | `1` = bare exit, don't hand :7791 to a supervisor |

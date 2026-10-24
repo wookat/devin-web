@@ -336,6 +336,7 @@ export async function handleSystem(ctx: ApiContext, req: IncomingMessage, res: S
       acps: broker.map((a) => ({
         acpId: a.acpId, pid: a.pid, mb: rssByPid.get(a.pid) ?? null, cwd: a.cwd,
         key: a.key, account: a.account, exited: a.exited,
+        commitMb: a.commitMb ?? null,
         sessions: sessPerAcp.get(a.acpId) ?? 0,
       })),
       sessions: {
