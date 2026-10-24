@@ -193,7 +193,6 @@ function ComposerFooter({
           <BeardBand
             cardRef={setCardEl}
             wrapClassName={isDraft ? 'max-w-[692px]' : undefined}
-            bareCard={isDraft}
             chin={isDraft || interrupted || subDead || sendErr || controlMsg || (persona && !isVisitor && !isDraft && (persona.mode !== 'off' || persona.escalated)) || (() => {
               if (isVisitor || envBannerGone) return false
               const sug = items.find((it) => it.kind === 'env_suggestion')
@@ -262,9 +261,10 @@ function ComposerFooter({
                 ))}
               </div>
             )}
-            {/* Draft is two layers only: the gray wax + this one inner surface
-                (the outer card renders bare via BeardBand bareCard). */}
-            <div className={cn(isDraft && 'rounded-[14px] border border-border bg-background p-1.5')}>
+            {/* Draft reuses the official nested card: gray wax + rounded-20
+                card — quotes/attachments above sit inside it, radii match the
+                session page. */}
+            <div>
             {caps.canSendMessage ? (<>
             <ComposerEditor
               ref={editorRef}

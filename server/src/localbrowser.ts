@@ -91,7 +91,14 @@ const clients = new Set<WebSocket>();
 
 const broadcast = (o: Record<string, unknown>) => {
   const s = JSON.stringify(o);
-  for (const c of clients) if (c.readyState === c.OPEN) c.send(s);
+  for (const c of clients) {
+    if (c.readyState !== c.OPEN) continue;
+    // Screencast frames are the heaviest outbound stream (~100KB/frame) —
+    // a suspended-but-ponging client that can't drain must not queue
+    // unboundedly. Over the cap, terminate; it reconnects at lastFrame.
+    if (c.bufferedAmount > 8 * 1024 * 1024) { clients.delete(c); c.terminate(); continue; }
+    c.send(s);
+  }
 };
 
 async function waitTargets(): Promise<{ id: string; type: string; url: string; webSocketDebuggerUrl: string }[]> {

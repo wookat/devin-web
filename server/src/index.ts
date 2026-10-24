@@ -226,7 +226,15 @@ termWss.on("connection", (ws, req) => {
     const ports = (q.get("ports") ?? "").split(/[\s,]+/).filter((x) => /^\d{1,5}(:\d{1,5})?$/.test(x));
     if (ports.length) { command = "devin"; args = ["forward", arg, ...ports]; }
   }
-  const send = (o: unknown) => { if (ws.readyState === ws.OPEN) ws.send(JSON.stringify(o)); };
+  // Backpressure: a suspended tab still ACKs at the protocol level — its JS
+  // never drains, and a build-log flood queues unboundedly (the backend RSS
+  // watchdog's recurring restarts). Over the cap the peer is unreachable;
+  // terminate → reconnect respawns the shell.
+  const send = (o: unknown) => {
+    if (ws.readyState !== ws.OPEN) return;
+    if (ws.bufferedAmount > 8 * 1024 * 1024) { try { ws.terminate(); } catch {} return; }
+    ws.send(JSON.stringify(o));
+  };
   // proc may arrive async (ssh2 password/key hosts connect first) — buffer
   // keystrokes sent before it exists and flush on wire().
   const early: string[] = [];

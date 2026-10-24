@@ -3,6 +3,10 @@ import type { IncomingMessage, Server } from "node:http";
 import type { WsServerEvent } from "./types.js";
 
 const KEEPALIVE_MS = 30_000;
+/** Per-socket outbound queue ceiling — ~80 screencast frames or minutes of
+ *  event chatter of slack; past it the peer can't drain and we're just
+ *  buffering memory we'll never deliver. */
+const MAX_BUFFERED = 8 * 1024 * 1024;
 
 /** Broadcast hub: one WebSocket endpoint, every event goes to every client. */
 export class WsHub {
@@ -55,7 +59,14 @@ export class WsHub {
   broadcast(event: WsServerEvent) {
     const msg = JSON.stringify(event);
     for (const client of this.wss.clients) {
-      if (client.readyState === WebSocket.OPEN) client.send(msg);
+      if (client.readyState !== WebSocket.OPEN) continue;
+      // Backpressure: a suspended tab still answers pings at the protocol
+      // level, so keepalive can't reap it — but its JS never drains the
+      // socket and send() queues forever (backend RSS watchdog's recurring
+      // 1.5-1.9GB restarts). Over the cap the client is unreachable anyway;
+      // terminate → it reconnects and re-syncs at the live edge.
+      if (client.bufferedAmount > MAX_BUFFERED) { client.terminate(); continue; }
+      client.send(msg);
     }
   }
 
