@@ -254,18 +254,22 @@ async function cmdStatus() {
 async function cmdInstall() {
   if (process.platform === "win32") {
     const q = (s) => `"${s}"`;
-    await sh("schtasks", ["/create", "/tn", "devin-web-supervisor", "/sc", "onlogon",
-      "/tr", `${q(process.execPath)} ${q(SUP)}`, "/f"]);
-    // The watchdog fires every minute — a bare node.exe task flashes a conhost
-    // window each tick. Run it through a generated .vbs launcher (window style
-    // 0 = fully hidden) so the per-minute probe is invisible.
+    // Both tasks run through generated .vbs launchers (Wscript window style 0
+    // = fully hidden): the watchdog's bare node.exe would flash a conhost per
+    // tick, and a bare node.exe supervisor keeps a visible console open for
+    // the whole session after every logon.
     fs.mkdirSync(DATA, { recursive: true });
-    const vbsPath = path.join(DATA, "watchdog.vbs");
-    fs.writeFileSync(vbsPath,
-      `CreateObject("Wscript.Shell").Run """${process.execPath}"" ""${path.join(ROOT, "scripts", "watchdog.mjs")}""", 0, False\r\n`);
+    const vbsFor = (target) => {
+      const p = path.join(DATA, `${path.basename(target, ".mjs")}.vbs`);
+      fs.writeFileSync(p,
+        `CreateObject("Wscript.Shell").Run """${process.execPath}"" ""${target}""", 0, False\r\n`);
+      return p;
+    };
     const wscript = path.join(process.env.SystemRoot || "C:\\Windows", "System32", "wscript.exe");
+    await sh("schtasks", ["/create", "/tn", "devin-web-supervisor", "/sc", "onlogon",
+      "/tr", `${q(wscript)} ${q(vbsFor(SUP))}`, "/f"]);
     await sh("schtasks", ["/create", "/tn", "devin-web-watchdog", "/sc", "minute", "/mo", "1",
-      "/tr", `${q(wscript)} ${q(vbsPath)}`, "/f"]);
+      "/tr", `${q(wscript)} ${q(vbsFor(path.join(ROOT, "scripts", "watchdog.mjs")))}`, "/f"]);
     console.log("installed Scheduled Tasks: devin-web-supervisor (onlogon) + devin-web-watchdog (1min)");
     return;
   }

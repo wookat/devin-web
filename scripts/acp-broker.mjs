@@ -121,7 +121,7 @@ function killTree(pid) {
 function pidIsAcp(pid, cmd) {
   try {
     const out = process.platform === "win32"
-      ? execSync(`powershell -NoProfile -Command "(Get-CimInstance Win32_Process -Filter 'ProcessId=${pid}').CommandLine"`, { stdio: ["ignore", "pipe", "ignore"] }).toString()
+      ? execSync(`powershell -NoProfile -Command "(Get-CimInstance Win32_Process -Filter 'ProcessId=${pid}').CommandLine"`, { stdio: ["ignore", "pipe", "ignore"], windowsHide: true }).toString()
       : execSync(`ps -p ${pid} -o args=`, { stdio: ["ignore", "pipe", "ignore"] }).toString();
     return /\bacp\b/i.test(out) || (!!cmd && out.includes(cmd));
   } catch { return false; }

@@ -156,7 +156,7 @@ setInterval(() => {
         "$cl=($cs|Where-Object{$_.Path -match 'ommit Limit'}|Select-Object -First 1).CookedValue;" +
         "$ps=@(Get-Process devin -ErrorAction SilentlyContinue | Select-Object Id,PagedMemorySize64);" +
         "Write-Output (@{free=$(if($cl){[math]::Round(($cl-$cb)/1MB)}else{$null});procs=$ps}|ConvertTo-Json -Compress -Depth 3)"],
-        { timeout: 20000 }, (e, out) => {
+        { timeout: 20000, windowsHide: true }, (e, out) => {
           if (e) { log(`foreign-sweep probe: ${e.message}`); return; }
           let j; try { j = JSON.parse(String(out).trim().split("\n").pop()); } catch { return; }
           const rows = [].concat(j.procs ?? []).map((p) => ({ pid: p.Id, mb: Math.round((p.PagedMemorySize64 ?? 0) / 1048576) }));
@@ -197,7 +197,7 @@ function killOrphanAcps() {
     return new Promise((r) =>
       execFile("powershell", ["-NoProfile", "-Command",
         "Get-CimInstance Win32_Process -Filter \"name='devin.exe'\" | Where-Object { $_.CommandLine -match 'acp' -and -not (Get-Process -Id $_.ParentProcessId -ErrorAction SilentlyContinue) } | ForEach-Object { Stop-Process -Id $_.ProcessId -Force }"],
-        { timeout: 20000 }, (e) => { if (e) log(`acp cleanup: ${e.message}`); r(); }));
+        { timeout: 20000, windowsHide: true }, (e) => { if (e) log(`acp cleanup: ${e.message}`); r(); }));
   }
   // POSIX: orphans reparent to init (ppid 1) — ps scan for devin acp with
   // ppid==1. The backend's own tree is killed via its process group instead.
@@ -276,7 +276,7 @@ async function clearPortSquatter() {
   if (process.platform === "win32") {
     await new Promise((r) => execFile("powershell", ["-NoProfile", "-Command",
       `Get-NetTCPConnection -LocalPort ${BACK_PORT} -State Listen -ErrorAction SilentlyContinue | Select-Object -ExpandProperty OwningProcess -Unique | ForEach-Object { $p = Get-CimInstance Win32_Process -Filter "ProcessId=$_" -ErrorAction SilentlyContinue; if ($p -and $p.CommandLine -match 'dist[\\\\/]server[\\\\/]index\\.js') { Stop-Process -Id $_ -Force; "killed $_" } }`],
-      { timeout: 15000 }, (e, out) => { const t = String(out ?? "").trim(); log(`port squatter: ${t || (e ? e.message : "none")}`); r(); }));
+      { timeout: 15000, windowsHide: true }, (e, out) => { const t = String(out ?? "").trim(); log(`port squatter: ${t || (e ? e.message : "none")}`); r(); }));
   } else {
     await new Promise((r) => execFile("sh", ["-c",
       `for pid in $(lsof -ti tcp:${BACK_PORT} -sTCP:LISTEN 2>/dev/null); do ps -p "$pid" -o command= 2>/dev/null | grep -q "dist/server/index.js" && kill -9 "$pid" && echo "killed $pid"; done; true`],
