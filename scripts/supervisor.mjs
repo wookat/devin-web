@@ -374,10 +374,19 @@ function serveStatic(req, res, url) {
   if (rel.startsWith("..") || path.isAbsolute(rel)) { res.writeHead(403).end(); return; }
   if (!fs.existsSync(file) || fs.statSync(file).isDirectory()) file = path.join(webDir, "index.html");
   const mime = MIME[path.extname(file).toLowerCase()] ?? "application/octet-stream";
+  // Cache split: /assets/* are content-hashed (immutable forever is safe);
+  // everything else — index.html and the SPA fallback most of all — must
+  // revalidate every load. Without this a heuristic-cached index.html keeps
+  // pointing at deleted chunk hashes after a rebuild → blank page forever.
+  // inAssets keys off the SERVED path (post-fallback): a missing asset URL
+  // serves index.html and must NOT be marked immutable under that URL.
+  const servedRel = path.relative(webDir, file);
+  const inAssets = servedRel.split(/[\\/]/)[0] === "assets";
+  const cache = inAssets ? "public, max-age=31536000, immutable" : "no-cache";
   const send = (p, headers) => {
     const stream = fs.createReadStream(p);
     stream.on("error", () => { if (!res.headersSent) res.writeHead(500).end(); else res.destroy(); });
-    stream.once("open", () => { res.writeHead(200, headers); stream.pipe(res); });
+    stream.once("open", () => { res.writeHead(200, { "cache-control": cache, ...headers }); stream.pipe(res); });
   };
   const accept = String(req.headers["accept-encoding"] ?? "");
   for (const [enc, suffix] of [["br", ".br"], ["gzip", ".gz"]]) {
