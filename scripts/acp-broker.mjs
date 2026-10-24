@@ -55,7 +55,7 @@ import fs from "node:fs";
 import path from "node:path";
 import { spawn, execSync } from "node:child_process";
 import crypto from "node:crypto";
-import { dataDir as resolveDataDir } from "./env.mjs";
+import { dataDir as resolveDataDir, acpMemScanMs, acpCommitMaxMb, acpCommitBusyMaxMb, commitEmergencyMb } from "./env.mjs";
 
 const dataDir = resolveDataDir();
 const sockPath = process.platform === "win32"
@@ -345,6 +345,98 @@ function killAcp(acpId) {
 }
 
 // ---------------------------------------------------------------------------
+// commit watchdog — upstream `devin acp` builds ≤3000.11.92 leak committed
+// memory (VirtualAlloc'd regions never freed — ~194k regions / 26GB in 2.5h,
+// mostly never touched: the PTY-per-tool-call leak fixed upstream in
+// 3000.11.205). The leak charges the SYSTEM commit limit, not just the
+// process, so a fat enough acp crashes unrelated apps (virtual-memory
+// exhaustion → Edge/WeChat/system hangs — observed on this box). The broker
+// owns the children and outlives backend restarts, so it bounds the damage:
+// poll each child's committed bytes and recycle it past a threshold. Kill is
+// turn-safe by design — ev:exit fires, open turns replay via auto-resume,
+// loaded sessions re-attach on a fresh acp.
+// ---------------------------------------------------------------------------
+const MEM = {
+  scanMs: acpMemScanMs(),          // DEVIN_WEB_ACP_MEM_SCAN_MS, 0 disables
+  maxMb: acpCommitMaxMb(),         // DEVIN_WEB_ACP_COMMIT_MAX_MB (idle acp)
+  maxBusyMb: acpCommitBusyMaxMb(), // DEVIN_WEB_ACP_COMMIT_BUSY_MAX_MB (in-flight turn)
+  emergencyFreeMb: commitEmergencyMb(), // DEVIN_WEB_COMMIT_EMERGENCY_MB
+};
+const busyOf = (a) => a.prompts.size + a.reqs.size;
+
+/** Snapshot each pid's committed MB + system-wide free commit MB (one
+ *  powershell spawn per scan on win32; /proc on posix). Missing/failed
+ *  entries are simply absent — callers must tolerate nulls. */
+function measureCommit(pids) {
+  const procs = new Map();
+  let sysFreeMB = null;
+  if (process.platform === "win32") {
+    const script =
+      "$cs=@((Get-Counter '\\Memory\\Committed Bytes','\\Memory\\Commit Limit' -ErrorAction SilentlyContinue).CounterSamples);" +
+      "$cb=($cs|Where-Object{$_.Path -match 'ommitted Bytes'}|Select-Object -First 1).CookedValue;" +
+      "$cl=($cs|Where-Object{$_.Path -match 'ommit Limit'}|Select-Object -First 1).CookedValue;" +
+      "if(-not $cb -and $cs.Count -ge 2){$cb=$cs[0].CookedValue;$cl=$cs[1].CookedValue};" +
+      `$ps=@(Get-Process -Id ${pids.join(",")} -ErrorAction SilentlyContinue | Select-Object Id,PagedMemorySize64);` +
+      "Write-Output (@{free=$(if($cl){[math]::Round(($cl-$cb)/1MB)}else{$null});procs=$ps}|ConvertTo-Json -Compress -Depth 3)";
+    const out = execSync(`powershell -NoProfile -Command "${script}"`, { stdio: ["ignore", "pipe", "ignore"], timeout: 15000, windowsHide: true }).toString();
+    const j = JSON.parse(out.trim().split("\n").pop());
+    sysFreeMB = j.free ?? null;
+    for (const p of [].concat(j.procs ?? [])) procs.set(p.Id, Math.round(p.PagedMemorySize64 / 1048576));
+  } else {
+    try {
+      const mi = fs.readFileSync("/proc/meminfo", "utf8");
+      const ca = Number(mi.match(/Committed_AS:\s+(\d+)/)?.[1]);
+      const cl = Number(mi.match(/CommitLimit:\s+(\d+)/)?.[1]);
+      if (ca && cl) sysFreeMB = Math.round((cl - ca) / 1024);
+    } catch { /* no /proc */ }
+    for (const pid of pids) {
+      try {
+        const st = fs.readFileSync(`/proc/${pid}/status`, "utf8");
+        const v = Number(st.match(/VmSize:\s+(\d+)/)?.[1]);
+        if (v) procs.set(pid, Math.round(v / 1024));
+      } catch { /* dead between list and read */ }
+    }
+  }
+  return { procs, sysFreeMB };
+}
+
+function memScan() {
+  const live = [...acps.values()].filter((a) => !a.exited && a.proc?.pid);
+  if (!live.length) return;
+  let m;
+  try { m = measureCommit(live.map((a) => a.proc.pid)); } catch { return; }
+  for (const a of live) {
+    const mb = m.procs.get(a.proc.pid);
+    if (mb != null) a.lastCommitMb = mb;
+  }
+  // Emergency: the whole box is out of commit — recycle the fattest child
+  // now or unrelated apps start failing allocations within minutes. One per
+  // scan: the next pass re-evaluates and takes the next biggest if needed.
+  if (m.sysFreeMB != null && m.sysFreeMB < MEM.emergencyFreeMb) {
+    const big = live.reduce((x, y) => ((m.procs.get(y.proc.pid) ?? 0) > (m.procs.get(x.proc.pid) ?? 0) ? y : x));
+    const mb = m.procs.get(big.proc.pid) ?? 0;
+    console.error(`[acp-broker] EMERGENCY system free commit ${m.sysFreeMB}MB < ${MEM.emergencyFreeMb}MB — recycling largest acp ${big.id} (pid ${big.proc.pid}, ${mb}MB, busy=${busyOf(big)})`);
+    ctlEvent({ ev: "mem-recycle", id: big.id, pid: big.proc.pid, commitMb: mb, reason: "system-emergency", ts: Date.now() });
+    killAcp(big.id);
+    return;
+  }
+  for (const a of live) {
+    const mb = m.procs.get(a.proc.pid);
+    if (mb == null) continue;
+    const busy = busyOf(a);
+    const cap = busy ? MEM.maxBusyMb : MEM.maxMb;
+    if (mb <= cap) continue;
+    console.error(`[acp-broker] recycling acp ${a.id} (pid ${a.proc.pid}): commit ${mb}MB > ${cap}MB (busy=${busy})`);
+    ctlEvent({ ev: "mem-recycle", id: a.id, pid: a.proc.pid, commitMb: mb, reason: busy ? "over-busy-cap" : "over-cap", ts: Date.now() });
+    killAcp(a.id);
+  }
+}
+if (MEM.scanMs > 0) {
+  const t = setInterval(memScan, MEM.scanMs);
+  t.unref?.();
+}
+
+// ---------------------------------------------------------------------------
 // socket server
 // ---------------------------------------------------------------------------
 function handleCtl(sock, head, rest) {
@@ -368,7 +460,7 @@ function handleCtl(sock, head, rest) {
           reply({ ok: true, acps: [...acps].map(([acpId, a]) => ({
             acpId, pid: a.proc.pid, cwd: a.meta.cwd, cmd: a.meta.cmd, key: a.meta.key, account: a.meta.account ?? null,
             exited: a.exited, exitCode: a.exitCode, bytesOut: a.bytesOut, pendingReqs: a.reqs.size,
-            startedAt: a.meta.startedAt,
+            startedAt: a.meta.startedAt, commitMb: a.lastCommitMb ?? null,
             // reqId is the CLIENT-side id (what the backend's turn journal
             // recorded, compared as a string); brokerReqId is what actually
             // went on the agent's wire — kept for forensics.

@@ -12,7 +12,7 @@ let seti: SetiModule | null = null
 void import('./setiIcons.generated').then((m) => { seti = m }).catch(() => null)
 
 export function filePillSvg(path: string): string {
-  const base = path.split('/').pop() || ''
+  const base = path.split(/[\\/]/).pop() || ''
   let svg = DEFAULT_SVG
   let fill = DEFAULT_FILL
   if (seti) {

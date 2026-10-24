@@ -224,6 +224,21 @@ export class SessionDb {
     // message, which on noisy sessions is thousands of rows per list poll.
     this.db.exec("CREATE INDEX IF NOT EXISTS idx_events_kind ON events(session_id,kind,seq DESC)");
     this.db.exec("PRAGMA user_version=2");
+    if (uv >= 2 && uv < 3) {
+      // Stale generations accumulated again after v1: dedupGet matches rows
+      // across ALL gens, so an invisible old-gen row can suppress a needed
+      // re-append under the live gen — stale gens are not just dead weight,
+      // they are poison. Adopt orphans (seq-collision dedupes), then drop.
+      this.db.exec(`INSERT OR IGNORE INTO events(session_id,seq,gen,ts,kind,bytes,data,dedup)
+        SELECT e.session_id, e.seq,
+          (SELECT MAX(g.gen) FROM events g WHERE g.session_id=e.session_id),
+          e.ts, e.kind, e.bytes, e.data, e.dedup
+        FROM events e
+        WHERE e.gen < (SELECT MAX(h.gen) FROM events h WHERE h.session_id=e.session_id)`);
+      this.db.exec(`DELETE FROM events
+        WHERE gen < (SELECT MAX(g.gen) FROM events g WHERE g.session_id=events.session_id)`);
+      this.db.exec("PRAGMA user_version=3");
+    }
     this.sInsEvent = this.db.prepare(
       "INSERT OR REPLACE INTO events(session_id,seq,gen,ts,kind,bytes,data,dedup) VALUES (?,?,?,?,?,?,?,?)",
     );
@@ -585,18 +600,23 @@ export class SessionDb {
     return gen;
   }
 
-  /** Aggregate counters for the /api/admin/modules health surface — three
-   * indexed COUNTs, cheap on a multi-GB db. */
+  /** Aggregate counters for the /api/admin/modules health surface. SUM(bytes)
+   *  is a full-table scan — seconds on a multi-GB db — so results memoize for
+   *  30s; a diagnostic number that stale is fine. */
+  private statsMemo: { at: number; v: { sessions: number; events: number; blobs: number; storedBytes: number } } | null = null;
   stats(): { sessions: number; events: number; blobs: number; storedBytes: number } {
+    if (this.statsMemo && Date.now() - this.statsMemo.at < 30_000) return this.statsMemo.v;
     this.flush();
     const g = (sql: string, col: string) =>
       Number((this.db.prepare(sql).get() as Record<string, unknown> | undefined)?.[col] ?? 0);
-    return {
+    const v = {
       sessions: g("SELECT COUNT(DISTINCT session_id) AS n FROM events", "n"),
       events: g("SELECT COUNT(*) AS n FROM events", "n"),
       blobs: g("SELECT COUNT(*) AS n FROM blobs", "n"),
       storedBytes: g("SELECT COALESCE(SUM(bytes),0) AS b FROM events", "b"),
     };
+    this.statsMemo = { at: Date.now(), v };
+    return v;
   }
 
   close() {

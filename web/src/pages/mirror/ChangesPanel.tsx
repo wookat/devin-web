@@ -390,7 +390,7 @@ function ChangesPanel({ items, step, onClearStep, focus, embedded, sessionId, vi
     }
     for (const file of [...node.files].sort((a, b) => displayPath(a.path).localeCompare(displayPath(b.path)))) {
       const shown = displayPath(file.path)
-      const name = shown.split('/').pop() || shown
+      const name = shown.split(/[\\/]/).pop() || shown
       const status = statusFor(file)
       rows.push(
         <button key={`file-${file.path}`} type="button" role="treeitem" aria-label={name} aria-level={level} data-item-parent-path={node.path} data-item-path={file.path} data-item-type="file" data-type="item" data-item-git-status={status.letter === 'M' ? 'modified' : status.letter === 'A' ? 'added' : status.letter === 'D' ? 'deleted' : 'renamed'} style={{ minHeight: 22, paddingLeft: level * 5 + 3 }} className="flex h-[22px] w-full items-center gap-1 rounded-[5px] px-[3px] text-left text-[13px] leading-[22px] text-foreground" onClick={() => { setCollapsed((prev) => { const next = new Set(prev); next.delete(file.path); return next }); requestAnimationFrame(() => document.querySelector(`[data-change-path="${CSS.escape(file.path)}"]`)?.scrollIntoView({ block: 'nearest' })) }}>
@@ -411,7 +411,7 @@ function ChangesPanel({ items, step, onClearStep, focus, embedded, sessionId, vi
         <div className="flex h-9 shrink-0 items-center gap-2 overflow-hidden border-b border-border pl-1 pr-2">
           <span className="pl-2 text-[13px] leading-[18px] font-medium">{t('chg.all')}</span>
           <span className="flex items-center gap-1.5 text-[12px] leading-[16px] tabular-nums text-muted-foreground">
-            <span>{files.length} {t('chg.files', { count: files.length })}</span>
+            <span>{t('chg.files', { count: files.length })}</span>
             {!viewMode && <><span className="text-text-green">+{tot.add}</span><span className="text-text-red">−{tot.rem}</span></>}
           </span>
         </div>
@@ -425,8 +425,8 @@ function ChangesPanel({ items, step, onClearStep, focus, embedded, sessionId, vi
               <button onClick={() => toggleFile(f.path)} className="flex w-full cursor-pointer items-center gap-2 px-3 py-1.5 text-left text-[13px] leading-[18px] hover:bg-muted">
                 {collapsed.has(f.path) ? <ChevronRight size={12} className="shrink-0" /> : <ChevronDown size={12} className="shrink-0" />}
                 <FileIcon path={f.path} size={14} className="shrink-0" />
-                <span className="min-w-0 truncate text-[13px]">{f.path.split('/').pop() || f.path}</span>
-                <span className="min-w-0 flex-1 truncate text-[13px] text-muted-foreground">{f.path.match(/\/repos\/([^/]+)/)?.[1]}</span>
+                <span className="min-w-0 truncate text-[13px]">{f.path.split(/[\\/]/).pop() || f.path}</span>
+                <span className="min-w-0 flex-1 truncate text-[13px] text-muted-foreground">{f.path.match(/[\\/]repos[\\/]([^\\/]+)/)?.[1]}</span>
                 <span className="text-text-green">+{stats(f).added}</span><span className="text-text-red">−{stats(f).removed}</span>
               </button>
               {!collapsed.has(f.path) && (diff?.loading || !diff ? <div className="px-3 py-3"><Loader2 size={14} className="animate-spin text-muted-foreground" /></div> : viewMode ? <pre className="max-h-[60dvh] overflow-auto whitespace-pre-wrap break-words bg-muted/40 px-3 py-2 font-mono text-[12px] leading-[18px]">{diff.text || ''}</pre> : renderOfficialDiff(f))}
@@ -457,7 +457,7 @@ function ChangesPanel({ items, step, onClearStep, focus, embedded, sessionId, vi
             <span className="truncate">{scope === 'all' ? t('chg.all') : t('chg.lastTurn')}</span>
             <ChevronDown size={16} className="shrink-0 text-muted-foreground" />
           </button>
-          <span className="flex items-center gap-1.5 text-[12px] leading-[16px] tabular-nums text-muted-foreground"><span>{files.length} {t('chg.files', { count: files.length })}</span><span className="text-[rgb(0,165,88)]">+{tot.add}</span><span className="text-[rgb(245,59,58)]">−{tot.rem}</span></span>
+          <span className="flex items-center gap-1.5 text-[12px] leading-[16px] tabular-nums text-muted-foreground"><span>{t('chg.files', { count: files.length })}</span><span className="text-[rgb(0,165,88)]">+{tot.add}</span><span className="text-[rgb(245,59,58)]">−{tot.rem}</span></span>
           <span className="ml-auto flex items-center gap-1">
             {treeHidden && <button type="button" aria-label={t('chg.showTree')} onClick={() => setTreeHidden(false)} className="flex size-7 shrink-0 cursor-pointer items-center justify-center rounded-[6px] text-muted-foreground hover:bg-tint-secondary hover:text-foreground"><PanelLeft size={18} /></button>}
             {files.length > 0 && <button type="button" onClick={() => setCollapsed(allCollapsed ? new Set() : new Set(files.map((f) => f.path)))} aria-label={allCollapsed ? t('chg.expandAllFiles') : t('chg.collapseAllFiles')} className="flex size-7 shrink-0 cursor-pointer items-center justify-center rounded-[6px] text-muted-foreground hover:bg-tint-secondary hover:text-foreground"><ChevronsUpDown size={18} /></button>}
@@ -467,8 +467,8 @@ function ChangesPanel({ items, step, onClearStep, focus, embedded, sessionId, vi
         <div ref={scrollRef} tabIndex={-1} className="min-h-0 min-w-0 flex-1 overflow-y-auto outline-none">
           {files.length === 0 ? <div className="mx-2 mb-4 mt-1"><span className="text-[14px] leading-[20px] text-muted-foreground">{t('chg.none')}</span></div> : files.map((file) => {
             const bodyOpen = !collapsed.has(file.path)
-            const name = file.path.split('/').pop() || file.path
-            const repoLabel = file.path.match(/\/repos\/([^/]+)/)?.[1]
+            const name = file.path.split(/[\\/]/).pop() || file.path
+            const repoLabel = file.path.match(/[\\/]repos[\\/]([^\\/]+)/)?.[1]
             return <div key={file.path} data-change-path={file.path} className="border-b border-border-secondary">
               <div className="sticky top-0 z-10 bg-background">
                 <div role="presentation" onClick={() => toggleFile(file.path)} className="flex h-[42px] cursor-pointer select-none items-center gap-1.5 overflow-x-auto border-b border-border-secondary bg-wash px-2 py-1.5 pr-3 [scrollbar-width:none]">

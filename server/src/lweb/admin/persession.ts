@@ -81,7 +81,7 @@ export async function handlePerSession(ctx: ApiContext, req: IncomingMessage, re
         // presence check / composer hint, not the whole transcript.
         messages: buildMessages(items.slice(-60)),
         share_url: mm.shared ? `/s/${id}?t=local` : null,
-        dashboard_url: `/api/session/${id}/dashboard?token=local`,
+        dashboard_url: `/api/admin/session/${id}/dashboard`,
         media_token: "local",
       });
       return true;

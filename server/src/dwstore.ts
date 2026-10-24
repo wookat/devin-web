@@ -179,6 +179,11 @@ let saveTimer: NodeJS.Timeout | null = null;
 function writeRegSync() {
   try {
     fs.mkdirSync(path.dirname(regFile), { recursive: true });
+    // Drop ghost rows minted by read-path meta() calls (??= on probes like
+    // /admin/session/wiki) that never gained state — unbounded otherwise.
+    if (reg?.sessions) for (const [id, m] of Object.entries(reg.sessions)) {
+      if (m && Object.keys(m).length === 0) delete reg.sessions[id];
+    }
     fs.writeFileSync(regFile, JSON.stringify(reg));
   } catch { /* best-effort */ }
 }

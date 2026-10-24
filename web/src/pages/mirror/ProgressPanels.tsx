@@ -327,6 +327,8 @@ function WorklogPanel({ id, items, mt, onGoLive, onWake, jumpTo, finished, canLi
             if (broken[key]) return <div className="flex min-h-0 flex-1 items-center justify-center"><div className="flex flex-col items-center gap-2 p-4 text-center"><span className="text-[14px] text-muted-foreground">{t('pp.imgFail')}</span><button type="button" onClick={() => setBroken((previous) => { const next = { ...previous }; delete next[key]; return next })} className="flex cursor-pointer items-center gap-1 text-[14px] text-blue-600 hover:underline dark:text-blue-400"><RefreshCw size={14} />{t('common.retry')}</button></div></div>
             return <div className="flex min-h-0 flex-1 items-center justify-center overflow-hidden"><img loading="lazy" decoding="async" src={screenshotUrl(id, key, mt)} className="h-full w-full rounded-sm object-contain" alt={t('pp.shotAlt')} onError={() => setBroken((previous) => ({ ...previous, [key]: true }))} /></div>
           })()
+        ) : title.body && title.kind === 'message' ? (
+          <div className="flex flex-1 flex-col gap-2 overflow-hidden p-4"><div className="text-[14px] text-foreground"><Markdown text={title.body} /></div></div>
         ) : title.body && title.kind !== 'thought' ? (
           <div className="flex flex-1 flex-col gap-2 overflow-hidden p-4"><div className="whitespace-pre-wrap text-[14px] text-muted-foreground">{title.body}</div></div>
         ) : null}
@@ -532,7 +534,7 @@ function ReadView({ item }: { item: TimelineItem }) {
           <div key={`${f.file_path}:${i}`} className="shrink-0 overflow-hidden rounded-lg border border-border bg-background">
             <div className="flex items-center gap-2 border-b border-border-secondary bg-wash px-3 py-1.5">
               <FileIcon path={f.file_path} size={13} className="shrink-0" />
-              <span className="min-w-0 flex-1 truncate font-mono text-[12px] text-foreground" title={f.file_path}>{f.file_path.split('/').pop() || f.file_path}</span>
+              <span className="min-w-0 flex-1 truncate font-mono text-[12px] text-foreground" title={f.file_path}>{f.file_path.split(/[\\/]/).pop() || f.file_path}</span>
               {f.start_line !== undefined && f.end_line !== undefined && (
                 <span className="shrink-0 rounded-[4px] bg-tint-green px-1.5 py-0.5 text-[11px] tabular-nums leading-none text-emerald-800 dark:text-emerald-300">{t('pp.readRange', { start: f.start_line, end: f.end_line, defaultValue: 'lines {{start}}–{{end}}' })}</span>
               )}
@@ -624,7 +626,7 @@ function ProgressPanel({ items, id, status }: { items: TimelineItem[]; id: strin
     return elapsed >= 0 && elapsed < 3_600_000 ? `${fmtDur(Math.floor(elapsed / 1000))} ago` : clock(new Date(ts).toISOString())
   }, [now])
   const live = status === 'working' || status === 'resumed' || status === 'restored'
-  if (!todos.length) return <div className="p-4 text-[13px] leading-[18px]">{t('pp.noTodos')}</div>
+  if (!todos.length) return <div className="flex flex-1 flex-col items-center justify-center gap-1 p-6 text-center"><List size={18} className="text-muted-foreground" /><p className="text-[13px] leading-[18px] font-medium">{t('pp.noTodos')}</p></div>
   const done = todos.filter((t) => t.status === 'completed').length
   return (
     <div className="flex flex-col gap-1.5 px-2 pb-4">

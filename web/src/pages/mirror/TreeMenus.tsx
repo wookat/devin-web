@@ -6,13 +6,14 @@ import { OArchive, OCheck, OChevronLeft, OChevronRight, ODots, OSearch } from '.
 import { adminFetch } from '@/lib/api'
 import { type MirrorTreeSession } from './treeCache'
 import { PROP_NAMES, type TreePrefs, DEFAULT_TREE_PREFS, RANGE_LABELS, filterCount, menuItemCls } from './treePrefs'
+import { dateLoc } from '@/lib/datetime'
 
 /** Official-style inline month calendar for the Filter Custom… date range. */
 function MenuCalendar({ title, range, onPick, onReset }: { title: string; range: [string, string]; onPick: (d: string) => void; onReset: () => void }) {
   const { t } = useTranslation()
   const [month, setMonth] = useState(() => { const n = new Date(); return new Date(Date.UTC(n.getUTCFullYear(), n.getUTCMonth(), 1)) })
   const fmt = (d: Date) => d.toISOString().slice(0, 10)
-  const label = (s: string) => s ? new Date(s + 'T00:00:00Z').toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric', timeZone: 'UTC' }) : '—'
+  const label = (s: string) => s ? new Date(s + 'T00:00:00Z').toLocaleDateString(dateLoc(), { month: 'short', day: 'numeric', year: 'numeric', timeZone: 'UTC' }) : '—'
   const first = new Date(Date.UTC(month.getUTCFullYear(), month.getUTCMonth(), 1))
   const start = new Date(first); start.setUTCDate(1 - first.getUTCDay())
   const days: Date[] = Array.from({ length: 42 }, (_, i) => { const d = new Date(start); d.setUTCDate(start.getUTCDate() + i); return d })
@@ -27,10 +28,10 @@ function MenuCalendar({ title, range, onPick, onReset }: { title: string; range:
       </div>
       <div className="flex items-center justify-between py-1">
         <button aria-label={t('tree.prevMonth')} onClick={() => setMonth(new Date(Date.UTC(month.getUTCFullYear(), month.getUTCMonth() - 1, 1)))} className="flex size-6 items-center justify-center rounded-md hover:bg-muted"><OChevronLeft size={13} /></button>
-        <span className="text-[13px] font-medium">{month.toLocaleDateString('en-US', { month: 'long', year: 'numeric', timeZone: 'UTC' })}</span>
+        <span className="text-[13px] font-medium">{month.toLocaleDateString(dateLoc(), { month: 'long', year: 'numeric', timeZone: 'UTC' })}</span>
         <button aria-label={t('tree.nextMonth')} onClick={() => setMonth(new Date(Date.UTC(month.getUTCFullYear(), month.getUTCMonth() + 1, 1)))} className="flex size-6 items-center justify-center rounded-md hover:bg-muted"><OChevronRight size={13} /></button>
       </div>
-      <div className="grid grid-cols-7 text-center text-[12px] text-muted-foreground">{['Su', 'Mo', 'Tu', 'We', 'Th', 'Fr', 'Sa'].map((d) => <span key={d} className="p-px leading-4">{d}</span>)}</div>
+      <div className="grid grid-cols-7 text-center text-[12px] text-muted-foreground">{Array.from({ length: 7 }, (_, i) => new Intl.DateTimeFormat(dateLoc(), { weekday: 'narrow', timeZone: 'UTC' }).format(new Date(Date.UTC(2024, 5, 2 + i)))).map((d) => <span key={d} className="p-px leading-4">{d}</span>)}</div>
       <div className="grid grid-cols-7">
         {days.map((d) => {
           const ds = fmt(d)

@@ -165,6 +165,7 @@
     "answered": "Answered by persona"
   },
   "draft": {
+    "sshAuthHint": "SSH hosts use local ssh-agent or ssh config auth",
     "pickFile": "Pick a file to preview",
     "tip": "Tip: Ctrl+N for a new session; @ for files/skills, / for commands",
     "local": "Local",
@@ -373,6 +374,8 @@
     "showPanel": "Show tabs panel"
   },
   "tree": {
+    "working": "Working",
+    "awakeFor": "Awake for {{h}}h {{m}}m",
     "newFile": "New file",
     "newFolder": "New folder",
     "fileName": "File name",
@@ -686,6 +689,7 @@
     }
   },
   "tl": {
+    "todoCreated": "Created {{count}} tasks",
     "showShots": "Show screenshots",
     "shotAlt": "Screenshot",
     "viewProgress": "View in Progress",
@@ -753,9 +757,17 @@
     "enableAutoFix": "Enable auto-fix",
     "fixing": "Fixing…",
     "fixThisPr": "Fix for this PR only",
-    "viewGithub": "View on GitHub"
+    "viewGithub": "View on GitHub",
+    "workedFor": "Worked for ",
+    "workingFor": "Working for "
   },
   "dir": {
+    "newFolder": "New folder",
+    "newFolderPh": "New folder name",
+    "edit": "Edit",
+    "delConfirm": "Delete {{name}}?",
+    "delete": "Delete",
+    "rename": "Rename",
     "default": "Default directory",
     "defaultParen": "Default ({{cwd}})",
     "serverDir": "server directory",
@@ -901,6 +913,7 @@
     "noHist": "No commands yet"
   },
   "chg": {
+    "files": "{{count}} files",
     "readFail": "(read failed)",
     "all": "All changes",
     "nLines": "{{n}} lines",
@@ -1004,6 +1017,7 @@
     "selectFirst": "Select a message first (New side chat)",
     "send": "Send side chat message",
     "translating": "Translating...",
+    "translateUnavailable": "Translation unavailable locally",
     "mergeFail": "merge failed"
   },
   "perm": {
@@ -1028,6 +1042,7 @@
     "reqClosed": "This request is no longer open"
   },
   "ag": {
+    "started": "Started {{date}}",
     "parent": "Parent",
     "working": "Working",
     "none": "No agents yet",
@@ -1339,7 +1354,13 @@
     "sysAcps": "Agent process pool",
     "sysDataDir": "Data directory",
     "sysErr": "Failed to load resource data",
-    "sysRole": { "supervisor": "supervisor", "backend": "backend", "broker": "acp broker", "acp": "agent", "other": "other" },
+    "sysRole": {
+      "supervisor": "supervisor",
+      "backend": "backend",
+      "broker": "acp broker",
+      "acp": "agent",
+      "other": "other"
+    },
     "resProject": "Project",
     "resGlobal": "Global (user)",
     "resEmpty": "None",
@@ -1423,8 +1444,45 @@
       "about": "Version and build info",
       "agents": "ACP agent registry: install checks, enable toggles, custom entries"
     },
+    "tabKw": {
+      "preferences": "主题 浅色 深色 语言 快捷键 发送 队列 侧栏 分组 紧凑 归档 theme light dark language shortcut send queue sidebar compact archive english",
+      "accounts": "账号 轮换 冷却 配额 添加 删除 token account rotate quota cooldown add remove",
+      "resources": "资源 规则 技能 模板 编辑 mcp rule skill template resources",
+      "ssh": "ssh 主机 隧道 端口 转发 host tunnel port forward",
+      "cli": "命令 终端 执行 写入 cli command terminal exec write",
+      "agents": "agent 接入 注册表 acp 启用 开关 registry enable",
+      "service": "服务 重启 构建 部署 密钥 日志 守护 pid service restart build deploy key logs daemon",
+      "diag": "诊断 体检 链路 模块 发送 检查 diagnose health probe module",
+      "about": "关于 版本 构建 version build about"
+    },
     "hub": "Overview",
     "hubDesc": "All settings for this local instance",
+    "backToApp": "Back to app",
+    "ssh": "SSH hosts",
+    "sshEmpty": "No SSH hosts configured",
+    "sshAuthAgent": "Agent",
+    "sshAuthPassword": "Password",
+    "sshAuthKey": "Key",
+    "sshOk": "Connected",
+    "sshFail": "Connection failed",
+    "sshTest": "Test",
+    "sshTesting": "Testing…",
+    "sshEdit": "Edit",
+    "sshDelete": "Delete",
+    "sshDelConfirm": "Delete SSH host {{name}}?",
+    "sshTarget": "Target",
+    "sshName": "Name",
+    "sshCwd": "Remote dir",
+    "sshAuth": "Auth",
+    "sshPassword": "Password",
+    "sshPasswordKeep": "Leave empty to keep stored",
+    "sshKeyPath": "Key path",
+    "sshPassphrase": "Passphrase",
+    "sshAgentNote": "Uses local ssh-agent or ssh config defaults",
+    "sshSave": "Save",
+    "sshAddDesc": "Add SSH hosts to run sessions on remote machines",
+    "sshAdd": "Add",
+    "sshSaveFail": "Save failed",
     "searchPh": "Search settings…",
     "personalDesc": "Interface and session preferences",
     "instanceDesc": "Local instance configuration and service management",

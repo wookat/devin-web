@@ -164,6 +164,22 @@ auto-resume so dead locks can't block replays; `clean-orphans.ps1` +
 `GET /api/admin/diagnose` + `/api/admin/repair` (fixes: kill-orphans,
 stop-turns, clear-open-turns, restart-now) back Settings → 诊断.
 
+Commit watchdog: `devin acp` ≤3000.11.92 leaked a PTY per tool call —
+~20 VirtualAlloc'd regions/s (64KB-1MB each, mostly untouched), ~26GB
+commit in 2.5h, which exhausts the SYSTEM commit limit and crashes
+unrelated apps (EventID 2004 / "虚拟内存不足" — hit on this box
+2026-10-24; fixed upstream in 3000.11.205, update lands on the next acp
+spawn). The broker bounds the blast radius since it owns the children:
+`memScan` every `DEVIN_WEB_ACP_MEM_SCAN_MS` (30s, 0=off) kills any acp
+over `DEVIN_WEB_ACP_COMMIT_MAX_MB` (8192) — or
+`DEVIN_WEB_ACP_COMMIT_BUSY_MAX_MB` (2×) while it still hosts in-flight
+turns (prompts+reqs ledger) — and, if system free commit drops under
+`DEVIN_WEB_COMMIT_EMERGENCY_MB` (3072), recycles the fattest child once
+per scan regardless. Kill rides the normal ev:exit path → open turns
+auto-resume, sessions re-attach on a fresh acp. Env readers live in
+scripts/env.mjs; `list` now reports per-acp `commitMb`, and recycles
+emit ctl `ev:"mem-recycle"` + a broker.log line.
+
 ## Test
 
 ```cmd

@@ -5,6 +5,7 @@ import { type TimelineItem, STANDALONE_GIT_TYPES, STANDALONE_ROW_TYPES, workSeco
 import { mergeScriptedRuns, mergeShellPairs, mergeEnvLifecycle } from '@/components/TimelineMerges'
 import { cn } from '@/lib/utils'
 import { type Group, isLifecycleStatus } from './composerMeta'
+import { dateLoc } from '@/lib/datetime'
 
 const COACH_RECOMMENDATIONS: Record<string, string> = {
   no_plan_before_impl: 'composer.recPlan',
@@ -139,7 +140,7 @@ function fmtDur(s: number): string {
 
 function time(ts: string): string {
   const d = new Date(ts)
-  return Number.isNaN(d.getTime()) ? '' : d.toLocaleTimeString('en-US', { hour: 'numeric', minute: '2-digit' })
+  return Number.isNaN(d.getTime()) ? '' : d.toLocaleTimeString(dateLoc(), { hour: 'numeric', minute: '2-digit' })
 }
 
 /** Official worklog-row / group gutter clock: h:mm without the AM/PM suffix. */
@@ -162,12 +163,12 @@ function headerClock(ts: string): string {
   const now = new Date()
   const day = (value: Date) => new Date(value.getFullYear(), value.getMonth(), value.getDate()).getTime()
   const days = Math.floor((day(now) - day(d)) / 86_400_000)
-  const time = d.toLocaleTimeString('en-US', { hour: 'numeric', minute: '2-digit' })
+  const time = d.toLocaleTimeString(dateLoc(), { hour: 'numeric', minute: '2-digit' })
   if (days === 0) return time
   if (days > 0 && days <= 6) {
-    return d.toLocaleDateString('en-US', { weekday: 'short' }) + ` ${time}`
+    return d.toLocaleDateString(dateLoc(), { weekday: 'short' }) + ` ${time}`
   }
-  return d.toLocaleDateString('en-US', {
+  return d.toLocaleDateString(dateLoc(), {
     month: 'short',
     day: 'numeric',
     ...(d.getFullYear() !== now.getFullYear() ? { year: 'numeric' } : {}),

@@ -88,13 +88,13 @@ function TreeRowImpl({ s, depth, activeDevinId, folders, onOpen, onPrefetch, onR
   // Official rows are 30px one-line; rows with a subtitle line render 44px
   // two-line. Official line-2 shows status AND time ("Working · 2m ago"),
   // not either/or.
-  const subtitle = !compact && !propHidden?.['Status'] && enu === 'working' ? 'Working' : null
+  const subtitle = !compact && !propHidden?.['Status'] && enu === 'working' ? t('tree.working') : null
   const subTime = !compact && !propHidden?.['Last updated'] ? relTime(s.updated_at) : ''
   const allPrs = !propHidden?.['Pull requests'] ? (s.pull_requests || []) : []
   const prs = compact ? [] : allPrs
   const showArchivedIcon = !compact && !!archivedView && !propHidden?.['Archived']
   const awakeMs = s.keep_alive_until ? new Date(s.keep_alive_until).getTime() - Date.now() : 0
-  const awakeLabel = awakeMs > 0 ? `Awake for ${Math.floor(awakeMs / 36e5)}h ${Math.floor((awakeMs % 36e5) / 6e4)}m` : ''
+  const awakeLabel = awakeMs > 0 ? t('tree.awakeFor', { h: Math.floor(awakeMs / 36e5), m: Math.floor((awakeMs % 36e5) / 6e4) }) : ''
   const hasSub = !!(subtitle || subTime || prs.length || showArchivedIcon || (!compact && awakeLabel))
   const compactPr = compact && !propHidden?.['Pull requests'] ? allPrs[0] : undefined
   const prColor = (st: string, draft: boolean) => draft ? 'text-muted-foreground' : st === 'closed' ? 'text-[#f53b3a]' : st === 'merged' ? 'text-[rgb(149,108,222)]' : 'text-green-600'

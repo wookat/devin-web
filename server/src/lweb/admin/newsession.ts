@@ -135,7 +135,7 @@ export async function handleNewSession(ctx: ApiContext, req: IncomingMessage, re
     // (the old loop hydrated every listed ring just to find the newest).
     let newestTs = 0, newestId = "";
     for (const s of listed) {
-      const t = Date.parse(s.updated) || 0;
+      const t = Date.parse(s.updated ?? "") || 0;
       if (t > newestTs) { newestTs = t; newestId = s.id; }
     }
     if (newestId) {

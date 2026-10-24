@@ -170,8 +170,25 @@ function VoiceButton({ onText, onRecordingChange, disabled }: { onText: (t: stri
   }
 
   const start = async () => {
+    setBusy(true)
+    let stream: MediaStream
     try {
-      const stream = await navigator.mediaDevices.getUserMedia({ audio: true })
+      // getUserMedia can pend indefinitely (ignored/blocked prompt) — bound the wait so failure surfaces.
+      let timedOut = false
+      stream = await Promise.race([
+        navigator.mediaDevices.getUserMedia({ audio: true }).then((st) => {
+          if (timedOut) { st.getTracks().forEach((t) => t.stop()); throw new Error('mic-timeout') }
+          return st
+        }),
+        new Promise<MediaStream>((_, rej) => setTimeout(() => { timedOut = true; rej(new Error('mic-timeout')) }, 10000)),
+      ])
+    } catch {
+      setBusy(false)
+      failMic()
+      return
+    }
+    setBusy(false)
+    try {
       const begin = () => {
         startRef.current = new Date()
         setElapsed(0)

@@ -6,6 +6,7 @@ import { Combo } from '@/components/ui'
 import { cn } from '@/lib/utils'
 import { sessionMirrorPath } from '@/lib/mirrorLinks'
 import { fmtDur } from './timelineUtil'
+import { dateLoc } from '@/lib/datetime'
 
 interface WfRunDetail {
   run?: {
@@ -234,7 +235,7 @@ function AgentsPanel({ runs, selected, onSelect, agentEvents, devinId, onOpenSes
           </div>
           {run?.created_at && (
             <div className="flex flex-wrap items-center gap-x-3 gap-y-1 text-[12px] leading-[16px] text-muted-foreground/70">
-              <span>Started {new Date(run.created_at).toLocaleDateString('en-US', { year: 'numeric', month: 'short', day: 'numeric' })}</span>
+              <span>{t('ag.started', { date: new Date(run.created_at).toLocaleDateString(dateLoc(), { year: 'numeric', month: 'short', day: 'numeric' }) })}</span>
             </div>
           )}
         </div>

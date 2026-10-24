@@ -79,11 +79,11 @@ export function AgentsTab() {
                 {a.check == null ? (
                   <span className="text-muted-foreground">{t('ag.noProbe')}</span>
                 ) : a.check.installed ? (
-                  <span className="flex items-center gap-1 text-emerald-600 dark:text-emerald-400">
+                  <span className="flex shrink-0 items-center gap-1 whitespace-nowrap text-emerald-600 dark:text-emerald-400">
                     <CheckCircle2 size={13} /> {t('ag.installed')}{a.check.version ? ` · ${a.check.version}` : ''}
                   </span>
                 ) : (
-                  <span className="flex items-center gap-1 text-red-500">
+                  <span className="flex shrink-0 items-center gap-1 whitespace-nowrap text-red-500">
                     <XCircle size={13} /> {t('ag.missing')}
                   </span>
                 )}

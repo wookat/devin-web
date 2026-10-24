@@ -53,7 +53,7 @@ export function CreateScanDialog({ profiles, onClose, onCreated }: {
               {workspaces.length > 0 && (
                 <div className="mt-2 flex max-h-[120px] flex-col gap-0.5 overflow-y-auto">
                   {workspaces.slice(0, 12).map((w) => (
-                    <button key={w.org} onClick={() => setCwd(w.org)} className={cn('truncate rounded-[5px] px-2 py-1 text-left text-[12px] hover:bg-tint-secondary', cwd === w.org && 'bg-tint-secondary font-medium')}>
+                    <button key={w.org} onClick={() => setCwd(w.org)} className={cn('shrink-0 truncate rounded-[5px] px-2 py-1 text-left text-[12px] hover:bg-tint-secondary', cwd === w.org && 'bg-tint-secondary font-medium')}>
                       {w.name} <span className="text-muted-foreground">· {w.org}</span>
                     </button>
                   ))}

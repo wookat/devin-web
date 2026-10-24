@@ -11,6 +11,7 @@ import { adminFetch } from '@/lib/api'
 import AppSidebar from '@/components/AppSidebar'
 import { cn } from '@/lib/utils'
 import type { MirrorTreeSession } from '@/pages/mirror/treeCache'
+import { dateLoc, relAgo } from '@/lib/datetime'
 
 /* Local code scans — official "Security" surface parity, ported from the
  * deobfuscated official bundles (_deob/src/security/security-uJj1dvj4.js +
@@ -61,10 +62,10 @@ export const SEVS: Sev[] = ['critical', 'high', 'medium', 'low', 'info']
 export const rel = (ts?: number): string => {
   if (!ts) return '—'
   const d = Date.now() - ts
-  if (d < 60e3) return 'just now'
-  if (d < 3600e3) return `${Math.floor(d / 60e3)}m ago`
-  if (d < 86400e3) return `${Math.floor(d / 3600e3)}h ago`
-  return new Date(ts).toLocaleDateString()
+  if (d < 86400e3) return relAgo(ts)
+  const dt = new Date(ts)
+  const sameYear = dt.getFullYear() === new Date().getFullYear()
+  return dt.toLocaleDateString(dateLoc(), sameYear ? { month: 'numeric', day: 'numeric' } : { year: 'numeric', month: 'numeric', day: 'numeric' })
 }
 
 /* official status names — local 'done' maps to 'completed' */

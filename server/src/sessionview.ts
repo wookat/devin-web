@@ -239,7 +239,7 @@ export function sessionStatus(ctx: ApiContext, id: string): { status: string; ac
 export interface ListedSession {
   id: string;
   title: string;
-  updated: string;
+  updated: string | null;
   cwd: string;
   /** devin's `_meta["cognition.ai/isLocked"]` — held open by SOME acp
    *  process (ours included). Pair with `loaded_here` to tell "在别处占用"
@@ -297,7 +297,7 @@ async function listLocalSessionsUncached(ctx: ApiContext): Promise<ListedSession
         out.push({
           id: s.sessionId,
           title: m.title ?? s.title ?? "Untitled session",
-          updated: seen ?? m.updatedAt ?? "1970-01-01T00:00:00.000Z",
+          updated: seen ?? m.updatedAt ?? null,
           cwd: remapLegacyCwd(s.cwd),
           locked: lm["cognition.ai/isLocked"] === true,
           created: (lm["cognition.ai/createdAt"] as string | undefined) ?? null,
@@ -310,8 +310,11 @@ async function listLocalSessionsUncached(ctx: ApiContext): Promise<ListedSession
   if (dirty) saveReg();
   const known = new Set(out.map((s) => s.id));
   for (const [id, m] of Object.entries(loadReg(ctx).sessions)) {
-    if (!known.has(id) && !m.archived && !m.hidden) {
-      out.push({ id, title: m.title ?? "Untitled session", updated: m.updatedAt ?? "1970-01-01T00:00:00.000Z", cwd: remapLegacyCwd(ctx.sessionCwd.get(id) ?? ctx.primaryCwd), locked: false, created: null, agent: m.agent ?? ctx.store.agentSession(id)?.agent });
+    // meta()'s ??= mints a row for ANY probed id — page names ("wiki",
+    // "new"), sub:* sidecar refs, deleted sessions. A row that never gained
+    // state is pure noise ("Untitled session" + no date), so skip it.
+    if (!known.has(id) && !m.archived && !m.hidden && Object.keys(m).length > 0) {
+      out.push({ id, title: m.title ?? "Untitled session", updated: m.updatedAt ?? null, cwd: remapLegacyCwd(ctx.sessionCwd.get(id) ?? ctx.primaryCwd), locked: false, created: null, agent: m.agent ?? ctx.store.agentSession(id)?.agent });
     }
   }
   return out;

@@ -54,7 +54,7 @@ export function ImageThumb({ href, name, max = 400, onError }: { href: string; n
 const PREVIEW_EXT = new Set('md.mdx.markdown.txt.log.diff.patch.json.jsonc.yaml.yml.toml.ini.cfg.conf.env.xml.csv.tsv.css.scss.sass.less.js.mjs.cjs.jsx.ts.mts.cts.tsx.py.rb.go.rs.java.kt.swift.c.h.cpp.hpp.cc.cs.php.sh.bash.zsh.fish.ps1.sql.lua.r.dart.vue.svelte.tf.hcl.dockerfile.gradle.proto.graphql.gql.html.htm.pdf.svg'.split('.'))
 const PREVIEW_NAMES = new Set(['dockerfile', 'makefile', 'license', 'readme', 'changelog', 'authors', 'contributors', 'procfile', 'gemfile', 'rakefile'])
 export function isPreviewable(name: string): boolean {
-  const base = (name.split('/').pop() || name).toLowerCase()
+  const base = (name.split(/[\\/]/).pop() || name).toLowerCase()
   if (PREVIEW_NAMES.has(base)) return true
   const dot = base.lastIndexOf('.')
   return dot >= 0 && PREVIEW_EXT.has(base.slice(dot + 1))

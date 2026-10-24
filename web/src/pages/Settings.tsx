@@ -48,7 +48,8 @@ const TABS: { key: string; group: 'personal' | 'instance'; cat: string; icon: Re
 
 export default function Settings() {
   const { t } = useTranslation()
-  const { tab } = useParams()
+  const { tab: rawTab } = useParams()
+  const tab = TABS.some(x => x.key === rawTab) ? rawTab : undefined
   // Shared status line: rendered inside the accounts Section (official slot);
   // service-tab actions also write to it — preserved from the monolith.
   const [prefsMsg, setPrefsMsg] = useState('')
@@ -60,7 +61,7 @@ export default function Settings() {
       <aside className="hidden w-[300px] shrink-0 flex-col border-r border-border bg-background md:flex">
         <div className="flex h-11 items-center border-b border-border px-3">
           <Link to="/admin/new" className="flex items-center gap-1.5 text-[13px] text-muted-foreground hover:text-foreground">
-            <ArrowLeft size={14} /> Back to app
+            <ArrowLeft size={14} /> {t('set.backToApp')}
           </Link>
         </div>
         {/* official "Search settings…" — filters nav rows live */}
@@ -75,7 +76,7 @@ export default function Settings() {
         <nav className="flex flex-col gap-0.5 overflow-y-auto p-2 text-[13px]">
           {(['personal', 'instance'] as const).map(g => {
             const items = TABS.filter(x => x.group === g &&
-              (!sq || t(`set.tab.${x.key}`).toLowerCase().includes(sq.toLowerCase()) || t(`set.tabDesc.${x.key}`, { defaultValue: '' }).toLowerCase().includes(sq.toLowerCase())))
+              (!sq || t(`set.tab.${x.key}`).toLowerCase().includes(sq.toLowerCase()) || t(`set.tabDesc.${x.key}`, { defaultValue: '' }).toLowerCase().includes(sq.toLowerCase()) || t(`set.tabKw.${x.key}`, { defaultValue: '' }).toLowerCase().includes(sq.toLowerCase())))
             if (!items.length) return null
             return (
               <div key={g}>

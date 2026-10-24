@@ -628,7 +628,7 @@ const WorkGroup = memo(function WorkGroup({ items, seconds, sessionId, mt, defau
         </span>
         <span className="flex min-w-0 flex-1 items-center gap-2 whitespace-nowrap">
           <span className="min-w-0 truncate">
-            {`${live ? 'Working' : 'Worked'} for `}
+            {t(live ? 'tl.workingFor' : 'tl.workedFor')}
             <span className="normal-nums">{fmtWorkedDur(seconds * 1000)}</span>
           </span>
           {(added > 0 || removed > 0) && (

@@ -39,6 +39,15 @@ persisted (durable files), rebuilt (adoption), or deliberately ephemeral.
   ack → ring replay → pending-req re-emit → stdin feed, strictly ordered
   before the data handler attaches. `broker.token` (0600, dataDir) gates
   every channel.
+- **Commit watchdog** — `memScan` every `DEVIN_WEB_ACP_MEM_SCAN_MS` (30s)
+  reads per-child commit via the OS and recycles any acp over
+  `DEVIN_WEB_ACP_COMMIT_MAX_MB` (8 GB — 2× while it hosts in-flight turns
+  per the prompt ledger); if system free commit drops under
+  `DEVIN_WEB_COMMIT_EMERGENCY_MB` (3 GB) the fattest child is recycled once
+  per scan regardless. Recycles emit `ev:mem-recycle` and ride the normal
+  exit path → open turns auto-resume on a fresh acp. Bounds the blast
+  radius of upstream leaks like the ≤3000.11.92 PTY commit balloon
+  (~26 GB in 2.5 h, EventID 2004-class system stalls).
 
 ## Module graph (server/src) — dependency direction strictly downward
 

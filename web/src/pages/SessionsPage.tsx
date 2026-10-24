@@ -9,6 +9,7 @@ import { subscribeWs } from '@/lib/ws'
 import { cn } from '@/lib/utils'
 import { type MirrorTreeSession } from './mirror/treeCache'
 import AppSidebar from '@/components/AppSidebar'
+import { dateLoc } from '@/lib/datetime'
 
 type Row = MirrorTreeSession
 
@@ -36,7 +37,7 @@ const fmtDay = (iso: string | null | undefined) => {
   if (Number.isNaN(t)) return ''
   const d = new Date(t)
   const sameYear = d.getFullYear() === new Date().getFullYear()
-  return d.toLocaleDateString('en-US', { month: 'short', day: 'numeric', ...(sameYear ? {} : { year: 'numeric' }) })
+  return d.toLocaleDateString(dateLoc(), { month: 'short', day: 'numeric', ...(sameYear ? {} : { year: 'numeric' }) })
 }
 
 /* Real enum values only (sessionStatus: working|blocked; meta: archived). */

@@ -24,8 +24,8 @@ function KeyState() {
   if (req === null) return null
   return (
     <span className={req
-      ? 'rounded-full bg-tint-green px-2 py-px text-[11px] text-green'
-      : 'rounded-full bg-tint-secondary px-2 py-px text-[11px] text-muted-foreground'}>
+      ? 'shrink-0 whitespace-nowrap rounded-full bg-tint-green px-2 py-px text-[11px] text-green'
+      : 'shrink-0 whitespace-nowrap rounded-full bg-tint-secondary px-2 py-px text-[11px] text-muted-foreground'}>
       {req ? t('set.keyOn') : t('set.keyOff')}
     </span>
   )

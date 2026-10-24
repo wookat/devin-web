@@ -7,6 +7,7 @@ import { adminFetch } from '@/lib/api'
 import AppSidebar from '@/components/AppSidebar'
 import { cn } from '@/lib/utils'
 import type { MirrorTreeSession } from './mirror/treeCache'
+import { dateLoc, relAgo } from '@/lib/datetime'
 
 /** Local scheduled sessions — official "Automations" page parity (structure
  *  ported from _deob/src/routes/AutomationsPage.js + components/
@@ -33,10 +34,8 @@ const PRESETS: { key: string; cron: string }[] = [
 const rel = (ts?: number): string => {
   if (!ts) return '—'
   const d = Date.now() - ts
-  if (d < 60e3) return 'just now'
-  if (d < 3600e3) return `${Math.floor(d / 60e3)}m ago`
-  if (d < 86400e3) return `${Math.floor(d / 3600e3)}h ago`
-  return new Date(ts).toLocaleDateString()
+  if (d < 86400e3) return relAgo(ts)
+  return new Date(ts).toLocaleDateString(dateLoc())
 }
 
 /** Humanize the common cron shapes we preset; anything else shows raw. */

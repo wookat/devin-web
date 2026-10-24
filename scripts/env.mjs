@@ -32,3 +32,18 @@ export function adminKey() {
 export function allowedHostsRaw() {
   return process.env.DEVIN_WEB_ALLOWED_HOSTS ?? "";
 }
+
+/** acp commit watchdog (see acp-broker.mjs — upstream devin acp leaks
+ *  committed memory and can exhaust the SYSTEM commit limit). */
+export function acpMemScanMs() {
+  return process.env.DEVIN_WEB_ACP_MEM_SCAN_MS == null ? 30_000 : Number(process.env.DEVIN_WEB_ACP_MEM_SCAN_MS);
+}
+export function acpCommitMaxMb() {
+  return Number(process.env.DEVIN_WEB_ACP_COMMIT_MAX_MB) || 8192;
+}
+export function acpCommitBusyMaxMb() {
+  return Number(process.env.DEVIN_WEB_ACP_COMMIT_BUSY_MAX_MB) || acpCommitMaxMb() * 2;
+}
+export function commitEmergencyMb() {
+  return process.env.DEVIN_WEB_COMMIT_EMERGENCY_MB == null ? 3072 : Number(process.env.DEVIN_WEB_COMMIT_EMERGENCY_MB);
+}

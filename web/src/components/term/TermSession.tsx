@@ -138,8 +138,18 @@ const TermSession = forwardRef<TermSessionHandle, Props>(function TermSession({ 
       unwatch()
       ro.disconnect()
       dataSub.dispose()
-      try { ws.send(JSON.stringify({ kill: true })) } catch { /* gone */ }
-      try { ws.close() } catch { /* gone */ }
+      // Closing a CONNECTING socket logs a console warning and drops the
+      // kill on the floor — defer to open so the spawned shell still dies.
+      if (ws.readyState === WebSocket.CONNECTING) {
+        ws.onopen = () => {
+          try { ws.send(JSON.stringify({ kill: true })) } catch { /* gone */ }
+          try { ws.close() } catch { /* gone */ }
+        }
+        ws.onmessage = null
+      } else {
+        try { ws.send(JSON.stringify({ kill: true })) } catch { /* gone */ }
+        try { ws.close() } catch { /* gone */ }
+      }
       term.dispose()
       termRef.current = null
       fitRef.current = null

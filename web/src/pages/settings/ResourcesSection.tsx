@@ -32,9 +32,9 @@ function AgentResources() {
           className="flex w-full cursor-pointer items-center gap-2 px-[12px] py-[8px] text-left hover:bg-tint-secondary">
           {open ? <ChevronDown size={13} className="shrink-0 text-muted-foreground" /> : <ChevronRight size={13} className="shrink-0 text-muted-foreground" />}
           {kind === 'skill' ? <BookOpen size={13} className="shrink-0 text-accent-primary" /> : <FileText size={13} className="shrink-0 text-muted-foreground" />}
-          <span className="min-w-0 flex-1 truncate text-13">{e.name}</span>
-          {e.description && <span className="hidden max-w-[40%] truncate text-12 text-secondary sm:block">{e.description}</span>}
-          <span className="shrink-0 truncate text-11 text-muted-foreground">{e.path}</span>
+          <span className="min-w-0 flex-1 truncate text-13" title={e.name}>{e.name}</span>
+          {e.description && <span className="hidden max-w-[40%] shrink truncate text-12 text-secondary sm:block" title={e.description}>{e.description}</span>}
+          <span className="w-[34%] shrink-0 truncate text-11 text-muted-foreground" title={e.path}>{e.path}</span>
         </button>
         {open && (
           <div className="mx-3 mb-2 h-[320px] overflow-hidden rounded-[8px] border border-border">

@@ -435,13 +435,19 @@ export class SessionLog {
   }
 
   /** Disarm replay dedup after the load resolves — held a few seconds so
-   *  updates flushed behind the response still dedupe stored echoes. */
+   *  updates flushed behind the response still dedupe stored echoes. This is
+   *  also the replay's commit point: older generations are superseded, and
+   *  stale rows are worse than dead weight — dedupGet matches across gens,
+   *  so an invisible old-gen row can swallow a needed re-append. */
   endDedupReplay(sessionId: string) {
     const prev = this.dedupUnarm.get(sessionId);
     if (prev) clearTimeout(prev);
     this.dedupUnarm.set(sessionId, setTimeout(() => {
       this.dedupReplay.delete(sessionId);
       this.dedupUnarm.delete(sessionId);
+      if (this.db) {
+        try { this.db.deleteOlderGens(sessionId, this.db.maxGen(sessionId)); } catch { /* best-effort */ }
+      }
     }, 15000).unref());
   }
 

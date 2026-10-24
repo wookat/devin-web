@@ -655,13 +655,15 @@ export default function AdminMirrorPage() {
     }
     if (trigger.char === '@') {
       if (!atCat) {
-        return AT_CATEGORIES.filter((c) => c.title.toLowerCase().includes(q)).map((c) => ({
-          key: `cat-${c.cat}`,
-          title: c.title,
-          sub: c.sub,
-          insert: '',
-          cat: c.cat,
-        }))
+        return AT_CATEGORIES.map((c) => ({ ...c, title: t(c.title), sub: t(c.sub) }))
+          .filter((c) => c.title.toLowerCase().includes(q))
+          .map((c) => ({
+            key: `cat-${c.cat}`,
+            title: c.title,
+            sub: c.sub,
+            insert: '',
+            cat: c.cat,
+          }))
       }
       if (atCat === 'skills') {
         return composerMeta.skills
@@ -695,7 +697,7 @@ export default function AdminMirrorPage() {
       }
     }
     return []
-  }, [trigger, composerMeta, atCat, indexedPaths, localCfg])
+  }, [trigger, composerMeta, atCat, indexedPaths, localCfg, t])
 
   useEffect(() => { setSugIdx(0) }, [input, atCat])
 
@@ -1247,12 +1249,16 @@ export default function AdminMirrorPage() {
     }
   }, [id, captureAnchor, isVisitor, storeSnapshot])
 
-  // dashboard tab reads the same per-session share endpoint for both viewers
+  // dashboard tab: admin viewers read the per-session admin endpoint (always
+  // available); visitors read the share endpoint (requires a share token).
   useEffect(() => {
-    if (panel !== 'dashboard' || !detail || !detail.share_url) return
-    const token = isVisitor ? shareTok : new URL(detail.share_url, window.location.origin).searchParams.get('t') || ''
+    if (panel !== 'dashboard' || !detail || (isVisitor && !detail.share_url)) return
+    const token = isVisitor ? shareTok : new URL(detail.share_url ?? window.location.origin, window.location.origin).searchParams.get('t') || ''
+    const url = isVisitor
+      ? `/api/share/${detail.session.id}/dashboard?t=${encodeURIComponent(token)}`
+      : `/api/admin/session/${detail.session.id}/dashboard`
     const fetchDash = () =>
-      fetch(`/api/share/${detail.session.id}/dashboard?t=${encodeURIComponent(token)}`)
+      fetch(url)
         .then((r) => r.json())
         .then((r: { dashboard: DashboardData | null; updated_at?: string }) => setDashboard({ data: r.dashboard, updatedAt: r.updated_at }))
         .catch(() => {})

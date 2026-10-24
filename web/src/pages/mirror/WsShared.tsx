@@ -12,8 +12,8 @@ import { FileIcon } from '@/lib/fileIcon'
 interface WsEntry { name: string; dir: boolean; size: number; mtime: string }
 interface FileResp { path: string; text: string | null; binary?: boolean; tooLarge?: boolean; size?: number; truncated?: boolean; error?: string }
 
-const ext = (p: string) => (p.split('/').pop() ?? '').split('.').pop()?.toLowerCase() ?? ''
-const base = (p: string) => p.split('/').pop() ?? p
+const ext = (p: string) => (p.split(/[\\/]/).pop() ?? '').split('.').pop()?.toLowerCase() ?? ''
+const base = (p: string) => p.split(/[\\/]/).pop() ?? p
 const parentOf = (p: string) => p.split('/').slice(0, -1).join('/')
 type Kind = 'image' | 'pdf' | 'av' | 'md' | 'html' | 'docx' | 'xlsx' | 'csv' | 'text' | 'bin'
 const KINDS: Record<string, Kind> = {}

@@ -165,6 +165,7 @@
     "answered": "分身已代答"
   },
   "draft": {
+    "sshAuthHint": "SSH 主机使用本机 ssh-agent 或 ssh config 认证",
     "pickFile": "点击左侧文件查看内容",
     "tip": "提示：Ctrl+N 新建会话；@ 引用文件和技能，/ 运行命令",
     "local": "本地",
@@ -373,6 +374,8 @@
     "showPanel": "显示标签面板"
   },
   "tree": {
+    "working": "运行中",
+    "awakeFor": "已唤醒 {{h}}小时{{m}}分",
     "newFile": "新建文件",
     "newFolder": "新建文件夹",
     "fileName": "文件名",
@@ -686,6 +689,7 @@
     }
   },
   "tl": {
+    "todoCreated": "已创建 {{count}} 个任务",
     "showShots": "显示截图",
     "shotAlt": "截图",
     "viewProgress": "在进展中查看",
@@ -753,9 +757,17 @@
     "enableAutoFix": "启用自动修复",
     "fixing": "正在修复…",
     "fixThisPr": "仅修复此 PR",
-    "viewGithub": "在 GitHub 上查看"
+    "viewGithub": "在 GitHub 上查看",
+    "workedFor": "工作了 ",
+    "workingFor": "运行了 "
   },
   "dir": {
+    "newFolder": "新建文件夹",
+    "newFolderPh": "新文件夹名称",
+    "edit": "编辑",
+    "delConfirm": "删除 {{name}}？",
+    "delete": "删除",
+    "rename": "重命名",
     "default": "默认目录",
     "defaultParen": "默认（{{cwd}}）",
     "serverDir": "服务目录",
@@ -901,6 +913,7 @@
     "noHist": "暂无命令"
   },
   "chg": {
+    "files": "{{count}} 个文件",
     "readFail": "(读取失败)",
     "all": "全部变更",
     "nLines": "{{n}} 行",
@@ -918,7 +931,6 @@
     "hideTree": "隐藏文件树",
     "lastTurn": "上一轮 agent 回合",
     "since": "自你上一条消息或 PR 评论以来",
-    "files": "{{count}} 个文件",
     "viewed": "已查看",
     "markViewed": "标记为已查看",
     "unmarkViewed": "取消已查看标记",
@@ -1005,6 +1017,7 @@
     "selectFirst": "先选择一条消息（新侧边聊天）",
     "send": "发送侧边聊天消息",
     "translating": "正在翻译…",
+    "translateUnavailable": "本地版不支持翻译",
     "mergeFail": "合并失败"
   },
   "perm": {
@@ -1029,6 +1042,7 @@
     "reqClosed": "此请求已关闭"
   },
   "ag": {
+    "started": "开始于 {{date}}",
     "parent": "父会话",
     "working": "运行中",
     "none": "暂无子代理",
@@ -1340,7 +1354,13 @@
     "sysAcps": "Agent 进程池",
     "sysDataDir": "数据目录",
     "sysErr": "资源数据获取失败",
-    "sysRole": { "supervisor": "守护进程", "backend": "后端", "broker": "ACP 代理", "acp": "Agent", "other": "其他" },
+    "sysRole": {
+      "supervisor": "守护进程",
+      "backend": "后端",
+      "broker": "ACP 代理",
+      "acp": "Agent",
+      "other": "其他"
+    },
     "resProject": "项目",
     "resGlobal": "全局（用户）",
     "resEmpty": "暂无",
@@ -1424,8 +1444,45 @@
       "about": "版本与构建信息",
       "agents": "ACP agent 注册表：安装检查、启用开关与自定义接入"
     },
+    "tabKw": {
+      "preferences": "主题 浅色 深色 语言 快捷键 发送 队列 侧栏 分组 紧凑 归档 theme light dark language shortcut send queue sidebar compact archive english theme",
+      "accounts": "账号 轮换 冷却 配额 添加 删除 token account rotate quota cooldown add remove",
+      "resources": "资源 规则 技能 模板 编辑 mcp rule skill template resources",
+      "ssh": "ssh 主机 隧道 端口 转发 host tunnel port forward",
+      "cli": "命令 终端 执行 写入 cli command terminal exec write",
+      "agents": "agent 接入 注册表 acp 启用 开关 registry enable",
+      "service": "服务 重启 构建 部署 密钥 日志 守护 pid service restart build deploy key logs daemon",
+      "diag": "诊断 体检 链路 模块 发送 检查 diagnose health probe module",
+      "about": "关于 版本 构建 version build about"
+    },
     "hub": "总览",
     "hubDesc": "本地实例的全部设置项",
+    "backToApp": "返回应用",
+    "ssh": "SSH 主机",
+    "sshEmpty": "未配置 SSH 主机",
+    "sshAuthAgent": "Agent",
+    "sshAuthPassword": "密码",
+    "sshAuthKey": "密钥",
+    "sshOk": "连接成功",
+    "sshFail": "连接失败",
+    "sshTest": "测试",
+    "sshTesting": "测试中…",
+    "sshEdit": "编辑",
+    "sshDelete": "删除",
+    "sshDelConfirm": "删除 SSH 主机 {{name}}？",
+    "sshTarget": "目标",
+    "sshName": "名称",
+    "sshCwd": "远端目录",
+    "sshAuth": "认证方式",
+    "sshPassword": "密码",
+    "sshPasswordKeep": "留空保留已存密码",
+    "sshKeyPath": "私钥路径",
+    "sshPassphrase": "密钥口令",
+    "sshAgentNote": "使用本机 ssh-agent 或 ssh config 中的默认认证方式",
+    "sshSave": "保存",
+    "sshAddDesc": "添加 SSH 主机后，新会话可选择远端环境",
+    "sshAdd": "添加",
+    "sshSaveFail": "保存失败",
     "searchPh": "搜索设置…",
     "personalDesc": "界面与会话偏好",
     "instanceDesc": "本地实例配置与服务管理",

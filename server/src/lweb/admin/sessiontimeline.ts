@@ -24,6 +24,7 @@ import { titleFromLog } from "../session.js";
 import { inflight, isDraining } from "../../sessionlive.js";
 import { personaState } from "../../persona.js";
 import { json, readJson } from "../../httputil.js";
+import { remapLegacyCwd } from "../../store.js";
 
 // ── Sidechat (sidechain) threads ─────────────────────────────────────────
 // devin stamps `cognition.ai/sidechain` meta on every update belonging to a
@@ -559,11 +560,14 @@ export async function handleSessionTimeline(ctx: ApiContext, req: IncomingMessag
     for (const it of items) {
       if (it.kind !== "edit") continue;
       for (const f of it.fileUpdates ?? []) {
-        const cur = files.get(f.file_path) ?? { path: f.file_path, added: 0, removed: 0 };
+        // fileUpdates carry spawn-time absolute paths — the repo moved, so
+        // remap the legacy segment or every old file links to a dead dir.
+        const fp = remapLegacyCwd(f.file_path);
+        const cur = files.get(fp) ?? { path: fp, added: 0, removed: 0 };
         cur.added += f.lines_added ?? 0;
         cur.removed += f.lines_removed ?? 0;
         cur.lastKey = f.fileId;
-        files.set(f.file_path, cur);
+        files.set(fp, cur);
       }
     }
     json(res, 200, { files: [...files.values()], truncated: false, error: null });

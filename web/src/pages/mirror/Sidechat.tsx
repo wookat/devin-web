@@ -16,6 +16,7 @@ function MessageToolbar({ text, eid, ts, tab, onSideChat, onStartNewSession, onF
   const [fb, setFb] = useState<'positive' | 'negative' | null>(null)
   const [sent, setSent] = useState<'positive' | 'negative' | null>(null)
   const [translating, setTranslating] = useState(false)
+  const [trFail, setTrFail] = useState(false)
   const act = (k: string, v: string) => {
     navigator.clipboard.writeText(v)
     setDone(k)
@@ -70,7 +71,7 @@ function MessageToolbar({ text, eid, ts, tab, onSideChat, onStartNewSession, onF
       {onTranslated && text.trim() && (
         <button
           aria-label={t('sc.translate')}
-          title={translating ? t('sc.translating') : t('sc.translate')}
+          title={trFail ? t('sc.translateUnavailable') : translating ? t('sc.translating') : t('sc.translate')}
           disabled={translating}
           onClick={async () => {
             setTranslating(true)
@@ -80,11 +81,12 @@ function MessageToolbar({ text, eid, ts, tab, onSideChat, onStartNewSession, onF
                 body: JSON.stringify({ text, target: PREFERRED_LANG }),
               })
               if (r.result) onTranslated(r.result)
+              else { setTrFail(true); setTimeout(() => setTrFail(false), 1500) }
             } finally {
               setTranslating(false)
             }
           }}
-          className={cn(btn, translating && 'animate-pulse')}
+          className={cn(btn, translating && 'animate-pulse', trFail ? 'text-red-500' : '')}
         >
           <Languages size={16} />
         </button>

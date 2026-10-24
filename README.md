@@ -43,6 +43,20 @@ supervisor, the **supervisor** revives backend and broker, the **broker**
 sweeps its own orphaned acp journal. The page stays served even while the
 backend is down — APIs return `502 backend_unavailable` until it is back.
 
+## Screenshots
+
+| | |
+|---|---|
+| ![Session detail — timeline, streaming markdown, tabbed panels with diffs](docs/screenshots/shot-session.png) | ![Session management — grouped, searchable, live status](docs/screenshots/shot-sessions.png) |
+| *Session detail: streaming timeline + right-side tab panels (changes, terminals, desktop, kanban, subagents, file viewer)* | *Session management: grouped list, search, sort/group/display controls* |
+| ![New session composer](docs/screenshots/shot-new.png) | ![Agent resources monitor](docs/screenshots/shot-resources.png) |
+| *New session: composer with `/` commands, `@` references, env/model pickers, recent projects* | *Settings → Agent resources: live host + per-process memory watchdog view* |
+| ![Security scans](docs/screenshots/shot-security.png) | ![DeepWiki browser](docs/screenshots/shot-wiki.png) |
+| *Security: scan dashboard, severity breakdown, per-repo findings* | *Wiki: generated codebase docs with topic tree and DeepWiki Q&A* |
+
+UI is bilingual — English / 简体中文, auto-detected from the browser
+(overridable via `dw-lang` in localStorage).
+
 ## The CLI
 
 ```bash
@@ -78,7 +92,20 @@ node devin-web.mjs uninstall
 - **Subagents** — `run_subagent` in-session delegation with relay/successor
   handling and derived sidecar transcripts.
 - **Durable event store** — `<dataDir>/sessionlog.db` (SQLite, WAL):
-  generation-isolated replay, content-addressed blobs dedup large payloads.
+  generation-isolated replay, content-addressed blobs dedup large payloads,
+  stale-generation sweep on migration + replay end, cached stats.
+- **Commit watchdog** — the broker scans acp children every
+  `DEVIN_WEB_ACP_MEM_SCAN_MS` (30s): any child over
+  `DEVIN_WEB_ACP_COMMIT_MAX_MB` (8 GB, 2× while hosting in-flight turns) is
+  recycled; if system free commit drops under `DEVIN_WEB_COMMIT_EMERGENCY_MB`
+  (3 GB) the fattest child goes first. Kills ride the normal exit path →
+  turns auto-resume on a fresh acp.
+- **Security scans** — scheduled/manual scans per workspace with severity
+  breakdown and per-finding detail (`/admin/security`).
+- **Automations** — preset or custom-cron scheduled sessions
+  (`/admin/automations`).
+- **Wiki & review** — generated codebase docs with topic tree and DeepWiki
+  Q&A (`/admin/wiki`), PR review launcher (`/admin/review`).
 - **Self-managing deploys** — `POST /api/admin/redeploy` builds then restarts
   immediately; `/_super/restart|stop|status|log` on the supervisor.
 - **Access control seam** — `DEVIN_WEB_ADMIN_KEY` gates `/api/admin/*` via the

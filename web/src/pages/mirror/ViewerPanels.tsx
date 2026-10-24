@@ -11,6 +11,7 @@ import DwMark from '@/components/DwMark'
 import { cn } from '@/lib/utils'
 import { headerClock, time, useFullTerminal, TerminalBlock } from './timelineUtil'
 import { AVATAR_HUES } from './attachments'
+import { dateLoc } from '@/lib/datetime'
 
 function BotMark() {
   return (
@@ -102,7 +103,7 @@ function FileViewerPanel({ href: href0, name, initialRaw, versions }: { href: st
               const d = new Date(vlist[curIdx].ts)
               return Number.isNaN(d.getTime())
                 ? ''
-                : d.toLocaleString('en-US', { month: 'short', day: 'numeric', hour: 'numeric', minute: '2-digit', hour12: true })
+                : d.toLocaleString(dateLoc(), { month: 'short', day: 'numeric', hour: 'numeric', minute: '2-digit', hour12: true })
             })()}
           </span>
           {verOpen && (
@@ -217,9 +218,9 @@ function fmtStart(ts: string): string {
   const now = new Date()
   const day = (value: Date) => new Date(value.getFullYear(), value.getMonth(), value.getDate()).getTime()
   const days = Math.floor((day(now) - day(d)) / 86_400_000)
-  const time = d.toLocaleTimeString('en-US', { hour: 'numeric', minute: '2-digit' })
-  if (days >= 0 && days <= 6) return `${d.toLocaleDateString('en-US', { weekday: 'short' })} ${time}`
-  return d.toLocaleDateString('en-US', {
+  const time = d.toLocaleTimeString(dateLoc(), { hour: 'numeric', minute: '2-digit' })
+  if (days >= 0 && days <= 6) return `${d.toLocaleDateString(dateLoc(), { weekday: 'short' })} ${time}`
+  return d.toLocaleDateString(dateLoc(), {
     month: 'short',
     day: 'numeric',
     ...(d.getFullYear() !== now.getFullYear() ? { year: 'numeric' } : {}),
@@ -244,6 +245,10 @@ function ShellPanel({ items }: { items: TimelineItem[] }) {
           ts: it.ts,
           shellId: (it.shellId || it.processId).slice(0, 6),
           terminal: it.terminal,
+          // dwtimeline stamps durationMs/exitCode on the shell item itself at
+          // terminal status — shell_done rows only exist in older logs.
+          exitCode: it.exitCode,
+          durationMs: it.durationMs,
           item: it,
         }
         byPid.set(it.processId, c)

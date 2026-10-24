@@ -165,7 +165,7 @@ export function ScanDetail({ scan, profiles, onBack, onPatch, onFix }: {
                         <div className="flex min-w-0 flex-1 flex-col gap-0.5">
                           <span className="truncate text-13 leading-[18px] text-text-primary">{f.title}</span>
                           <span className="flex min-w-0 items-center gap-1 truncate font-mono text-[11px] leading-4 text-text-secondary">
-                            {f.file_path ?? t('sec.noFile')}{f.start_line != null ? `:${f.start_line}` : ''}
+                            {f.file_path ? `${f.file_path}${f.start_line ? `:${f.start_line}` : ''}` : t('sec.noFile')}
                           </span>
                         </div>
                       </button>

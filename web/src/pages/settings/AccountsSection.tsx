@@ -3,6 +3,7 @@ import { useTranslation } from 'react-i18next'
 import { Plus, RefreshCw } from 'lucide-react'
 import { adminFetch } from '@/lib/api'
 import { Btn2, Section } from './atoms'
+import { dateLoc } from '@/lib/datetime'
 
 /* Accounts tab — multi-account rotation pool (SWE rate-limit failover).
  * Rows show plan/quota/expiry from /api/accounts; actions rotate / refresh /
@@ -77,7 +78,7 @@ export function AccountsTab({ msg, setMsg }: { msg: string; setMsg: (m: string) 
                     {a.cooling && <span className="shrink-0 rounded-full bg-amber-500/10 px-1.5 py-px text-[11px] font-medium text-amber-600">{t('set.coolingBadge')}</span>}
                   </h4>
                   <div className="text-[13px] text-muted-foreground">
-                    {[info.plan, quota, info.planEnd && `${t('set.expiry')}${info.planEnd.slice(0, 10)}`].filter(Boolean).join(' · ')}
+                    {[info.plan, quota, info.planEnd && `${t('set.expiry')}${new Date(info.planEnd).toLocaleDateString(dateLoc())}`].filter(Boolean).join(' · ')}
                   </div>
                 </div>
               </div>

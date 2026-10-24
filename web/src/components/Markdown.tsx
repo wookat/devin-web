@@ -1,6 +1,7 @@
 import { useEffect, useState } from 'react'
 import { useTranslation } from 'react-i18next'
 import ReactMarkdown from 'react-markdown'
+import rehypeRaw from 'rehype-raw'
 import remarkGfm from 'remark-gfm'
 import { Copy, Check, WrapText } from 'lucide-react'
 import { Link } from 'react-router-dom'
@@ -231,6 +232,7 @@ export default function Markdown({ text, rewriteUrl, onFileRef, variant }: {
       : 'prose-chat text-[14px] leading-[20px] break-words [overflow-wrap:anywhere]'}>
       <ReactMarkdown
         remarkPlugins={[remarkGfm]}
+        rehypePlugins={[rehypeRaw]}
         components={{
           pre: ({ children }) => <>{children}</>,
           code: ({ className, children, ...props }) => {
