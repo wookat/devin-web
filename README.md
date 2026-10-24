@@ -9,10 +9,11 @@ driven over the [Agent Client Protocol](https://agentclientprotocol.com),
 served from your own machine, reachable anywhere (LAN or Cloudflare Tunnel).
 
 [![license: MIT](https://img.shields.io/badge/license-MIT-blue.svg)](LICENSE)
+[![中文文档](https://img.shields.io/badge/docs-%E4%B8%AD%E6%96%87%E7%89%88-red)](README.zh-CN.md)
 [![node >= 22.5](https://img.shields.io/badge/node-%E2%89%A5%2022.5-brightgreen?logo=node.js&logoColor=white)](https://nodejs.org)
 [![platform](https://img.shields.io/badge/platform-windows%20%7C%20linux%20%7C%20macos-lightgrey)](https://github.com/wookat/devin-web)
 
-![Session detail — streaming timeline with tabbed work panels](docs/screenshots/shot-session.png)
+![Session detail — streaming timeline with tabbed work panels](docs/screenshots/shot-session-en.png)
 
 English · 简体中文 UI — auto-detected from the browser.
 
@@ -93,11 +94,11 @@ node devin-web.mjs stop       # graceful stop (watchdog respects it)
 
 | | |
 |---|---|
-| ![Session management](docs/screenshots/shot-sessions.png) | ![New session composer](docs/screenshots/shot-new.png) |
+| ![Session management](docs/screenshots/shot-sessions-en.png) | ![New session composer](docs/screenshots/shot-new-en.png) |
 | *Session management — grouped list, live status, sort/group/display controls* | *Composer — `/` commands, `@` references, env/model pickers, recent projects* |
-| ![Agent resources monitor](docs/screenshots/shot-resources.png) | ![Security scans](docs/screenshots/shot-security.png) |
+| ![Agent resources monitor](docs/screenshots/shot-resources-en.png) | ![Security scans](docs/screenshots/shot-security-en.png) |
 | *Settings → Agent resources — live host + per-process memory view* | *Security — scan dashboard, severity breakdown, per-repo findings* |
-| ![DeepWiki browser](docs/screenshots/shot-wiki.png) | |
+| ![DeepWiki browser](docs/screenshots/shot-wiki-en.png) | |
 | *Wiki — generated codebase docs, topic tree, DeepWiki Q&A* | |
 
 ## Architecture
