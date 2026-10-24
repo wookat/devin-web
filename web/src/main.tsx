@@ -85,6 +85,7 @@ function mount(boot: RouteModule | null) {
           <Route path="/" element={<LastOrNew />} />
           <Route path="/settings" element={<SettingsPage />} />
           <Route path="/settings/:tab" element={<SettingsPage />} />
+          <Route path="/admin" element={<Navigate to="/admin/sessions" replace />} />
           <Route path="/admin/d/:hex" element={<MirrorResolvePage kind="session" />} />
           <Route path="/admin/review" element={<ReviewPage />} />
           <Route path="/admin/review/:owner/:repo/pull/:number" element={<ReviewPage />} />
@@ -98,6 +99,8 @@ function mount(boot: RouteModule | null) {
           <Route path="/admin/:id/mirror" element={<Mirror />} />
           <Route path="/admin/:id/classic" element={<AdminSessionPage />} />
           <Route path="/s/:id" element={<Mirror />} />
+          {/* No route → blank Routes outlet; land somewhere sane instead. */}
+          <Route path="*" element={<Navigate to="/" replace />} />
         </Routes>
         </Suspense>
         </ErrorBoundary>
