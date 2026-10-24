@@ -12,6 +12,7 @@ import { cn } from '@/lib/utils'
 import { headerClock, time, useFullTerminal, TerminalBlock } from './timelineUtil'
 import { AVATAR_HUES } from './attachments'
 import { dateLoc } from '@/lib/datetime'
+import { copyText } from '../../lib/clipboard'
 
 function BotMark() {
   return (
@@ -134,14 +135,14 @@ function FileViewerPanel({ href: href0, name, initialRaw, versions }: { href: st
             </button>
           )}
           {!isPdf && !isImg && !isVideo && (
-            <button aria-label={t('vp.copyContent')} title={t('vp.copyContent')} disabled={text === null} onClick={() => { if (text !== null) { navigator.clipboard.writeText(text); flash('content') } }} className={abtn}>
+            <button aria-label={t('vp.copyContent')} title={t('vp.copyContent')} disabled={text === null} onClick={() => { if (text !== null) { copyText(text); flash('content') } }} className={abtn}>
               {done === 'content' ? <Check size={16} /> : <Copy size={16} />}
             </button>
           )}
           <button
             aria-label={t('vp.copyLink')}
             title={t('vp.copyLink')}
-            onClick={() => { navigator.clipboard.writeText(new URL(href, location.origin).toString()); flash('link') }}
+            onClick={() => { copyText(new URL(href, location.origin).toString()); flash('link') }}
             className={abtn}
           >
             {done === 'link' ? <Check size={16} /> : <Link2 size={16} />}

@@ -2,6 +2,7 @@ import { useEffect, useRef, useState } from 'react'
 import { useTranslation } from 'react-i18next'
 import { SmilePlus, MoreHorizontal, Pencil, Link2, Copy, ArrowUpRight, Trash2 } from 'lucide-react'
 import { cn } from '@/lib/utils'
+import { copyText } from '../../lib/clipboard'
 
 // Official reaction set: the 8 GitHub reactions, in the picker's order.
 const REACTION_SET: readonly (readonly [string, string, string])[] = [
@@ -66,8 +67,8 @@ function CommentActions({ comment, canWrite, onEdit, onDelete }: { comment: { id
       {open && (
         <div role="menu" className="absolute right-0 top-6 z-20 min-w-[180px] overflow-hidden rounded-[10px] border border-border bg-popover py-1 shadow-lg">
           {canWrite && <button role="menuitem" className={item} onClick={() => { setOpen(false); onEdit() }}><Pencil size={13} /> {t('common.edit')}</button>}
-          <button role="menuitem" className={item} onClick={() => { void navigator.clipboard.writeText(`${location.origin}${location.pathname}#comment-${comment.id}`); setOpen(false) }}><Link2 size={13} /> {t('common.copyLink')}</button>
-          <button role="menuitem" className={item} onClick={() => { void navigator.clipboard.writeText(comment.body); setOpen(false) }}><Copy size={13} /> {t('common.copyMsg')}</button>
+          <button role="menuitem" className={item} onClick={() => { void copyText(`${location.origin}${location.pathname}#comment-${comment.id}`); setOpen(false) }}><Link2 size={13} /> {t('common.copyLink')}</button>
+          <button role="menuitem" className={item} onClick={() => { void copyText(comment.body); setOpen(false) }}><Copy size={13} /> {t('common.copyMsg')}</button>
           {comment.url && <a role="menuitem" href={comment.url} target="_blank" rel="noreferrer" className={item} onClick={() => setOpen(false)}><ArrowUpRight size={13} /> {t('common.openGithub')}</a>}
           {canWrite && <button role="menuitem" className={cn(item, 'text-red-500 hover:text-red-500')} onClick={() => { setOpen(false); onDelete() }}><Trash2 size={13} /> {t('common.delete')}</button>}
         </div>

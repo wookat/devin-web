@@ -556,7 +556,12 @@ export default function AdminMirrorPage() {
   const [composerMeta, setComposerMeta] = useState<ComposerMetaT | null>(null)
   // Official draft precheck (POST /api/devin-coach/precheck, debounced on composer
   // changes with a stable per-mount draft_id); findings drive the coach hint row.
-  const draftIdRef = useRef<string>(crypto.randomUUID())
+  const draftIdRef = useRef<string>(
+    // randomUUID is secure-context only — absent on http://<lan-ip> access
+    // (not localhost/https) → render crash. Fallback just needs uniqueness
+    // for a per-mount draft id.
+    crypto.randomUUID?.() ?? `d-${Date.now().toString(36)}-${Math.random().toString(36).slice(2)}`)
+
   const [findings, setFindings] = useState<{ finding_type: string; explanation: string }[]>([])
   const [scanState, setScanState] = useState<'idle' | 'busy' | 'sent' | 'error'>('idle')
   /* Official coach_precheck_mode org setting (bundle-sampled): 'off' | 'warning_only'

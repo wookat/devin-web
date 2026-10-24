@@ -5,6 +5,7 @@ import { LightboxImage } from './Lightbox'
 import Markdown from './Markdown'
 import { cn } from '@/lib/utils'
 import { CHIP_DOCX_SVG, CHIP_XLSX_SVG } from './chipOfficeIcons'
+import { copyText } from '../lib/clipboard'
 
 const IMAGE_RE = /\.(png|jpe?g|gif|webp|svg|bmp)$/i
 
@@ -90,7 +91,7 @@ function MdPreviewCard({ name, href, ts, onOpenTab }: { name: string; href: stri
           aria-label={t('att.copyContent')}
           title={t('att.copyContent')}
           disabled={!text}
-          onClick={() => { if (text) { navigator.clipboard.writeText(text); flash('content') } }}
+          onClick={() => { if (text) { copyText(text); flash('content') } }}
           className={abtn}
         >
           {done === 'content' ? <Check size={16} /> : <Copy size={16} />}
@@ -102,7 +103,7 @@ function MdPreviewCard({ name, href, ts, onOpenTab }: { name: string; href: stri
             const q = new URLSearchParams({ tab: name })
             const ms = ts ? new Date(ts).getTime() : NaN
             if (!Number.isNaN(ms)) q.set('ts', String(ms))
-            navigator.clipboard.writeText(`${location.origin}${location.pathname}?${q}`)
+            copyText(`${location.origin}${location.pathname}?${q}`)
             flash('link')
           }}
           className={abtn}

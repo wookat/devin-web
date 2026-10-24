@@ -8,6 +8,7 @@ import Timeline, { type TimelineItem } from '@/components/Timeline'
 import Dashboard from '@/components/Dashboard'
 import { Button, Textarea, StatusDot, statusLabel, Combo, Card } from '@/components/ui'
 import { cn } from '@/lib/utils'
+import { copyText } from '../lib/clipboard'
 
 interface Detail {
   session: {
@@ -118,8 +119,8 @@ export default function AdminSessionPage() {
     // Enable the share link lazily on copy (opt-in model — share_url is
     // null until the admin share-link endpoint flags the session).
     void adminFetch<{ enabled: boolean; url: string | null }>(`/api/admin/session/${id}/share-link`, { method: 'POST', body: JSON.stringify({ enabled: true }) })
-      .then((r) => { navigator.clipboard.writeText(location.origin + (r.url ?? detail.share_url ?? `/admin/${id}`)); load() })
-      .catch(() => navigator.clipboard.writeText(location.origin + `/admin/${id}`))
+      .then((r) => { copyText(location.origin + (r.url ?? detail.share_url ?? `/admin/${id}`)); load() })
+      .catch(() => copyText(location.origin + `/admin/${id}`))
     setCopied(true)
     setTimeout(() => setCopied(false), 1500)
   }

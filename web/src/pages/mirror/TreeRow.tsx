@@ -10,6 +10,7 @@ import { cn } from '@/lib/utils'
 import { sessionMirrorPath } from '@/lib/mirrorLinks'
 import { type MirrorTreeSession, relTime } from './treeCache'
 import { mapEnum, actionCls } from './statusReduce'
+import { copyText } from '../../lib/clipboard'
 
 /** What a section accepts for session drops — `pin` = pin + position,
  *  `folder` = assign folder name (null = unfile into Recent). Carried in the
@@ -363,7 +364,7 @@ function TreeRowImpl({ s, depth, activeDevinId, folders, onOpen, onPrefetch, onR
                     onMouseEnter={() => { if (menu !== 'main') setMenu('main') }}
                     onClick={(e) => {
                       e.stopPropagation()
-                      navigator.clipboard.writeText(`${window.location.origin}${sessionMirrorPath(s.devin_id)}`)
+                      copyText(`${window.location.origin}${sessionMirrorPath(s.devin_id)}`)
                       setCopiedAt(Date.now())
                       window.setTimeout(() => setCopiedAt(0), 1600)
                       setMenu('closed')

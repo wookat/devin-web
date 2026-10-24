@@ -8,6 +8,7 @@ import { relTime } from './treeCache'
 import { type PrBugItemT, type PrDiffFileT, PrDiffFile, PrAnalysisPromo, PrSectionViewedProgress, type DiffOptsT, DIFF_OPTS_KEY, readDiffOpts } from './PrDiff'
 import { PrHeader, type PrInfo, type PrCheckT } from './PrHeader'
 import { PrDiscussion, usePrDiscussion, type PrCommentT, type PrThreadT, type PrDiscussionItemT } from './PrDiscussion'
+import { copyText } from '../../lib/clipboard'
 
 /**
  * PR tab panel, mirroring the official Devin Review PR tab's read-only layout
@@ -326,7 +327,7 @@ function PrPanel({ id, prUrl }: { id: string; prUrl: string }) {
                   {cm.committed_at && <span>• {relTime(cm.committed_at)}</span>}
                   {cm.author && <span>• {cm.author}</span>}
                   <span className="rounded bg-muted px-1.5 py-0.5 font-mono">{cm.sha.slice(0, 7)}</span>
-                  <button aria-label={t('pr.copySha')} onClick={() => void navigator.clipboard.writeText(cm.sha)} className="flex size-5 cursor-pointer items-center justify-center rounded hover:bg-accent hover:text-foreground"><Copy size={11} /></button>
+                  <button aria-label={t('pr.copySha')} onClick={() => void copyText(cm.sha)} className="flex size-5 cursor-pointer items-center justify-center rounded hover:bg-accent hover:text-foreground"><Copy size={11} /></button>
                 </div>
               </div>
             ))}

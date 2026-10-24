@@ -2,6 +2,7 @@ import { Children, createContext, isValidElement, useContext, useLayoutEffect, u
 import { useTranslation } from 'react-i18next'
 import type { Element as HastElement, ElementContent } from 'hast'
 import { ArrowDown, ArrowUp, ArrowUpDown, Check, Copy } from 'lucide-react'
+import { copyText } from '../lib/clipboard'
 
 /** Official markdown table (app.devin.ai DOM + bundle, sampled 2026-09-05):
  *  elevated rounded-12 card (p-1.5) with a hover "Copy table" pill, hidden
@@ -286,7 +287,7 @@ export function MdTable({ node, children }: { node?: HastElement; children?: Rea
   const copy = () => {
     const t = tableRef.current
     if (!t) return
-    navigator.clipboard.writeText(tableToMarkdown(t)).then(() => {
+    copyText(tableToMarkdown(t)).then(() => {
       setCopied(true)
       setTimeout(() => setCopied(false), 1500)
     }).catch(() => { /* clipboard unavailable */ })

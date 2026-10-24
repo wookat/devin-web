@@ -6,6 +6,7 @@ import Markdown from '@/components/Markdown'
 import { blockWordDiff, changedAfterRanges, otherSideLine, type WordSeg } from '@/lib/diff'
 import { buildPrDiffRows, type PrDiffRow as PrDiffRowT } from '@/lib/prDiffRows'
 import { cn } from '@/lib/utils'
+import { copyText } from '../../lib/clipboard'
 
 interface PrBugItemT {
   title: string
@@ -210,7 +211,7 @@ function PrDiffFile({ f, rawBase, viewedKey, threadLines, onGoToThread, bugsAt, 
         </button>
         <FileIcon path={f.file_path} size={14} className="shrink-0" />
         <span className="min-w-0 flex-1 truncate font-sans text-[13px]" title={f.file_path}>{f.old_file_path && f.old_file_path !== f.file_path ? `${f.old_file_path} → ` : ''}{f.file_path}</span>
-        <button aria-label={t('pr.copyPath')} title={t('pr.copyPath')} onClick={() => { void navigator.clipboard.writeText(f.file_path) }} className="flex size-7 shrink-0 cursor-pointer items-center justify-center rounded-[6px] text-muted-foreground hover:bg-accent hover:text-foreground">
+        <button aria-label={t('pr.copyPath')} title={t('pr.copyPath')} onClick={() => { void copyText(f.file_path) }} className="flex size-7 shrink-0 cursor-pointer items-center justify-center rounded-[6px] text-muted-foreground hover:bg-accent hover:text-foreground">
           <Copy size={18} />
         </button>
         <span className="flex shrink-0 gap-0.5 text-[12px]">

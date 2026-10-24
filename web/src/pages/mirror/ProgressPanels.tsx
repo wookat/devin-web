@@ -11,6 +11,7 @@ import Markdown from '@/components/Markdown'
 import { cn } from '@/lib/utils'
 import { useFullTerminal, headerClock, fmtDur, clock, AnsiText } from './timelineUtil'
 import { ChangesPanel } from './ChangesPanel'
+import { copyText } from '../../lib/clipboard'
 
 type ProgressStep = { item: TimelineItem; id: string; tsMs: number }
 type ProgressMarker = { timestamp: number; isUserInput: boolean; isNavigable: boolean; eventId: string; message?: string }
@@ -294,7 +295,7 @@ function WorklogPanel({ id, items, mt, onGoLive, onWake, jumpTo, finished, canLi
           ) : title.kind === 'message' && title.role === 'user' ? (
             <><MessageSquare size={16} className="mr-1 inline" /><span>{t('pp.youSaid')}</span></>
           ) : heading(title)}
-          {command && <button type="button" aria-label={t('pp.copyCmd')} title={t('pp.copyCmd')} onClick={() => void navigator.clipboard.writeText(fullCommand)} className="absolute right-0 top-0 z-10 flex size-6 cursor-pointer items-center justify-center rounded text-muted-foreground opacity-0 hover:bg-accent hover:text-foreground focus-within:opacity-100 group-hover/app-title:opacity-100"><Copy size={14} /></button>}
+          {command && <button type="button" aria-label={t('pp.copyCmd')} title={t('pp.copyCmd')} onClick={() => void copyText(fullCommand)} className="absolute right-0 top-0 z-10 flex size-6 cursor-pointer items-center justify-center rounded text-muted-foreground opacity-0 hover:bg-accent hover:text-foreground focus-within:opacity-100 group-hover/app-title:opacity-100"><Copy size={14} /></button>}
         </div>
       </div>
       <div className="-mx-2 flex min-h-0 flex-1 flex-col overflow-y-auto px-3">

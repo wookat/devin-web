@@ -7,6 +7,7 @@ import { cn } from '@/lib/utils'
 import { sessionMirrorPath } from '@/lib/mirrorLinks'
 import { fmtDur } from './timelineUtil'
 import { dateLoc } from '@/lib/datetime'
+import { copyText } from '../../lib/clipboard'
 
 interface WfRunDetail {
   run?: {
@@ -278,7 +279,7 @@ function AgentsPanel({ runs, selected, onSelect, agentEvents, devinId, onOpenSes
             <button
               onClick={(e) => {
                 e.preventDefault()
-                void navigator.clipboard.writeText(contents.script || '').then(() => {
+                void copyText(contents.script || '').then(() => {
                   setCopied(true)
                   setTimeout(() => setCopied(false), 1500)
                 })

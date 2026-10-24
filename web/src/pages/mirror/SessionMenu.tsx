@@ -11,6 +11,7 @@ import { cn } from '@/lib/utils'
 import { type MirrorTreeSession } from './treeCache'
 import { type SessionDetail } from './pageBits'
 import { SessionSettingsGlyph, HeaderMenuPortal } from './glyphs'
+import { copyText } from '../../lib/clipboard'
 
 const settingsRowCls = 'text-foreground text-[13px] leading-[18px] flex w-full cursor-pointer select-none items-center gap-2 rounded-[6px] px-2 py-1.5 outline-none [&>svg]:mx-px [&>svg]:size-4 [&>svg]:shrink-0 hover:bg-tint-secondary'
 const settingsSeparatorCls = 'mx-2 h-[9px] bg-border bg-clip-content py-1'
@@ -217,9 +218,9 @@ function SessionMenu({ detail, id, isSub, isDevinSession, current, treeNode, fol
               // share_url is null until the link is enabled — enabling
               // happens lazily here (opt-in is the point).
               void adminFetch<{ enabled: boolean; url: string | null }>(`/api/admin/session/${id}/share-link`, { method: 'POST', body: JSON.stringify({ enabled: true }) }).then((r) => {
-                navigator.clipboard.writeText(window.location.origin + (r.url || `/admin/${id}`))
+                copyText(window.location.origin + (r.url || `/admin/${id}`))
                 reloadDetail()
-              }).catch(() => navigator.clipboard.writeText(window.location.origin + `/admin/${id}`))
+              }).catch(() => copyText(window.location.origin + `/admin/${id}`))
               setCopied(true); setTimeout(() => setCopied(false), 1500)
               setSettingsOpen(false); setSettingsSub('none')
             }}
@@ -236,7 +237,7 @@ function SessionMenu({ detail, id, isSub, isDevinSession, current, treeNode, fol
               setSettingsOpen(false); setSettingsSub('none')
               if (!confirm(t('menu.shareToCloudConfirm'))) return
               const r = await adminFetch<{ ok: boolean; url?: string; error?: string }>(`/api/admin/session/${id}/share`, { method: 'POST', body: JSON.stringify({}) }).catch(() => null)
-              if (r?.ok && r.url) { navigator.clipboard.writeText(r.url); setControlMsg(t('menu.sharedOk', { url: r.url })) }
+              if (r?.ok && r.url) { copyText(r.url); setControlMsg(t('menu.sharedOk', { url: r.url })) }
               else setControlMsg(r?.error || t('menu.shareFailed'))
             }}
             className={settingsRowCls}

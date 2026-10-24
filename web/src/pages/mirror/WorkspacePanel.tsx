@@ -6,6 +6,7 @@ import { OChevronDown, OChevronRight, OSearch, OX } from '@/components/officialI
 import { cn } from '@/lib/utils'
 import { type WsEntry, type FileResp, base, parentOf, kindOf, EDITABLE, gitCls, gitTitle, TypeIcon, type MenuPos, type CtxItem, CtxMenu } from './WsShared'
 import { Viewer } from './WorkspaceViewers'
+import { copyText } from '../../lib/clipboard'
 
 function EditorPanel({ id }: { id: string }) {
   const { t } = useTranslation()
@@ -256,9 +257,9 @@ function WorkspacePanel({ id }: { id: string }) {
       n ? { label: t('ws.copy'), onClick: () => { const v = window.prompt(t('ws.copyTo'), `${n.path}.copy`); if (v) void op('copy', n.path, v) } } : null,
       n ? { label: t('ws.delete'), danger: true, onClick: () => { if (window.confirm(`${t('ws.delConfirm')}${n.entry.name}?`)) void op('delete', n.path) } } : null,
       n ? { sep: true, label: '' } : null,
-      n ? { label: t('ws.copyPath'), onClick: () => void navigator.clipboard.writeText(cwd ? `${cwd}/${n.path}` : n.path) } : null,
-      n ? { label: t('ws.copyRelPath'), onClick: () => void navigator.clipboard.writeText(n.path) } : null,
-      n ? { label: t('ws.copyName'), onClick: () => void navigator.clipboard.writeText(n.entry.name) } : null,
+      n ? { label: t('ws.copyPath'), onClick: () => void copyText(cwd ? `${cwd}/${n.path}` : n.path) } : null,
+      n ? { label: t('ws.copyRelPath'), onClick: () => void copyText(n.path) } : null,
+      n ? { label: t('ws.copyName'), onClick: () => void copyText(n.entry.name) } : null,
     ]
   }
 
@@ -268,8 +269,8 @@ function WorkspacePanel({ id }: { id: string }) {
     { label: t('tabs.closeLeft'), onClick: () => closeSide(p, 'left') },
     { label: t('tabs.closeRight'), onClick: () => closeSide(p, 'right') },
     { sep: true, label: '' },
-    { label: t('ws.copyPath'), onClick: () => void navigator.clipboard.writeText(cwd ? `${cwd}/${p}` : p) },
-    { label: t('ws.copyRelPath'), onClick: () => void navigator.clipboard.writeText(p) },
+    { label: t('ws.copyPath'), onClick: () => void copyText(cwd ? `${cwd}/${p}` : p) },
+    { label: t('ws.copyRelPath'), onClick: () => void copyText(p) },
     { label: t('tabs.revealInTree'), onClick: () => { const parts = parentOf(p).split('/'); let acc = ''; setExpanded((x) => { const n = { ...x }; for (const s of parts) { if (!s) continue; acc = acc ? `${acc}/${s}` : s; n[acc] = true } return n }) } },
   ]
 
@@ -339,7 +340,7 @@ function WorkspacePanel({ id }: { id: string }) {
                 <button
                   className="cursor-pointer rounded px-0.5 hover:bg-tint-secondary hover:text-foreground"
                   title={arr.slice(0, i + 1).join('/')}
-                  onClick={() => void navigator.clipboard.writeText(arr.slice(0, i + 1).join('/'))}
+                  onClick={() => void copyText(arr.slice(0, i + 1).join('/'))}
                 >{seg}</button>
               </span>
             ))}

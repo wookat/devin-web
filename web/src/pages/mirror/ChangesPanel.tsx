@@ -9,6 +9,7 @@ import { lineDiffFull, blockWordDiff, type DiffLine, type WordSeg } from '@/lib/
 import { cn } from '@/lib/utils'
 import { WordDiffLine } from './PrPanel'
 import { useShikiTokens, type Tok } from '@/components/CodeView'
+import { copyText } from '../../lib/clipboard'
 
 interface AggFile {
   path: string
@@ -474,7 +475,7 @@ function ChangesPanel({ items, step, onClearStep, focus, embedded, sessionId, vi
                 <div role="presentation" onClick={() => toggleFile(file.path)} className="flex h-[42px] cursor-pointer select-none items-center gap-1.5 overflow-x-auto border-b border-border-secondary bg-wash px-2 py-1.5 pr-3 [scrollbar-width:none]">
                   <button type="button" aria-label={bodyOpen ? t('chg.collapseFile') : t('chg.expandFile')} onClick={(event) => { event.stopPropagation(); toggleFile(file.path) }} className="flex size-7 shrink-0 items-center justify-center rounded-[6px] text-muted-foreground hover:bg-tint-secondary hover:text-foreground"><ChevronDown size={18} className={cn(!bodyOpen && '-rotate-90')} /></button>
                   <div className="flex min-w-10 flex-1 items-center gap-1.5 font-sans text-[13px]"><span className="flex min-w-0 items-center gap-1.5"><FileIcon path={name} size={15} className="shrink-0" /><span className="shrink select-text truncate whitespace-nowrap text-foreground">{name}</span>{repoLabel && <span className="shrink-[1000000] select-text truncate text-muted-foreground">{repoLabel}</span>}</span></div>
-                  <button type="button" aria-label={t('chg.copyPath')} onClick={(event) => { event.stopPropagation(); navigator.clipboard.writeText(file.path).catch(() => {}) }} className="hidden size-7 shrink-0 items-center justify-center rounded-[6px] text-muted-foreground hover:bg-tint-secondary hover:text-foreground sm:flex"><Copy size={18} /></button>
+                  <button type="button" aria-label={t('chg.copyPath')} onClick={(event) => { event.stopPropagation(); copyText(file.path).catch(() => {}) }} className="hidden size-7 shrink-0 items-center justify-center rounded-[6px] text-muted-foreground hover:bg-tint-secondary hover:text-foreground sm:flex"><Copy size={18} /></button>
                   <div className="hidden shrink-0 gap-0.5 text-[12px] font-normal sm:flex"><span className="text-[rgb(0,165,88)]">+{stats(file).added}</span><span className="text-[rgb(245,59,58)]">−{stats(file).removed}</span></div>
                   <label title={t('chg.markViewed')} onClick={(event) => event.stopPropagation()} className="flex shrink-0 cursor-pointer items-center gap-1 text-[11px] text-muted-foreground">
                     <input type="checkbox" checked={viewed.has(file.path)} onChange={() => toggleViewed(file.path)} className="size-3.5 cursor-pointer accent-[rgb(0,165,88)]" />
@@ -516,7 +517,7 @@ function ChangesPanel({ items, step, onClearStep, focus, embedded, sessionId, vi
         <>
           <div className="fixed inset-0 z-40" onClick={() => setFileMenu(null)} />
           <div role="menu" className="fixed z-50 flex w-[200px] flex-col overflow-hidden rounded-[10px] bg-white/[.94] p-1 text-foreground shadow-[0_10px_15px_-3px_rgba(0,0,0,0.1),0_4px_6px_-2px_rgba(0,0,0,0.05)] outline outline-1 outline-black/[.06] backdrop-blur-[8px] dark:bg-[#1f1f1f]/[.94]" style={{ left: fileMenu.left, top: fileMenu.top }}>
-            <button type="button" role="menuitem" onClick={() => { navigator.clipboard.writeText(fileMenu.path).catch(() => {}); setFileMenu(null) }} className="flex cursor-pointer items-center gap-2 rounded-[6px] px-2 py-1.5 text-left text-[13px] leading-[18px] hover:bg-tint-secondary"><Copy size={14} className="shrink-0 text-muted-foreground" />{t('chg.copyPath')}</button>
+            <button type="button" role="menuitem" onClick={() => { copyText(fileMenu.path).catch(() => {}); setFileMenu(null) }} className="flex cursor-pointer items-center gap-2 rounded-[6px] px-2 py-1.5 text-left text-[13px] leading-[18px] hover:bg-tint-secondary"><Copy size={14} className="shrink-0 text-muted-foreground" />{t('chg.copyPath')}</button>
             <button type="button" role="menuitem" onClick={() => { toggleViewed(fileMenu.path); setFileMenu(null) }} className="flex cursor-pointer items-center gap-2 rounded-[6px] px-2 py-1.5 text-left text-[13px] leading-[18px] hover:bg-tint-secondary"><Check size={14} className="shrink-0 text-muted-foreground" />{viewed.has(fileMenu.path) ? t('chg.unmarkViewed') : t('chg.markViewed')}</button>
           </div>
         </>,

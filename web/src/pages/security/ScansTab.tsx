@@ -5,6 +5,7 @@ import { MoreHorizontal, ExternalLink, Copy, Archive, ArchiveRestore } from 'luc
 import { cn } from '@/lib/utils'
 import { CountCell, EmptyPanel, ScanListSkeleton, StatusDot, rel } from './atoms'
 import type { Scan } from './atoms'
+import { copyText } from '../../lib/clipboard'
 
 /* ---------- scans tab — official group sections, not a card table ---------- */
 
@@ -32,7 +33,7 @@ function ScanRowMenu({ scan, archived, onArchive }: {
       {open && (
         <div className="absolute right-0 top-8 z-30 w-48 rounded-[8px] border border-border-secondary bg-background p-1 shadow-lg" onClick={(e) => e.stopPropagation()}>
           <button
-            onClick={() => { setOpen(false); void navigator.clipboard.writeText(`${location.origin}/admin/security/${scan.id}`).catch(() => {}) }}
+            onClick={() => { setOpen(false); void copyText(`${location.origin}/admin/security/${scan.id}`).catch(() => {}) }}
             className="flex w-full items-center gap-2 rounded-[5px] px-2 py-1.5 text-left text-[13px] hover:bg-tint-secondary">
             <Copy size={13} />{t('sec.copyScanLink')}
           </button>

@@ -4,6 +4,7 @@ import { ChevronDown, Check, Copy, XCircle, CheckCircle2, Circle, CircleDashed, 
 import { adminFetch } from '@/lib/api'
 import { cn } from '@/lib/utils'
 import { reviewMirrorPath } from '@/lib/mirrorLinks'
+import { copyText } from '../../lib/clipboard'
 
 interface PrInfo {
   title?: string; number?: number; state?: string; draft?: boolean; merged?: boolean
@@ -170,7 +171,7 @@ function PrHeader({ id, prUrl, info, mergeStatus, checks, pendingReviewId, autho
             <button
               aria-label={t('pr.copyBranch')}
               title={t('pr.copyBranch')}
-              onClick={() => { void navigator.clipboard.writeText(info.head_branch || ''); setCopiedBr(true); setTimeout(() => setCopiedBr(false), 1200) }}
+              onClick={() => { void copyText(info.head_branch || ''); setCopiedBr(true); setTimeout(() => setCopiedBr(false), 1200) }}
               className="flex size-5 cursor-pointer items-center justify-center rounded text-muted-foreground hover:bg-accent hover:text-foreground"
             >
               {copiedBr ? <Check size={11} /> : <Copy size={11} />}

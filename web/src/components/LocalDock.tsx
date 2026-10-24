@@ -2,6 +2,7 @@ import { useCallback, useEffect, useState } from 'react'
 import { useTranslation } from 'react-i18next'
 import { ChevronDown, ChevronUp, Copy, ExternalLink, Plus, RefreshCw, Repeat, Trash2, X } from 'lucide-react'
 import { adminFetch } from '@/lib/api'
+import { copyText } from '../lib/clipboard'
 
 /**
  * Account pool strip — a persistent section pinned to the bottom of the
@@ -363,7 +364,7 @@ export default function LocalDock() {
                         <button
                           className="cursor-pointer rounded p-0.5 text-muted-foreground hover:text-foreground"
                           title={t('dock.copyLink')}
-                          onClick={() => void navigator.clipboard.writeText(pkceUrl)}
+                          onClick={() => void copyText(pkceUrl)}
                         >
                           <Copy size={10} />
                         </button>

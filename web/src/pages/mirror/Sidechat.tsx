@@ -9,6 +9,7 @@ import { Textarea, Select } from '@/components/ui'
 import { cn } from '@/lib/utils'
 import { PREFERRED_LANG } from './VoiceButton'
 import { FeedbackDialog } from './dialogs'
+import { copyText } from '../../lib/clipboard'
 
 function MessageToolbar({ text, eid, ts, tab, onSideChat, onStartNewSession, onFork, onQuote, sessionId, onTranslated }: { text: string; eid: string; ts?: string; tab?: string; onSideChat?: () => void; onStartNewSession?: () => void; onFork?: () => void; onQuote?: () => void; sessionId?: string; onTranslated?: (t: string) => void }) {
   const { t } = useTranslation()
@@ -18,7 +19,7 @@ function MessageToolbar({ text, eid, ts, tab, onSideChat, onStartNewSession, onF
   const [translating, setTranslating] = useState(false)
   const [trFail, setTrFail] = useState(false)
   const act = (k: string, v: string) => {
-    navigator.clipboard.writeText(v)
+    copyText(v)
     setDone(k)
     setTimeout(() => setDone(''), 1200)
   }

@@ -9,6 +9,7 @@ import { LightboxImage } from './Lightbox'
 import { mirrorHref } from '@/lib/mirrorLinks'
 import { delimitOfficialLinks } from '../../shared/officialLinks'
 import { MdTable, MdTbody, MdTd, MdTh, MdThead, MdTr } from './MdTable'
+import { copyText } from '../lib/clipboard'
 
 type Tok = { content: string; color?: string; darkColor?: string }
 
@@ -65,7 +66,7 @@ function CodeBlock({ code, lang }: { code: string; lang?: string }) {
               type="button"
               aria-label={t('md.copyCode')}
               onClick={() => {
-                void navigator.clipboard.writeText(text)
+                void copyText(text)
                 setCopied(true)
                 setTimeout(() => setCopied(false), 1500)
               }}
