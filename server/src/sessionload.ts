@@ -117,6 +117,11 @@ export async function hostFor(ctx: ApiContext, id: string, cwdHint?: string): Pr
  * background poll, forever. Real ops go through acpForId and always retry. */
 export const loadCooldown = new Map<string, number>();
 
+/** View-time tail-heal throttle (ensureLoaded): one healing replay per
+ *  session per minute — an interrupted banner can outlive many refreshes
+ *  and each loadOnce is a full session/load round-trip. */
+const healTried = new Map<string, number>();
+
 /** session_locked forensics: devin's session/list can stamp the holder pid on
  * loaded sessions (`_meta["cognition.ai/lockHolderPid"]`) — the same field
  * adoption claims sessions by. The lock error itself never names the holder,
@@ -226,6 +231,23 @@ export async function ensureLoaded(ctx: ApiContext, id: string): Promise<void> {
         const disk = ctx.sessionLog.readDiskTail(id);
         if (disk.length) ctx.sessionLog.restoreMemory(id, disk);
       } catch { /* mirror unreadable — pages degrade to empty, not broken */ }
+    }
+    // Interrupted-turn evidence (open-turns entry or an unbounded tail) means
+    // devin's transcript may hold messages we never journaled — the dead
+    // window's frames, a ring overflow, or a resync that raced its 60s cap.
+    // Replay heals the tail in the background: session/load is idempotent on
+    // the holder and dedup appends only the missing rows. Without this the
+    // stale view persisted until the next SEND ran a load (observed: the
+    // "interrupted" banner showed a transcript missing its newest messages).
+    // interruptedTurn already returns null while a turn/load is live here,
+    // and healTried bounds a view-polling loop to one replay per minute.
+    const t = interruptedTurn(ctx, id);
+    if (t && !loadInflight.has(id)) {
+      const last = healTried.get(id) ?? 0;
+      if (Date.now() - last > 60_000) {
+        healTried.set(id, Date.now());
+        void loadOnce(ctx, acp, id, cwd).catch(() => {});
+      }
     }
     return;
   }
