@@ -31,6 +31,11 @@ interface DwSessionMeta {
    *  the cwd in sessionCwd is then a REMOTE path. Persisted so restarts keep
    *  routing through ssh. */
   ssh?: string;
+  /** Last-known working directory, journaled on every sessionCwd.set. The
+   *  in-memory map dies with the backend and devin's own session/list reports
+   *  the HOSTING acp's cwd for loaded sessions (relocation rewrites it), so
+   *  this journal is the only restart-stable record of the real project dir. */
+  cwd?: string;
   /** Local share-link opt-in: /api/share/<id>/* answers only while set.
    *  Without the flag every session id is an ambient capability URL — ids
    *  are enumerable via /ws and the sessions list. Toggled by the admin

@@ -9,7 +9,7 @@ import { writeHeapSnapshot } from "node:v8";
 import { AcpManager } from "./manager.js";
 import { AccountPool, isRateLimitError, retryAfterSeconds } from "./accounts.js";
 import { agentsCheck, devinCheck, setAgentsDir } from "./agents.js";
-import { Store } from "./store.js";
+import { Store, remapLegacyCwd } from "./store.js";
 import { WsHub } from "./ws.js";
 import { WebSocketServer } from "ws";
 import { SessionLog } from "./sessionlog.js";
@@ -23,7 +23,7 @@ import { watchSubRateLimit } from "./sessionsub.js";
 import { loadInflight, sessionHost } from "./sessionplace.js";
 import { touchSessionActivity, markGracefulExit } from "./sessionlive.js";
 import { brokerEnabled } from "./acpbroker.js";
-import { meta } from "./dwstore.js";
+import { meta, loadReg, saveReg } from "./dwstore.js";
 import { sshInteractive } from "./ssh.js";
 import { edition } from "./edition.js";
 import { adminKeyRequired } from "./authn.js";
@@ -151,7 +151,24 @@ function isAllowedRequest(req: http.IncomingMessage): boolean {
 const store = new Store();
 setAgentsDir(store.dataDir);
 const sessionLog = new SessionLog(path.join(store.dataDir, "log"));
-const sessionCwd = new Map<string, string>();
+// sessionCwd write-through: the map is in-memory, so a restart empties it and
+// every `?? primaryCwd` fallback then reports the SERVER's repo dir as the
+// session's project (observed: a session created in `aaai` rendered as
+// devin-web after a bounce). devin's own session/list can't fix it — for a
+// loaded session it reports the HOSTING acp's cwd, which relocation rewrites.
+// Journal every set into DwSessionMeta.cwd and re-seed at boot instead.
+let ctxForCwd: ApiContext | null = null;
+const sessionCwd = new class extends Map<string, string> {
+  override set(id: string, cwd: string) {
+    super.set(id, cwd);
+    const c = ctxForCwd;
+    if (c && cwd && !id.includes(":")) {
+      const m = meta(c, id);
+      if (m.cwd !== cwd) { m.cwd = cwd; saveReg(); }
+    }
+    return this;
+  }
+}();
 const sessionSsh = new Map<string, string>();
 const permissionOwner = new Map<string, import("./acp.js").DevinAcp>();
 const primaryCwd = process.cwd();
@@ -376,6 +393,16 @@ const ctx: ApiContext = {
   sessionSsh,
   permissionOwner,
 };
+
+// Re-seed the journaled cwds: dw meta first (authoritative), then the older
+// agentSessions record for sessions created before the journal existed.
+ctxForCwd = ctx;
+for (const [id, m] of Object.entries(loadReg(ctx).sessions)) {
+  if (m.cwd && !sessionCwd.has(id)) sessionCwd.set(id, m.cwd);
+}
+for (const [id, r] of Object.entries(store.agentSessions())) {
+  if (r.cwd && !sessionCwd.has(id)) sessionCwd.set(id, remapLegacyCwd(r.cwd));
+}
 
 httpServer.on("request", (req, res) => {
   try {
