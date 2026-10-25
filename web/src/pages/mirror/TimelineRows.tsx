@@ -1,6 +1,6 @@
 import { memo, useCallback, useEffect, useMemo, useRef, useState, type ReactNode, type KeyboardEvent as ReactKeyboardEvent } from 'react'
 import { useTranslation } from 'react-i18next'
-import { Loader2, ChevronRight, ChevronDown, SquareTerminal, Bot, CircleDashed, ArrowUpRight, Clock, Flag, Square } from 'lucide-react'
+import { Loader2, ChevronRight, ChevronDown, SquareTerminal, Bot, CircleDashed, ArrowUpRight, Clock, Flag, Square, Eye } from 'lucide-react'
 import { adminFetch } from '@/lib/api'
 import { viewer, screenshotUrl } from '@/lib/viewer'
 import { visibleInterval } from '@/lib/poll'
@@ -14,7 +14,7 @@ import { cn, subProfileLabel } from '@/lib/utils'
 import { editStats, time, rowClock, preview, FullTerminal, AnsiText } from './timelineUtil'
 import { LiveOutputTail } from './ResourcePanels'
 
-const EventRow = memo(function EventRow({ item, sessionId, mt, onStepChanges, onOpenProgress, onOpenSubagent, live, envSupersededBy, tempOpen, selected, standalone }: { item: TimelineItem; sessionId: string; mt: string; onStepChanges?: (item: TimelineItem) => void; onOpenProgress?: (item: TimelineItem) => void; onOpenSubagent?: (agentId: string) => void; live?: boolean; envSupersededBy?: string; tempOpen?: boolean; selected?: boolean; standalone?: boolean }) {
+const EventRow = memo(function EventRow({ item, sessionId, mt, onStepChanges, onOpenProgress, onOpenSubagent, onOpenWsFile, live, envSupersededBy, tempOpen, selected, standalone }: { item: TimelineItem; sessionId: string; mt: string; onStepChanges?: (item: TimelineItem) => void; onOpenProgress?: (item: TimelineItem) => void; onOpenSubagent?: (agentId: string) => void; onOpenWsFile?: (path: string) => void; live?: boolean; envSupersededBy?: string; tempOpen?: boolean; selected?: boolean; standalone?: boolean }) {
   const { t } = useTranslation()
   const shots = item.screenshotKeys || []
   const [liveDismissed, setLiveDismissed] = useState(false)
@@ -116,6 +116,11 @@ const EventRow = memo(function EventRow({ item, sessionId, mt, onStepChanges, on
                   </span>
                 )}
               </span>
+              {onOpenWsFile && (
+                <span role="button" tabIndex={0} title={t('tl.openInEditor')} aria-label={t('tl.openInEditor')} onClick={(e) => { e.stopPropagation(); onOpenWsFile(r.filePath) }} onKeyDown={(e) => { if (e.key === 'Enter') { e.stopPropagation(); onOpenWsFile(r.filePath) } }} className="shrink-0 cursor-pointer rounded p-0.5 opacity-0 hover:bg-accent group-hover:opacity-100 focus-visible:opacity-100">
+                  <Eye size={11} className="text-muted-foreground" />
+                </span>
+              )}
               {onOpenProgress && (
                 <span role="button" tabIndex={0} title={t('tl.viewProgress')} aria-label={t('tl.viewProgress')} onClick={(e) => { e.stopPropagation(); onOpenProgress(item) }} onKeyDown={(e) => { if (e.key === 'Enter') { e.stopPropagation(); onOpenProgress(item) } }} className="shrink-0 cursor-pointer rounded p-0.5 opacity-0 hover:bg-accent group-hover:opacity-100 focus-visible:opacity-100">
                   <CircleDashed size={11} className="text-muted-foreground" />
@@ -268,7 +273,14 @@ const EventRow = memo(function EventRow({ item, sessionId, mt, onStepChanges, on
               {(item.fileUpdates || []).map((f, i) => (
                 <span key={i}>
                   {i > 0 && ', '}
-                  <span title={f.file_path}>{readLabel(f)}</span>
+                  <span
+                    title={onOpenWsFile ? t('tl.openInEditorTitle', { path: f.file_path }) : f.file_path}
+                    role={onOpenWsFile ? 'button' : undefined}
+                    tabIndex={onOpenWsFile ? 0 : undefined}
+                    onClick={onOpenWsFile ? (e) => { e.stopPropagation(); onOpenWsFile(f.file_path) } : undefined}
+                    onKeyDown={onOpenWsFile ? (e) => { if (e.key === 'Enter') { e.stopPropagation(); onOpenWsFile(f.file_path) } } : undefined}
+                    className={onOpenWsFile ? 'cursor-pointer rounded-sm hover:bg-accent hover:text-foreground' : undefined}
+                  >{readLabel(f)}</span>
                 </span>
               ))}
             </span>
@@ -357,7 +369,14 @@ const EventRow = memo(function EventRow({ item, sessionId, mt, onStepChanges, on
           <ul className="mt-1 space-y-0.5 rounded-md bg-muted px-2.5 py-1.5 font-mono text-[11px]">
             {item.fileUpdates.map((f, i) => (
               <li key={i} className="flex items-center gap-2">
-                <span className="truncate">{f.file_path.split('/').slice(-2).join('/')}</span>
+                <span
+                  title={onOpenWsFile ? t('tl.openInEditorTitle', { path: f.file_path }) : f.file_path}
+                  role={onOpenWsFile ? 'button' : undefined}
+                  tabIndex={onOpenWsFile ? 0 : undefined}
+                  onClick={onOpenWsFile ? (e) => { e.stopPropagation(); onOpenWsFile(f.file_path) } : undefined}
+                  onKeyDown={onOpenWsFile ? (e) => { if (e.key === 'Enter') { e.stopPropagation(); onOpenWsFile(f.file_path) } } : undefined}
+                  className={cn('truncate', onOpenWsFile && 'cursor-pointer rounded-sm hover:bg-accent hover:text-foreground')}
+                >{f.file_path.split('/').slice(-2).join('/')}</span>
                 <span className="text-text-green">+{f.lines_added ?? 0}</span>
                 <span className="text-text-red">−{f.lines_removed ?? 0}</span>
               </li>
@@ -590,7 +609,7 @@ function WgScrollBody({ children, live, itemCount }: { children: ReactNode; live
   )
 }
 
-const WorkGroup = memo(function WorkGroup({ items, seconds, sessionId, mt, defaultOpen, live, onStepChanges, onOpenProgress, tailThoughtId, selectedId }: { items: TimelineItem[]; seconds: number; sessionId: string; mt: string; defaultOpen: boolean; live?: boolean; onStepChanges?: (item: TimelineItem) => void; onOpenProgress?: (item: TimelineItem) => void; tailThoughtId?: string; selectedId?: string }) {
+const WorkGroup = memo(function WorkGroup({ items, seconds, sessionId, mt, defaultOpen, live, onStepChanges, onOpenProgress, onOpenWsFile, tailThoughtId, selectedId }: { items: TimelineItem[]; seconds: number; sessionId: string; mt: string; defaultOpen: boolean; live?: boolean; onStepChanges?: (item: TimelineItem) => void; onOpenProgress?: (item: TimelineItem) => void; onOpenWsFile?: (path: string) => void; tailThoughtId?: string; selectedId?: string }) {
   const { t } = useTranslation()
   const [open, setOpen] = useState(defaultOpen)
   let added = 0
@@ -665,7 +684,7 @@ const WorkGroup = memo(function WorkGroup({ items, seconds, sessionId, mt, defau
             <div className="w-px bg-border group-hover/rail:bg-muted-foreground" />
           </div>
           <WgScrollBody live={live} itemCount={rows.length}>
-            {rows.map((it) => <EventRow key={it.id} item={it} sessionId={sessionId} mt={mt} live={it.id === lastShellId} tempOpen={it.id === tailThoughtId} selected={it.id === selectedId} onStepChanges={onStepChanges} onOpenProgress={onOpenProgress} />)}
+            {rows.map((it) => <EventRow key={it.id} item={it} sessionId={sessionId} mt={mt} live={it.id === lastShellId} tempOpen={it.id === tailThoughtId} selected={it.id === selectedId} onStepChanges={onStepChanges} onOpenProgress={onOpenProgress} onOpenWsFile={onOpenWsFile} />)}
           </WgScrollBody>
         </div>
       )}

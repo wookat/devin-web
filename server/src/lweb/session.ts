@@ -57,7 +57,22 @@ export function confined(cwd: string, p: unknown): string | null {
     const real = fs.realpathSync(full);
     const realRoot = fs.realpathSync(root);
     return real === realRoot || real.startsWith(realRoot + path.sep) ? real : null;
-  } catch { return null; /* doesn't exist — never read it */ }
+  } catch {
+    // Target doesn't exist yet (new file/dir writes go through here) —
+    // confine via the nearest EXISTING ancestor instead: the lexical check
+    // already passed, so if the resolved ancestor sits inside the real root,
+    // no symlink along the way drops the write outside the workspace.
+    const realRoot = (() => { try { return fs.realpathSync(root) } catch { return null } })();
+    if (!realRoot) return null;
+    for (let anc = path.dirname(full); anc === root || anc.startsWith(root + path.sep); anc = path.dirname(anc)) {
+      try {
+        const ra = fs.realpathSync(anc);
+        if (ra === realRoot || ra.startsWith(realRoot + path.sep)) return full;
+        return null; // ancestor escapes the real root → symlink escape
+      } catch { /* keep walking up */ }
+    }
+    return null;
+  }
 }
 
 function subStatusEnum(a: { status: string; agentId?: string; resumable?: boolean } | undefined | null, aid: string): string {

@@ -693,6 +693,8 @@
     "showShots": "显示截图",
     "shotAlt": "截图",
     "viewProgress": "在进展中查看",
+    "openInEditor": "在编辑器中打开",
+    "openInEditorTitle": "在编辑器中打开 {{path}}",
     "moreActions": "更多操作",
     "failed": "失败",
     "done": "完成",

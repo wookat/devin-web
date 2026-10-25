@@ -121,7 +121,7 @@ export async function handleSessionFiles(ctx: ApiContext, req: IncomingMessage, 
       if (stat.size > 2 * 1024 * 1024) { json(res, 200, { path: rel, text: null, truncated: false, tooLarge: true, size: stat.size }); return true; }
       const buf = fs.readFileSync(file);
       const text = buf.includes(0) ? null : buf.toString("utf8");
-      json(res, 200, { path: rel, text, truncated: stat.size > 512 * 1024 ? true : false, binary: text === null, size: stat.size });
+      json(res, 200, { path: rel, text, truncated: stat.size > 512 * 1024 ? true : false, binary: text === null, size: stat.size, mtime: stat.mtime.toISOString() });
     } catch (e) {
       json(res, 200, { path: rel, text: null, error: e instanceof Error ? e.message : String(e) });
     }

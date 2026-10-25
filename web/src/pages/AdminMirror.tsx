@@ -29,6 +29,7 @@ import { useDraftSession } from './mirror/useDraftSession'
 import { useSelectionQuote } from './mirror/useSelectionQuote'
 import { type WfAgentEventState } from './mirror/AgentsPanel'
 import { SessionMenu } from './mirror/SessionMenu'
+import { requestWsOpen } from './mirror/WsShared'
 import { SessionIndex } from './mirror/SessionIndex'
 import { TimelineGroup, StatusTail } from './mirror/TimelineGroups'
 import { DraftExplorer } from './mirror/DraftExplorer'
@@ -1379,6 +1380,9 @@ export default function AdminMirrorPage() {
   // the matching entry of the Changes panel (nothing to open when the file was never edited)
   const onFileRef = useCallback((path: string) => { setStepChanges(null); setFocusFile({ path, n: Date.now() }); openTab('changes') }, [openTab])
   const onOpenProgress = useCallback((it: TimelineItem) => { setWorklogJump(it.id); openTab('worklog') }, [openTab])
+  // Progress-row file click → reveal the file in the Editor tab (md/html land
+  // on the viewer's Preview mode — the "click to preview" affordance).
+  const onOpenWsFile = useCallback((path: string) => { requestWsOpen(id, path); openTab('editor') }, [id, openTab])
   // Cloud parity: clicking a subagent card opens the child session as a full
   // page (own timeline + composer + controls), not a side-panel transcript.
   // `sub:` ids always key off the ROOT session — nested cards keep the root id.
@@ -2347,14 +2351,17 @@ const groups = useMemo(() => groupItems(allItems, sessionWorking), [allItems, se
         className={cn('relative flex min-w-0 flex-1 flex-col', effShowPanel && !fullWidth && 'md:basis-0', fullWidth && effShowPanel && 'max-md:flex md:hidden')}
         style={effShowPanel && !fullWidth && window.innerWidth >= 768 ? { flexGrow: 'calc(100 - var(--dw-rpct))' } : undefined}
         onDragEnter={(e) => { if (e.dataTransfer.types.includes('Files')) { e.preventDefault(); setDragOver((n) => n + 1) } }}
-        onDragOver={(e) => { if (e.dataTransfer.types.includes('Files')) e.preventDefault() }}
+        onDragOver={(e) => { if (e.dataTransfer.types.includes('Files') || e.dataTransfer.types.includes('text/x-dw-path')) e.preventDefault() }}
         onDragLeave={(e) => { if (e.dataTransfer.types.includes('Files')) setDragOver((n) => Math.max(0, n - 1)) }}
         onDrop={(e) => {
-          // Workspace-tree file drag → insert an @path mention into the composer.
+          // Workspace-tree file drag → drop a file-mention pill into the
+          // composer (same token/label as the @files suggestion pick).
           const wbPath = e.dataTransfer.getData('text/x-dw-path')
           if (wbPath) {
             e.preventDefault()
-            setInput((cur) => (cur.trim() ? `${cur} @${wbPath} ` : `@${wbPath} `))
+            const name = wbPath.split('/').pop() || wbPath
+            if (editorRef.current) editorRef.current.insertPill(wbPath, name, 'file', wbPath)
+            else setInput((cur) => (cur.trim() ? `${cur} ${wbPath} ` : `${wbPath} `))
             return
           }
           if (!e.dataTransfer.types.includes('Files')) return
@@ -2517,7 +2524,7 @@ const groups = useMemo(() => groupItems(allItems, sessionWorking), [allItems, se
                   ) : row.g ? (
                     // keyed by the newest member: history backfill prepends older items and may
                     // extend the group backwards, which must not remount it (would drop open state)
-                    <TimelineGroup g={row.g} isLast={row.gi === groups.length - 1} id={id} isVisitor={isVisitor} isSub={isSub} caps={caps} detail={detail} status={status} panel={panel} mediaTok={mediaTok} permResolved={permResolved} secretProvided={secretProvided} provideSecret={provideSecret} wf={wf} onOpenWfRun={(runId) => { setWfRunId(runId || null); openTab('agents') }} onOpenPr={openPr} onOpenPermission={(it) => { setPermSide(it); setShowPanel(true) }} envSuperseded={envSuperseded} messageHeaders={messageHeaders} translations={translations} onTranslated={(itemId, tr) => setTranslations((p) => ({ ...p, [itemId]: tr }))} onFileRef={onFileRef} openFileTab={openFileTab} jumpToQuote={jumpToQuote} onSelQuote={setSelQuote} quoteGuardUntil={quoteGuardUntil} onControlMsg={setControlMsg} onSideChat={(it) => { setScAnchor({ id: it.id, ts: it.ts }); openTab('sidechat') }} onStepChanges={onStepChanges} onOpenProgress={onOpenProgress} onOpenSubagent={onOpenSubagent} worklogJump={worklogJump} tailThoughtId={tailThoughtId} urlPrs={urlPrs} urlFiles={urlFiles} />
+                    <TimelineGroup g={row.g} isLast={row.gi === groups.length - 1} id={id} isVisitor={isVisitor} isSub={isSub} caps={caps} detail={detail} status={status} panel={panel} mediaTok={mediaTok} permResolved={permResolved} secretProvided={secretProvided} provideSecret={provideSecret} wf={wf} onOpenWfRun={(runId) => { setWfRunId(runId || null); openTab('agents') }} onOpenPr={openPr} onOpenPermission={(it) => { setPermSide(it); setShowPanel(true) }} envSuperseded={envSuperseded} messageHeaders={messageHeaders} translations={translations} onTranslated={(itemId, tr) => setTranslations((p) => ({ ...p, [itemId]: tr }))} onFileRef={onFileRef} openFileTab={openFileTab} jumpToQuote={jumpToQuote} onSelQuote={setSelQuote} quoteGuardUntil={quoteGuardUntil} onControlMsg={setControlMsg} onSideChat={(it) => { setScAnchor({ id: it.id, ts: it.ts }); openTab('sidechat') }} onStepChanges={onStepChanges} onOpenProgress={onOpenProgress} onOpenSubagent={onOpenSubagent} onOpenWsFile={onOpenWsFile} worklogJump={worklogJump} tailThoughtId={tailThoughtId} urlPrs={urlPrs} urlFiles={urlFiles} />
                   ) : null}
                 </div>
               )

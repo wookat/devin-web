@@ -2,9 +2,11 @@ import { useCallback, useEffect, useRef, useState } from 'react'
 import { useTranslation } from 'react-i18next'
 import { RefreshCw, FileCode, ChevronFirst, ChevronLast } from 'lucide-react'
 import { adminFetch } from '@/lib/api'
+import { subscribeWs } from '@/lib/ws'
+import { visibleInterval } from '@/lib/poll'
 import { OChevronDown, OChevronRight, OSearch, OX } from '@/components/officialIcons'
 import { cn } from '@/lib/utils'
-import { type WsEntry, type FileResp, base, parentOf, kindOf, EDITABLE, gitCls, gitTitle, TypeIcon, type MenuPos, type CtxItem, CtxMenu } from './WsShared'
+import { type WsEntry, type FileResp, base, parentOf, kindOf, EDITABLE, gitCls, gitTitle, TypeIcon, type MenuPos, type CtxItem, CtxMenu, WS_OPEN_EVENT, consumeWsOpen } from './WsShared'
 import { Viewer } from './WorkspaceViewers'
 import { copyText } from '../../lib/clipboard'
 
@@ -39,6 +41,10 @@ function EditorPanel({ id }: { id: string }) {
 interface Sess { tabs: string[]; active: string | null; expanded: Record<string, boolean>; filter: string; drafts: Record<string, string>; treeCollapsed?: boolean }
 const mem = new Map<string, Sess>()
 
+/** Order-stable fingerprint of a dir listing — silent refreshes compare it to
+ *  skip the setState (and the whole subtree rerender) when nothing changed. */
+const dirSig = (es: WsEntry[]) => es.map((e) => `${e.name} ${e.dir ? 1 : 0} ${e.size} ${e.mtime}`).join(' ')
+
 function WorkspacePanel({ id }: { id: string }) {
   const { t } = useTranslation()
   const saved = mem.get(id)
@@ -61,43 +67,146 @@ function WorkspacePanel({ id }: { id: string }) {
 
   useEffect(() => { mem.set(id, { tabs, active, expanded, filter, drafts, treeCollapsed }) }, [id, tabs, active, expanded, filter, drafts, treeCollapsed])
 
-  const loadDir = useCallback(async (p: string, force = false) => {
-    if (!force && dirs[p] === 'loading') return
-    setDirs((d) => ({ ...d, [p]: 'loading' }))
+  const dirsRef = useRef(dirs)
+  dirsRef.current = dirs
+  const draftsRef = useRef(drafts)
+  draftsRef.current = drafts
+  const tabsRef = useRef(tabs)
+  tabsRef.current = tabs
+  // Content signature per open file, from the /file response's size+mtime —
+  // the dir-refresh check compares the dir entry's signature against it to
+  // decide whether an open file changed on disk behind our back.
+  const fileSig = useRef(new Map<string, string>())
+
+  const loadDir = useCallback(async (p: string, force = false, silent = false): Promise<WsEntry[] | null> => {
+    if (!force && dirs[p] === 'loading') return null
+    if (!silent) setDirs((d) => ({ ...d, [p]: 'loading' }))
     try {
       const r = await adminFetch<{ cwd: string; path: string; entries: WsEntry[]; error: string | null }>(
         `/api/admin/session/${id}/files?path=${encodeURIComponent(p)}&all=1`)
       setCwd(r.cwd)
       const entries = [...(r.entries ?? [])].sort((a, b) => Number(b.dir) - Number(a.dir) || a.name.localeCompare(b.name))
-      setDirs((d) => ({ ...d, [p]: { entries } }))
-    } catch { setDirs((d) => ({ ...d, [p]: 'error' })) }
+      setDirs((d) => {
+        // Silent refreshes keep object identity on no-change so the tree —
+        // and every expanded/selected node under it — skips the rerender.
+        const prev = d[p]
+        if (silent && prev && prev !== 'loading' && prev !== 'error' && dirSig(prev.entries) === dirSig(entries)) return d
+        return { ...d, [p]: { entries } }
+      })
+      return entries
+    } catch {
+      if (!silent) setDirs((d) => ({ ...d, [p]: 'error' }))
+      return null
+    }
   }, [id, dirs])
 
   useEffect(() => { if (!dirs['']) void loadDir('') }, [dirs, loadDir])
 
+  const pullGit = useCallback(() => adminFetch<{ git?: boolean; map?: Record<string, string> }>(`/api/admin/session/${id}/file-git`)
+    .then((r) => { if (r.git) setGitMap(r.map ?? {}) })
+    .catch(() => {}), [id])
   useEffect(() => {
-    let dead = false
-    const pull = () => adminFetch<{ git?: boolean; map?: Record<string, string> }>(`/api/admin/session/${id}/file-git`)
-      .then((r) => { if (!dead && r.git) setGitMap(r.map ?? {}) })
-      .catch(() => {})
-    void pull()
-    const t = setInterval(pull, 15000)
-    return () => { dead = true; clearInterval(t) }
-  }, [id])
+    void pullGit()
+    const t = setInterval(() => void pullGit(), 15000)
+    return () => clearInterval(t)
+  }, [pullGit])
 
   const openFile = useCallback(async (p: string, force = false) => {
     if (!force) setFiles((f) => ({ ...f, [p]: { path: p, text: null } }))
     try {
       const r = await adminFetch<FileResp>(`/api/admin/session/${id}/file?path=${encodeURIComponent(p)}`)
+      if (r.mtime != null) fileSig.current.set(p, `${r.size ?? 0}|${r.mtime}`)
       setFiles((f) => ({ ...f, [p]: r }))
     } catch (e) { setFiles((f) => ({ ...f, [p]: { path: p, text: null, error: (e as Error).message } })) }
   }, [id])
+
+  /* Live file sync: agent edits/uploads never invalidate the cached dirs, so
+     the tree goes stale mid-turn. Every loaded dir is silently re-read on
+     session activity (debounced WS tail) plus a visible-interval baseline;
+     unchanged dirs keep identity → zero rerender. Open tabs whose disk entry
+     moved (mtime/size changed, or vanished) are refetched — unless the user
+     has an unsaved draft, which is never clobbered. */
+  const refreshAll = useCallback(async () => {
+    const loaded = Object.keys(dirsRef.current).filter((p) => {
+      const v = dirsRef.current[p]
+      return v !== undefined && v !== 'loading' && v !== 'error'
+    })
+    if (!loaded.length) return
+    const fresh = new Map<string, WsEntry[]>()
+    await Promise.all(loaded.map(async (p) => {
+      const es = await loadDir(p, true, true)
+      if (es) fresh.set(p, es)
+    }))
+    void pullGit()
+    for (const p of tabsRef.current) {
+      if (draftsRef.current[p] !== undefined) continue
+      const es = fresh.get(parentOf(p))
+      if (!es) continue
+      const ent = es.find((x) => x.name === base(p))
+      const sig = ent ? `${ent.size}|${ent.mtime}` : null
+      if (sig !== fileSig.current.get(p)) {
+        if (sig) fileSig.current.set(p, sig)
+        void openFile(p, true)
+      }
+    }
+  }, [loadDir, pullGit, openFile])
+
+  const refreshTimer = useRef<number | null>(null)
+  const scheduleRefresh = useCallback(() => {
+    if (refreshTimer.current != null) return
+    refreshTimer.current = window.setTimeout(() => { refreshTimer.current = null; void refreshAll() }, 1500)
+  }, [refreshAll])
+  useEffect(() => {
+    const off = subscribeWs((ev) => {
+      if (ev.sessionId !== id) return
+      if (ev.type !== 'timeline_delta' && ev.type !== 'session_status' && ev.type !== 'session_update') return
+      scheduleRefresh()
+    })
+    return () => {
+      off()
+      if (refreshTimer.current != null) { clearTimeout(refreshTimer.current); refreshTimer.current = null }
+    }
+  }, [id, scheduleRefresh])
+  useEffect(() => visibleInterval(() => void refreshAll(), 15_000), [refreshAll])
 
   const open = useCallback((p: string) => {
     setTabs((t) => (t.includes(p) ? t : [...t, p]))
     setActive(p)
     if (EDITABLE[kindOf(p)] && !files[p]) void openFile(p)
   }, [files, openFile])
+
+  const cwdRef = useRef(cwd)
+  cwdRef.current = cwd
+
+  /** Timeline/progress → "open file in editor": normalize (possibly absolute)
+   *  the path into workspace-relative, expand its ancestors, open the tab.
+   *  md/html land on the viewer's Preview mode automatically. */
+  const revealAndOpen = useCallback((raw: string) => {
+    let p = raw.replace(/\\/g, '/')
+    const c = cwdRef.current.replace(/\\/g, '/').replace(/\/+$/, '')
+    if (c && p.startsWith(`${c}/`)) p = p.slice(c.length + 1)
+    p = p.replace(/^\.?\//, '')
+    const segs = p.split('/')
+    let acc = ''
+    for (const seg of segs.slice(0, -1)) {
+      acc = acc ? `${acc}/${seg}` : seg
+      if (!dirsRef.current[acc]) void loadDir(acc)
+      const key = acc
+      setExpanded((x) => (x[key] ? x : { ...x, [key]: true }))
+    }
+    open(p)
+  }, [open, loadDir])
+
+  useEffect(() => {
+    const pend = consumeWsOpen(id)
+    if (pend) revealAndOpen(pend)
+    const h = (e: Event) => {
+      const d = (e as CustomEvent<{ id: string; path: string }>).detail
+      if (d?.id === id && d.path) revealAndOpen(d.path)
+    }
+    window.addEventListener(WS_OPEN_EVENT, h)
+    return () => window.removeEventListener(WS_OPEN_EVENT, h)
+  }, [id, revealAndOpen])
 
   const toggleDir = useCallback((p: string) => {
     setExpanded((x) => {
@@ -196,7 +305,7 @@ function WorkspacePanel({ id }: { id: string }) {
           role="button"
           tabIndex={0}
           draggable={renaming !== n.path}
-          onDragStart={(e) => { setDragNode(n.path); e.dataTransfer.effectAllowed = 'move'; e.dataTransfer.setData('text/x-dw-path', n.path) }}
+          onDragStart={(e) => { setDragNode(n.path); e.dataTransfer.effectAllowed = 'copyMove'; e.dataTransfer.setData('text/x-dw-path', n.path); e.dataTransfer.setData('text/plain', n.path) }}
           onDragEnd={() => { setDragNode(null); setDropDir(null) }}
           onDragOver={n.entry.dir ? (e) => { e.preventDefault(); e.stopPropagation(); setDropDir(n.path) } : undefined}
           onDragLeave={n.entry.dir ? () => setDropDir((d) => (d === n.path ? null : d)) : undefined}
@@ -383,7 +492,13 @@ function WorkspacePanel({ id }: { id: string }) {
           <span className="text-[11px] font-medium tracking-wide text-muted-foreground">{t('ws.repos')}</span>
           <div className="flex items-center">
             <button className="flex size-6 cursor-pointer items-center justify-center rounded-[4px] text-muted-foreground hover:bg-tint-secondary" aria-label={t('common.refresh')} title={t('common.refresh')}
-              onClick={() => { setDirs({}); void loadDir('', true) }}><RefreshCw size={12} /></button>
+              onClick={() => {
+                const loaded = Object.keys(dirsRef.current)
+                setDirs({})
+                fileSig.current.clear()
+                for (const p of loaded.length ? loaded : ['']) void loadDir(p, true)
+                for (const p of tabsRef.current) void openFile(p, true)
+              }}><RefreshCw size={12} /></button>
             <button className="flex size-6 cursor-pointer items-center justify-center rounded-[4px] text-muted-foreground hover:bg-tint-secondary" aria-label={t('ws.hideTree')} title={t('ws.hideTree')}
               onClick={() => setTreeCollapsed(true)}><ChevronLast size={13} /></button>
           </div>

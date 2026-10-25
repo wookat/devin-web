@@ -693,6 +693,8 @@
     "showShots": "Show screenshots",
     "shotAlt": "Screenshot",
     "viewProgress": "View in Progress",
+    "openInEditor": "Open in editor",
+    "openInEditorTitle": "Open {{path}} in editor",
     "moreActions": "More actions",
     "failed": "failed",
     "done": "done",

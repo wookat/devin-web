@@ -185,8 +185,11 @@ const ComposerEditor = forwardRef<
         }
         document.execCommand('insertText', false, e.clipboardData.getData('text/plain'))
       }}
-      onDragOver={(e) => { if (e.dataTransfer.types.includes('Files')) e.preventDefault() }}
+      onDragOver={(e) => { if (e.dataTransfer.types.includes('Files') || e.dataTransfer.types.includes('text/x-dw-path')) e.preventDefault() }}
       onDrop={(e) => {
+        // Workspace-tree drags carry text/x-dw-path — let them bubble to the
+        // page-level handler, which inserts a file-mention pill.
+        if (e.dataTransfer.types.includes('text/x-dw-path')) return
         if (!e.dataTransfer.types.includes('Files')) return
         e.preventDefault()
         e.stopPropagation()

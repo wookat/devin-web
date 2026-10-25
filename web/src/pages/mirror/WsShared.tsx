@@ -10,7 +10,23 @@ import { FileIcon } from '@/lib/fileIcon'
 // ---------------------------------------------------------------------------
 
 interface WsEntry { name: string; dir: boolean; size: number; mtime: string }
-interface FileResp { path: string; text: string | null; binary?: boolean; tooLarge?: boolean; size?: number; truncated?: boolean; error?: string }
+interface FileResp { path: string; text: string | null; binary?: boolean; tooLarge?: boolean; size?: number; truncated?: boolean; mtime?: string; error?: string }
+
+/* Cross-panel "open this workspace file in the Editor tab" channel: the
+   timeline/progress rows can't call WorkspacePanel directly, so they queue a
+   path here and fire WS_OPEN_EVENT; WorkspacePanel consumes it on mount and
+   on every event. */
+const WS_OPEN_EVENT = 'dw-ws-open'
+const pendingWsOpen = new Map<string, string>()
+function requestWsOpen(sessionId: string, path: string) {
+  pendingWsOpen.set(sessionId, path)
+  try { window.dispatchEvent(new CustomEvent(WS_OPEN_EVENT, { detail: { id: sessionId, path } })) } catch { /* SSR */ }
+}
+function consumeWsOpen(sessionId: string): string | null {
+  const p = pendingWsOpen.get(sessionId) ?? null
+  pendingWsOpen.delete(sessionId)
+  return p
+}
 
 const ext = (p: string) => (p.split(/[\\/]/).pop() ?? '').split('.').pop()?.toLowerCase() ?? ''
 const base = (p: string) => p.split(/[\\/]/).pop() ?? p
@@ -144,4 +160,4 @@ function useSaver(dirty: boolean, onSave: () => void) {
   return { saving, doSave }
 }
 
-export { type WsEntry, type FileResp, ext, base, parentOf, type Kind, kindOf, EDITABLE, gitCls, gitTitle, TypeIcon, type MenuPos, type CtxItem, CtxMenu, ErrBox, Fallback, EditBar, useSaver };
+export { type WsEntry, type FileResp, ext, base, parentOf, type Kind, kindOf, EDITABLE, gitCls, gitTitle, TypeIcon, type MenuPos, type CtxItem, CtxMenu, ErrBox, Fallback, EditBar, useSaver, WS_OPEN_EVENT, requestWsOpen, consumeWsOpen };
