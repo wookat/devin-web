@@ -13,7 +13,7 @@ import type { LogEntry } from "../../sessiondb.js";
 import { buildTimeline, tlReset } from "../../dwtimeline.js";
 import { meta, saveReg } from "../../dwstore.js";
 import { snapshotItems } from "../../dwtailsnap.js";
-import { ensureLoaded, acpForId, interruptedTurn, hostFor } from "../../sessionload.js";
+import { ensureLoaded, acpForId, interruptedTurn, hostFor, loadCooldown } from "../../sessionload.js";
 import { sessionStatus, terminalText } from "../../sessionview.js";
 import { dispatchPrompt } from "../../sessionprompt.js";
 import { queueList, queueAdd, queueRemove, queueFlush } from "../../sessionqueue.js";
@@ -477,12 +477,26 @@ export async function handleSessionTimeline(ctx: ApiContext, req: IncomingMessag
     if (!peek) void ensureLoaded(ctx, id);
     const loading = !peek && loadInflight.has(id);
     const { items: live, gen } = buildTimeline(ctx, id);
-    const snap = (loading || peek || !live.length) ? snapshotItems(ctx, id) : null;
-    // During replay serve ONLY the old-gen snapshot; afterwards ONLY
-    // the rebuilt live items — never mix generations. In peek mode the
-    // snapshot wins unless the live log already holds more (newer) data.
-    const serveSnap = !!snap && (loading || (peek && snap.length >= live.length));
-    const all = serveSnap ? snap : live;
+    // Snapshot isn't just a loading stand-in: a FAILED load (session_locked
+    // by a foreign/stale holder) leaves `live` holding only the few post-boot
+    // rows — serving it wholesale erased the whole visible history down to
+    // the latest sends (observed: full tail painted from the snapshot, then
+    // the moment config finished its retry loop the page collapsed to 3
+    // messages). Union instead: snapshot base + live rows the snapshot
+    // lacks (ids are e<seq>, aligned across builds). loadCooldown marks the
+    // failed-load window so the snapshot keeps covering it.
+    const snap = (loading || peek || !live.length || loadCooldown.has(id)) ? snapshotItems(ctx, id) : null;
+    let all: typeof live;
+    let serveSnap: boolean;
+    if (snap) {
+      const ids = new Set(snap.map((i) => i.id));
+      const tail = live.filter((i) => !ids.has(i.id));
+      all = tail.length ? [...snap, ...tail] : snap;
+      serveSnap = true;
+    } else {
+      all = live;
+      serveSnap = false;
+    }
     // Consume the reset flag only when actually serving new-gen items.
     const reset = !loading && !serveSnap && tlReset.delete(id);
     // Page from the END (newest). `limit` items per page; `cursor` is the
