@@ -214,6 +214,23 @@ per checkpoint tick (new dbs; existing needs one VACUUM — repair fix
 `vacuum-logs`). `LanKeyBanner` warns once on non-loopback access with
 no ADMIN_KEY.
 
+Timeline render path — a strict ref-stability chain, every link required:
+`mergeItems()` (mirror/timelineUtil.tsx) preserves the previous item
+OBJECT for any row whose fields didn't change; the merge passes in
+TimelineMerges.ts (`mergeScriptedRuns`/`mergeShellPairs`) cache their
+folded output in WeakMaps keyed by the source item so folded rows keep
+the same ref too; `TimelineGroup` (mirror/TimelineGroups.tsx) is
+`React.memo` with a comparator that compares the group structurally
+(item refs / work items element-wise), scalar props by value, shared
+maps by the per-row lookup (`permResolved.get(reqId)`,
+`translations[id]`, …) — NOT map identity, they're rebuilt per frame —
+and callback props by identity only when they're `useCallback`'d at the
+call site (inline arrows there close only over stable setters and are
+intentionally skipped). Break any link — clone items in mergeItems,
+mint fresh folded objects, or remove the memo — and every delta frame
+re-renders every mounted row incl. its full markdown re-parse (~60-80ms
+long tasks each, the "vast-comte is laggy" regression).
+
 Translate (`POST /api/admin/mirror/translate`, `server/src/translate.ts`)
 provider chain: **devin-chat** → DEVIN_WEB_TRANSLATE_URL → MyMemory → gtx.
 devin-chat is the official webapp's translate call — POST

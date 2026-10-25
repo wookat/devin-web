@@ -6,6 +6,12 @@ import type { EnvResolution, TimelineItem } from './Timeline'
  * completion loaded on another page flips its `scripted_tools_started` row to
  * "Ran scripted tool" and disappears as a standalone row.
  */
+/** mergeItems preserves source-item refs across deltas, but the merge
+ * transforms mint fresh objects for folded rows every call — which would
+ * defeat the memoized TimelineGroup rows downstream. Cache the folded
+ * output per source item, keyed on everything the fold consumed. */
+const scriptedFoldCache = new WeakMap<TimelineItem, { sig: string; out: TimelineItem }>()
+
 export function mergeScriptedRuns(items: TimelineItem[]): TimelineItem[] {
   const done = new Map<string, TimelineItem>()
   const started = new Set<string>()
@@ -23,17 +29,24 @@ export function mergeScriptedRuns(items: TimelineItem[]): TimelineItem[] {
       const d = done.get(it.shellId)
       const kids = orphans.get(it.shellId)
       if (!d && !kids) return [it]
+      const sig = `${d?.id ?? ''}@${d?.ts ?? ''}|${kids?.length ?? -1}|${it.nested?.length ?? -1}|${it.kind}`
+      const hit = scriptedFoldCache.get(it)
+      if (hit?.sig === sig) return [hit.out]
       const nested = kids
         ? [...(it.nested || []), ...kids.map((k) => ({ label: k.title || k.raw_type.replace(/_/g, ' '), ts: k.ts }))].sort((a, b) => a.ts.localeCompare(b.ts))
         : it.nested
       const ran = d || it.kind === 'shell_done'
       const n = nested?.length
       const title = n ? i18n.t(ran ? 'tl.scriptedRanN' : 'tl.scriptedRunningN', { count: n }) : ran ? i18n.t('tl.ranScripted') : i18n.t('tl.runningScripted')
-      return [{ ...it, kind: ran ? ('shell_done' as const) : it.kind, title, nested, exitCode: d?.exitCode ?? it.exitCode, body: it.body || d?.body }]
+      const out = { ...it, kind: ran ? ('shell_done' as const) : it.kind, title, nested, exitCode: d?.exitCode ?? it.exitCode, body: it.body || d?.body }
+      scriptedFoldCache.set(it, { sig, out })
+      return [out]
     }
     return [it]
   })
 }
+
+const shellFoldCache = new WeakMap<TimelineItem, { sig: string; out: TimelineItem }>()
 
 /** Official groups show one row per command: the completion event merges into
  * the command row (output behind the expand), no standalone "Exit code" rows. */
@@ -57,16 +70,25 @@ export function mergeShellPairs(items: TimelineItem[]): TimelineItem[] {
       const dones = it.processId ? doneByProcess.get(it.processId) : undefined
       if (dones && dones.length > 0) {
         for (const d of dones) consumed.add(d.id)
-        const last = dones[dones.length - 1]
-        const outputs = dones.map((d) => d.body).filter(Boolean)
-        out.push({
-          ...it,
-          exitCode: last.exitCode,
-          terminal: it.startupCommand ? undefined : (last.terminal ?? it.terminal),
-          terminalMore: last.terminalMore ?? it.terminalMore,
-          pageCursor: last.pageCursor ?? it.pageCursor,
-          output: outputs.length ? outputs.join('\n\n') : undefined,
-        })
+        const sig = dones.map((d) => `${d.id}@${d.ts}`).join(',')
+        let hit = shellFoldCache.get(it)
+        if (!hit || hit.sig !== sig) {
+          const last = dones[dones.length - 1]
+          const outputs = dones.map((d) => d.body).filter(Boolean)
+          hit = {
+            sig,
+            out: {
+              ...it,
+              exitCode: last.exitCode,
+              terminal: it.startupCommand ? undefined : (last.terminal ?? it.terminal),
+              terminalMore: last.terminalMore ?? it.terminalMore,
+              pageCursor: last.pageCursor ?? it.pageCursor,
+              output: outputs.length ? outputs.join('\n\n') : undefined,
+            },
+          }
+          shellFoldCache.set(it, hit)
+        }
+        out.push(hit.out)
       } else {
         out.push(it)
       }

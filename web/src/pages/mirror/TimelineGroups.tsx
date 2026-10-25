@@ -1,4 +1,4 @@
-import { type MutableRefObject } from 'react'
+import { memo, type MutableRefObject } from 'react'
 import { useTranslation } from 'react-i18next'
 import { useNavigate } from 'react-router-dom'
 import { Workflow as WorkflowIcon, BookOpen } from 'lucide-react'
@@ -33,7 +33,7 @@ type SelQuote = { x: number; y: number; text: string; eventId: string; author: '
 /* Timeline row dispatch — one element per groupItems() group: cards for
  * permissions/secrets/workflows/PRs/git events, EventRow for stray rows,
  * the message bubble branch for 'item' groups, WorkGroup for 'work'. */
-function TimelineGroup({ g, isLast, id, isVisitor, isSub, caps, detail, status, panel, mediaTok, permResolved, secretProvided, provideSecret, wf, onOpenWfRun, onOpenPr, onOpenPermission, envSuperseded, messageHeaders, translations, onTranslated, onFileRef, openFileTab, jumpToQuote, onSelQuote, quoteGuardUntil, onControlMsg, onSideChat, onStepChanges, onOpenProgress, onOpenSubagent, onOpenWsFile, worklogJump, tailThoughtId, urlPrs, urlFiles }: {
+type TimelineGroupProps = {
   g: Group
   isLast: boolean
   id: string
@@ -70,7 +70,9 @@ function TimelineGroup({ g, isLast, id, isVisitor, isSub, caps, detail, status, 
   tailThoughtId: string | undefined
   urlPrs: { pr_url?: string; number?: number }[]
   urlFiles: { href: string; name: string }[]
-}) {
+}
+
+function TimelineGroupInner({ g, isLast, id, isVisitor, isSub, caps, detail, status, panel, mediaTok, permResolved, secretProvided, provideSecret, wf, onOpenWfRun, onOpenPr, onOpenPermission, envSuperseded, messageHeaders, translations, onTranslated, onFileRef, openFileTab, jumpToQuote, onSelQuote, quoteGuardUntil, onControlMsg, onSideChat, onStepChanges, onOpenProgress, onOpenSubagent, onOpenWsFile, worklogJump, tailThoughtId, urlPrs, urlFiles }: TimelineGroupProps) {
   const { t } = useTranslation()
   const nav = useNavigate()
   const setSelQuote = onSelQuote
@@ -345,5 +347,51 @@ function StatusTail({ statusState, actionRequired, woke, controlling, onResume, 
     ) : null
   )
 }
+
+/* Row-level memo boundary: every streamed delta recomputes groups, but
+ * mergeItems() keeps refs for untouched items and the merge caches keep
+ * folded items stable — so a group whose inputs didn't change renders the
+ * same output and the whole subtree (markdown parse included) is skipped.
+ * Function props NOT compared below are inline at the call site but close
+ * only over stable setters/callbacks; the useCallback'd ones are compared
+ * by identity. The shared maps (permResolved, envSuperseded, …) are rebuilt
+ * per frame — compare only the value THIS row reads, not the map itself. */
+function sameGroup(a: Group, b: Group): boolean {
+  if (a.type !== b.type) return false
+  if (a.type === 'work' && b.type === 'work') {
+    if (a.seconds !== b.seconds || a.items.length !== b.items.length) return false
+    for (let i = 0; i < a.items.length; i++) if (a.items[i] !== b.items[i]) return false
+    return true
+  }
+  if (a.type === 'work' || b.type === 'work') return false
+  return a.item === b.item
+}
+
+const TimelineGroup = memo(TimelineGroupInner, (a, b) => {
+  if (!sameGroup(a.g, b.g)) return false
+  if (a.isLast !== b.isLast || a.id !== b.id || a.isVisitor !== b.isVisitor || a.isSub !== b.isSub
+    || a.status !== b.status || a.panel !== b.panel || a.mediaTok !== b.mediaTok
+    || a.worklogJump !== b.worklogJump || a.tailThoughtId !== b.tailThoughtId
+    || a.detail !== b.detail || a.caps !== b.caps
+    || a.urlPrs !== b.urlPrs || a.urlFiles !== b.urlFiles) return false
+  if (a.provideSecret !== b.provideSecret || a.onOpenPr !== b.onOpenPr
+    || a.onFileRef !== b.onFileRef || a.openFileTab !== b.openFileTab
+    || a.jumpToQuote !== b.jumpToQuote || a.onStepChanges !== b.onStepChanges
+    || a.onOpenProgress !== b.onOpenProgress || a.onOpenSubagent !== b.onOpenSubagent
+    || a.onOpenWsFile !== b.onOpenWsFile) return false
+  const item = a.g.type === 'work' ? undefined : a.g.item
+  if (item) {
+    if (a.envSuperseded.get(item.id) !== b.envSuperseded.get(item.id)) return false
+    if (a.messageHeaders.get(item.id) !== b.messageHeaders.get(item.id)) return false
+    if (a.translations[item.id] !== b.translations[item.id]) return false
+    if (a.permResolved.get(item.permission?.requestId || '') !== b.permResolved.get(item.permission?.requestId || '')) return false
+    if (a.secretProvided.has(item.secretRequest?.requestId || '') !== b.secretProvided.has(item.secretRequest?.requestId || '')) return false
+    if (item.kind === 'workflow') {
+      const runId = item.workflow?.runId || ''
+      if (a.wf.status.get(runId) !== b.wf.status.get(runId) || a.wf.agents.get(runId) !== b.wf.agents.get(runId)) return false
+    }
+  }
+  return true
+})
 
 export { TimelineGroup, StatusTail, type SelQuote }
