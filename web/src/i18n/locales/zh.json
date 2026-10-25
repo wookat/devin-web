@@ -996,7 +996,9 @@
     "quoted": "引用了 {{label}}",
     "worklog": "工作日志",
     "devinMsg": "Devin 消息",
-    "userMsg": "用户消息"
+    "userMsg": "用户消息",
+    "translate": "翻译",
+    "copyTranslation": "复制译文"
   },
   "sc": {
     "newWithPrompt": "用此提示开新会话",

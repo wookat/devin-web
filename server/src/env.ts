@@ -73,3 +73,11 @@ export function acpBrokerSock(): string {
 export function dashboardMcpOn(): boolean {
   return !!process.env.DEVIN_WEB_DASHBOARD_MCP;
 }
+
+/** Optional upstream translate endpoint (DEVIN_WEB_TRANSLATE_URL) — when
+ *  set, /api/admin/mirror/translate proxies to it with the devin account
+ *  Bearer token (same contract as the transcribe-audio proxy: POST
+ *  {text,target} → {result|text|translation}). */
+export function translateUrl(): string {
+  return process.env.DEVIN_WEB_TRANSLATE_URL || "";
+}

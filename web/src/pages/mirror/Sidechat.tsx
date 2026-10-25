@@ -7,9 +7,9 @@ import { visibleInterval } from '@/lib/poll'
 import Markdown from '@/components/Markdown'
 import { Textarea, Select } from '@/components/ui'
 import { cn } from '@/lib/utils'
-import { PREFERRED_LANG } from './VoiceButton'
 import { FeedbackDialog } from './dialogs'
 import { copyText } from '../../lib/clipboard'
+import { translateText } from '@/lib/translate'
 
 function MessageToolbar({ text, eid, ts, tab, onSideChat, onStartNewSession, onFork, onQuote, sessionId, onTranslated }: { text: string; eid: string; ts?: string; tab?: string; onSideChat?: () => void; onStartNewSession?: () => void; onFork?: () => void; onQuote?: () => void; sessionId?: string; onTranslated?: (t: string) => void }) {
   const { t } = useTranslation()
@@ -77,12 +77,10 @@ function MessageToolbar({ text, eid, ts, tab, onSideChat, onStartNewSession, onF
           onClick={async () => {
             setTranslating(true)
             try {
-              const r = await adminFetch<{ result: string | null; error: string | null }>('/api/admin/mirror/translate', {
-                method: 'POST',
-                body: JSON.stringify({ text, target: PREFERRED_LANG }),
-              })
-              if (r.result) onTranslated(r.result)
-              else { setTrFail(true); setTimeout(() => setTrFail(false), 1500) }
+              onTranslated(await translateText(text))
+            } catch {
+              setTrFail(true)
+              setTimeout(() => setTrFail(false), 1500)
             } finally {
               setTranslating(false)
             }

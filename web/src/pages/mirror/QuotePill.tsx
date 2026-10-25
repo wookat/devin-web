@@ -1,7 +1,9 @@
 import { useEffect, useLayoutEffect, useRef, useState } from 'react'
 import { useTranslation } from 'react-i18next'
-import { ChevronDown } from 'lucide-react'
+import { ChevronDown, Languages, Copy, Check, Loader2 } from 'lucide-react'
 import { BubblePlusGlyph, CloseQuoteGlyph } from './glyphs'
+import { translateText } from '@/lib/translate'
+import { copyText } from '../../lib/clipboard'
 
 /* Official dark-quote tokens (verbatim from app.devin.ai .dark scope):
    wax bg rgb(31,31,31,.94)+blur, border white/.04, text white/.9, hint /.52. */
@@ -26,13 +28,37 @@ function QuotePill({ x, y, placement = 'above', hidden, startExpanded, quoteText
   const [expanded, setExpanded] = useState(!!startExpanded)
   const [caption, setCaption] = useState('')
   const [sendMenu, setSendMenu] = useState(false)
+  // Selection translate: busy → result text card; fail flashes the icon red.
+  const [trState, setTrState] = useState<'idle' | 'busy' | 'fail' | { text: string }>('idle')
+  const [trCopied, setTrCopied] = useState(false)
+  const doTranslate = async () => {
+    if (trState === 'busy') return
+    setTrState('busy')
+    try {
+      const result = await translateText(quoteText ?? '')
+      setTrState({ text: result })
+    } catch {
+      setTrState('fail')
+      setTimeout(() => setTrState('idle'), 1500)
+    }
+  }
   const capRef = useRef<HTMLInputElement>(null)
   const cardRef = useRef<HTMLFormElement>(null)
+  const resultRef = useRef<HTMLDivElement>(null)
   const [cardH, setCardH] = useState(0)
   useEffect(() => { if (expanded) capRef.current?.focus() }, [expanded])
   // Official card geometry: top = anchor - measuredHeight when 'above' (the
-  // anchor point is the layer origin; gap 6 already folded into y).
-  useLayoutEffect(() => { if (expanded && cardRef.current) setCardH(cardRef.current.getBoundingClientRect().height) })
+  // anchor point is the layer origin; gap 6 already folded into y). The
+  // translation result card is tall too — measure it the same way.
+  const showingResult = typeof trState === 'object'
+  const trText = showingResult ? trState.text : ''
+  // The pill isn't remounted per selection — a stale translation from the
+  // previous selection must not paint over a fresh one.
+  useEffect(() => { setTrState('idle'); setTrCopied(false) }, [quoteText])
+  useLayoutEffect(() => {
+    const el = expanded ? cardRef.current : showingResult ? resultRef.current : null
+    if (el) setCardH(el.getBoundingClientRect().height)
+  }, [expanded, showingResult, trState])
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => {
       if (e.key === 'Escape') { e.preventDefault(); onClose(); return }
@@ -61,13 +87,63 @@ function QuotePill({ x, y, placement = 'above', hidden, startExpanded, quoteText
     <div
       className="dw-quote-pill fixed left-0 top-0 z-50 select-none"
       style={{
-        transform: `translate(${x}px, ${expanded ? (placement === 'above' ? y - cardH : y) : (placement === 'above' ? y - 28 : y)}px)`,
+        transform: `translate(${x}px, ${(expanded || showingResult) ? (placement === 'above' ? y - cardH : y) : (placement === 'above' ? y - 28 : y)}px)`,
         transformOrigin: placement === 'above' ? 'center bottom' : 'center top',
         visibility: hidden ? 'hidden' : undefined,
       }}
       onMouseDown={(e) => e.preventDefault()}
     >
-      {expanded ? (
+      {showingResult ? (
+        /* Translation result card — same 360px wax geometry as the quote
+           card: quoted source on top (faded, clamped), translation body,
+           footer [copy][close]. */
+        <div
+          ref={resultRef}
+          className="dark w-[360px] overflow-hidden rounded-[12px] border backdrop-blur"
+          style={{ background: QWAX, borderColor: QBORDER, color: QTEXT }}
+        >
+          <div className="flex flex-col" style={{ padding: 6, gap: 10 }}>
+            {quoteText && (
+              <div className="line-clamp-3 text-[12px] leading-4" style={{ color: 'rgb(255 255 255 / 0.52)' }}>
+                {quoteText}
+              </div>
+            )}
+            <div className="max-h-48 overflow-auto whitespace-pre-wrap text-[13px] leading-5">
+              {trText}
+            </div>
+            <div className="flex h-7 items-center justify-end gap-1">
+              <button
+                type="button"
+                title={t('quote.copyTranslation')}
+                aria-label={t('quote.copyTranslation')}
+                className={iconBtn}
+                style={{ color: QTEXT }}
+                onMouseOver={(e) => (e.currentTarget.style.background = QTINT)}
+                onMouseOut={(e) => (e.currentTarget.style.background = 'transparent')}
+                onClick={async () => {
+                  await copyText(trText)
+                  setTrCopied(true)
+                  setTimeout(() => setTrCopied(false), 1200)
+                }}
+              >
+                {trCopied ? <Check size={14} /> : <Copy size={14} />}
+              </button>
+              <button
+                type="button"
+                title={t('common.close')}
+                aria-label={t('common.close')}
+                className={iconBtn}
+                style={{ color: QTEXT }}
+                onMouseOver={(e) => (e.currentTarget.style.background = QTINT)}
+                onMouseOut={(e) => (e.currentTarget.style.background = 'transparent')}
+                onClick={onClose}
+              >
+                ×
+              </button>
+            </div>
+          </div>
+        </div>
+      ) : expanded ? (
         /* Official expanded card: 360px wax, r12, border secondary, blur, p6 gap10 */
         <form
           ref={cardRef}
@@ -165,6 +241,20 @@ function QuotePill({ x, y, placement = 'above', hidden, startExpanded, quoteText
           >
             <CloseQuoteGlyph className="size-4" />
           </button>
+          {!!quoteText?.trim() && (
+            <button
+              type="button"
+              title={trState === 'fail' ? t('sc.translateUnavailable') : t('quote.translate')}
+              aria-label={t('quote.translate')}
+              className={iconBtn}
+              style={{ color: trState === 'fail' ? 'rgb(239 68 68)' : QTEXT }}
+              onMouseOver={(e) => (e.currentTarget.style.background = QTINT)}
+              onMouseOut={(e) => (e.currentTarget.style.background = 'transparent')}
+              onClick={() => void doTranslate()}
+            >
+              {trState === 'busy' ? <Loader2 size={14} className="animate-spin" /> : <Languages size={14} />}
+            </button>
+          )}
         </div>
       )}
     </div>

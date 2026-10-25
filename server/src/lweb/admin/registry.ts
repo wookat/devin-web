@@ -12,6 +12,7 @@ import { personaState, personaMode, askPersona, decisionsTail } from "../../pers
 import { cronNext, runAutomation } from "../../automations.js";
 import { publicSshHost, type SshHost } from "../../ssh.js";
 import { json, readBody, readJson, UNSUPPORTED } from "../../httputil.js";
+import { translateText } from "../../translate.js";
 import { parseSubId, cwdFor, subsAny, subTreeRow, treeSession, titleFromLog } from "../session.js";
 import { indexWorkspace } from "../admin.js";
 
@@ -313,7 +314,11 @@ export async function handleRegistry(ctx: ApiContext, req: IncomingMessage, res:
     return true;
   }
   if (p === "/api/admin/mirror/translate" && m === "POST") {
-    json(res, 200, UNSUPPORTED);
+    // Provider chain lives in translate.ts: DEVIN_WEB_TRANSLATE_URL proxy
+    // (Bearer token, transcribe-style) → Google gtx fallback.
+    const body = await readJson(req);
+    const out = await translateText(ctx, String(body.text ?? ""), String(body.target ?? ""));
+    json(res, 200, out);
     return true;
   }
 

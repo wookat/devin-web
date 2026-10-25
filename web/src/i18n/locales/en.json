@@ -996,7 +996,9 @@
     "quoted": "Quoted {{label}}",
     "worklog": "Worklog",
     "devinMsg": "Devin message",
-    "userMsg": "User message"
+    "userMsg": "User message",
+    "translate": "Translate",
+    "copyTranslation": "Copy translation"
   },
   "sc": {
     "newWithPrompt": "Start new session with this prompt",
