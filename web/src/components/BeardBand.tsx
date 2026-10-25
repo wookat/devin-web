@@ -13,8 +13,8 @@ export default function BeardBand({ band, chin, children, className, wrapClassNa
   chin?: ReactNode
   children: ReactNode
   className?: string
-  /** Outer column width class — sessions use the official 740; the draft
-   *  page narrows to 692 to line up with the cards below it. */
+  /** Outer column width class — default is the official 740 composer column
+   *  (sessions and the draft page share it). */
   wrapClassName?: string
 
   cardRef?: React.Ref<HTMLDivElement>

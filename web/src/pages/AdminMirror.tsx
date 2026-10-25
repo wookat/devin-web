@@ -2547,8 +2547,14 @@ const groups = useMemo(() => groupItems(allItems, sessionWorking), [allItems, se
 
         {/* Draft mode keeps the composer in flow (it anchors the centered
             hero); session mode renders it inside the scroll element — see the
-            sticky tail above. */}
-        {isDraft && <div>{composerEl}</div>}
+            sticky tail above. The mount mirrors the scroll pane's padding +
+            chat-pane container so the BeardBand's @[800px] chrome insets and
+            its 740 column resolve to the same card width in both modes. */}
+        {isDraft && (
+          <div className="@container/chat-pane">
+            <div className="px-4 @[448px]/chat-pane:px-6">{composerEl}</div>
+          </div>
+        )}
 
         {isDraft && loaded && (
           // Desktop New-Space lower segment: Local env · Choose folder ·

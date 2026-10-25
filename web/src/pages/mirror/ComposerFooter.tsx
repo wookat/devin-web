@@ -192,7 +192,6 @@ function ComposerFooter({
           )}
           <BeardBand
             cardRef={setCardEl}
-            wrapClassName={isDraft ? 'max-w-[692px]' : undefined}
             chin={isDraft || interrupted || subDead || sendErr || controlMsg || (persona && !isVisitor && !isDraft && (persona.mode !== 'off' || persona.escalated)) || (() => {
               if (isVisitor || envBannerGone) return false
               const sug = items.find((it) => it.kind === 'env_suggestion')
