@@ -328,11 +328,19 @@ const manager = new AcpManager({
     permissionOwner.delete(requestId);
     hub.broadcast({ type: "permission_resolved", requestId });
   },
+  onTerminalCreate: (terminalId, sessionId, command) => {
+    // The wire never links a terminal to its tool_call — journal create with
+    // the command line so dwtimeline can bind terminalId → shell item.
+    if (sessionId) sessionLog.append(sessionId, { sessionUpdate: "dw_term_create", terminalId, command });
+  },
   onTerminalOutput: (terminalId, sessionId, data) => {
     recordTerminal(terminalId, sessionId, data);
     hub.broadcast({ type: "terminal_output", terminalId, sessionId, data });
   },
   onTerminalExit: (terminalId, sessionId, exitCode, signal) => {
+    // Real exit status — the agent's own "Exited with code N" text mirrors it,
+    // but this keeps the true code even when the summary is absent/mangled.
+    if (sessionId) sessionLog.append(sessionId, { sessionUpdate: "dw_term_exit", terminalId, exitCode, signal });
     hub.broadcast({ type: "terminal_exit", terminalId, sessionId, exitCode, signal });
   },
   onExit: (cwd, code, agent, sessionId) => {

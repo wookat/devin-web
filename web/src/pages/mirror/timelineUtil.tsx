@@ -254,13 +254,18 @@ const terminalRequests = new Map<string, Promise<string | null>>()
 
 function useFullTerminal(item: TimelineItem | null | undefined): string | undefined {
   const [text, setText] = useState(item?.terminal)
-  const key = item?.terminalMore && item.processId
+  // Fetch the terminal sidecar whenever real stdout may exist beyond what the
+  // item embeds: terminalMore (truncated tail) or a bound shell with no tail
+  // yet (still running / bound after embed). Unbound legacy pids resolve to
+  // the endpoint's own fallback, so the request is cheap and harmless.
+  const wantFetch = !!item?.processId && (item.terminalMore || (item.kind === 'shell' && item.terminal === undefined))
+  const key = wantFetch && item
     ? `${viewer().id}:${item.processId}:${item.pageCursor ?? ''}:${item.terminal?.length}`
     : null
   useEffect(() => {
     let alive = true
     setText(item?.terminal)
-    if (!item?.terminalMore || !item.processId || !key) return () => { alive = false }
+    if (!item?.processId || !key) return () => { alive = false }
     const cached = terminalCache.get(key)
     if (cached !== undefined) {
       setText(cached)

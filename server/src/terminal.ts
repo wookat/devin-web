@@ -68,7 +68,7 @@ export class TerminalRunner {
   async create(
     defaultCwd: string,
     params: CreateTerminalRequest,
-    ev: Pick<DevinAcpEvents, "onTerminalOutput" | "onTerminalExit">,
+    ev: Pick<DevinAcpEvents, "onTerminalCreate" | "onTerminalOutput" | "onTerminalExit">,
   ): Promise<CreateTerminalResponse> {
     const id = randomUUID();
     const limit = params.outputByteLimit ?? MAX_OUTPUT;
@@ -113,6 +113,7 @@ export class TerminalRunner {
       limit,
     };
     this.terminals.set(id, term);
+    ev.onTerminalCreate(id, term.sessionId, [params.command, ...(params.args ?? [])].join(" "));
 
     const onData = (chunk: Buffer) => {
       const data = chunk.toString("utf8");

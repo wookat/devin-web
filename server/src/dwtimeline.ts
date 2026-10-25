@@ -7,6 +7,7 @@ import type { ApiContext } from "./routes.js";
 import { MAX_UPDATES_PER_SESSION } from "./sessionlog.js";
 import type { LogEntry } from "./sessiondb.js";
 import { loadInflight } from "./sessionplace.js";
+import { terminalText } from "./sessionview.js";
 
 // ---------------------------------------------------------------------------
 // ACP session-update log → web TimelineItem[]
@@ -51,6 +52,11 @@ interface DwItem {
   fileUpdates?: FileUpdate[];
   todos?: { status: string; content: string; activeForm?: string }[];
   terminal?: string;
+  /** Real stdout lives in the term sidecar — this tail is the embedded
+   *  preview; `terminalMore` tells the client a longer read is available. */
+  terminalMore?: boolean;
+  pageCursor?: string;
+  startupCommand?: boolean;
   processId?: string;
   permission?: Record<string, unknown>;
   questions?: { question: string; options: string[]; allow_multiple?: boolean }[];
@@ -142,6 +148,59 @@ function toolKind(u: Record<string, unknown>): string {
   return TOOL_KIND_MAP[k] ?? "activity";
 }
 
+/** The ACP wire never links a terminal back to its tool_call: the create
+ * event journals `[command, ...args]` while the tool row shows
+ * rawInput.command — same line modulo quoting/whitespace, so normalize
+ * both away and require a real substring overlap. */
+const normCmd = (s: string) => s.replace(/["'`]/g, "").replace(/\s+/g, " ").trim();
+
+/** Bind a shell item to its dw_term_create by command text — earliest
+ * unconsumed match wins, so identical commands still pair in order. */
+function bindShellTerminal(st: TlState, it: DwItem): void {
+  if (st.boundTerms.has(it.id)) return;
+  const cmd = normCmd(it.body ?? "");
+  if (cmd.length < 4) return;
+  for (const c of st.termCreates) {
+    if (c.used) continue;
+    const jc = normCmd(c.command);
+    if (jc.length >= 4 && (jc.includes(cmd) || cmd.includes(jc))) {
+      c.used = true;
+      it.processId = c.terminalId;
+      st.termItems.set(c.terminalId, it);
+      st.boundTerms.add(it.id);
+      return;
+    }
+  }
+}
+
+/** Exit status precedence: runner truth (dw_term_exit) > the agent's own
+ * "Exited with code N" summary > the completed/failed status default. */
+function realExitCode(st: TlState, it: DwItem): string | undefined {
+  const te = it.processId ? st.termExit.get(it.processId) : undefined;
+  if (te) return te.exitCode != null ? String(te.exitCode) : te.signal ? `sig:${te.signal}` : undefined;
+  const m = /Exited with code (-?\d+)/.exec(it.output ?? "");
+  return m ? m[1] : undefined;
+}
+
+/** Small stdout tail embedded on the item — enough for the expanded pane's
+ * first paint; `terminalMore` lets the client lazy-read the rest. */
+const TERM_EMBED_TAIL = 4 * 1024;
+
+function embedShellOutput(it: DwItem): void {
+  if (!it.processId || it.startupCommand) return;
+  const t = terminalText(it.processId);
+  if (!t?.text) return;
+  it.terminal = t.text.length > TERM_EMBED_TAIL ? t.text.slice(-TERM_EMBED_TAIL) : t.text;
+  it.terminalMore = t.text.length > TERM_EMBED_TAIL || undefined;
+}
+
+function attachShellResult(st: TlState, it: DwItem): void {
+  bindShellTerminal(st, it);
+  const code = realExitCode(st, it);
+  if (code !== undefined) it.exitCode = code;
+  embedShellOutput(it);
+}
+
 /** Incremental timeline-builder state, kept per session so each /timeline
  * poll only processes the NEW log entries instead of rebuilding thousands
  * of items every few seconds. */
@@ -185,6 +244,15 @@ interface TlState {
    * build entry points that can reach sessionLog. Entries keep refs when
    * unset (message text never offloads, so snapshot builds still render). */
   resolve?: (u: Record<string, unknown>) => Record<string, unknown>;
+  /** dw_term_create entries in log order — the wire never links a terminal
+   *  to its tool_call, so the create's command line is the binding key. */
+  termCreates: { terminalId: string; command: string; used: boolean }[];
+  /** terminalId → real exit status (dw_term_exit, may precede tool done). */
+  termExit: Map<string, { exitCode: number | null; signal: string | null }>;
+  /** terminalId → bound shell item (for exit events arriving post-bind). */
+  termItems: Map<string, DwItem>;
+  /** item ids already bound to a terminal — bind once, keep FIFO order. */
+  boundTerms: Set<string>;
 }
 
 /** Stored entries may offload big strings to blobs ({$blob} refs). Resolve
@@ -195,7 +263,7 @@ function resolveU(st: TlState, u: Record<string, unknown>): Record<string, unkno
 }
 
 function freshTlState(sid = ""): TlState {
-  return { items: [], toolItems: new Map(), toolStart: new Map(), permItems: new Map(), lastMsg: null, realUser: new Set(), localUser: new Map(), seenSeq: -1, logGen: -1, gen: 0, agentToolIds: new Set(), pendingSpawns: [], subCards: new Map(), produced: new Map(), sid };
+  return { items: [], toolItems: new Map(), toolStart: new Map(), permItems: new Map(), lastMsg: null, realUser: new Set(), localUser: new Map(), seenSeq: -1, logGen: -1, gen: 0, agentToolIds: new Set(), pendingSpawns: [], subCards: new Map(), produced: new Map(), sid, termCreates: [], termExit: new Map(), termItems: new Map(), boundTerms: new Set() };
 }
 
 /** Extract output paths a shell command is likely to CREATE: `>`/`>>`
@@ -505,6 +573,7 @@ function tlPush(st: TlState, e: { ts: number; seq?: number; update: Record<strin
         // shell, not the edit tool).
         for (const p of shellOutputPaths(cmd)) st.produced.set(p, "create");
       }
+      if (it.kind === "shell") bindShellTerminal(st, it);
     }
     // run_subagent: seed the card from the tool's own args (title/task/profile/
     // is_background). The real agentId arrives later via a subagent_started
@@ -535,9 +604,12 @@ function tlPush(st: TlState, e: { ts: number; seq?: number; update: Record<strin
     if (st2 === "completed" || st2 === "failed") {
       const startMs = Date.parse(st.toolStart.get(toolId) ?? it.ts);
       if (Number.isFinite(startMs)) it.durationMs = Math.max(0, Date.parse(iso) - startMs);
+      // Real stdout + real exit status from the terminal runner — before the
+      // generic defaults below fill whatever is still missing.
+      if (it.kind === "shell") attachShellResult(st, it);
     }
     if (st2 === "completed") { it.exitCode = it.exitCode ?? "0"; it.suffix = undefined; }
-    else if (st2 === "failed") { it.exitCode = "1"; it.suffix = "— failed"; it.callout = "error"; }
+    else if (st2 === "failed") { it.exitCode = it.exitCode ?? "1"; it.suffix = "— failed"; it.callout = "error"; }
     else if (st2 === "in_progress" || st2 === "pending") it.suffix = "running";
     dirty?.push(it);
     return;
@@ -583,6 +655,33 @@ function tlPush(st: TlState, e: { ts: number; seq?: number; update: Record<strin
   // Turn-boundary marker (interruptedTurn recovery evidence) — not a row,
   // but a flush point: produced files settle onto the turn's final reply.
   if (kind === "dw_turn_end") { flushProduced(st, dirty, true); return; }
+  // Terminal lifecycle markers journaled by index.ts — binding data for the
+  // shell rows, never rows themselves. The create carries the command line
+  // (the only toolCallId↔terminalId link on the wire); the exit carries the
+  // runner's real status and can land before OR after the completion update.
+  if (kind === "dw_term_create") {
+    const tid = String(u.terminalId ?? "");
+    if (tid) st.termCreates.push({ terminalId: tid, command: String(u.command ?? ""), used: false });
+    return;
+  }
+  if (kind === "dw_term_exit") {
+    const tid = String(u.terminalId ?? "");
+    if (!tid) return;
+    st.termExit.set(tid, {
+      exitCode: (u.exitCode as number | null | undefined) ?? null,
+      signal: (u.signal as string | null | undefined) ?? null,
+    });
+    const it = st.termItems.get(tid);
+    if (it) {
+      const code = realExitCode(st, it);
+      if (code !== undefined) it.exitCode = code;
+      // Exit can postdate the completion delta — refresh the tail so the
+      // embedded text ends at the real end of output.
+      embedShellOutput(it);
+      dirty?.push(it);
+    }
+    return;
+  }
   if (kind === "dw_notice") {
     const notice = String(u.notice ?? "");
     // Machine-readable notice classification so the client can render an

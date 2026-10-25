@@ -37,6 +37,10 @@ export interface DevinAcpEvents {
   ) => void;
   /** Fired when a pending request is resolved without the client (timeout, process exit). */
   onPermissionResolved: (requestId: string) => void;
+  /** The ACP wire never links a terminal back to its tool_call — journal the
+   * create (command line included) so the timeline can bind terminalId →
+   * shell item and show real stdout instead of "Exited with code N". */
+  onTerminalCreate: (terminalId: string, sessionId: string, command: string) => void;
   onTerminalOutput: (terminalId: string, sessionId: string, data: string) => void;
   onTerminalExit: (terminalId: string, sessionId: string, exitCode: number | null, signal: string | null) => void;
   /** Wire-sniffed client→agent `session/prompt` request: `requestId` is the
