@@ -13,6 +13,7 @@ import { Store, remapLegacyCwd } from "./store.js";
 import { WsHub } from "./ws.js";
 import { WebSocketServer } from "ws";
 import { SessionLog } from "./sessionlog.js";
+import { snapshotEntries } from "./dwtailsnap.js";
 import { handleApi, type ApiContext } from "./routes.js";
 import { handleLocalWb } from "./lweb/index.js";
 import { recordTerminal } from "./sessionview.js";
@@ -397,6 +398,9 @@ const ctx: ApiContext = {
 // Re-seed the journaled cwds: dw meta first (authoritative), then the older
 // agentSessions record for sessions created before the journal existed.
 ctxForCwd = ctx;
+// Tail-mirror seam: the persisted tl/*.json snapshot completes the log's
+// own hydration — one log, one truth (see SessionLog.tailMirror).
+sessionLog.bindTailMirror((id) => snapshotEntries(ctx, id));
 for (const [id, m] of Object.entries(loadReg(ctx).sessions)) {
   if (m.cwd && !sessionCwd.has(id)) sessionCwd.set(id, m.cwd);
 }

@@ -13,7 +13,7 @@ import type { LogEntry } from "../../sessiondb.js";
 import { buildTimeline, tlReset } from "../../dwtimeline.js";
 import { meta, saveReg } from "../../dwstore.js";
 import { snapshotItems } from "../../dwtailsnap.js";
-import { ensureLoaded, acpForId, interruptedTurn, hostFor, loadCooldown } from "../../sessionload.js";
+import { ensureLoaded, acpForId, interruptedTurn, hostFor } from "../../sessionload.js";
 import { sessionStatus, terminalText } from "../../sessionview.js";
 import { dispatchPrompt } from "../../sessionprompt.js";
 import { queueList, queueAdd, queueRemove, queueFlush } from "../../sessionqueue.js";
@@ -207,10 +207,6 @@ function sidechainThreads(ctx: ApiContext, id: string): SidechainThread[] {
 /** Latched when the official `_cognition.ai/sidechain/request` call reports
  * unimplemented — later sends skip the probe (and its session/load). */
 let sidechainExtBroken = false;
-
-/** Sessions whose live rebuild hasn't caught up with the persisted tail
- * snapshot — keeps the snapshot∪live union served until it does. */
-const livePoor = new Set<string>();
 
 /** devin's surface for an unimplemented ext method: a -32601 RequestError
  * ("Method not found": …), "unknown method", or the same text wrapped in a
@@ -481,34 +477,16 @@ export async function handleSessionTimeline(ctx: ApiContext, req: IncomingMessag
     if (!peek) void ensureLoaded(ctx, id);
     const loading = !peek && loadInflight.has(id);
     const { items: live, gen } = buildTimeline(ctx, id);
-    // Snapshot isn't just a loading stand-in: a FAILED load (session_locked
-    // by a foreign/stale holder) leaves `live` holding only the few post-boot
-    // rows — serving it wholesale erased the whole visible history down to
-    // the latest sends (observed: full tail painted from the snapshot, then
-    // the moment config finished its retry loop the page collapsed to 3
-    // messages). Union instead: snapshot base + live rows the snapshot
-    // lacks. `livePoor` hysteresis keeps the union going until live
-    // genuinely catches up — gating only on loadCooldown flapped the page
-    // between snapshot-rich and live-poor at every cooldown edge
-    // ("一下有最后几条，一下没有").
-    const snap = (loading || peek || !live.length || loadCooldown.has(id) || livePoor.has(id)) ? snapshotItems(ctx, id) : null;
-    let all: typeof live;
-    let serveSnap: boolean;
-    if (snap) {
-      // seqs are journaled per entry and resume across restarts, so a row
-      // newer than everything the snapshot covers is genuinely new — id
-      // set-membership would wrongly drop a seq-less synthesized row whose
-      // array-index e<i> collides with a stored e<seq>.
-      const maxSeq = snap.reduce((mx, i) => Math.max(mx, i.eidx ?? -1), -1);
-      const tail = live.filter((i) => (i.eidx ?? -1) > maxSeq);
-      all = tail.length ? [...snap, ...tail] : snap;
-      serveSnap = true;
-      if (live.length >= snap.length) livePoor.delete(id); else livePoor.add(id);
-    } else {
-      all = live;
-      serveSnap = false;
-      livePoor.delete(id);
-    }
+    // The session log is the single source of truth (hydration merges every
+    // mirror by journaled seq). The snapshot's only role is a paint while
+    // `live` is torn — ONE invariant: serve whichever is richer. Serving
+    // the snapshot unconditionally during load REGRESSED below live when
+    // the replay had already streamed past the snapshot's persist point
+    // (snap is only written at settle, so a mid-replay snap is always
+    // older). Ties go to live — the authoritative gen.
+    const snap = snapshotItems(ctx, id);
+    const serveSnap = !!snap && snap.length > live.length;
+    const all = serveSnap ? snap : live;
     // Consume the reset flag only when actually serving new-gen items.
     const reset = !loading && !serveSnap && tlReset.delete(id);
     // Page from the END (newest). `limit` items per page; `cursor` is the

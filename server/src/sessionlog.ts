@@ -53,6 +53,14 @@ export class SessionLog {
    *  (ctx.sessionLog.sidecars.*), not through this class. */
   readonly sidecars: Sidecars;
 
+  /** Optional tail-mirror seam: the persisted `tl/*.json` snapshot holds
+   *  the SAME journaled rows (stable seqs across restarts). Bound by the
+   *  host (index.ts → dwtailsnap) so this module stays storage-only —
+   *  merging it into readDiskTail keeps `get()`'s hydrated ring complete
+   *  even when the primary store's tail window is thin/corrupt. */
+  private tailMirror: ((sessionId: string) => LogEntry[] | null) | null = null;
+  bindTailMirror(fn: (sessionId: string) => LogEntry[] | null) { this.tailMirror = fn; }
+
   /** @param dir disk-log directory; null disables persistence (tests). */
   constructor(private dir: string | null = null) {
     if (dir) {
@@ -484,7 +492,11 @@ export class SessionLog {
     // .jsonl) survives — refill once per id or every post-restart read path
     // (timeline/sidebar/share) stares at an empty transcript. Bounded to
     // the ring's tail cap; an empty disk marks too, so no rescan loop.
-    if (this.hydrated.has(sessionId)) return cur ?? [];
+    // A prior empty verdict only stands while NO mirror claims history —
+    // a transient read failure (locked db, mid-import) must not poison the
+    // session for the process lifetime, or `live` would hold only post-boot
+    // rows and every first paint would miss the tail.
+    if (this.hydrated.has(sessionId) && !this.has(sessionId)) return cur ?? [];
     this.hydrated.add(sessionId);
     try {
       const disk = this.readDiskTail(sessionId, MAX_UPDATES_PER_SESSION);
@@ -506,8 +518,12 @@ export class SessionLog {
    *  into memory per call. */
   has(sessionId: string): boolean {
     if ((this.logs.get(sessionId)?.length ?? 0) > 0) return true;
-    if (this.db) { this.ensureImported(sessionId); return this.db.has(sessionId); }
-    if (this.dir) { try { return fs.statSync(this.file(sessionId)).size > 0; } catch { return false; } }
+    if (this.db) { this.ensureImported(sessionId); if (this.db.has(sessionId)) return true; }
+    if (this.dir) { try { if (fs.statSync(this.file(sessionId)).size > 0) return true; } catch { /* absent */ } }
+    // The persisted tail mirror is also part of "the log" — a session whose
+    // primary store is empty but whose tail snapshot survives still HAS
+    // history, and get()'s poison-check must see it that way.
+    if (this.tailMirror?.(sessionId)?.length) return true;
     return false;
   }
 
@@ -572,10 +588,32 @@ export class SessionLog {
    * row synchronously and freezes the event loop long enough for the
    * supervisor's health probe to kill the backend. */
   readDiskTail(sessionId: string, n: number = MAX_UPDATES_PER_SESSION): LogEntry[] {
+    let out: LogEntry[];
     if (this.db) {
       this.importLegacy(sessionId);
-      return this.db.readTail(sessionId, n);
+      out = this.db.readTail(sessionId, n);
+    } else {
+      out = this.readMirrorTail(sessionId, n);
     }
+    // One log, every mirror: rows the persisted tail snapshot holds that
+    // the primary tail window lacks get merged back by journaled seq
+    // (stable across restarts). A healthy primary is a strict superset →
+    // no-op; a thin/corrupt window gets completed instead of silently
+    // shrinking the transcript the serving layer sees.
+    const mirror = this.tailMirror?.(sessionId);
+    if (mirror?.length) {
+      const seen = new Set(out.map((e) => e.seq));
+      const extra = mirror.filter((e) => e.seq != null && !seen.has(e.seq));
+      if (extra.length) {
+        out = [...out, ...extra].sort((a, b) => (a.seq ?? Number.MAX_SAFE_INTEGER) - (b.seq ?? Number.MAX_SAFE_INTEGER));
+        if (out.length > n) out = out.slice(-n);
+      }
+    }
+    return out;
+  }
+
+  /** .jsonl-mirror tail read — the pre-db persistence path. */
+  private readMirrorTail(sessionId: string, n: number): LogEntry[] {
     if (!this.dir) return [];
     const f = this.file(sessionId);
     let size = 0;
