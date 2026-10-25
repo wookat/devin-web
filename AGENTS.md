@@ -342,6 +342,16 @@ route code never changes.
   `_local` log entry → `DwItem.attachments` → `TimelineItem.attachments`.
   Legacy `ATTACHMENT:"url"` marker lines in old persisted tails are still
   parsed by `splitAttachments` as fallback — keep it.
+- Shell items carry REAL stdout + exit status via terminal binding: the ACP
+  wire never links a terminal to its tool_call (exec updates ship only the
+  agent's "Exited with code N" text), so `index.ts` journals
+  `dw_term_create {terminalId, command}` and `dw_term_exit {terminalId,
+  exitCode, signal}` into the session log (not rows — tlPush consumes them
+  into TlState). dwtimeline binds terminalId → shell item by normalized
+  command text (earliest unconsumed create wins), embeds a 4KB stdout tail
+  from the term sidecar at completion (`terminalMore` → client lazy-reads
+  the rest via `/terminal?pid=`), and sets the true exit code — precedence
+  runner exit > parsed agent summary > status default ("0"/"1").
 - `AdminMirror.tsx` = the page coordinator (~2.6k). Everything else lives in
   `web/src/pages/mirror/`: HeaderBar, TabStrip, FindInSession, SidebarRail,
   panelRender (tab→panel dispatch), glyphs, treeCache, composerMeta,
