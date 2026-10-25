@@ -208,6 +208,10 @@ function sidechainThreads(ctx: ApiContext, id: string): SidechainThread[] {
  * unimplemented — later sends skip the probe (and its session/load). */
 let sidechainExtBroken = false;
 
+/** Sessions whose live rebuild hasn't caught up with the persisted tail
+ * snapshot — keeps the snapshot∪live union served until it does. */
+const livePoor = new Set<string>();
+
 /** devin's surface for an unimplemented ext method: a -32601 RequestError
  * ("Method not found": …), "unknown method", or the same text wrapped in a
  * result body. ONLY these trip the local fallback — locked/offline/429 are
@@ -483,19 +487,27 @@ export async function handleSessionTimeline(ctx: ApiContext, req: IncomingMessag
     // the latest sends (observed: full tail painted from the snapshot, then
     // the moment config finished its retry loop the page collapsed to 3
     // messages). Union instead: snapshot base + live rows the snapshot
-    // lacks (ids are e<seq>, aligned across builds). loadCooldown marks the
-    // failed-load window so the snapshot keeps covering it.
-    const snap = (loading || peek || !live.length || loadCooldown.has(id)) ? snapshotItems(ctx, id) : null;
+    // lacks. `livePoor` hysteresis keeps the union going until live
+    // genuinely catches up — gating only on loadCooldown flapped the page
+    // between snapshot-rich and live-poor at every cooldown edge
+    // ("一下有最后几条，一下没有").
+    const snap = (loading || peek || !live.length || loadCooldown.has(id) || livePoor.has(id)) ? snapshotItems(ctx, id) : null;
     let all: typeof live;
     let serveSnap: boolean;
     if (snap) {
-      const ids = new Set(snap.map((i) => i.id));
-      const tail = live.filter((i) => !ids.has(i.id));
+      // seqs are journaled per entry and resume across restarts, so a row
+      // newer than everything the snapshot covers is genuinely new — id
+      // set-membership would wrongly drop a seq-less synthesized row whose
+      // array-index e<i> collides with a stored e<seq>.
+      const maxSeq = snap.reduce((mx, i) => Math.max(mx, i.eidx ?? -1), -1);
+      const tail = live.filter((i) => (i.eidx ?? -1) > maxSeq);
       all = tail.length ? [...snap, ...tail] : snap;
       serveSnap = true;
+      if (live.length >= snap.length) livePoor.delete(id); else livePoor.add(id);
     } else {
       all = live;
       serveSnap = false;
+      livePoor.delete(id);
     }
     // Consume the reset flag only when actually serving new-gen items.
     const reset = !loading && !serveSnap && tlReset.delete(id);
@@ -543,8 +555,11 @@ export async function handleSessionTimeline(ctx: ApiContext, req: IncomingMessag
       peek: peek || undefined,
       activity: loading ? { text: "Loading history…" } : st.status === "working" ? { text: "working" } : null,
       // A turn that died mid-flight (server crash / killed acp) — the
-      // original message so the client can offer one-click resend.
-      interrupted: interruptedTurn(ctx, id) ?? undefined,
+      // original message so the client can offer one-click resend. While a
+      // load/replay is in flight the tail is mid-write — a verdict drawn
+      // from it flickers (banner appears then vanishes). Report only once
+      // the stream settles.
+      interrupted: loading ? undefined : interruptedTurn(ctx, id) ?? undefined,
       persona: personaState(ctx, id),
     });
     return true;

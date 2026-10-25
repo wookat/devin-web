@@ -126,13 +126,32 @@ export function captureLoadResponse(id: string, r: unknown, agentId = "devin") {
   if (res.modes?.availableModes?.length && !opts?.some((o) => o.id === "mode")) {
     opts = [...(opts ?? []), { id: "mode", name: "Mode", type: "select", currentValue: res.modes.currentModeId, _acp: true, options: res.modes.availableModes.map((m) => ({ value: String(m.id), name: String(m.name ?? m.id) })) } as ConfigOption];
   }
-  responseCfg.set(id, { configOptions: opts ?? undefined, modes: res.modes ?? undefined, commands: res.availableCommands ?? undefined, echoTs: Date.now() });
-  cfgByAgent.set(agentId, { configOptions: opts ?? undefined, modes: res.modes ?? undefined });
+  // Merge into the previous capture — a session/load response that omits
+  // configOptions (devin doesn't always re-advertise them on load) must NOT
+  // wipe the model/mode groups journaled from the earlier load: wholesale
+  // replace made the pills vanish mid-open then reappear as streamed
+  // updates re-added the groups ("SW1-2 有→没→有").
+  const prev = responseCfg.get(id);
+  let mergedOpts = opts;
+  if (opts?.length && prev?.configOptions?.length) {
+    const missing = prev.configOptions.filter((p) => !opts!.some((g) => g.id === p.id));
+    if (missing.length) mergedOpts = [...opts, ...missing];
+  } else if (!opts?.length && prev?.configOptions?.length) {
+    mergedOpts = prev.configOptions;
+  }
+  const mergedModes = res.modes ?? prev?.modes ?? undefined;
+  const mergedCommands = res.availableCommands ?? prev?.commands ?? undefined;
+  responseCfg.set(id, { configOptions: mergedOpts ?? undefined, modes: mergedModes, commands: mergedCommands, echoTs: Date.now() });
+  const prevAgent = cfgByAgent.get(agentId);
+  cfgByAgent.set(agentId, {
+    configOptions: mergedOpts ?? prevAgent?.configOptions ?? undefined,
+    modes: mergedModes ?? (prevAgent?.modes as typeof mergedModes) ?? undefined,
+  });
   if (res.availableCommands?.length) lastAgentCommands = res.availableCommands;
-  if (opts?.length || res.modes) {
+  if (mergedOpts?.length || mergedModes) {
     lastAgentCfg = {
-      ...(opts?.length ? { configOptions: opts } : {}),
-      ...(res.modes ? { modes: res.modes } : {}),
+      ...(mergedOpts?.length ? { configOptions: mergedOpts } : {}),
+      ...(mergedModes ? { modes: mergedModes } : {}),
     };
   }
   persistAgentCfg();
