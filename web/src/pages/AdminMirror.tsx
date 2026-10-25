@@ -876,11 +876,11 @@ export default function AdminMirrorPage() {
   // boundWindow cut can never yank content mid-drag.
   const lastScrollAt = useRef(0)
   const trimTimer = useRef(0)
-  // Load-window pin guard: transient not-near scroll events while content is
-  // still arriving (browser scroll restoration, virtualizer settles) are NOT
-  // user intent — without this they permanently kill the bottom pin and a
-  // refresh lands mid-list instead of on the latest message.
-  const bootGuardUntil = useRef(0)
+  // Distance-from-bottom of the previous scroll event — latch decisions are
+  // made on the DELTA (toward/away), not the absolute position, so a gesture
+  // that crosses the 60px near-band can't be mistaken for arriving at the
+  // bottom (and compensation writes, which preserve dist, can't move it).
+  const prevDist = useRef<number | null>(null)
   const userTookOver = useRef(false)
 
   /** Remember the top-most visible event so a background refresh doesn't shift the view. */
@@ -1531,13 +1531,6 @@ export default function AdminMirrorPage() {
     anchor.current = null
   }, [items, older])
 
-  // First data has arrived — for the settle window afterwards, not-near scroll
-  // events are treated as transient (restores/measurements) and re-pinned
-  // unless the user has already taken over with a real gesture.
-  useEffect(() => {
-    if (loaded) bootGuardUntil.current = Date.now() + 1500
-  }, [loaded])
-
   // Session switch: these refs survive the :id route change (no remount) —
   // a scrolled-up latch or stale gesture flag from the previous session
   // otherwise strands the new one mid-transcript instead of bottom-pinned.
@@ -1545,6 +1538,7 @@ export default function AdminMirrorPage() {
     stickBottom.current = true
     userTookOver.current = false
     anchor.current = null
+    prevDist.current = null
   }, [id])
 
   // While stickBottom holds, ANY total-size change (virtual rows measuring in,
@@ -2428,34 +2422,40 @@ const groups = useMemo(() => groupItems(allItems, sessionWorking), [allItems, se
           ref={scrollRef}
           onScroll={(e) => {
             const el = e.currentTarget
-            const near = el.scrollHeight - el.scrollTop - el.clientHeight < 60
-            // Position-derived stick state: every NON-user scroll source is
-            // distance-preserving (virtualizer measure-adjusts shift
-            // scrollTop and scrollHeight equally) or bottom-landing (the
-            // pins) — so a not-near scroll can only be the user moving away.
-            // Scrollbar drags emit no wheel/pointer/key events at all; the
-            // old gesture window never saw them, so the bottom pin fought
-            // every drag — each stream resize yanked scrollTop back to the
-            // edge = the bouncing scrollbar + strobing viewport.
-            if (near) {
+            const dist = el.scrollHeight - el.scrollTop - el.clientHeight
+            const prev = prevDist.current
+            prevDist.current = dist
+            const delta = prev == null ? 0 : dist - prev
+            const near = dist < 60
+            // Judge by distance-from-bottom DELTA, not absolute position.
+            // Virtualizer measure-compensation shifts scrollTop and
+            // scrollHeight together (dist unchanged); a stream append grows
+            // dist; only a real gesture — or the pin's own landing write —
+            // moves dist DOWN. The old absolute test ate the takeover flag
+            // while an upward gesture was still inside the 60px band
+            // (Chrome smooth-scroll emits ~20px steps): the first step
+            // re-latched + cleared the flag, then the step that finally
+            // left the band hit `!near && !tookOver` → RE-PIN. One wheel
+            // notch = fighting the pin, which is exactly the reported
+            // "scrolling up gets dragged back to the bottom".
+            if (delta < 0 && near) {
+              // Moving toward the bottom inside the band → follow again.
+              // Reaching the bottom clears the gesture debt — a stale
+              // takeover flag would silently drop the latch for the rest
+              // of the session (and the next — refs survive id changes).
               stickBottom.current = true
-              // Reaching the bottom by any means clears the gesture debt —
-              // a stale takeover flag would silently drop the latch for the
-              // rest of the session (and the NEXT session — refs survive
-              // the id route change without a remount).
               userTookOver.current = false
-            } else if (!userTookOver.current) {
-              // Not-near scroll with no real gesture behind it = virtualizer
-              // compensation / gen-swap rebuild / stream growth — NOT user
-              // intent. Re-pin instead of dropping the latch. This used to
-              // be time-gated (bootGuardUntil 1.5s), but a slow replay's
-              // gen swap routinely lands outside the window → first open
-              // stranded mid-transcript. Only genuine gestures unstick.
-              el.scrollTop = el.scrollHeight
-              stickBottom.current = true
-            } else {
-              stickBottom.current = false
+            } else if (delta > 0) {
+              if (userTookOver.current) {
+                stickBottom.current = false
+              } else {
+                // Moving away with no gesture behind it = stream growth
+                // that raced the pin / gen-swap rebuild — re-pin.
+                el.scrollTop = el.scrollHeight
+                stickBottom.current = true
+              }
             }
+            // delta === 0 → distance-preserving compensation → keep latches.
             if (!near) lastScrollAt.current = Date.now()
             setShowJump(!near)
             // Official backfills older history automatically as you approach the top
