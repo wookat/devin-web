@@ -328,7 +328,10 @@ function tlPush(st: TlState, e: { ts: number; seq?: number; update: Record<strin
       // so without this the attachment chips vanish when the twin converts.
       const keep = (st.lastMsg.body ?? "").split("\n").filter((l) => /^ATTACHMENT:"/.test(l.trim()));
       st.lastMsg.body = text + (keep.length ? `\n${keep.join("\n")}` : "");
-      st.lastMsg.ts = iso;
+      // The echo's arrival ts can postdate whole turn rows (devin sometimes
+      // emits it late) — the item must keep the send-time stamp or the client
+      // sorts the reply ABOVE the user's message.
+      if (iso < st.lastMsg.ts) st.lastMsg.ts = iso;
     } else if (twinAtLast == null && !u._local && st.lastMsg && st.lastMsg.kind === wantKind && st.lastMsg.role === role) {
       st.lastMsg.body = (st.lastMsg.body ?? "") + text;
       st.lastMsg.ts = iso;
@@ -351,6 +354,10 @@ function tlPush(st: TlState, e: { ts: number; seq?: number; update: Record<strin
         if (t === text || t === mergedMsg.body) {
           const ix = st.items.indexOf(lo);
           if (ix >= 0) st.items.splice(ix, 1);
+          // A non-adjacent echo (arrived after reply rows) still represents
+          // the send — inherit the twin's send-time stamp so the client
+          // sorts it before the reply, not under it.
+          if (mergedMsg !== lo && lo.ts < mergedMsg.ts) mergedMsg.ts = lo.ts;
           dirty?.push({ id: lo.id, ts: iso, kind: "other", raw_type: "gone", _gone: true });
           if (st.lastMsg === lo) st.lastMsg = null;
           st.localUser.delete(t);
