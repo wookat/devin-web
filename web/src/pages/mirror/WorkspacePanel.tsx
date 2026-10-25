@@ -95,7 +95,9 @@ function WorkspacePanel({ id }: { id: string }) {
       })
       return entries
     } catch {
-      if (!silent) setDirs((d) => ({ ...d, [p]: 'error' }))
+      // Silent refresh failures mark the dir too — a deleted/unreadable dir
+      // must not keep showing its last-seen entries forever.
+      setDirs((d) => ({ ...d, [p]: 'error' }))
       return null
     }
   }, [id, dirs])
@@ -127,29 +129,38 @@ function WorkspacePanel({ id }: { id: string }) {
      moved (mtime/size changed, or vanished) are refetched — unless the user
      has an unsaved draft, which is never clobbered. */
   const refreshAll = useCallback(async () => {
-    const loaded = Object.keys(dirsRef.current).filter((p) => {
-      const v = dirsRef.current[p]
-      return v !== undefined && v !== 'loading' && v !== 'error'
-    })
+    const loaded = Object.keys(dirsRef.current).filter((p) => dirsRef.current[p] !== 'loading')
     if (!loaded.length) return
-    const fresh = new Map<string, WsEntry[]>()
-    await Promise.all(loaded.map(async (p) => {
-      const es = await loadDir(p, true, true)
-      if (es) fresh.set(p, es)
-    }))
+    await Promise.all(loaded.map((p) => loadDir(p, true, true)))
     void pullGit()
-    for (const p of tabsRef.current) {
-      if (draftsRef.current[p] !== undefined) continue
-      const es = fresh.get(parentOf(p))
-      if (!es) continue
-      const ent = es.find((x) => x.name === base(p))
-      const sig = ent ? `${ent.size}|${ent.mtime}` : null
-      if (sig !== fileSig.current.get(p)) {
-        if (sig) fileSig.current.set(p, sig)
-        void openFile(p, true)
-      }
-    }
-  }, [loadDir, pullGit, openFile])
+    /* Open-file resync via the stat-only probe — independent of whether the
+       file's parent dir is currently loaded, and it also catches the whole
+       parent directory being deleted (dir refresh then just errors). */
+    await Promise.all(tabsRef.current.map(async (p) => {
+      if (draftsRef.current[p] !== undefined) return
+      try {
+        const r = await adminFetch<FileResp>(`/api/admin/session/${id}/file?path=${encodeURIComponent(p)}&stat=1`)
+        if (r.error || r.mtime == null) {
+          // Deleted/unreadable on disk → close the tab like VS Code does
+          // (drafts are protected above — an unsaved buffer keeps its tab).
+          fileSig.current.delete(p)
+          setFiles((f) => { const n = { ...f }; delete n[p]; return n })
+          setTabs((t) => {
+            const i = t.indexOf(p)
+            const next = t.filter((x) => x !== p)
+            setActive((a) => (a === p ? next[Math.min(i, next.length - 1)] ?? null : a))
+            return next
+          })
+          return
+        }
+        const sig = `${r.size ?? 0}|${r.mtime}`
+        if (sig !== fileSig.current.get(p)) {
+          fileSig.current.set(p, sig)
+          void openFile(p, true)
+        }
+      } catch { /* transient — next refresh retries */ }
+    }))
+  }, [loadDir, pullGit, openFile, id])
 
   const refreshTimer = useRef<number | null>(null)
   const scheduleRefresh = useCallback(() => {

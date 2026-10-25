@@ -141,7 +141,7 @@ function TimelineGroup({ g, isLast, id, isVisitor, isSub, caps, detail, status, 
       <StandaloneGitRow item={g.item} timestamp={rowClock(g.item.ts)} />
     ) : g.type === 'row' ? (
       <div className="wg-time-host relative pb-2.5">
-        <EventRow item={g.item} sessionId={id} mt={mediaTok} live={isLast && status === 'working' && g.item.kind === 'shell' && !g.item.exitCode} tempOpen={g.item.id === tailThoughtId} selected={g.item.id === worklogJump && panel === 'worklog'} standalone onStepChanges={onStepChanges} onOpenProgress={onOpenProgress} onOpenSubagent={onOpenSubagent} onOpenWsFile={onOpenWsFile} />
+        <EventRow item={g.item} sessionId={id} mt={mediaTok} live={isLast && status === 'working' && g.item.kind === 'shell' && !g.item.exitCode} tempOpen={g.item.id === tailThoughtId} selected={g.item.id === worklogJump && panel === 'worklog'} standalone onStepChanges={onStepChanges} onOpenProgress={onOpenProgress} onOpenSubagent={onOpenSubagent} onOpenWsFile={isVisitor ? undefined : onOpenWsFile} />
         <span className="wg-gutter-time pointer-events-none absolute right-0 top-0 hidden h-[18px] select-none items-center whitespace-nowrap bg-background pl-3 text-[12px] leading-[16px] text-muted-foreground md:flex proportional-nums">{rowClock(g.item.ts)}</span>
       </div>
     ) : g.type === 'item' && (g.item.kind === 'env_suggestion' || g.item.kind === 'bot_flag') ? (
@@ -269,7 +269,7 @@ function TimelineGroup({ g, isLast, id, isVisitor, isSub, caps, detail, status, 
         selectedId={panel === 'worklog' ? worklogJump ?? undefined : undefined}
         onStepChanges={onStepChanges}
         onOpenProgress={onOpenProgress}
-        onOpenWsFile={onOpenWsFile}
+        onOpenWsFile={isVisitor ? undefined : onOpenWsFile}
       />
     )
   )

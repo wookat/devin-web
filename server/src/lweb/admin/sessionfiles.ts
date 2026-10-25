@@ -118,7 +118,10 @@ export async function handleSessionFiles(ctx: ApiContext, req: IncomingMessage, 
       if (relCheck.startsWith("..") || path.isAbsolute(relCheck)) throw new Error("escapes workspace");
       const stat = fs.statSync(file);
       if (stat.isDirectory()) throw new Error("is a directory");
-      if (stat.size > 2 * 1024 * 1024) { json(res, 200, { path: rel, text: null, truncated: false, tooLarge: true, size: stat.size }); return true; }
+      // ?stat=1 — the workspace live-sync probes open files without paying
+      // for the content read on every poll.
+      if (url.searchParams.get("stat") === "1") { json(res, 200, { path: rel, text: null, stat: true, size: stat.size, mtime: stat.mtime.toISOString() }); return true; }
+      if (stat.size > 2 * 1024 * 1024) { json(res, 200, { path: rel, text: null, truncated: false, tooLarge: true, size: stat.size, mtime: stat.mtime.toISOString() }); return true; }
       const buf = fs.readFileSync(file);
       const text = buf.includes(0) ? null : buf.toString("utf8");
       json(res, 200, { path: rel, text, truncated: stat.size > 512 * 1024 ? true : false, binary: text === null, size: stat.size, mtime: stat.mtime.toISOString() });
