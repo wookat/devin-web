@@ -214,6 +214,24 @@ per checkpoint tick (new dbs; existing needs one VACUUM — repair fix
 `vacuum-logs`). `LanKeyBanner` warns once on non-loopback access with
 no ADMIN_KEY.
 
+Translate (`POST /api/admin/mirror/translate`, `server/src/translate.ts`)
+provider chain: **devin-chat** → DEVIN_WEB_TRANSLATE_URL → MyMemory → gtx.
+devin-chat is the official webapp's translate call — POST
+`<DEVIN_WEB_DEVIN_API|https://app.devin.ai/api>/chat` with
+`Authorization: Bearer <auth1 token>` + `x-cog-org-id`, payload
+`{messages:[{system:"You are a translation assistant…"},{user}],stream:false,
+query_label:"translation",speed:"fast"}` → `{result}`. Creds: token from
+`DEVIN_WEB_DEVIN_TOKEN` or `<dataDir>/devin-web.token`, org from
+`DEVIN_WEB_DEVIN_ORG` or `<dataDir>/devin-web.org` (auth1 sessions 401
+"no organizations" on every /api/* call without it — org can't be
+auto-discovered, refresh both files by copying `auth1_session.token` and
+the org id from a logged-in browser; token expiry silently falls back to
+MyMemory). `devinChatProbe()` gives an explicit liveness check.
+**Proxy**: app.devin.ai 401s on direct CN egress — the backend sets
+`NODE_USE_ENV_PROXY=1` + a loopback `NO_PROXY` default at startup
+(index.ts) AND the supervisor injects it into the spawn env, so fetch
+honors a user-level `HTTPS_PROXY` when present.
+
 ## Test
 
 ```cmd

@@ -37,6 +37,15 @@ import { initLocalBrowser, attachBrowserWs } from "./localbrowser.js";
 import { initScreen } from "./screen.js";
 import type { WsServerEvent } from "./types.js";
 
+// Node 24 fetch ignores the system proxy unless opted in — on networks
+// where app.devin.ai is unreachable direct (CN egress hits a different
+// front-door edge and 401s), the devin chat translate upstream needs the
+// user's HTTP(S)_PROXY honored. Set before the first fetch so undici's
+// lazily-bound global dispatcher picks it up; both are no-ops when the
+// user env lacks a proxy or already defines these vars.
+if (!process.env.NODE_USE_ENV_PROXY) process.env.NODE_USE_ENV_PROXY = "1";
+if (!process.env.NO_PROXY) process.env.NO_PROXY = "127.0.0.1,localhost,::1";
+
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 
 // A stray async rejection must not kill the process — Node ≥15 exits on

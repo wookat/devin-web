@@ -240,6 +240,13 @@ function spawnBackend() {
         // can still override by exporting its own value first.
         DEVIN_WEB_ALLOWED_HOSTS: allowedHostsRaw()
           || "192.168.6.251:7791,devin.zalize.com,devin-web.zalize.com",
+        // Node 24 fetch ignores the system proxy unless opted in — the
+        // devin chat translate upstream (app.devin.ai) is unreachable
+        // direct on this network. Honor HTTP(S)_PROXY if the user env has
+        // one; NO_PROXY keeps loopback probes direct. Both default to
+        // no-ops when the user sets nothing.
+        NODE_USE_ENV_PROXY: process.env.NODE_USE_ENV_PROXY || "1",
+        NO_PROXY: process.env.NO_PROXY || "127.0.0.1,localhost,::1",
       },
     });
   const c = child;

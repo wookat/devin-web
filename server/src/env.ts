@@ -7,6 +7,7 @@
  * module — they live outside the compiled bundle and share scripts/env.mjs
  * instead. Keep the two files' resolution rules identical.
  */
+import fs from "node:fs";
 import os from "node:os";
 import path from "node:path";
 
@@ -80,4 +81,38 @@ export function dashboardMcpOn(): boolean {
  *  {text,target} → {result|text|translation}). */
 export function translateUrl(): string {
   return process.env.DEVIN_WEB_TRANSLATE_URL || "";
+}
+
+/** Devin web session token (auth1_…) — DEVIN_WEB_DEVIN_TOKEN wins, then
+ *  <dataDir>/devin-web.token (one line, written once from the logged-in
+ *  browser's auth1_session). Feeds the official /api/chat translate
+ *  provider; empty when unconfigured. */
+export function devinToken(): string {
+  const env = process.env.DEVIN_WEB_DEVIN_TOKEN;
+  if (env) return env.trim();
+  try {
+    return fs.readFileSync(path.join(dataDir(), "devin-web.token"), "utf8").trim();
+  } catch {
+    return "";
+  }
+}
+
+/** Devin org id for x-cog-org-id — DEVIN_WEB_DEVIN_ORG wins, then
+ *  <dataDir>/devin-web.org. Required by every /api/* call for auth1
+ *  sessions ("No organizations found" without it), so auto-discovery is
+ *  only a fallback for token types that don't need org context. */
+export function devinOrg(): string {
+  const env = process.env.DEVIN_WEB_DEVIN_ORG;
+  if (env) return env.trim();
+  try {
+    return fs.readFileSync(path.join(dataDir(), "devin-web.org"), "utf8").trim();
+  } catch {
+    return "";
+  }
+}
+
+/** Devin web api base (DEVIN_WEB_DEVIN_API) — defaults to the official
+ *  webapp host; overridable for staging/enterprise. */
+export function devinApiBase(): string {
+  return (process.env.DEVIN_WEB_DEVIN_API || "https://app.devin.ai/api").replace(/\/+$/, "");
 }
