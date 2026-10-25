@@ -1218,6 +1218,26 @@ export default function AdminMirrorPage() {
         }).catch(() => {})
       }, 300)
     }
+    // Delta application coalesces: each incoming frame used to setItems
+    // immediately, so a token/tool storm re-rendered the streaming row's
+    // ENTIRE accumulated markdown per event — the multi-second main-thread
+    // freeze on busy sessions. Buffer incoming items and merge once per
+    // ~160ms window; order within the buffer is arrival order.
+    let deltaBuf: TimelineItem[] = []
+    let deltaTimer: number | null = null
+    const flushDeltaBuf = () => {
+      deltaTimer = null
+      if (!deltaBuf.length) return
+      const inc = deltaBuf
+      deltaBuf = []
+      setItems((prev) => {
+        const gone = new Set(inc.filter((i) => i._gone).map((i) => i.id))
+        const base = gone.size ? prev.filter((i) => !gone.has(i.id)) : prev
+        return mergeItems(base, inc.filter((i) => !i._gone))
+      })
+      boundWindow()
+      setLoaded(true)
+    }
     const offWs = subscribeWs((ev) => {
       if (!alive) return
       if (ev.sessionId !== id) return
@@ -1225,15 +1245,9 @@ export default function AdminMirrorPage() {
         // Drop deltas whose log generation doesn't match the window's —
         // a snapshot window (gen 0) or a previous rebuild would merge-collide
         // on `e${i}` ids; resync pulls the real page right away.
-        if (typeof ev.gen === 'number' && ev.gen !== windowGen.current) { resync(ev.gen); return }
-        const inc = ev.items as TimelineItem[]
-        setItems((prev) => {
-          const gone = new Set(inc.filter((i) => i._gone).map((i) => i.id))
-          const base = gone.size ? prev.filter((i) => !gone.has(i.id)) : prev
-          return mergeItems(base, inc.filter((i) => !i._gone))
-        })
-        boundWindow()
-        setLoaded(true)
+        if (typeof ev.gen === 'number' && ev.gen !== windowGen.current) { deltaBuf = []; resync(ev.gen); return }
+        deltaBuf.push(...(ev.items as TimelineItem[]))
+        if (deltaTimer == null) deltaTimer = window.setTimeout(flushDeltaBuf, 160)
       } else if (ev.type === 'prompt_done' || ev.type === 'account_limited' || ev.type === 'account_rotated' || ev.type === 'persona_state') {
         void load()
       }
@@ -1251,6 +1265,7 @@ export default function AdminMirrorPage() {
       graduateTl.current = null
       if (graduateTimer != null) clearTimeout(graduateTimer)
       if (resyncTimer != null) clearTimeout(resyncTimer)
+      if (deltaTimer != null) clearTimeout(deltaTimer)
       if (followUp != null) clearTimeout(followUp)
       if (olderPrefetchTimer != null) clearTimeout(olderPrefetchTimer)
       if (olderPrefetch.current?.id === id) olderPrefetch.current = null

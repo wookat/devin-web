@@ -728,7 +728,24 @@ function backfillTimeline(ctx: ApiContext, sessionId: string, logGen: number) {
  * incremental builder and broadcast the produced/mutated items. Clients merge
  * them by id — no refetch needed. Skipped while a replay is in flight (the
  * whole log is being rebuilt; buildTimeline catches up in one pass) and when
- * the session has no built state yet (the first poll builds it wholesale). */
+ * the session has no built state yet (the first poll builds it wholesale).
+ *
+ * Broadcasts coalesce: during a token/tool storm every log append would
+ * otherwise emit its own ws frame, and each client render re-parses the
+ * streaming message's WHOLE markdown — 20+ full renders/sec of an ever-
+ * growing body is what froze the page. Dirty items accumulate keyed by id
+ * (later versions replace earlier, matching the client's merge) and flush
+ * as ONE broadcast per window. */
+const DELTA_FLUSH_MS = 120;
+const pendingDelta = new Map<string, { items: Map<string, DwItem>; timer: NodeJS.Timeout; gen: number }>();
+
+function flushDelta(ctx: ApiContext, sessionId: string) {
+  const p = pendingDelta.get(sessionId);
+  if (!p) return;
+  pendingDelta.delete(sessionId);
+  if (p.items.size) ctx.hub.broadcast({ type: "timeline_delta", sessionId, gen: p.gen, items: [...p.items.values()] });
+}
+
 function noteUpdate(ctx: ApiContext, sessionId: string) {
   if (loadInflight.has(sessionId)) return;
   const st = tlCache.get(sessionId);
@@ -744,7 +761,15 @@ function noteUpdate(ctx: ApiContext, sessionId: string) {
     const s = e.seq ?? -1;
     if (s > st.seenSeq) { tlPush(st, e, s, dirty); st.seenSeq = s; }
   }
-  if (dirty.length) ctx.hub.broadcast({ type: "timeline_delta", sessionId, gen: st.gen, items: dirty });
+  if (!dirty.length) return;
+  let p = pendingDelta.get(sessionId);
+  if (!p) {
+    p = { items: new Map(), gen: st.gen, timer: setTimeout(() => flushDelta(ctx, sessionId), DELTA_FLUSH_MS) };
+    p.timer.unref?.();
+    pendingDelta.set(sessionId, p);
+  }
+  p.gen = st.gen;
+  for (const it of dirty) p.items.set(it.id, it);
 }
 
 /** Coalesce the timeline's messages for the classic chat view. */
