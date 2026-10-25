@@ -1519,6 +1519,15 @@ export default function AdminMirrorPage() {
     if (loaded) bootGuardUntil.current = Date.now() + 1500
   }, [loaded])
 
+  // Session switch: these refs survive the :id route change (no remount) —
+  // a scrolled-up latch or stale gesture flag from the previous session
+  // otherwise strands the new one mid-transcript instead of bottom-pinned.
+  useEffect(() => {
+    stickBottom.current = true
+    userTookOver.current = false
+    anchor.current = null
+  }, [id])
+
   // While stickBottom holds, ANY total-size change (virtual rows measuring in,
   // stream appends, prepended pages, composer growth) re-pins the view to the
   // true bottom — this is what makes refresh land on the newest message
@@ -2408,9 +2417,18 @@ const groups = useMemo(() => groupItems(allItems, sessionWorking), [allItems, se
             // edge = the bouncing scrollbar + strobing viewport.
             if (near) {
               stickBottom.current = true
-            } else if (!userTookOver.current && Date.now() < bootGuardUntil.current) {
-              // Load-window transient (scroll restore / measure settle): not
-              // user intent — re-pin instead of dropping the bottom latch.
+              // Reaching the bottom by any means clears the gesture debt —
+              // a stale takeover flag would silently drop the latch for the
+              // rest of the session (and the NEXT session — refs survive
+              // the id route change without a remount).
+              userTookOver.current = false
+            } else if (!userTookOver.current) {
+              // Not-near scroll with no real gesture behind it = virtualizer
+              // compensation / gen-swap rebuild / stream growth — NOT user
+              // intent. Re-pin instead of dropping the latch. This used to
+              // be time-gated (bootGuardUntil 1.5s), but a slow replay's
+              // gen swap routinely lands outside the window → first open
+              // stranded mid-transcript. Only genuine gestures unstick.
               el.scrollTop = el.scrollHeight
               stickBottom.current = true
             } else {
@@ -2438,6 +2456,17 @@ const groups = useMemo(() => groupItems(allItems, sessionWorking), [allItems, se
               userTookOver.current = true
             }
           }}
+          // The remaining real gestures the latch can't see: a scrollbar
+          // drag emits nothing (pointer lands in the ~17px gutter), and a
+          // touch drag emits neither wheel nor key. Both mean user intent.
+          onPointerDown={(e) => {
+            const el = e.currentTarget
+            if (e.clientX > el.getBoundingClientRect().right - 20) {
+              stickBottom.current = false
+              userTookOver.current = true
+            }
+          }}
+          onTouchStart={() => { userTookOver.current = true }}
           // scrollbar-gutter both-edges: a classic (layout) scrollbar eats
           // the RIGHT side of the content box only, leaving the column
           // off-center vs the page (left pad < right pad+bar). both-edges
