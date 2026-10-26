@@ -690,6 +690,14 @@ export class DevinAcp {
     return this.conn.extMethod(method, params ?? {});
   }
 
+  /** Raw extension-notification passthrough — the desktop's IDE-context
+   * pushes (workspace/didChangeFiles, document/didOpen, terminal/*) go
+   * client→agent this way so the agent sees what the user did between
+   * turns. Fire-and-forget; the agent tolerates unknown methods. */
+  async sendExtNotification(method: string, params?: Record<string, unknown>) {
+    return this.conn.extNotification(method, params ?? {});
+  }
+
   async cancel(sessionId: string) {
     return this.conn.cancel({ sessionId });
   }

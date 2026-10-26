@@ -409,5 +409,20 @@ export async function handleRegistry(ctx: ApiContext, req: IncomingMessage, res:
     return true;
   }
 
+  // GET /api/admin/plugins — desktop-parity `_cognition.ai/plugins/list`
+  // passthrough: the acp-side local plugin store (account-upload bundles
+  // with their skills). Plugins are account-level config, so any healthy
+  // pooled acp answers identically.
+  if (p === "/api/admin/plugins" && m === "GET") {
+    try {
+      const acp = await ctx.manager.get(ctx.primaryCwd);
+      const r = await acp.extMethod("", "_cognition.ai/plugins/list", {});
+      json(res, 200, r ?? { plugins: [] });
+    } catch (e) {
+      json(res, 200, { plugins: [], error: (e as Error).message?.slice(0, 200) ?? "plugins unavailable" });
+    }
+    return true;
+  }
+
   return false;
 }

@@ -89,6 +89,24 @@ test("isSessionPinned: unknown session → false", () => {
   assert.equal(isSessionPinned("never-loaded"), false);
 });
 
+test("notifySessionCtx: fires on a hosted session, drops an unhosted one", async () => {
+  const { notifySessionCtx } = await import(pathToFileURL(path.join(dist, "sessionplace.js")).href);
+  const sent = [];
+  const host = { sendExtNotification: (m, p) => { sent.push([m, p]); return Promise.resolve(); } };
+  markLoadedOn("ctx-test", host);
+  notifySessionCtx("ctx-test", "_cognition.ai/document/didOpen", { uri: "file:///a" });
+  assert.equal(sent.length, 1);
+  assert.equal(sent[0][0], "_cognition.ai/document/didOpen");
+  assert.equal(sent[0][1].sessionId, "ctx-test"); // envelope carries the session
+  assert.equal(sent[0][1].uri, "file:///a");
+  notifySessionCtx("ctx-ghost", "_cognition.ai/document/didOpen", { uri: "file:///b" });
+  assert.equal(sent.length, 1); // unhosted → dropped, never forces a load
+  // a rejecting host must not throw back into the file op (fire-and-forget)
+  host.sendExtNotification = () => Promise.reject(new Error("dead pipe"));
+  notifySessionCtx("ctx-test", "_cognition.ai/document/didOpen", { uri: "file:///c" });
+  await new Promise((r) => setImmediate(r)); // let the rejection settle
+});
+
 // ---- metrics ------------------------------------------------------------
 
 test("metrics: inc accumulates, snapshot serializes", () => {

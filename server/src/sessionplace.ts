@@ -58,3 +58,14 @@ export function markMemOnly(id: string, host: DevinAcp): DevinAcp {
   s.add(id);
   return host;
 }
+
+/** Passively notify the session's loaded host acp — desktop-parity
+ * client→agent context pushes (workspace/didChangeFiles, document/didOpen).
+ * Never forces a load: if the session isn't bound to a host the context is
+ * simply dropped (it'd be stale by the next load anyway). Fire-and-forget —
+ * a notification failure must never break the file op that produced it. */
+export function notifySessionCtx(id: string, method: string, params: Record<string, unknown>): void {
+  const host = sessionHost.get(id);
+  if (!host) return;
+  void host.sendExtNotification(method, { sessionId: id, ...params }).catch(() => { /* context hint — drop */ });
+}

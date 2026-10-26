@@ -36,10 +36,10 @@ devin-web 现状：仅调用 **14** 个 `_cognition.ai/*` 方法 → 方法面�
 协议不用逆向：仍是 `devin acp` stdio JSON-RPC + `session_update` 通知流，devin-web 的 broker/manager 直接吸收新 RPC。每个方法的工作量 = 从 extension.js/webapp bundle 读参数与响应形状 → index.ts 加薄转发 → 前端 UI。
 
 分批建议（按价值/依赖排序）：
-1. **P0 revert/**：检查点回退/fork —— 全新能力，用户感知最强
-2. **P0 session/loadPage + brief**：长会话分页加载，直接解决大会话卡顿
-3. **P1 subagent bg/fg、terminal/commandCompleted、queuedMessages/update、workspace 事件**
-4. **P1 plugins/* + mcp/***：本地插件/MCP 管理 UI（exe 已实现全部端点）
+1. **P0 revert/**：检查点回退/fork —— 全新能力，用户感知最强 ✅ 已落地
+2. ~~**P0 session/loadPage + brief**~~：❌ 实机确认是云端复合路由，本地 acp 崩 `.slice`——W1 无解
+3. **P1 workspace/document 事件推送** ✅ 已落地（didOpen/didChangeFiles）；subagent bg/fg、terminal/commandCompleted、queuedMessages/update 待做
+4. **P1 plugins/* + mcp/***：本地插件/MCP 管理 UI（exe 已实现全部端点）—— plugins/list 已通（只读）
 5. **P2 goal/*、turn_stats/loadStats/compaction、scope_search、reads/*、browserPreview/capture、processMemory**
 6. **P3 云端 REST**（需 auth1）：notifications、secrets、wiki、session folders/tags/pin、plan/*
 
@@ -105,3 +105,34 @@ devin-web 现状：仅调用 **14** 个 `_cognition.ai/*` 方法 → 方法面�
 - **必须 authenticate**：ACP 模式不再自动读 credentials.toml，须 `authenticate(meta.api_key=<账号池 key>)`，否则 `session/new` 报 "ACP host has not authenticated"。direct/brokered/adopted 三条路径都已接。
 - **session/new 不落盘**：新会话是内存态，`session/load` 报 "Session not found"，首次 `session/prompt` 成功后才持久化。devin-web 用 `sessionplace.memOnly` 标记跳过 load，prompt 成功后清除；宿主进程死亡则该会话丢失（与桌面一致）。
 - 会话锁冲突照旧：`session/load` 对已被占用的会话报 "already open in another process"（桌面应用打开着同一 session 时 API 会 500，正常）。
+
+---
+
+## 已验证落地：IDE 上下文推送（document/workspace 通知）+ plugins/list
+
+### 方向澄清（2026-10-26 实机确认）
+
+`document/*`、`workspace/*`、`terminal/commandStarted|Completed` 是 **client→agent**
+上下文推送（IDE 侧通知 agent "用户在编辑器/终端里干了什么"），不是 server→client
+事件流。对 devin-web 的意义：用户在 web 编辑器里打开/保存文件时同步给 agent，
+桌面端 agent 据此感知用户手动改动。
+
+### 实机探测结论
+
+- `conn.extNotification(method, params)` 发送被 216 正常接收派发（stderr `ext_notification` dispatch，无协议错误）。
+- `workspace/didChangeFiles` serde schema：`{created?: string[]}`（file:// URI 列表）。
+- `document/didOpen`：`{uri, languageId?}`。
+- `terminal/commandStarted`：`{terminalId, commandLine, cwd?}`；`terminal/commandCompleted`：`{commandLine, cwd?, exitCode?, output?}`。
+- `plugins/list`：实机返回账号级插件清单（pluginKey/state/source/assets.skills/mcpServers/pin），任一池化 acp 可答——**P1 插件管理只实现了只读 list，install/remove UI 未做**。
+- **session/loadPage|loadSpine|brief|loadStats 本地全部不可用**：对已认证持久会话调用一律在 handler 内 `.slice` 崩 undefined——它们是桌面端走云端会话服务的复合路由（`toWireRequest`），本地 acp 未实装。大会话分页加载在 W1 无解，需走云端 REST 或放弃。
+
+### devin-web 实现要点
+
+- `DevinAcp.sendExtNotification` → `conn.extNotification`（SDK 返回 Promise<void>）。
+- `sessionplace.notifySessionCtx(id, method, params)`：**被动**发送——只走 `sessionHost.get(id)` 已绑定的 host，绝不触发 session/load（未加载的会话上下文本已过期）；fire-and-forget，发送失败不回污染文件操作。envelope 带 `sessionId`。
+- 挂点（`lweb/admin/sessionfiles.ts`）：
+  - `file-write` 成功后 → `workspace/didChangeFiles {created:[file:///uri]}`
+  - `file-ops` 成功后 → 同上（rename/move/copy 带上 dest）
+  - `GET /file` 读到文本 → `document/didOpen {uri}`（60s/(session,path) 去抖——GET 也是程序化读取，只把首个 hit 当"打开"）
+- `GET /api/admin/plugins` → `plugins/list` 转发。
+- 未做：`document/didClose|didChangeDirty|didFocus`（web 端无干净边界）、`terminal/commandStarted|Completed`（交互 shell 无逐命令边界，需 PS prompt 钩子）、`workspace/didChangeRevision {branch?,uri?}`（file-git 已 8s 缓存，变更检测缺 diff 基线——可在 file-git 响应中对比 lastBranch 后补）。

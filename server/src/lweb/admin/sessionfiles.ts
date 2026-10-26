@@ -12,9 +12,27 @@ import path from "node:path";
 import type { ApiContext } from "../../routes.js";
 import { json, readJson } from "../../httputil.js";
 import { cwdFor, confined } from "../session.js";
+import { notifySessionCtx } from "../../sessionplace.js";
 
 /** file-git response cache — 8s per session (was lweb/common). */
 const gitStatusCache = new Map<string, { at: number; body: unknown }>();
+
+/** file:/// URI the desktop notification schema expects. */
+function fileUri(absPath: string): string {
+  return "file:///" + absPath.replace(/\\/g, "/").replace(/^\//, "");
+}
+
+/** didOpen debounce — file GET is also a programmatic read, so only the
+ * first hit per (session,path) per minute counts as an "open". */
+const didOpenSeen = new Map<string, number>();
+function notifyDidOpen(id: string, absPath: string): void {
+  const k = `${id}|${absPath}`;
+  const last = didOpenSeen.get(k) ?? 0;
+  if (Date.now() - last < 60_000) return;
+  if (didOpenSeen.size > 2000) didOpenSeen.clear();
+  didOpenSeen.set(k, Date.now());
+  notifySessionCtx(id, "_cognition.ai/document/didOpen", { uri: fileUri(absPath) });
+}
 
 export async function handleSessionFiles(ctx: ApiContext, req: IncomingMessage, res: ServerResponse, url: URL, m: string, sub: string, id: string): Promise<boolean> {
   // Editor write/ops — ADMIN ONLY (never in sessionSubs: share links must
@@ -29,6 +47,8 @@ export async function handleSessionFiles(ctx: ApiContext, req: IncomingMessage, 
       const buf = typeof body.base64 === "string" ? Buffer.from(body.base64, "base64") : Buffer.from(String(body.text ?? ""), "utf8");
       if (buf.length > 50 * 1024 * 1024) { json(res, 413, { error: "too large" }); return true; }
       fs.writeFileSync(full, buf);
+      // Desktop parity: the agent sees user-side workspace edits.
+      notifySessionCtx(id, "_cognition.ai/workspace/didChangeFiles", { created: [fileUri(full)] });
       json(res, 200, { ok: true, size: buf.length });
     } catch (e) { json(res, 500, { error: (e as Error).message }); }
     return true;
@@ -51,6 +71,7 @@ export async function handleSessionFiles(ctx: ApiContext, req: IncomingMessage, 
         case "delete": fs.rmSync(full, { recursive: true, force: true }); break;
         default: json(res, 400, { error: `unknown op ${body.op}` }); return true;
       }
+      notifySessionCtx(id, "_cognition.ai/workspace/didChangeFiles", { created: dest ? [fileUri(full), fileUri(dest)] : [fileUri(full)] });
       json(res, 200, { ok: true });
     } catch (e) { json(res, 500, { error: (e as Error).message }); }
     return true;
@@ -124,6 +145,7 @@ export async function handleSessionFiles(ctx: ApiContext, req: IncomingMessage, 
       if (stat.size > 2 * 1024 * 1024) { json(res, 200, { path: rel, text: null, truncated: false, tooLarge: true, size: stat.size, mtime: stat.mtime.toISOString() }); return true; }
       const buf = fs.readFileSync(file);
       const text = buf.includes(0) ? null : buf.toString("utf8");
+      if (text !== null) notifyDidOpen(id, file); // user opened the file in the editor
       json(res, 200, { path: rel, text, truncated: stat.size > 512 * 1024 ? true : false, binary: text === null, size: stat.size, mtime: stat.mtime.toISOString() });
     } catch (e) {
       json(res, 200, { path: rel, text: null, error: e instanceof Error ? e.message : String(e) });
