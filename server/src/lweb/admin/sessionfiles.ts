@@ -136,5 +136,69 @@ export async function handleSessionFiles(ctx: ApiContext, req: IncomingMessage, 
     return true;
   }
 
+  // GET file-find?q= — recursive workspace filename search for the editor's
+  // Ctrl+P quick-open. Skips heavy/dependency dirs, substring-matches the
+  // workspace-relative path (case-insensitive), caps matches + walk volume.
+  if (sub === "file-find" && m === "GET") {
+    const cwd = cwdFor(ctx, id);
+    const qq = (url.searchParams.get("q") ?? "").trim().toLowerCase();
+    if (!qq) { json(res, 200, { matches: [], truncated: false }); return true; }
+    const SKIP = new Set([".git", "node_modules", "dist", "out", "build", ".next", ".nuxt", "target", "vendor", "__pycache__", ".cache", "coverage", ".idea", ".vscode-test", "Pods"]);
+    const matches: { path: string; name: string; score: number }[] = [];
+    let visited = 0, truncated = false;
+    const walk = (dir: string, rel: string, depth: number) => {
+      if (truncated || depth > 10) return;
+      let ents: fs.Dirent[];
+      try { ents = fs.readdirSync(dir, { withFileTypes: true }) } catch { return }
+      for (const e of ents) {
+        if (visited++ > 30000 || matches.length >= 200) { truncated = true; return }
+        const rp = rel ? `${rel}/${e.name}` : e.name;
+        if (e.isDirectory()) {
+          if (!SKIP.has(e.name)) walk(path.join(dir, e.name), rp, depth + 1);
+        } else {
+          const lo = rp.toLowerCase(), ln = e.name.toLowerCase();
+          const score = ln.startsWith(qq) ? 0 : ln.includes(qq) ? 1 : lo.includes(qq) ? 2 : -1;
+          if (score >= 0) matches.push({ path: rp, name: e.name, score });
+        }
+      }
+    };
+    walk(cwd, "", 0);
+    matches.sort((a, b) => a.score - b.score || a.path.length - b.path.length);
+    json(res, 200, { matches: matches.slice(0, 100).map(({ path: p, name }) => ({ path: p, name })), truncated });
+    return true;
+  }
+
+  // GET file-diff?path= — unified diff of the working-tree file vs HEAD.
+  // Untracked files (git status ??) get a synthetic all-added diff; tracked
+  // files use `git diff HEAD` which covers staged + unstaged hunks.
+  if (sub === "file-diff" && m === "GET") {
+    const cwd = cwdFor(ctx, id);
+    const rel = url.searchParams.get("path") ?? "";
+    const full = confined(cwd, rel);
+    if (!full) { json(res, 400, { error: "path escapes cwd" }); return true; }
+    try {
+      const r = spawnSync("git", ["diff", "HEAD", "--", rel.replace(/\\/g, "/")], { cwd, encoding: "buffer", timeout: 8000, windowsHide: true, maxBuffer: 8 * 1024 * 1024 });
+      let diff = r.stdout ? r.stdout.toString("utf8") : "";
+      if (!diff.trim() && fs.existsSync(full) && !fs.statSync(full).isDirectory()) {
+        const st = spawnSync("git", ["status", "--porcelain=v1", "--", rel.replace(/\\/g, "/")], { cwd, encoding: "buffer", timeout: 5000, windowsHide: true });
+        const stLine = (st.stdout ? st.stdout.toString("utf8") : "").trim();
+        if (stLine.startsWith("??")) {
+          const buf = fs.readFileSync(full);
+          if (buf.includes(0)) { json(res, 200, { diff: null, binary: true, error: null }); return true; }
+          const lines = buf.toString("utf8").split("\n");
+          if (lines.length && lines[lines.length - 1] === "") lines.pop();
+          const clipped = lines.slice(0, 3000);
+          const relPosix = rel.replace(/\\/g, "/");
+          diff = `diff --git a/${relPosix} b/${relPosix}\nnew file mode 100644\n--- /dev/null\n+++ b/${relPosix}\n@@ -0,0 +1,${clipped.length} @@\n${clipped.map((l) => `+${l}`).join("\n")}\n`;
+        }
+      }
+      if (diff.length > 512 * 1024) diff = `${diff.slice(0, 512 * 1024)}\n--- diff truncated ---\n`;
+      json(res, 200, { diff: diff || null, binary: false, error: null });
+    } catch (e) {
+      json(res, 200, { diff: null, binary: false, error: e instanceof Error ? e.message : String(e) });
+    }
+    return true;
+  }
+
   return false;
 }

@@ -874,7 +874,15 @@
     "clearAnnotText": "清除标注",
     "showTree": "显示文件树",
     "hideTree": "收起文件树",
-    "binary": "二进制文件，不支持预览"
+    "binary": "二进制文件，不支持预览",
+    "findPh": "在文件中查找…",
+    "noMatches": "无结果",
+    "wrap": "自动换行",
+    "quickOpen": "快速打开",
+    "quickOpenPh": "按名称搜索文件…",
+    "openTabs": "已打开",
+    "noMatches2": "没有匹配的文件",
+    "gitDiffTitle": "Git 差异"
   },
   "vp": {
     "cantLoad": "无法加载 {{name}}",

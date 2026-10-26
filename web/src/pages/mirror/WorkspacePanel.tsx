@@ -7,7 +7,8 @@ import { visibleInterval } from '@/lib/poll'
 import { OChevronDown, OChevronRight, OSearch, OX } from '@/components/officialIcons'
 import { cn } from '@/lib/utils'
 import { type WsEntry, type FileResp, base, parentOf, kindOf, EDITABLE, gitCls, gitTitle, TypeIcon, type MenuPos, type CtxItem, CtxMenu, WS_OPEN_EVENT, consumeWsOpen } from './WsShared'
-import { Viewer } from './WorkspaceViewers'
+import { Viewer, DiffPane } from './WorkspaceViewers'
+import CodeView from '@/components/CodeView'
 import { copyText } from '../../lib/clipboard'
 
 function EditorPanel({ id }: { id: string }) {
@@ -89,6 +90,72 @@ function CrumbPicker({ pos, parent, seg, state, onPick, onClose }: {
   )
 }
 
+/** Ctrl+P quick-open: workspace filename search backed by `file-find`.
+ *  ↓↑/Enter/Esc keyboard nav; empty query shows the currently open tabs. */
+function QuickOpen({ id, openTabs, onPick, onClose }: {
+  id: string; openTabs: string[]
+  onPick: (p: string) => void; onClose: () => void
+}) {
+  const { t } = useTranslation()
+  const [q, setQ] = useState('')
+  const [list, setList] = useState<{ path: string; name: string }[]>([])
+  const [sel, setSel] = useState(0)
+  const boxRef = useRef<HTMLDivElement>(null)
+  useEffect(() => {
+    const h = (e: MouseEvent) => { if (!boxRef.current?.contains(e.target as HTMLElement)) onClose() }
+    const k = (e: KeyboardEvent) => { if (e.key === 'Escape') onClose() }
+    window.addEventListener('mousedown', h)
+    window.addEventListener('keydown', k)
+    return () => { window.removeEventListener('mousedown', h); window.removeEventListener('keydown', k) }
+  }, [onClose])
+  useEffect(() => {
+    if (!q.trim()) { setList([]); setSel(0); return }
+    let dead = false
+    const h = window.setTimeout(() => {
+      adminFetch<{ matches?: { path: string; name: string }[] }>(`/api/admin/session/${id}/file-find?q=${encodeURIComponent(q.trim())}`)
+        .then((r) => { if (!dead) { setList(r.matches ?? []); setSel(0) } })
+        .catch(() => { if (!dead) setList([]) })
+    }, 150)
+    return () => { dead = true; clearTimeout(h) }
+  }, [q, id])
+  const shown = q.trim() ? list : openTabs.map((p) => ({ path: p, name: base(p) }))
+  const pick = (i: number) => { const m = shown[i]; if (m) { onPick(m.path); onClose() } }
+  return (
+    <div ref={boxRef} className="fixed left-1/2 top-[12%] z-[90] w-[520px] max-w-[92vw] -translate-x-1/2 overflow-hidden rounded-[12px] border border-border bg-card shadow-2xl">
+      <div className="flex items-center gap-2 border-b border-border px-3 py-2">
+        <OSearch size={14} className="shrink-0 text-muted-foreground" />
+        <input
+          autoFocus
+          value={q}
+          onChange={(e) => setQ(e.target.value)}
+          placeholder={t('ws.quickOpenPh')}
+          className="min-w-0 flex-1 bg-transparent text-[13px] outline-none placeholder:text-muted-foreground"
+          onKeyDown={(e) => {
+            if (e.key === 'ArrowDown') { e.preventDefault(); setSel((s) => Math.min(s + 1, shown.length - 1)) }
+            if (e.key === 'ArrowUp') { e.preventDefault(); setSel((s) => Math.max(s - 1, 0)) }
+            if (e.key === 'Enter') { e.preventDefault(); pick(sel) }
+          }}
+        />
+      </div>
+      <div className="max-h-[320px] overflow-y-auto p-1">
+        {!q.trim() && <div className="px-2 pb-1 pt-1.5 text-[10px] uppercase tracking-wide text-muted-foreground">{t('ws.openTabs')}</div>}
+        {q.trim() && shown.length === 0 && <div className="px-2 py-3 text-center text-[12px] text-muted-foreground">{t('ws.noMatches2')}</div>}
+        {shown.map((m, i) => (
+          <button key={m.path}
+            onClick={() => pick(i)}
+            onMouseMove={() => setSel(i)}
+            className={cn('flex h-[30px] w-full cursor-pointer items-center gap-2 rounded-[6px] px-2 text-left text-[13px]',
+              i === sel ? 'bg-tint-secondary' : '')}>
+            <TypeIcon path={m.path} size={14} className="shrink-0" />
+            <span className="shrink-0 font-medium">{m.name}</span>
+            <span className="min-w-0 flex-1 truncate text-[11px] text-muted-foreground">{m.path}</span>
+          </button>
+        ))}
+      </div>
+    </div>
+  )
+}
+
 function WorkspacePanel({ id }: { id: string }) {
   const { t } = useTranslation()
   const saved = mem.get(id)
@@ -108,7 +175,17 @@ function WorkspacePanel({ id }: { id: string }) {
   const [dropDir, setDropDir] = useState<string | null>(null)
   const [gitMap, setGitMap] = useState<Record<string, string>>({})
   const [crumb, setCrumb] = useState<{ parent: string; seg: string; x: number; y: number } | null>(null)
+  const [qo, setQo] = useState(false)
   const stripRef = useRef<HTMLDivElement>(null)
+
+  /* Ctrl+P quick-open while this panel is mounted. */
+  useEffect(() => {
+    const h = (e: KeyboardEvent) => {
+      if ((e.ctrlKey || e.metaKey) && !e.shiftKey && e.key.toLowerCase() === 'p') { e.preventDefault(); setQo((v) => !v) }
+    }
+    window.addEventListener('keydown', h)
+    return () => window.removeEventListener('keydown', h)
+  }, [])
 
   useEffect(() => { mem.set(id, { tabs, active, expanded, filter, drafts, treeCollapsed }) }, [id, tabs, active, expanded, filter, drafts, treeCollapsed])
 
@@ -182,7 +259,7 @@ function WorkspacePanel({ id }: { id: string }) {
        file's parent dir is currently loaded, and it also catches the whole
        parent directory being deleted (dir refresh then just errors). */
     await Promise.all(tabsRef.current.map(async (p) => {
-      if (draftsRef.current[p] !== undefined) return
+      if (p.startsWith(DIFF_PFX) || draftsRef.current[p] !== undefined) return
       try {
         const r = await adminFetch<FileResp>(`/api/admin/session/${id}/file?path=${encodeURIComponent(p)}&stat=1`)
         if (r.error || r.mtime == null) {
@@ -230,6 +307,30 @@ function WorkspacePanel({ id }: { id: string }) {
     setActive(p)
     if (EDITABLE[kindOf(p)] && !files[p]) void openFile(p)
   }, [files, openFile])
+
+  /* Git diff pseudo-tabs (`diff:<relpath>`): the tab shows the working-tree
+   *  diff vs HEAD, rendered read-only with the `diff` grammar. */
+  const DIFF_PFX = 'diff:'
+  const loadDiff = useCallback(async (p: string) => {
+    const key = `${DIFF_PFX}${p}`
+    setTabs((t) => (t.includes(key) ? t : [...t, key]))
+    setActive(key)
+    setFiles((f) => ({ ...f, [key]: { path: key, text: null } }))
+    try {
+      const r = await adminFetch<{ diff: string | null; binary?: boolean; error: string | null }>(`/api/admin/session/${id}/file-diff?path=${encodeURIComponent(p)}`)
+      const text = r.error ? null : (r.diff ?? (r.binary ? '(binary file — no textual diff)' : '(no changes vs HEAD)'))
+      setFiles((f) => ({ ...f, [key]: { path: key, text, error: r.error ?? undefined } }))
+    } catch (e) {
+      setFiles((f) => ({ ...f, [key]: { path: key, text: null, error: (e as Error).message } }))
+    }
+  }, [id])
+
+  /* Rehydrate diff tabs after panel remount (tabs persist in `mem`). */
+  const openDiff = useCallback((p: string) => void loadDiff(p), [loadDiff])
+  useEffect(() => {
+    for (const p of tabs) if (p.startsWith(DIFF_PFX) && files[p] === undefined) void loadDiff(p.slice(DIFF_PFX.length))
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [tabs])
 
   const cwdRef = useRef(cwd)
   cwdRef.current = cwd
@@ -399,7 +500,11 @@ function WorkspacePanel({ id }: { id: string }) {
             />
           ) : <span className={cn('min-w-0 flex-1 truncate', gitCls(gitMap[n.path]))}>{n.entry.name}</span>}
           {!n.entry.dir && gitMap[n.path] && (
-            <span className={cn('ml-1 shrink-0 text-[10px] font-medium', gitCls(gitMap[n.path]))} title={gitTitle(t, gitMap[n.path])}>{gitMap[n.path]}</span>
+            <button
+              className={cn('ml-1 shrink-0 cursor-pointer rounded-[3px] px-0.5 text-[10px] font-medium hover:bg-tint-secondary', gitCls(gitMap[n.path]))}
+              title={`${gitTitle(t, gitMap[n.path])} — ${t('ws.gitDiffTitle')}`}
+              onClick={(e) => { e.stopPropagation(); void loadDiff(n.path) }}
+            >{gitMap[n.path]}</button>
           )}
         </div>
         {n.entry.dir && isOpen && (
@@ -425,6 +530,8 @@ function WorkspacePanel({ id }: { id: string }) {
       n ? { label: t('ws.copyPath'), onClick: () => void copyText(cwd ? `${cwd}/${n.path}` : n.path) } : null,
       n ? { label: t('ws.copyRelPath'), onClick: () => void copyText(n.path) } : null,
       n ? { label: t('ws.copyName'), onClick: () => void copyText(n.entry.name) } : null,
+      n && !n.entry.dir && gitMap[n.path] ? { sep: true, label: '' } : null,
+      n && !n.entry.dir && gitMap[n.path] ? { label: t('ws.gitDiffTitle'), onClick: () => void loadDiff(n.path) } : null,
     ]
   }
 
@@ -455,6 +562,8 @@ function WorkspacePanel({ id }: { id: string }) {
         >
           {tabs.map((p) => {
             const isActive = active === p
+            const isDiff = p.startsWith(DIFF_PFX)
+            const realPath = isDiff ? p.slice(DIFF_PFX.length) : p
             return (
               <div
                 key={p}
@@ -473,11 +582,11 @@ function WorkspacePanel({ id }: { id: string }) {
                   isActive ? 'bg-background text-foreground shadow-[inset_0_2px_0_0_var(--color-accent-primary,#317cff)]' : 'text-muted-foreground hover:bg-tint-secondary',
                   dragTab === p && 'opacity-50',
                 )}
-                title={p}
+                title={isDiff ? `${t('ws.gitDiffTitle')} — ${realPath}` : p}
               >
                 {/* icon: file glyph normally; × on hover or when active (official rule) */}
                 <span className={cn('relative flex size-4 items-center justify-center', isActive && 'hidden')}>
-                  <TypeIcon path={p} size={13} />
+                  <TypeIcon path={isDiff ? `${realPath}.diff` : p} size={13} />
                   <span
                     role="button" aria-label={t('common.close')}
                     className="absolute inset-0 hidden items-center justify-center rounded-[3px] bg-transparent group-hover:flex hover:bg-border/60"
@@ -491,15 +600,16 @@ function WorkspacePanel({ id }: { id: string }) {
                     onClick={(e) => { e.stopPropagation(); closeTab(p) }}
                   >{dirty(p) ? <span className="size-2 rounded-full bg-amber-500" /> : <OX size={12} />}</span>
                 )}
-                <span className="min-w-0 truncate">{base(p)}{dirty(p) && !isActive ? ' ●' : ''}</span>
+                <span className="min-w-0 truncate">{isDiff ? `${base(realPath)} ⇄` : base(p)}{dirty(p) && !isActive ? ' ●' : ''}</span>
               </div>
             )
           })}
         </div>
         {active && (
           <div className="flex h-6 shrink-0 items-center gap-1 border-b border-border bg-transparent px-3 text-[11px] text-muted-foreground">
-            <TypeIcon path={active} size={11} />
-            {active.split('/').map((seg, i, arr) => (
+            <TypeIcon path={active.startsWith(DIFF_PFX) ? `${active.slice(DIFF_PFX.length)}.diff` : active} size={11} />
+            {active.startsWith(DIFF_PFX) && <span className="rounded bg-tint-secondary px-1 text-[10px] font-medium">{t('ws.gitDiffTitle')}</span>}
+            {(active.startsWith(DIFF_PFX) ? active.slice(DIFF_PFX.length) : active).split('/').map((seg, i, arr) => (
               <span key={i} className="flex items-center gap-1">
                 {i > 0 && <OChevronRight size={9} className="opacity-60" />}
                 <button
@@ -520,6 +630,11 @@ function WorkspacePanel({ id }: { id: string }) {
         )}
         <div className="min-h-0 flex-1 overflow-auto bg-background">
           {active ? (
+            active.startsWith(DIFF_PFX) ? (
+              <div key={active} className="min-h-full overflow-auto">
+                <DiffPane file={files[active]} onRetry={() => void loadDiff(active.slice(DIFF_PFX.length))} />
+              </div>
+            ) : (
             <Viewer
               key={active}
               id={id}
@@ -533,6 +648,7 @@ function WorkspacePanel({ id }: { id: string }) {
               onSaveBinary={saveBinary}
               onRetry={() => void openFile(active, true)}
             />
+            )
           ) : (
             <div className="flex h-full flex-col items-center justify-center gap-2 text-muted-foreground">
               <FileCode size={28} className="opacity-40" />
@@ -553,6 +669,8 @@ function WorkspacePanel({ id }: { id: string }) {
         <div className="flex h-[36px] shrink-0 items-center justify-between border-b border-border px-2.5">
           <span className="text-[11px] font-medium tracking-wide text-muted-foreground">{t('ws.repos')}</span>
           <div className="flex items-center">
+            <button className="flex size-6 cursor-pointer items-center justify-center rounded-[4px] text-muted-foreground hover:bg-tint-secondary" aria-label={t('ws.quickOpen')} title={`${t('ws.quickOpen')} (Ctrl+P)`}
+              onClick={() => setQo(true)}><OSearch size={12} /></button>
             <button className="flex size-6 cursor-pointer items-center justify-center rounded-[4px] text-muted-foreground hover:bg-tint-secondary" aria-label={t('common.refresh')} title={t('common.refresh')}
               onClick={() => {
                 const loaded = Object.keys(dirsRef.current)
@@ -597,6 +715,7 @@ function WorkspacePanel({ id }: { id: string }) {
         </div>
       </div>
       )}
+      {qo && <QuickOpen id={id} openTabs={tabs.filter((p) => !p.startsWith(DIFF_PFX))} onPick={open} onClose={() => setQo(false)} />}
       {ctxMenu && <CtxMenu pos={ctxMenu.pos} items={nodeMenuItems(ctxMenu.node)} onClose={() => setCtxMenu(null)} />}
       {tabMenu && <CtxMenu pos={tabMenu.pos} items={tabMenuItems(tabMenu.path)} onClose={() => setTabMenu(null)} />}
       {crumb && (

@@ -1,11 +1,119 @@
-import { useMemo, useRef, useState } from 'react'
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { useTranslation } from 'react-i18next'
-import { useShikiTokens, type Tok } from '@/components/CodeView'
+import { ChevronDown, ChevronUp, WrapText, Search, X } from 'lucide-react'
+import CodeView, { useShikiTokens, type Tok } from '@/components/CodeView'
 import Markdown from '@/components/Markdown'
+import { cn } from '@/lib/utils'
 import { type FileResp, ext, kindOf, ErrBox, Fallback, EditBar, useSaver } from './WsShared'
 import { ImageEditor, DocxView, XlsxView } from './WorkspaceMedia'
 
 /* ---------------- viewers / editors ---------------- */
+
+/** In-file find (Ctrl+F): live match count; Enter/↑↓ jump by moving the
+ *  textarea selection, which also scrolls the match into view. */
+function useFind(text: string, taRef: () => HTMLTextAreaElement | null) {
+  const [open, setOpen] = useState(false)
+  const [q, setQ] = useState('')
+  const [idx, setIdx] = useState(0)
+  const hits = useMemo(() => {
+    if (!q) return [] as number[]
+    const T = text.toLowerCase(), Q = q.toLowerCase()
+    const out: number[] = []
+    let i = T.indexOf(Q)
+    while (i >= 0 && out.length < 5000) { out.push(i); i = T.indexOf(Q, i + 1) }
+    return out
+  }, [text, q])
+  const jump = useCallback((i: number) => {
+    if (!hits.length) return
+    const k = ((i % hits.length) + hits.length) % hits.length
+    setIdx(k)
+    const ta = taRef()
+    if (ta) { ta.focus(); ta.setSelectionRange(hits[k], hits[k] + q.length) }
+  }, [hits, q, taRef])
+  useEffect(() => {
+    const h = (e: KeyboardEvent) => {
+      if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === 'f') { e.preventDefault(); setOpen(true) }
+    }
+    window.addEventListener('keydown', h)
+    return () => window.removeEventListener('keydown', h)
+  }, [])
+  useEffect(() => { if (!open) setQ('') }, [open])
+  useEffect(() => { setIdx(-1) }, [q])
+  return { open, setOpen, q, setQ, hits, idx, jump }
+}
+
+function FindBar({ find }: { find: ReturnType<typeof useFind> }) {
+  const { t } = useTranslation()
+  if (!find.open) return null
+  const n = find.hits.length
+  return (
+    <div className="absolute right-3 top-2 z-20 flex items-center gap-1 rounded-[8px] border border-border bg-card/95 px-2 py-1 shadow-md backdrop-blur">
+      <Search size={12} className="shrink-0 text-muted-foreground" />
+      <input
+        autoFocus
+        value={find.q}
+        onChange={(e) => find.setQ(e.target.value)}
+        placeholder={t('ws.findPh')}
+        className="w-40 bg-transparent text-[12px] outline-none placeholder:text-muted-foreground"
+        onKeyDown={(e) => {
+          if (e.key === 'Enter') { e.preventDefault(); find.jump(find.idx + (e.shiftKey ? -1 : 1)) }
+          if (e.key === 'Escape') { e.preventDefault(); find.setOpen(false) }
+        }}
+      />
+      <span className="w-12 text-right text-[11px] text-muted-foreground">{n ? `${find.idx + 1}/${n}` : t('ws.noMatches')}</span>
+      <button className="flex size-5 cursor-pointer items-center justify-center rounded hover:bg-tint-secondary" onClick={() => find.jump(find.idx - 1)} aria-label="prev"><ChevronUp size={12} /></button>
+      <button className="flex size-5 cursor-pointer items-center justify-center rounded hover:bg-tint-secondary" onClick={() => find.jump(find.idx + 1)} aria-label="next"><ChevronDown size={12} /></button>
+      <button className="flex size-5 cursor-pointer items-center justify-center rounded hover:bg-tint-secondary" onClick={() => find.setOpen(false)} aria-label="close"><X size={12} /></button>
+    </div>
+  )
+}
+
+/** Word wrap (Alt+Z): measured chars-per-line so the gutter keeps correct
+ *  per-logical-line heights even when lines wrap to multiple visual rows.
+ *  The container's first <textarea> is the measuring target. */
+function useWrap(host: React.RefObject<HTMLElement | null>, on: boolean) {
+  const [cpl, setCpl] = useState(0)
+  useEffect(() => {
+    const el = host.current
+    const ta = el?.querySelector('textarea')
+    if (!on || !el || !ta) { setCpl(0); return }
+    const cs = getComputedStyle(ta)
+    const probe = document.createElement('span')
+    probe.style.cssText = `position:absolute;left:-9999px;top:0;white-space:pre;font:${cs.fontSize} ${cs.fontFamily}`
+    probe.textContent = '0'.repeat(64)
+    el.appendChild(probe)
+    const cw = probe.getBoundingClientRect().width / 64 || 7
+    probe.remove()
+    const pad = parseFloat(cs.paddingLeft) + parseFloat(cs.paddingRight)
+    const ro = new ResizeObserver(() => setCpl(Math.max(1, Math.floor((ta.clientWidth - pad) / cw))))
+    ro.observe(ta)
+    return () => ro.disconnect()
+  }, [on, host])
+  return cpl
+}
+
+function useWrapPref(): [boolean, () => void] {
+  const [on, setOn] = useState(() => { try { return localStorage.getItem('dw-editor-wrap') === '1' } catch { return false } })
+  useEffect(() => {
+    const h = (e: KeyboardEvent) => {
+      if (e.altKey && e.key.toLowerCase() === 'z') { e.preventDefault(); setOn((v) => !v) }
+    }
+    window.addEventListener('keydown', h)
+    return () => window.removeEventListener('keydown', h)
+  }, [])
+  useEffect(() => { try { localStorage.setItem('dw-editor-wrap', on ? '1' : '0') } catch { /* */ } }, [on])
+  return [on, useCallback(() => setOn((v) => !v), [])]
+}
+
+function WrapToggle({ on, toggle }: { on: boolean; toggle: () => void }) {
+  const { t } = useTranslation()
+  return (
+    <button onClick={toggle} title={`${t('ws.wrap')} (Alt+Z)`}
+      className={cn('flex h-6 cursor-pointer items-center gap-1 rounded-[5px] px-1.5 text-[11px]', on ? 'bg-tint-secondary text-foreground' : 'text-muted-foreground hover:text-foreground')}>
+      <WrapText size={12} /> {t('ws.wrap')}
+    </button>
+  )
+}
 
 function Viewer({ id, path, file, rawUrl, draft, onDraft, onDiscard, onSaveText, onSaveBinary, onRetry }: {
   id: string; path: string; file?: FileResp; rawUrl: (p: string) => string
@@ -57,11 +165,16 @@ export function CodeEditor({ text, savedText, name, onChange, onSave, onDiscard 
   const { t } = useTranslation()
   const gutRef = useRef<HTMLDivElement>(null)
   const preRef = useRef<HTMLPreElement>(null)
+  const hostRef = useRef<HTMLDivElement>(null)
+  const taRef = useRef<HTMLTextAreaElement>(null)
   const dirty = text !== savedText
   const { saving, doSave } = useSaver(dirty, onSave)
-  const lines = useMemo(() => text.split('\n').length, [text])
+  const [wrap, toggleWrap] = useWrapPref()
+  const cpl = useWrap(hostRef, wrap)
+  const find = useFind(text, () => taRef.current)
+  const textLines = useMemo(() => text.split('\n'), [text])
   const toks = useShikiTokens(text, name, 250)
-  const rows: Tok[][] = toks ?? text.split('\n').map((l) => [{ content: l }])
+  const rows: Tok[][] = toks ?? textLines.map((l) => [{ content: l }])
   const sync = (e: React.UIEvent<HTMLTextAreaElement>) => {
     const el = e.currentTarget
     if (gutRef.current) gutRef.current.scrollTop = el.scrollTop
@@ -69,14 +182,18 @@ export function CodeEditor({ text, savedText, name, onChange, onSave, onDiscard 
   }
   return (
     <div className="flex h-full min-h-0 flex-col">
-      <EditBar mode="Edit" setMode={() => {}} modes={[]} dirty={dirty} saving={saving} onSave={doSave} onDiscard={onDiscard} />
-      <div className="flex min-h-0 flex-1 overflow-hidden">
+      <EditBar mode="Edit" setMode={() => {}} modes={[]} dirty={dirty} saving={saving} onSave={doSave} onDiscard={onDiscard}
+        extras={<WrapToggle on={wrap} toggle={toggleWrap} />} />
+      <div className="relative flex min-h-0 flex-1 overflow-hidden">
         <div ref={gutRef} className="shrink-0 select-none overflow-hidden border-r border-border bg-card px-[1ch] pt-3 text-right font-mono text-[11px] leading-[20px] text-muted-foreground" aria-hidden>
-          {Array.from({ length: lines }, (_, i) => <div key={i}>{i + 1}</div>)}
+          {textLines.map((l, i) => (
+            <div key={i} style={wrap && cpl ? { height: Math.max(1, Math.ceil(Math.max(l.length, 1) / cpl)) * 20 } : undefined}>{i + 1}</div>
+          ))}
         </div>
-        <div className="relative min-w-0 flex-1 overflow-hidden bg-background">
+        <div ref={hostRef} className="relative min-w-0 flex-1 overflow-hidden bg-background">
           <pre ref={preRef} aria-hidden
-            className="pointer-events-none absolute left-0 top-0 m-0 w-max min-w-full whitespace-pre bg-background p-3 pl-2 font-mono text-[12px] leading-[20px] text-foreground">
+            className={cn('pointer-events-none absolute left-0 top-0 m-0 bg-background p-3 pl-2 font-mono text-[12px] leading-[20px] text-foreground',
+              wrap ? 'w-full whitespace-pre-wrap break-all' : 'w-max min-w-full whitespace-pre')}>
             {rows.map((toks, i) => (
               <span key={i}>
                 {toks.map((tk, j) => (
@@ -90,14 +207,17 @@ export function CodeEditor({ text, savedText, name, onChange, onSave, onDiscard 
             ))}
           </pre>
           <textarea
+            ref={taRef}
             value={text}
-            wrap="off"
+            wrap={wrap ? 'soft' : 'off'}
             spellCheck={false}
             onChange={(e) => onChange(e.target.value)}
             onScroll={sync}
-            className="absolute inset-0 h-full w-full resize-none whitespace-pre bg-transparent p-3 pl-2 font-mono text-[12px] leading-[20px] text-transparent caret-foreground outline-none"
+            className={cn('absolute inset-0 h-full w-full resize-none bg-transparent p-3 pl-2 font-mono text-[12px] leading-[20px] text-transparent caret-foreground outline-none',
+              wrap ? 'whitespace-pre-wrap break-all' : 'whitespace-pre')}
           />
         </div>
+        <FindBar find={find} />
       </div>
     </div>
   )
@@ -109,27 +229,39 @@ function PlainEditor({ text, savedText, name, onChange, onSave, onDiscard, previ
   text: string; savedText: string; name: string; onChange: (t: string) => void; onSave: () => void; onDiscard: () => void; preview?: React.ReactNode
 }) {
   const gutRef = useRef<HTMLDivElement>(null)
+  const hostRef = useRef<HTMLDivElement>(null)
+  const taRef = useRef<HTMLTextAreaElement>(null)
   const [mode, setMode] = useState(preview ? 'Preview' : 'Edit')
   const dirty = text !== savedText
   const { saving, doSave } = useSaver(dirty, onSave)
-  const lines = useMemo(() => text.split('\n').length, [text])
+  const [wrap, toggleWrap] = useWrapPref()
+  const cpl = useWrap(hostRef, wrap && mode === 'Edit')
+  const find = useFind(text, () => taRef.current)
+  const textLines = useMemo(() => text.split('\n'), [text])
   return (
     <div className="flex h-full min-h-0 flex-col">
-      <EditBar mode={mode} setMode={setMode} modes={preview ? ['Preview', 'Edit'] : ['Edit']} dirty={dirty} saving={saving} onSave={doSave} onDiscard={onDiscard} />
+      <EditBar mode={mode} setMode={setMode} modes={preview ? ['Preview', 'Edit'] : ['Edit']} dirty={dirty} saving={saving} onSave={doSave} onDiscard={onDiscard}
+        extras={mode === 'Edit' ? <WrapToggle on={wrap} toggle={toggleWrap} /> : undefined} />
       {mode === 'Preview' && preview ? (
         <div className="min-h-0 flex-1 overflow-auto">{preview}</div>
       ) : (
-        <div className="flex min-h-0 flex-1">
+        <div ref={hostRef} className="relative flex min-h-0 flex-1">
           <div ref={gutRef} className="shrink-0 select-none overflow-hidden border-r border-border bg-card px-[1ch] pt-3 text-right font-mono text-[11px] leading-[20px] text-muted-foreground" aria-hidden>
-            {Array.from({ length: lines }, (_, i) => <div key={i}>{i + 1}</div>)}
+            {textLines.map((l, i) => (
+              <div key={i} style={wrap && cpl ? { height: Math.max(1, Math.ceil(Math.max(l.length, 1) / cpl)) * 20 } : undefined}>{i + 1}</div>
+            ))}
           </div>
           <textarea
+            ref={taRef}
             value={text}
+            wrap={wrap ? 'soft' : 'off'}
             spellCheck={false}
             onChange={(e) => onChange(e.target.value)}
             onScroll={(e) => { if (gutRef.current) gutRef.current.scrollTop = (e.target as HTMLTextAreaElement).scrollTop }}
-            className="min-w-0 flex-1 resize-none whitespace-pre bg-background p-3 pl-2 font-mono text-[12px] leading-[20px] text-foreground outline-none"
+            className={cn('min-w-0 flex-1 resize-none bg-background p-3 pl-2 font-mono text-[12px] leading-[20px] text-foreground outline-none',
+              wrap ? 'whitespace-pre-wrap break-all' : 'whitespace-pre')}
           />
+          <FindBar find={find} />
         </div>
       )}
     </div>
@@ -212,4 +344,17 @@ function CsvView({ text, savedText, onChange, onSave, onDiscard }: {
   )
 }
 
-export { Viewer };
+/** Read-only unified-diff pane for `diff:` pseudo-tabs — the `diff` grammar
+ *  colorizes added/removed/context lines. */
+function DiffPane({ file, onRetry }: { file?: FileResp; onRetry: () => void }) {
+  const { t } = useTranslation()
+  if (!file || (!file.text && !file.error)) return <div className="p-3 text-[13px] text-muted-foreground">{t('common.loading')}</div>
+  if (file.error) return <ErrBox msg={file.error} onRetry={onRetry} />
+  return (
+    <div className="min-h-full overflow-visible p-1">
+      <CodeView text={file.text ?? ''} name="x.diff" />
+    </div>
+  )
+}
+
+export { Viewer, DiffPane };

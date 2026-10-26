@@ -874,7 +874,15 @@
     "clearAnnotText": "Clear annotations",
     "showTree": "Show file tree",
     "hideTree": "Collapse file tree",
-    "binary": "Binary file — no preview"
+    "binary": "Binary file — no preview",
+    "findPh": "Find in file…",
+    "noMatches": "No results",
+    "wrap": "Word Wrap",
+    "quickOpen": "Quick Open",
+    "quickOpenPh": "Search files by name…",
+    "openTabs": "Open tabs",
+    "noMatches2": "No matching files",
+    "gitDiffTitle": "Git diff"
   },
   "vp": {
     "cantLoad": "Cannot load {{name}}",

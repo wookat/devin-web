@@ -151,9 +151,10 @@ function Fallback({ path, src, msg }: { path: string; src: string; msg: string }
 }
 
 /** Toolbar for editable text kinds: Edit/Preview toggle + save state. */
-function EditBar({ mode, setMode, modes, dirty, saving, onSave, onDiscard }: {
+function EditBar({ mode, setMode, modes, dirty, saving, onSave, onDiscard, extras }: {
   mode: string; setMode: (m: string) => void; modes: string[]
   dirty: boolean; saving: boolean; onSave: () => void; onDiscard: () => void
+  extras?: React.ReactNode
 }) {
   const { t } = useTranslation()
   return (
@@ -164,6 +165,7 @@ function EditBar({ mode, setMode, modes, dirty, saving, onSave, onDiscard }: {
             className={cn('h-6 cursor-pointer rounded-[5px] px-2 text-[12px]', mode === m ? 'bg-tint-secondary font-medium text-foreground' : 'text-muted-foreground hover:text-foreground')}>{m}</button>
         ))}
       </div>
+      {extras}
       <div className="ml-auto flex items-center gap-1.5">
         {dirty && <span className="text-[11px] text-amber-600">{t('ws.unsaved')}</span>}
         {dirty && <button onClick={onDiscard} className="h-6 cursor-pointer rounded-[5px] px-2 text-[12px] text-muted-foreground hover:bg-tint-secondary hover:text-foreground">{t('ws.discard')}</button>}
