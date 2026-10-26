@@ -42,7 +42,7 @@ function TreeSection({ name, items, isFolder, icon, showCount, archived, searchI
         ref={setLabelRef}
         {...fdrag.listeners}
         onPointerDown={(e) => { if (e.button === 0) (fdrag.listeners?.onPointerDown as ((ev: React.PointerEvent) => void) | undefined)?.(e) }}
-        className={`group/label sticky top-0 z-20 flex h-8 w-full shrink-0 items-center justify-between gap-px bg-background pl-1 pr-1 text-[12px] font-medium text-muted-foreground ${drop.isOver ? 'rounded-md bg-tint-secondary' : ''}`}
+        className={`group/label sticky top-0 z-10 isolate flex h-8 w-full shrink-0 items-center justify-between gap-px bg-background pl-1 pr-1 text-[12px] font-medium text-muted-foreground ${drop.isOver ? 'rounded-md bg-tint-secondary' : ''}`}
       >
         {searching ? (
           <input
