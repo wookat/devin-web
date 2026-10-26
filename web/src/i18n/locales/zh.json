@@ -856,6 +856,7 @@
     "repos": "仓库",
     "filterFiles": "筛选文件",
     "loadFail": "加载失败",
+    "emptyDir": "空目录",
     "discard": "还原",
     "saving": "保存中…",
     "loadingSheet": "正在加载表格…",

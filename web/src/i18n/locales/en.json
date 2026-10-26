@@ -856,6 +856,7 @@
     "repos": "REPOS",
     "filterFiles": "Filter files",
     "loadFail": "Failed to load",
+    "emptyDir": "Empty directory",
     "discard": "Discard",
     "saving": "Saving…",
     "loadingSheet": "Loading spreadsheet…",

@@ -41,7 +41,39 @@ KINDS.pdf = 'pdf'
 KINDS.docx = 'docx'
 for (const e of 'xlsx xls'.split(' ')) KINDS[e] = 'xlsx'
 KINDS.csv = 'csv'
-const TEXT_EXTS = new Set('txt log js jsx mjs cjs ts tsx py json css scss less sass sh bash zsh ps1 bat cmd yml yaml toml ini cfg conf env sql go rs java c h cc cpp cxx hpp cs rb php swift kt kts lua r pl pm scala clj ex exs erl hs ml fs vb dockerfile makefile mk cmake gradle xml xsl vue svelte diff patch properties gitignore lock thrift proto graphql tf hcl dart zig nim sol asm tex bib'.split(' '))
+const TEXT_EXTS = new Set(`
+txt log text asc nfo
+js jsx mjs cjs gjs ts tsx mts cts gts
+vue svelte astro imba marko edge
+html htm xhtml
+css scss sass less styl postcss pcss qss
+json jsonc json5 jsonl ndjson jsonnet hjson map ipynb webmanifest mcmeta tfstate
+babelrc eslintrc prettierrc hintrc swcrc
+xml xsl xslt xsd rss atom plist storyboard
+yaml yml toml ini cfg conf properties desktop editorconfig gitattributes
+gitmodules gitignore dockerignore npmignore npmrc env reg po pot
+md markdown mdx mdc rst adoc asciidoc org wiki mediawiki textile tex latex sty cls bib
+sh bash zsh ksh csh tcsh fish nu ps1 psm1 psd1 bat cmd awk sed tcl
+service timer socket nginx apacheconf vim vimrc gvimrc
+c h cpp cxx cc hpp hxx cs csx java jsp kt kts scala sc groovy gvy gradle jenkinsfile nf
+py pyw pyi rpy ipy rb rbw rake gemspec podspec erb php phtml phps blade
+go rs swift lua luau r rmd rhistory rprofile pl pm perl t jl dart v vsh vala
+ex exs eex heex erl hrl hs lhs hsc ml mli mll mly fs fsi fsx fsscript
+clj cljs cljc edn lisp lsp el scm rkt fnl cr d nim zig haxe hx
+coffee litcoffee m mm objc mojo gleam lean coq purs hack hh
+ada adb ads pas pp dpr
+glsl vert frag geom comp hlsl fx wgsl shader asm riscv ll vh sv svh vhdl vhd wat wast
+sql plsql pks pkb cql gql graphql graphqls sparql rq ttl
+kql spl sas do ado matlab gnuplot gp wl nb mma
+cue kdl csv tsv tf tfvars bicep pkl nix proto protobuf thrift cmake mk mak just
+rel msg srv action sol vy move cairo
+hbs handlebars mustache pug jade haml jinja j2 jinja2 njk nunjucks ftl tmpl tpl
+twig liquid soy razor cshtml templ
+diff patch rej http rest hurl mermaid mmd gherkin feature codeql ql jison
+narrat tasl talon st vbs vba gd gdscript scad qml qmldir nsi nsh
+typespec tsp typ typst wit wenyan zenscript polar rego puppet
+makefile dockerfile containerfile mod sum vtt srt ics hcl lock
+`.split(/\s+/).filter(Boolean))
 const kindOf = (p: string): Kind => KINDS[ext(p)] ?? (TEXT_EXTS.has(ext(p)) ? 'text' : 'bin')
 /** kinds backed by a text payload and therefore editable */
 const EDITABLE: Record<Kind, boolean> = { image: false, pdf: false, av: false, md: true, html: true, docx: false, xlsx: true, csv: true, text: true, bin: false }

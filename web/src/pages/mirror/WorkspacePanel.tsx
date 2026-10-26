@@ -45,6 +45,50 @@ const mem = new Map<string, Sess>()
  *  skip the setState (and the whole subtree rerender) when nothing changed. */
 const dirSig = (es: WsEntry[]) => es.map((e) => `${e.name} ${e.dir ? 1 : 0} ${e.size} ${e.mtime}`).join(' ')
 
+/** Breadcrumb sibling picker: lists a directory's entries so any path level
+ *  can jump sideways (dirs drill deeper, files open). */
+function CrumbPicker({ pos, parent, seg, state, onPick, onClose }: {
+  pos: MenuPos; parent: string; seg: string
+  state: { entries: WsEntry[] } | 'loading' | 'error' | undefined
+  onPick: (e: WsEntry) => void; onClose: () => void
+}) {
+  const { t } = useTranslation()
+  useEffect(() => {
+    const h = (e: MouseEvent) => { if (!(e.target as HTMLElement).closest?.('[data-crumb-picker]')) onClose() }
+    const k = (e: KeyboardEvent) => { if (e.key === 'Escape') onClose() }
+    window.addEventListener('mousedown', h)
+    window.addEventListener('keydown', k)
+    window.addEventListener('blur', onClose)
+    return () => { window.removeEventListener('mousedown', h); window.removeEventListener('keydown', k); window.removeEventListener('blur', onClose) }
+  }, [onClose])
+  const entries = state && state !== 'loading' && state !== 'error' ? state.entries : null
+  const x = Math.min(pos.x, window.innerWidth - 240)
+  const y = Math.min(pos.y, window.innerHeight - 300)
+  return (
+    <div data-crumb-picker
+      className="fixed z-[80] max-h-[280px] min-w-[200px] max-w-[280px] overflow-y-auto rounded-[10px] border border-border/60 bg-white/95 p-1 shadow-lg backdrop-blur-md dark:bg-card/95"
+      style={{ left: x, top: y }}
+      onMouseDown={(e) => e.stopPropagation()}
+    >
+      <div className="truncate px-2 pb-1 pt-1.5 text-[10px] uppercase tracking-wide text-muted-foreground" title={parent || '/'}>
+        {parent || '/'}
+      </div>
+      {state === 'loading' && <div className="px-2 py-1.5 text-[12px] text-muted-foreground">{t('common.loading')}</div>}
+      {state === 'error' && <div className="px-2 py-1.5 text-[12px] text-red-500">{t('ws.loadFail')}</div>}
+      {entries?.length === 0 && <div className="px-2 py-1.5 text-[12px] text-muted-foreground">{t('ws.emptyDir')}</div>}
+      {entries?.map((en) => (
+        <button key={en.name} onClick={() => onPick(en)}
+          className={cn('flex h-[26px] w-full cursor-pointer select-none items-center gap-1.5 rounded-[6px] px-2 text-left text-[12px] leading-[18px] outline-none hover:bg-tint-secondary',
+            en.name === seg ? 'bg-tint-secondary font-medium text-foreground' : 'text-foreground')}>
+          <TypeIcon path={en.name} dir={en.dir} size={13} className="shrink-0" />
+          <span className="min-w-0 flex-1 truncate">{en.name}</span>
+          {en.dir && <OChevronRight size={10} className="shrink-0 opacity-50" />}
+        </button>
+      ))}
+    </div>
+  )
+}
+
 function WorkspacePanel({ id }: { id: string }) {
   const { t } = useTranslation()
   const saved = mem.get(id)
@@ -63,6 +107,7 @@ function WorkspacePanel({ id }: { id: string }) {
   const [dragTab, setDragTab] = useState<string | null>(null)
   const [dropDir, setDropDir] = useState<string | null>(null)
   const [gitMap, setGitMap] = useState<Record<string, string>>({})
+  const [crumb, setCrumb] = useState<{ parent: string; seg: string; x: number; y: number } | null>(null)
   const stripRef = useRef<HTMLDivElement>(null)
 
   useEffect(() => { mem.set(id, { tabs, active, expanded, filter, drafts, treeCollapsed }) }, [id, tabs, active, expanded, filter, drafts, treeCollapsed])
@@ -403,7 +448,7 @@ function WorkspacePanel({ id }: { id: string }) {
       <div className="flex min-w-0 flex-1 flex-col overflow-hidden">
         <div
           ref={stripRef}
-          className="flex h-[36px] shrink-0 items-stretch gap-0 overflow-x-auto overflow-y-hidden border-b border-border bg-transparent [scrollbar-width:thin]"
+          className="flex h-[36px] shrink-0 items-stretch gap-0 overflow-x-auto overflow-y-hidden border-b border-border bg-transparent [scrollbar-width:none] [&::-webkit-scrollbar]:hidden"
           onWheel={(e) => { if (stripRef.current && Math.abs(e.deltaY) > Math.abs(e.deltaX)) stripRef.current.scrollLeft += e.deltaY }}
           onDragOver={(e) => { if (dragTab) { e.preventDefault(); e.dataTransfer.dropEffect = 'move' } }}
           onDrop={(e) => { e.preventDefault(); if (dragTab) { setTabs((t) => t.filter((x) => x !== dragTab).concat(dragTab)); setDragTab(null) } }}
@@ -458,9 +503,15 @@ function WorkspacePanel({ id }: { id: string }) {
               <span key={i} className="flex items-center gap-1">
                 {i > 0 && <OChevronRight size={9} className="opacity-60" />}
                 <button
-                  className="cursor-pointer rounded px-0.5 hover:bg-tint-secondary hover:text-foreground"
+                  className={cn('cursor-pointer rounded px-0.5 hover:bg-tint-secondary hover:text-foreground',
+                    crumb && crumb.seg === seg && crumb.parent === arr.slice(0, i).join('/') && 'bg-tint-secondary text-foreground')}
                   title={arr.slice(0, i + 1).join('/')}
-                  onClick={() => void copyText(arr.slice(0, i + 1).join('/'))}
+                  onClick={(e) => {
+                    const parent = arr.slice(0, i).join('/')
+                    if (!dirsRef.current[parent]) void loadDir(parent)
+                    const r = (e.currentTarget as HTMLElement).getBoundingClientRect()
+                    setCrumb({ parent, seg, x: r.left, y: r.bottom + 4 })
+                  }}
                 >{seg}</button>
               </span>
             ))}
@@ -548,6 +599,26 @@ function WorkspacePanel({ id }: { id: string }) {
       )}
       {ctxMenu && <CtxMenu pos={ctxMenu.pos} items={nodeMenuItems(ctxMenu.node)} onClose={() => setCtxMenu(null)} />}
       {tabMenu && <CtxMenu pos={tabMenu.pos} items={tabMenuItems(tabMenu.path)} onClose={() => setTabMenu(null)} />}
+      {crumb && (
+        <CrumbPicker
+          pos={{ x: crumb.x, y: crumb.y }}
+          parent={crumb.parent}
+          seg={crumb.seg}
+          state={dirs[crumb.parent]}
+          onClose={() => setCrumb(null)}
+          onPick={(en) => {
+            const child = crumb.parent ? `${crumb.parent}/${en.name}` : en.name
+            if (en.dir) {
+              if (!dirsRef.current[child]) void loadDir(child)
+              const nxt = active?.startsWith(`${child}/`) ? active.slice(child.length + 1).split('/')[0] : ''
+              setCrumb({ ...crumb, parent: child, seg: nxt ?? '' })
+            } else {
+              open(child)
+              setCrumb(null)
+            }
+          }}
+        />
+      )}
     </div>
   )
 }
