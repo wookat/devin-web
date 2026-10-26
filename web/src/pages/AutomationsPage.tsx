@@ -16,7 +16,11 @@ import { dateLoc, relAgo } from '@/lib/datetime'
 interface Automation {
   id: string; name: string; prompt: string; schedule: string; cwd: string
   enabled: boolean; createdAt: number; lastRun?: number; lastSession?: string; nextRun?: number
+  steps?: { name: string; prompt: string }[]
+  runs?: { at: number; sessionId: string | null }[]
+  running?: { sessionId: string; step: number; sentAt: number }
 }
+interface Playbook { id: string; name: string; prompt: string }
 
 const PAGE_MAX = 'max-w-[min(1200px,max(50vw,800px))]'
 const PAGE_PAD_X = 'px-4 sm:px-6'
@@ -101,31 +105,42 @@ export default function AutomationsPage() {
   const [sort, setSort] = useState<{ col: 'name' | 'last'; dir: 1 | -1 }>({ col: 'name', dir: 1 })
   const [menuFor, setMenuFor] = useState('')
   const [delFor, setDelFor] = useState<Automation | null>(null)
-  const [form, setForm] = useState<{ open: boolean; name: string; prompt: string; preset: string; cron: string; cwd: string }>({ open: false, name: '', prompt: '', preset: '0', cron: '', cwd: '' })
+  const [form, setForm] = useState<{ open: boolean; name: string; prompt: string; preset: string; cron: string; cwd: string; steps: { name: string; prompt: string }[] }>({ open: false, name: '', prompt: '', preset: '0', cron: '', cwd: '', steps: [] })
   const [createMenu, setCreateMenu] = useState(false)
+  const [playbooks, setPlaybooks] = useState<Playbook[]>([])
+  const [tplPanel, setTplPanel] = useState(false)
   const [err, setErr] = useState('')
 
   const load = () => {
     adminFetch<{ sessions: MirrorTreeSession[] }>('/api/admin/mirror/sessions').then((r) => setTree(r.sessions ?? [])).catch(() => {})
     adminFetch<{ automations: Automation[] }>('/api/admin/automations').then((r) => setItems(r.automations ?? [])).catch(() => {})
+    adminFetch<{ playbooks: Playbook[] }>('/api/admin/playbooks').then((r) => setPlaybooks(r.playbooks ?? [])).catch(() => {})
   }
   useEffect(load, [])
 
   const schedule = form.preset === String(PRESETS.length - 1) ? form.cron : PRESETS[+form.preset].cron
   const openForm = (a?: Automation) => {
     setCreateMenu(false)
+    setTplPanel(false)
     setForm(a
-      ? { open: true, name: t('au.copyOf', { name: a.name }), prompt: a.prompt, preset: String(PRESETS.length - 1), cron: a.schedule, cwd: a.cwd }
-      : { open: true, name: '', prompt: '', preset: '0', cron: '', cwd: '' })
+      ? { open: true, name: t('au.copyOf', { name: a.name }), prompt: a.prompt, preset: String(PRESETS.length - 1), cron: a.schedule, cwd: a.cwd, steps: (a.steps ?? []).slice(1).map((s) => ({ ...s })) }
+      : { open: true, name: '', prompt: '', preset: '0', cron: '', cwd: '', steps: [] })
   }
   const create = async () => {
     setErr('')
+    const steps = [{ name: '', prompt: form.prompt.trim() }, ...form.steps.map((s) => ({ name: s.name.trim(), prompt: s.prompt.trim() }))]
     try {
-      await adminFetch('/api/admin/automations', { method: 'POST', body: JSON.stringify({ name: form.name.trim(), prompt: form.prompt.trim(), schedule, cwd: form.cwd.trim() || undefined }) })
-      setForm((f) => ({ ...f, open: false, name: '', prompt: '' }))
+      await adminFetch('/api/admin/automations', { method: 'POST', body: JSON.stringify({ name: form.name.trim(), prompt: form.prompt.trim(), ...(steps.length > 1 ? { steps } : {}), schedule, cwd: form.cwd.trim() || undefined }) })
+      setForm((f) => ({ ...f, open: false, name: '', prompt: '', steps: [] }))
       load()
     } catch (e) { setErr((e as Error).message) }
   }
+  const saveTpl = async () => {
+    if (!form.name.trim() || !form.prompt.trim()) return
+    try { await adminFetch('/api/admin/playbooks', { method: 'POST', body: JSON.stringify({ name: form.name.trim(), prompt: form.prompt.trim() }) }); load() } catch { /* toast-less */ }
+  }
+  const useTpl = (pb: Playbook) => { setTplPanel(false); setForm((f) => ({ ...f, open: true, name: f.name || pb.name, prompt: pb.prompt })) }
+  const delTpl = async (id: string) => { try { await adminFetch(`/api/admin/playbooks/${id}`, { method: 'DELETE' }); load() } catch { /* toast-less */ } }
   const act = async (id: string, path = '', body?: unknown, del = false) => {
     setBusy(id + path)
     try { await adminFetch(`/api/admin/automations/${id}${path}`, { method: del ? 'DELETE' : 'POST', body: JSON.stringify(body ?? {}) }); load() }
@@ -156,6 +171,16 @@ export default function AutomationsPage() {
         <button disabled={busy === a.id} onClick={() => { setMenuFor(''); void act(a.id, '', { enabled: !a.enabled }) }} className="flex h-8 w-full cursor-pointer items-center rounded-md px-2.5 text-[13px] hover:bg-accent disabled:opacity-50">{a.enabled ? t('au.disable') : t('au.enable')}</button>
         <button disabled={busy === a.id + '/run'} onClick={() => { setMenuFor(''); void act(a.id, '/run') }} className="flex h-8 w-full cursor-pointer items-center gap-2 rounded-md px-2.5 text-[13px] hover:bg-accent disabled:opacity-50"><Play size={12} />{t('au.runNow')}</button>
         {a.lastSession && <button onClick={() => navigate(`/admin/${a.lastSession}`)} className="flex h-8 w-full cursor-pointer items-center rounded-md px-2.5 text-[13px] hover:bg-accent">{t('au.viewSessions')}</button>}
+        {(a.runs?.length ?? 0) > 0 && (
+          <>
+            <div className="px-2.5 pb-0.5 pt-1.5 text-[11px] font-medium text-muted-foreground">{t('au.runs')}</div>
+            {a.runs!.slice(-5).reverse().map((r, i) => (
+              <button key={i} disabled={!r.sessionId} onClick={() => { setMenuFor(''); if (r.sessionId) navigate(`/admin/${r.sessionId}`) }} className="flex h-7 w-full cursor-pointer items-center rounded-md px-2.5 text-[12px] tabular-nums text-muted-foreground hover:bg-accent disabled:cursor-default disabled:opacity-50">
+                {rel(r.at)}{!r.sessionId && ` · ${t('au.runFailed')}`}
+              </button>
+            ))}
+          </>
+        )}
         <button onClick={() => { setMenuFor(''); openForm(a) }} className="flex h-8 w-full cursor-pointer items-center rounded-md px-2.5 text-[13px] hover:bg-accent">{t('au.duplicate')}</button>
         <div className="my-1 h-px bg-border" />
         <button onClick={() => { setMenuFor(''); setDelFor(a) }} className="flex h-8 w-full cursor-pointer items-center rounded-md px-2.5 text-[13px] text-red-500 hover:bg-red-500/10">{t('au.delete')}</button>
@@ -212,7 +237,7 @@ export default function AutomationsPage() {
                       <div className="fixed inset-0 z-30" onClick={() => setCreateMenu(false)} />
                       <div className="absolute right-0 top-full z-40 mt-1 min-w-[190px] rounded-lg border border-border bg-popover p-1 shadow-lg">
                         <button onClick={() => openForm()} className="flex h-8 w-full cursor-pointer items-center gap-2 rounded-md px-2.5 text-[13px] hover:bg-accent"><Plus size={13} />{t('au.createManual')}</button>
-                        <button disabled title={t('au.comingSoon')} className="flex h-8 w-full cursor-not-allowed items-center gap-2 rounded-md px-2.5 text-[13px] text-muted-foreground opacity-50">{t('au.fromTpl')}</button>
+                        <button onClick={() => { setCreateMenu(false); setTplPanel((o) => !o) }} className="flex h-8 w-full cursor-pointer items-center gap-2 rounded-md px-2.5 text-[13px] hover:bg-accent"><Clock size={13} />{t('au.fromTpl')}</button>
                         <button disabled title={t('au.comingSoon')} className="flex h-8 w-full cursor-not-allowed items-center gap-2 rounded-md px-2.5 text-[13px] text-muted-foreground opacity-50">{t('au.genDevin')}</button>
                       </div>
                     </>
@@ -221,11 +246,47 @@ export default function AutomationsPage() {
               </div>
             </div>
 
+            {/* Playbook picker — "create from template" target */}
+            {tplPanel && (
+              <div className="mx-1 flex flex-col gap-1 rounded-lg border border-border-secondary bg-card p-2">
+                <div className="flex items-center justify-between px-1.5 py-1">
+                  <span className="text-[12px] font-medium text-muted-foreground">{t('au.tplLib')}</span>
+                  <button onClick={() => setTplPanel(false)} className="cursor-pointer text-muted-foreground hover:text-foreground"><X size={13} /></button>
+                </div>
+                {playbooks.length === 0 && <div className="px-1.5 py-3 text-center text-[12px] text-muted-foreground">{t('au.tplEmpty')}</div>}
+                {playbooks.map((pb) => (
+                  <div key={pb.id} className="flex items-center gap-2 rounded-md px-1.5 py-1.5 hover:bg-tint-secondary">
+                    <div className="min-w-0 flex-1">
+                      <div className="truncate text-[13px]">{pb.name}</div>
+                      <div className="truncate text-[12px] text-muted-foreground">{pb.prompt}</div>
+                    </div>
+                    <button onClick={() => useTpl(pb)} className="shrink-0 cursor-pointer rounded-md px-2 py-1 text-[12px] hover:bg-accent">{t('au.useTpl')}</button>
+                    <button onClick={() => delTpl(pb.id)} aria-label={t('au.delete')} className="flex size-6 shrink-0 cursor-pointer items-center justify-center rounded-md text-muted-foreground hover:bg-accent hover:text-red-500"><X size={12} /></button>
+                  </div>
+                ))}
+              </div>
+            )}
+
             {/* Create form (official links to /automations/create; ours is inline) */}
             {form.open && (
               <div className="mx-1 flex flex-col gap-3 rounded-lg border border-border-secondary bg-card p-4">
                 <input value={form.name} onChange={(e) => setForm((f) => ({ ...f, name: e.target.value }))} placeholder={t('au.namePh')} className="rounded-md border border-border bg-background px-3 py-2 text-[13px] outline-none placeholder:text-muted-foreground focus:border-ring" />
-                <textarea value={form.prompt} onChange={(e) => setForm((f) => ({ ...f, prompt: e.target.value }))} placeholder={t('au.promptPh')} rows={3} className="resize-y rounded-md border border-border bg-background px-3 py-2 text-[13px] outline-none placeholder:text-muted-foreground focus:border-ring" />
+                <div className="flex flex-col gap-2">
+                  <div className="flex items-center gap-2">
+                    <span className="w-14 shrink-0 text-[12px] text-muted-foreground">{t('au.stepN', { n: 1 })}</span>
+                    <textarea value={form.prompt} onChange={(e) => setForm((f) => ({ ...f, prompt: e.target.value }))} placeholder={t('au.promptPh')} rows={3} className="min-w-0 flex-1 resize-y rounded-md border border-border bg-background px-3 py-2 text-[13px] outline-none placeholder:text-muted-foreground focus:border-ring" />
+                  </div>
+                  {form.steps.map((s, i) => (
+                    <div key={i} className="flex items-start gap-2">
+                      <input value={s.name} onChange={(e) => setForm((f) => ({ ...f, steps: f.steps.map((x, j) => j === i ? { ...x, name: e.target.value } : x) }))} placeholder={t('au.stepN', { n: i + 2 })} className="w-14 shrink-0 rounded-md border border-border bg-background px-1.5 py-2 text-[12px] outline-none placeholder:text-muted-foreground focus:border-ring" />
+                      <textarea value={s.prompt} onChange={(e) => setForm((f) => ({ ...f, steps: f.steps.map((x, j) => j === i ? { ...x, prompt: e.target.value } : x) }))} placeholder={t('au.stepPh')} rows={2} className="min-w-0 flex-1 resize-y rounded-md border border-border bg-background px-3 py-2 text-[13px] outline-none placeholder:text-muted-foreground focus:border-ring" />
+                      <button onClick={() => setForm((f) => ({ ...f, steps: f.steps.filter((_, j) => j !== i) }))} aria-label={t('au.delStep')} className="mt-1.5 flex size-6 shrink-0 cursor-pointer items-center justify-center rounded-md text-muted-foreground hover:bg-accent hover:text-foreground"><X size={13} /></button>
+                    </div>
+                  ))}
+                  {form.steps.length < 19 && (
+                    <button onClick={() => setForm((f) => ({ ...f, steps: [...f.steps, { name: '', prompt: '' }] }))} className="flex h-7 w-fit cursor-pointer items-center gap-1 rounded-md px-2 text-[12px] text-muted-foreground hover:bg-tint-secondary hover:text-foreground"><Plus size={12} />{t('au.addStep')}</button>
+                  )}
+                </div>
                 <div className="flex flex-wrap items-center gap-2">
                   <div className="relative">
                     <select value={form.preset} onChange={(e) => setForm((f) => ({ ...f, preset: e.target.value }))} className="appearance-none rounded-md border border-border bg-background py-2 pl-3 pr-8 text-[13px] outline-none focus:border-ring">
@@ -239,8 +300,9 @@ export default function AutomationsPage() {
                   <input value={form.cwd} onChange={(e) => setForm((f) => ({ ...f, cwd: e.target.value }))} placeholder={t('au.cwdPh')} className="min-w-0 flex-1 rounded-md border border-border bg-background px-3 py-2 text-[13px] outline-none placeholder:text-muted-foreground focus:border-ring" />
                 </div>
                 <div className="flex items-center gap-2">
-                  <button onClick={create} disabled={!form.name.trim() || !form.prompt.trim() || !schedule.trim()} className="rounded-md bg-primary px-3 py-1.5 text-[13px] font-medium text-primary-foreground hover:opacity-90 disabled:opacity-50">{t('au.create')}</button>
+                  <button onClick={create} disabled={!form.name.trim() || !form.prompt.trim() || !schedule.trim() || form.steps.some((s) => !s.prompt.trim())} className="rounded-md bg-primary px-3 py-1.5 text-[13px] font-medium text-primary-foreground hover:opacity-90 disabled:opacity-50">{t('au.create')}</button>
                   <button onClick={() => setForm((f) => ({ ...f, open: false }))} className="rounded-md px-3 py-1.5 text-[13px] text-muted-foreground hover:bg-tint-secondary">{t('au.cancel')}</button>
+                  <button onClick={saveTpl} disabled={!form.name.trim() || !form.prompt.trim()} className="rounded-md px-3 py-1.5 text-[13px] text-muted-foreground hover:bg-tint-secondary disabled:opacity-50">{t('au.saveTpl')}</button>
                   {err && <span className="text-[12px] text-red-500">{err}</span>}
                 </div>
               </div>
@@ -261,6 +323,8 @@ export default function AutomationsPage() {
                         <div className="flex min-w-0 items-center gap-1.5 text-[13px] font-medium leading-[18px] first-letter:uppercase">
                           <span className="min-w-0 truncate">{a.name}</span>
                           {!a.enabled && <span className="shrink-0 rounded border border-border px-1 text-[11px] text-muted-foreground">{t('au.disabled')}</span>}
+                          {(a.steps?.length ?? 0) > 1 && <span className="shrink-0 rounded border border-border px-1 text-[11px] text-muted-foreground">{t('au.stepsN', { n: a.steps!.length })}</span>}
+                          {a.running && <span className="flex shrink-0 items-center gap-1 rounded border border-blue-500/40 px-1 text-[11px] text-blue-500"><Loader2 size={10} className="animate-spin" />{t('au.runningN', { i: a.running.step + 1, n: a.steps?.length || 1 })}</span>}
                         </div>
                         <div className="truncate text-[13px] leading-[18px] text-muted-foreground">
                           {humanCron(a.schedule, t)}<span className="text-muted-foreground/60"> · {a.cwd}</span>

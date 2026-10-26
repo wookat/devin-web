@@ -90,6 +90,9 @@ interface DwRegistry {
   /** Scheduled sessions — 5-field cron entries fired by the automations
    *  scheduler (server/src/automations.ts). */
   automations?: Record<string, DwAutomation>;
+  /** Reusable task templates for automations (server/src/automations.ts,
+   *  /api/admin/playbooks). */
+  playbooks?: Record<string, DwPlaybook>;
   /** Wiki home grid — public GitHub repos browsed via the DeepWiki MCP
    *  (server/src/wiki.ts). Key: "owner/repo" lowercase. */
   wikiRepos?: Record<string, DwWikiRepo>;
@@ -147,10 +150,20 @@ export interface DwWikiRepo {
   topics?: { id: string; title: string; depth: number }[];
 }
 
+export interface DwAutomationStep {
+  name: string;
+  prompt: string;
+}
+
 export interface DwAutomation {
   id: string;
   name: string;
   prompt: string;
+  /** Multi-step workflow — when non-empty each step's prompt is dispatched
+   *  serially into ONE fired session (context carries over); the next step
+   *  goes out only once the session is fully idle (no inflight / openTurns /
+   *  queued messages). `prompt` mirrors steps[0] for list display/search. */
+  steps?: DwAutomationStep[];
   /** 5-field cron expression "min hour dom mon dow". */
   schedule: string;
   cwd: string;
@@ -159,6 +172,21 @@ export interface DwAutomation {
   lastRun?: number;
   lastSession?: string;
   nextRun?: number;
+  /** Journaled run history — newest last, capped at 10. */
+  runs?: { at: number; sessionId: string | null }[];
+  /** In-flight workflow progress, journaled so a backend restart RESUMES the
+   *  run instead of orphaning mid-chain steps: the scheduler tick keeps
+   *  polling the session and dispatches step `step` once it goes idle. */
+  running?: { sessionId: string; step: number; sentAt: number };
+}
+
+/** Reusable task template ("playbook") shared by automations — official
+ *  Devin parity for the "create from template" flow. */
+export interface DwPlaybook {
+  id: string;
+  name: string;
+  prompt: string;
+  createdAt: number;
 }
 
 let reg: DwRegistry | null = null;
@@ -177,6 +205,7 @@ function loadReg(ctx: ApiContext): DwRegistry {
   reg!.sessionOrder ??= {};
   reg!.dashboards ??= {};
   reg!.prefs ??= {};
+  reg!.playbooks ??= {};
   return reg!;
 }
 

@@ -1834,7 +1834,19 @@
     "introNotify": "Send notification",
     "genDevinDesc": "Describe what you need and let Devin draft it",
     "createManualDesc": "Configure a cron schedule and prompt directly",
-    "fromTplDesc": "Pick from the template gallery (unavailable locally)"
+    "fromTplDesc": "Pick from the template gallery (unavailable locally)",
+    "stepN": "Step {{n}}",
+    "stepPh": "What should happen in this step?",
+    "addStep": "Add step",
+    "delStep": "Remove step",
+    "saveTpl": "Save as template",
+    "tplLib": "Templates",
+    "tplEmpty": "No templates yet — save one from the create form.",
+    "useTpl": "Use",
+    "stepsN": "{{n}} steps",
+    "runningN": "Step {{i}}/{{n}}",
+    "runs": "Recent runs",
+    "runFailed": "failed"
   },
   "wiki": {
     "heading": "Wikis",

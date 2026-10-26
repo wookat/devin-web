@@ -6,7 +6,7 @@
 import type { IncomingMessage, ServerResponse } from "node:http";
 import path from "node:path";
 import type { ApiContext } from "../../routes.js";
-import { loadReg, saveReg, meta, type DwAutomation } from "../../dwstore.js";
+import { loadReg, saveReg, meta, type DwAutomation, type DwPlaybook, type DwAutomationStep } from "../../dwstore.js";
 import { listLocalSessions } from "../../sessionview.js";
 import { personaState, personaMode, askPersona, decisionsTail } from "../../persona.js";
 import { cronNext, runAutomation } from "../../automations.js";
@@ -41,6 +41,19 @@ async function sessionReorder(ctx: ApiContext, key: string, id: string, after: u
   (r.sessionOrder ??= {})[key] = order;
 }
 
+/** Validate a steps array → clean DwAutomationStep[] | null (bad shape). */
+function parseSteps(raw: unknown): DwAutomationStep[] | null {
+  if (raw == null) return [];
+  if (!Array.isArray(raw) || raw.length > 20) return null;
+  const out: DwAutomationStep[] = [];
+  for (const s of raw) {
+    const prompt = String((s as { prompt?: unknown })?.prompt ?? "").trim();
+    if (!prompt) return null;
+    out.push({ name: String((s as { name?: unknown })?.name ?? "").slice(0, 80), prompt: prompt.slice(0, 20_000) });
+  }
+  return out;
+}
+
 export async function handleRegistry(ctx: ApiContext, req: IncomingMessage, res: ServerResponse, url: URL, m: string, p: string, parts: string[]): Promise<boolean> {
   // /api/admin/automations — scheduled-session CRUD + manual fire.
   // GET list; POST create; POST /:id patch {name?,prompt?,schedule?,cwd?,enabled?};
@@ -62,14 +75,16 @@ export async function handleRegistry(ctx: ApiContext, req: IncomingMessage, res:
     if (m === "POST" && !aid) {
       const body = await readJson(req);
       const schedule = String(body.schedule ?? "").trim();
+      const steps = parseSteps(body.steps);
       const next = cronNext(schedule);
-      if (!String(body.name ?? "").trim() || !String(body.prompt ?? "").trim() || !next) {
+      if (!String(body.name ?? "").trim() || !String(body.prompt ?? "").trim() || !next || steps === null) {
         json(res, 400, { error: "name, prompt, and a valid 5-field cron schedule are required" });
         return true;
       }
       const a: DwAutomation = {
         id: `auto-${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 7)}`,
         name: String(body.name).slice(0, 120), prompt: String(body.prompt).slice(0, 20_000),
+        ...(steps?.length ? { steps } : {}),
         schedule, cwd: String(body.cwd ?? ctx.primaryCwd),
         enabled: body.enabled !== false, createdAt: Date.now(), nextRun: next,
       };
@@ -87,6 +102,12 @@ export async function handleRegistry(ctx: ApiContext, req: IncomingMessage, res:
         if (!n) { json(res, 400, { error: "invalid cron schedule" }); return true; }
         one.schedule = String(body.schedule).trim(); one.nextRun = n;
       }
+      if (body.steps !== undefined) {
+        const steps = parseSteps(body.steps);
+        if (steps === null) { json(res, 400, { error: "invalid steps — each needs a non-empty prompt" }); return true; }
+        if (steps.length) { one.steps = steps; one.prompt = steps[0]!.prompt; }
+        else delete one.steps;
+      }
       if (body.enabled != null) { one.enabled = !!body.enabled; one.nextRun = one.enabled ? (cronNext(one.schedule) ?? undefined) : undefined; }
       saveReg();
       json(res, 200, { ok: true, automation: one });
@@ -94,6 +115,49 @@ export async function handleRegistry(ctx: ApiContext, req: IncomingMessage, res:
     }
     if (one && m === "DELETE") {
       delete reg.automations[aid]; saveReg();
+      json(res, 200, { ok: true });
+      return true;
+    }
+    json(res, 404, { error: "not found" });
+    return true;
+  }
+
+  // /api/admin/playbooks — reusable task templates for automations.
+  // GET list; POST create {name,prompt}; POST /:id patch; DELETE /:id.
+  if (parts[2] === "playbooks") {
+    const reg = loadReg(ctx);
+    reg.playbooks ??= {};
+    const pid = parts[3] ? decodeURIComponent(parts[3]) : "";
+    const one = pid ? reg.playbooks[pid] : null;
+    if (m === "GET" && !pid) {
+      json(res, 200, { playbooks: Object.values(reg.playbooks).sort((a, b) => a.createdAt - b.createdAt) });
+      return true;
+    }
+    if (m === "POST" && !pid) {
+      const body = await readJson(req);
+      if (!String(body.name ?? "").trim() || !String(body.prompt ?? "").trim()) {
+        json(res, 400, { error: "name and prompt are required" });
+        return true;
+      }
+      const pb: DwPlaybook = {
+        id: `pb-${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 7)}`,
+        name: String(body.name).slice(0, 120), prompt: String(body.prompt).slice(0, 20_000),
+        createdAt: Date.now(),
+      };
+      reg.playbooks[pb.id] = pb; saveReg();
+      json(res, 200, { ok: true, playbook: pb });
+      return true;
+    }
+    if (one && m === "POST") {
+      const body = await readJson(req);
+      if (body.name != null) one.name = String(body.name).slice(0, 120) || one.name;
+      if (body.prompt != null) one.prompt = String(body.prompt).slice(0, 20_000) || one.prompt;
+      saveReg();
+      json(res, 200, { ok: true, playbook: one });
+      return true;
+    }
+    if (one && m === "DELETE") {
+      delete reg.playbooks[pid]; saveReg();
       json(res, 200, { ok: true });
       return true;
     }

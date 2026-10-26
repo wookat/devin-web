@@ -1834,7 +1834,19 @@
     "introNotify": "发送通知",
     "genDevinDesc": "描述需求，让 Devin 帮你起草自动化",
     "createManualDesc": "直接配置 cron 计划与任务提示词",
-    "fromTplDesc": "从官方模板库选择（本地版暂不支持）"
+    "fromTplDesc": "从官方模板库选择（本地版暂不支持）",
+    "stepN": "步骤 {{n}}",
+    "stepPh": "这一步要做什么？",
+    "addStep": "添加步骤",
+    "delStep": "删除步骤",
+    "saveTpl": "存为模板",
+    "tplLib": "模板库",
+    "tplEmpty": "暂无模板——可在创建表单中「存为模板」。",
+    "useTpl": "使用",
+    "stepsN": "{{n}} 步",
+    "runningN": "第 {{i}}/{{n}} 步",
+    "runs": "运行记录",
+    "runFailed": "失败"
   },
   "wiki": {
     "heading": "Wikis",

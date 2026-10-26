@@ -3,13 +3,20 @@
 // each fire creates a REAL session on the automation's cwd (mirrors the
 // /api/admin/sessions/new recipe) and dispatchPrompts its task. Fired sessions
 // show up in the sidebar titled "⚙ <name>" with folder ".automations".
+// An automation may carry `steps[]` — a serial workflow run inside one
+// session (context carries over). Progress is JOURNALED on the automation
+// (`running {sessionId, step}`) so a backend restart resumes the chain: each
+// tick, a running entry whose session has gone fully idle (no inflight turn,
+// no open-turns entry, nothing queued) advances to the next step.
 import type { ApiContext } from "./routes.js";
 import { loadReg, saveReg, meta, type DwAutomation } from "./dwstore.js";
 import { agentById } from "./agents.js";
 import { dispatchPrompt } from "./sessionprompt.js";
 import { captureLoadResponse } from "./sessioncfg.js";
 import { markLoadedOn } from "./sessionplace.js";
-import { isDraining } from "./sessionlive.js";
+import { inflight, isDraining } from "./sessionlive.js";
+import { openTurns } from "./sessionturns.js";
+import { queueList } from "./sessionqueue.js";
 import { remapLegacyCwd } from "./store.js";
 
 // ---------------------------------------------------------------------------
@@ -64,6 +71,37 @@ export function cronNext(expr: string, from = Date.now()): number | null {
 
 const firing = new Set<string>();
 
+/** Effective step list — single-prompt automations count as one step. */
+function stepsOf(a: DwAutomation): { name: string; prompt: string }[] {
+  return a.steps?.length ? a.steps : [{ name: "", prompt: a.prompt }];
+}
+
+/** Fully idle? inflight (in-memory) + openTurns (journaled / adopted turns)
+ * + a parked queue all mean the turn is still owned by someone. */
+function sessionBusy(id: string): boolean {
+  return inflight.has(id) || openTurns.has(id) || queueList(id).length > 0;
+}
+
+function sendStep(ctx: ApiContext, a: DwAutomation, sessionId: string, step: number) {
+  const st = stepsOf(a)[step];
+  if (!st) return;
+  a.running = { sessionId, step, sentAt: Date.now() };
+  saveReg();
+  // Promise-bearing dispatch — a bare call would let a rejection escape to
+  // unhandledRejection (auto-resume does the same dance).
+  void Promise.resolve(dispatchPrompt(ctx, sessionId, st.prompt, [])).catch((e) =>
+    console.error(`[automations] ${a.name} step ${step + 1}: dispatch failed`, e));
+}
+
+/** Close out the running entry: history row (cap 10) + clear the marker. */
+function finishRun(a: DwAutomation) {
+  if (!a.running) return;
+  (a.runs ??= []).push({ at: a.lastRun ?? Date.now(), sessionId: a.running.sessionId });
+  if (a.runs.length > 10) a.runs = a.runs.slice(-10);
+  delete a.running;
+  saveReg();
+}
+
 async function fire(ctx: ApiContext, a: DwAutomation): Promise<string | null> {
   const cwd = a.cwd || ctx.primaryCwd;
   const agent = agentById(undefined);
@@ -82,13 +120,14 @@ async function fire(ctx: ApiContext, a: DwAutomation): Promise<string | null> {
   mm.title = `⚙ ${a.name}`;
   mm.folder = ".automations";
   saveReg();
-  dispatchPrompt(ctx, s.sessionId, a.prompt, []);
+  sendStep(ctx, a, s.sessionId, 0);
   return s.sessionId;
 }
 
 export async function runAutomation(ctx: ApiContext, id: string): Promise<string | null> {
   const a = loadReg(ctx).automations?.[id];
   if (!a) return null;
+  delete a.running; // manual run supersedes any wedged chain marker
   const sid = await fire(ctx, a);
   a.lastRun = Date.now();
   a.lastSession = sid ?? undefined;
@@ -98,7 +137,7 @@ export async function runAutomation(ctx: ApiContext, id: string): Promise<string
 }
 
 // ---------------------------------------------------------------------------
-// scheduler — 30s tick; lastRun guard prevents same-minute double fire
+// scheduler — 30s tick; journaled `running` drives multi-step progression
 // ---------------------------------------------------------------------------
 
 let timer: ReturnType<typeof setInterval> | null = null;
@@ -115,6 +154,18 @@ async function tick(ctx: ApiContext) {
   const autos = reg.automations ?? {};
   const now = Date.now();
   for (const a of Object.values(autos)) {
+    // ── In-flight workflow chain (survives restarts — `running` is journaled)
+    const r = a.running;
+    if (r) {
+      if (!meta(ctx, r.sessionId)) { finishRun(a); continue; } // session deleted → abort chain
+      if (sessionBusy(r.sessionId)) continue;                   // turn still owned — keep waiting
+      if (now - r.sentAt < 10_000) continue;                    // grace: let the turn actually register
+      const steps = stepsOf(a);
+      if (r.step + 1 < steps.length) sendStep(ctx, a, r.sessionId, r.step + 1);
+      else finishRun(a);
+      continue;
+    }
+    // ── Cron firing
     if (!a.enabled || firing.has(a.id)) continue;
     const next = a.nextRun ?? (a.nextRun = cronNext(a.schedule) ?? undefined);
     if (!next || next > now) continue;
@@ -128,6 +179,10 @@ async function tick(ctx: ApiContext) {
       saveReg();
     } catch (e) {
       console.error(`[automations] ${a.name}: ${e instanceof Error ? e.message : e}`);
+      (a.runs ??= []).push({ at: now, sessionId: null });
+      if (a.runs.length > 10) a.runs = a.runs.slice(-10);
+      delete a.running; // session spawn failed — clear any marker fire() planted
+      saveReg();
     } finally {
       firing.delete(a.id);
     }
