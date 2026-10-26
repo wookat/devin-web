@@ -26,6 +26,7 @@ import { touchSessionActivity, markGracefulExit } from "./sessionlive.js";
 import { brokerEnabled } from "./acpbroker.js";
 import { meta, loadReg, saveReg } from "./dwstore.js";
 import { sshInteractive } from "./ssh.js";
+import { ShellDecoder } from "./shelltext.js";
 import { edition } from "./edition.js";
 import { adminKeyRequired } from "./authn.js";
 import { adminKey, allowedHostsRaw } from "./env.js";
@@ -242,8 +243,15 @@ termWss.on("connection", (ws, req) => {
   // to the WS (close ⇒ kill ⇒ tunnel down).
   const run = q.get("run");
   const arg = (q.get("arg") ?? "").trim();
-  let command = process.platform === "win32" ? "cmd.exe" : (process.env.SHELL ?? "sh");
-  let args: string[] = process.platform === "win32" ? [] : ["-i"];
+  // win32 interactive default is powershell, not cmd: cmd's pipe I/O is
+  // pinned to the OEM codepage (CP936 → mojibake, `chcp` doesn't help
+  // pipes). powershell accepts an ASCII bootstrap that flips stdin AND
+  // stdout to UTF-8 — real bidirectional CJK. run=cmd is the escape hatch
+  // (GBK-decoded output; non-ASCII input is still OEM-limited).
+  let command = process.platform === "win32" ? "powershell.exe" : (process.env.SHELL ?? "sh");
+  let args: string[] = process.platform === "win32" ? ["-NoLogo", "-NoProfile", "-Command", "-"] : ["-i"];
+  let shellKind: "powershell" | "cmd" | "posix" = process.platform === "win32" ? "powershell" : "posix";
+  if (run === "cmd" && process.platform === "win32") { command = "cmd.exe"; args = []; shellKind = "cmd"; }
   // SSH-hosted session → the interactive shell IS an ssh login on the target.
   const baseId = sid.startsWith("sub:") ? sid.slice(4).split(":")[0] : sid;
   const sessSsh = (baseId && (sessionSsh.get(baseId) ?? meta(ctx, baseId).ssh)) || null;
@@ -270,8 +278,11 @@ termWss.on("connection", (ws, req) => {
   let killed = false;
   const wire = (p: child_process.ChildProcess) => {
     proc = p;
-    p.stdout?.on("data", (d: Buffer) => send({ d: d.toString("utf8") }));
-    p.stderr?.on("data", (d: Buffer) => send({ d: d.toString("utf8") }));
+    // cmd on a pipe emits OEM (CP936) bytes — decode GBK-or-UTF8 per chunk.
+    // powershell was bootstrapped to UTF-8, ssh/posix are UTF-8 already.
+    const dec = new ShellDecoder(shellKind === "cmd" && !sessSsh);
+    p.stdout?.on("data", (d: Buffer) => send({ d: dec.push(d) }));
+    p.stderr?.on("data", (d: Buffer) => send({ d: dec.push(d) }));
     p.stdin?.on("error", () => {});
     p.on("exit", (code) => { send({ exit: code }); try { ws.close(); } catch {} });
     for (const d of early.splice(0)) { try { p.stdin?.write(d); } catch {} }
@@ -284,7 +295,12 @@ termWss.on("connection", (ws, req) => {
     } catch {}
   });
   ws.on("close", () => { killed = true; try { proc?.kill(); } catch {} });
-  send({ d: `\x1b[90m[${cwd}]\x1b[0m\r\n` });
+  // Transport profile first — pty (ssh) echoes+edits remotely so the client
+  // passes keystrokes through raw; pipe shells echo nothing until a line is
+  // read, so the client runs a local line editor (visible typing, arrows,
+  // history, paste). Client+server ship from the same build — no compat gap.
+  send({ shell: sessSsh || run === "ssh" ? "pty" : "pipe" });
+  send({ d: `\x1b[90m[${cwd}]${sessSsh || run === "ssh" ? "" : ` ${shellKind}`}\x1b[0m\r\n` });
   if (sessSsh && !(run === "ssh" && sshArgOk)) {
     // sshInteractive: `ssh -tt` for agent-auth hosts, ssh2 pty for
     // password/key records — same ChildProcess shape either way.
@@ -296,7 +312,18 @@ termWss.on("connection", (ws, req) => {
       try { ws.close(); } catch {}
     });
   } else {
-    try { wire(child_process.spawn(command, args, { cwd, env: process.env })); }
+    try {
+      const p = child_process.spawn(command, args, { cwd, env: process.env });
+      if (shellKind === "powershell") {
+        // pure-ASCII bootstrap: flip piped stdin/stdout + native-child
+        // encoding to UTF-8 → CJK input & output both survive (the pipe
+        // otherwise stays at the OEM codepage no matter what chcp says).
+        try {
+          p.stdin?.write("[Console]::InputEncoding=[Text.UTF8Encoding]::new($false); [Console]::OutputEncoding=[Text.UTF8Encoding]::new($false); $OutputEncoding=[Text.UTF8Encoding]::new($false)\n");
+        } catch {}
+      }
+      wire(p);
+    }
     catch (e) { send({ d: `\r\n[spawn] ${e instanceof Error ? e.message : e}\r\n` }); try { ws.close(); } catch {} }
   }
 });

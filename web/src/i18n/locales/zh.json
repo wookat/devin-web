@@ -1444,7 +1444,8 @@
       "service": "服务",
       "diag": "诊断",
       "about": "关于",
-      "agents": "Agent 接入"
+      "agents": "Agent 接入",
+      "persona": "代理人"
     },
     "tabDesc": {
       "preferences": "界面、会话与侧栏偏好",
@@ -1455,7 +1456,8 @@
       "service": "服务状态、重启/构建、运行日志",
       "diag": "链路体检、模块与发送检查",
       "about": "版本与构建信息",
-      "agents": "ACP agent 注册表：安装检查、启用开关与自定义接入"
+      "agents": "ACP agent 注册表：安装检查、启用开关与自定义接入",
+      "persona": "代替你行动的代理角色——分身代答与侧边聊天助手"
     },
     "tabKw": {
       "preferences": "主题 浅色 深色 语言 快捷键 发送 队列 侧栏 分组 紧凑 归档 theme light dark language shortcut send queue sidebar compact archive english theme",
@@ -1466,7 +1468,8 @@
       "agents": "agent 接入 注册表 acp 启用 开关 registry enable",
       "service": "服务 重启 构建 部署 密钥 日志 守护 pid service restart build deploy key logs daemon",
       "diag": "诊断 体检 链路 模块 发送 检查 diagnose health probe module",
-      "about": "关于 版本 构建 version build about"
+      "about": "关于 版本 构建 version build about",
+      "persona": "persona sidechat agent proxy 分身 侧聊 代理"
     },
     "hub": "总览",
     "hubDesc": "本地实例的全部设置项",
@@ -1846,7 +1849,13 @@
     "stepsN": "{{n}} 步",
     "runningN": "第 {{i}}/{{n}} 步",
     "runs": "运行记录",
-    "runFailed": "失败"
+    "runFailed": "失败",
+    "runBatch": "批量运行…",
+    "batchTitle": "批量运行 — {{name}}",
+    "batchDesc": "每行输入触发一个会话（最多 20 条）。在步骤提示词里写 {{input}} 指定插入位置；不写则追加到每步末尾。",
+    "batchPh": "每行一条输入…\n例如：src/a.ts\nsrc/b.ts",
+    "batchN": "{{n}} 次运行",
+    "runningK": "{{k}} 个运行中 · 第 {{i}}/{{n}} 步"
   },
   "wiki": {
     "heading": "Wikis",
@@ -2025,5 +2034,24 @@
     "body": "当前未设置访问密钥，同一网络下的设备可以访问并操作本会话服务。",
     "fix": "前往 服务 → 访问密钥 设置",
     "dismiss": "不再提示"
+  },
+  "pa": {
+    "mode": "分身模式",
+    "modeDesc": "工作会话在回合结束时向你提问时，由分身代为回答。拿不准的问题会升级为横幅提醒，直到你本人回复。",
+    "mode_off": "关闭",
+    "mode_semi": "半自动",
+    "mode_auto": "自动",
+    "webhook": "Webhook",
+    "webhookPh": "把代答/升级事件 POST 到该 URL（可选）",
+    "maxHour": "限额",
+    "maxHourDesc": "每会话每小时最多代答次数",
+    "personaSpec": "分身体人设",
+    "personaSpecDesc": "分身会话的行为规范（AGENTS.md）——回答原则、红线与风格。保存后下一次代答生效。",
+    "sidechatSpec": "侧聊人设",
+    "sidechatSpecDesc": "侧聊助手的行为规范（AGENTS.md）——围绕会话锚点内容答问的方式。",
+    "saveSpec": "保存人设",
+    "decisions": "代答记录",
+    "noDecisions": "还没有代答记录。",
+    "saved": "已保存"
   }
 }

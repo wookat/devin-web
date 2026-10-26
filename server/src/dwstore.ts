@@ -174,10 +174,13 @@ export interface DwAutomation {
   nextRun?: number;
   /** Journaled run history — newest last, capped at 10. */
   runs?: { at: number; sessionId: string | null }[];
-  /** In-flight workflow progress, journaled so a backend restart RESUMES the
-   *  run instead of orphaning mid-chain steps: the scheduler tick keeps
-   *  polling the session and dispatches step `step` once it goes idle. */
-  running?: { sessionId: string; step: number; sentAt: number };
+  /** In-flight workflow progress keyed by fired-session id — journaled so a
+   *  backend restart RESUMES every chain instead of orphaning mid-run steps:
+   *  the scheduler tick polls each session and dispatches `prompts[step]`
+   *  once it goes fully idle. `prompts` carries the RENDERED step texts (any
+   *  {{input}} batch substitution already applied) so mid-run edits to the
+   *  automation can't corrupt an in-flight chain. */
+  running?: Record<string, { step: number; sentAt: number; prompts: string[] }>;
 }
 
 /** Reusable task template ("playbook") shared by automations — official

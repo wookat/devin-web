@@ -4,6 +4,7 @@
  * prefs, persona, @file index, precheck/transcribe/translate.
  */
 import type { IncomingMessage, ServerResponse } from "node:http";
+import fs from "node:fs";
 import path from "node:path";
 import type { ApiContext } from "../../routes.js";
 import { loadReg, saveReg, meta, type DwAutomation, type DwPlaybook, type DwAutomationStep } from "../../dwstore.js";
@@ -64,7 +65,9 @@ export async function handleRegistry(ctx: ApiContext, req: IncomingMessage, res:
     const aid = parts[3] ? decodeURIComponent(parts[3]) : "";
     const one = aid ? reg.automations[aid] : null;
     if (one && parts[4] === "run" && m === "POST") {
-      const sid = await runAutomation(ctx, aid).catch(() => null);
+      const body = (await readJson(req).catch(() => ({}))) as { inputs?: unknown };
+      const inputs = Array.isArray(body.inputs) ? body.inputs.map((x) => String(x)).filter((x) => x.trim()) : undefined;
+      const sid = await runAutomation(ctx, aid, inputs).catch(() => null);
       json(res, sid ? 200 : 502, sid ? { ok: true, id: sid } : { error: "fire failed (acp unavailable?)" });
       return true;
     }
@@ -325,6 +328,26 @@ export async function handleRegistry(ctx: ApiContext, req: IncomingMessage, res:
     json(res, 200, { ok: true, persona: personaState(ctx, id) });
     return true;
   }
+  // Agent role specs — the AGENTS.md each dedicated plumbing session runs
+  // under (persona 分身, sidechat 侧聊). Read + overwrite; dirs are created
+  // lazily by their consumers, GET on a never-written spec returns "".
+  if (p === "/api/admin/agent-spec" && m === "GET") {
+    const which = url.searchParams.get("which") === "sidechat" ? "sidechat" : "persona";
+    let spec = "";
+    try { spec = fs.readFileSync(path.join(ctx.store.dataDir, which, "AGENTS.md"), "utf8"); } catch { /* never written */ }
+    json(res, 200, { spec });
+    return true;
+  }
+  if (p === "/api/admin/agent-spec" && m === "POST") {
+    const body = await readJson(req);
+    const which = body.which === "sidechat" ? "sidechat" : "persona";
+    const dir = path.join(ctx.store.dataDir, which);
+    fs.mkdirSync(dir, { recursive: true });
+    fs.writeFileSync(path.join(dir, "AGENTS.md"), String(body.spec ?? "").slice(0, 100_000));
+    json(res, 200, { ok: true });
+    return true;
+  }
+
   if (p === "/api/admin/session-persona-ask" && m === "POST") {
     const body = await readJson(req);
     const id = String(body.id ?? "");

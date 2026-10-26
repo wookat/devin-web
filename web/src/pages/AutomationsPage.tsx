@@ -18,7 +18,7 @@ interface Automation {
   enabled: boolean; createdAt: number; lastRun?: number; lastSession?: string; nextRun?: number
   steps?: { name: string; prompt: string }[]
   runs?: { at: number; sessionId: string | null }[]
-  running?: { sessionId: string; step: number; sentAt: number }
+  running?: Record<string, { step: number; sentAt: number; prompts: string[] }>
 }
 interface Playbook { id: string; name: string; prompt: string }
 
@@ -105,6 +105,8 @@ export default function AutomationsPage() {
   const [sort, setSort] = useState<{ col: 'name' | 'last'; dir: 1 | -1 }>({ col: 'name', dir: 1 })
   const [menuFor, setMenuFor] = useState('')
   const [delFor, setDelFor] = useState<Automation | null>(null)
+  const [batchFor, setBatchFor] = useState<Automation | null>(null)
+  const [batchText, setBatchText] = useState('')
   const [form, setForm] = useState<{ open: boolean; name: string; prompt: string; preset: string; cron: string; cwd: string; steps: { name: string; prompt: string }[] }>({ open: false, name: '', prompt: '', preset: '0', cron: '', cwd: '', steps: [] })
   const [createMenu, setCreateMenu] = useState(false)
   const [playbooks, setPlaybooks] = useState<Playbook[]>([])
@@ -170,6 +172,7 @@ export default function AutomationsPage() {
       <div className="absolute right-0 top-full z-40 mt-1 min-w-[160px] rounded-lg border border-border bg-popover p-1 shadow-lg">
         <button disabled={busy === a.id} onClick={() => { setMenuFor(''); void act(a.id, '', { enabled: !a.enabled }) }} className="flex h-8 w-full cursor-pointer items-center rounded-md px-2.5 text-[13px] hover:bg-accent disabled:opacity-50">{a.enabled ? t('au.disable') : t('au.enable')}</button>
         <button disabled={busy === a.id + '/run'} onClick={() => { setMenuFor(''); void act(a.id, '/run') }} className="flex h-8 w-full cursor-pointer items-center gap-2 rounded-md px-2.5 text-[13px] hover:bg-accent disabled:opacity-50"><Play size={12} />{t('au.runNow')}</button>
+        <button onClick={() => { setMenuFor(''); setBatchFor(a); setBatchText('') }} className="flex h-8 w-full cursor-pointer items-center gap-2 rounded-md px-2.5 text-[13px] hover:bg-accent"><Plus size={12} />{t('au.runBatch')}</button>
         {a.lastSession && <button onClick={() => navigate(`/admin/${a.lastSession}`)} className="flex h-8 w-full cursor-pointer items-center rounded-md px-2.5 text-[13px] hover:bg-accent">{t('au.viewSessions')}</button>}
         {(a.runs?.length ?? 0) > 0 && (
           <>
@@ -324,7 +327,7 @@ export default function AutomationsPage() {
                           <span className="min-w-0 truncate">{a.name}</span>
                           {!a.enabled && <span className="shrink-0 rounded border border-border px-1 text-[11px] text-muted-foreground">{t('au.disabled')}</span>}
                           {(a.steps?.length ?? 0) > 1 && <span className="shrink-0 rounded border border-border px-1 text-[11px] text-muted-foreground">{t('au.stepsN', { n: a.steps!.length })}</span>}
-                          {a.running && <span className="flex shrink-0 items-center gap-1 rounded border border-blue-500/40 px-1 text-[11px] text-blue-500"><Loader2 size={10} className="animate-spin" />{t('au.runningN', { i: a.running.step + 1, n: a.steps?.length || 1 })}</span>}
+                          {a.running && <span className="flex shrink-0 items-center gap-1 rounded border border-blue-500/40 px-1 text-[11px] text-blue-500"><Loader2 size={10} className="animate-spin" />{(() => { const rs = Object.values(a.running); const i = Math.max(...rs.map((r) => r.step)) + 1; const n = rs[0]?.prompts.length ?? 1; return rs.length > 1 ? t('au.runningK', { k: rs.length, i, n }) : t('au.runningN', { i, n }) })()}</span>}
                         </div>
                         <div className="truncate text-[13px] leading-[18px] text-muted-foreground">
                           {humanCron(a.schedule, t)}<span className="text-muted-foreground/60"> · {a.cwd}</span>
@@ -409,6 +412,38 @@ export default function AutomationsPage() {
             <div className="mt-4 flex justify-end gap-2">
               <button onClick={() => setDelFor(null)} className="cursor-pointer rounded-md px-3 py-1.5 text-[13px] hover:bg-accent">{t('au.cancel')}</button>
               <button disabled={busy === delFor.id} onClick={() => { const id = delFor.id; setDelFor(null); void act(id, '', undefined, true) }} className="cursor-pointer rounded-md bg-red-600 px-3 py-1.5 text-[13px] font-medium text-white hover:bg-red-700 disabled:opacity-50">{busy === delFor.id ? '…' : t('au.delete')}</button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Batch run — one session per input line, {{input}} substituted */}
+      {batchFor && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40" onClick={() => setBatchFor(null)}>
+          <div className="w-[440px] rounded-xl border border-border bg-popover p-5 shadow-xl" onClick={(e) => e.stopPropagation()}>
+            <h3 className="text-[15px] font-medium">{t('au.batchTitle', { name: batchFor.name })}</h3>
+            <p className="mt-1.5 text-[13px] text-muted-foreground">{t('au.batchDesc')}</p>
+            <textarea
+              autoFocus
+              value={batchText}
+              onChange={(e) => setBatchText(e.target.value)}
+              placeholder={t('au.batchPh')}
+              rows={5}
+              className="mt-3 w-full resize-y rounded-md border border-border bg-background px-3 py-2 font-mono text-[12px] outline-none placeholder:text-muted-foreground focus:border-ring"
+            />
+            <div className="mt-4 flex items-center justify-end gap-2">
+              <span className="mr-auto text-[12px] tabular-nums text-muted-foreground">{t('au.batchN', { n: batchText.split('\n').filter((x) => x.trim()).length })}</span>
+              <button onClick={() => setBatchFor(null)} className="cursor-pointer rounded-md px-3 py-1.5 text-[13px] hover:bg-accent">{t('au.cancel')}</button>
+              <button
+                disabled={!batchText.trim() || busy === batchFor.id + '/run'}
+                onClick={() => {
+                  const inputs = batchText.split('\n').map((x) => x.trim()).filter(Boolean).slice(0, 20)
+                  const id = batchFor.id
+                  setBatchFor(null)
+                  void act(id, '/run', { inputs })
+                }}
+                className="cursor-pointer rounded-md bg-primary px-3 py-1.5 text-[13px] font-medium text-primary-foreground hover:opacity-90 disabled:opacity-50"
+              >{busy === batchFor.id + '/run' ? '…' : t('au.runNow')}</button>
             </div>
           </div>
         </div>

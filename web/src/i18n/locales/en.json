@@ -1444,7 +1444,8 @@
       "service": "Service",
       "diag": "Diagnostics",
       "about": "About",
-      "agents": "Agents"
+      "agents": "Agents",
+      "persona": "Agents"
     },
     "tabDesc": {
       "preferences": "Interface, session and sidebar preferences",
@@ -1455,7 +1456,8 @@
       "service": "Status, restart/rebuild, logs",
       "diag": "Chain doctor, module and send checks",
       "about": "Version and build info",
-      "agents": "ACP agent registry: install checks, enable toggles, custom entries"
+      "agents": "ACP agent registry: install checks, enable toggles, custom entries",
+      "persona": "Proxy agents that act on your behalf — persona replies, side-chat assistant"
     },
     "tabKw": {
       "preferences": "主题 浅色 深色 语言 快捷键 发送 队列 侧栏 分组 紧凑 归档 theme light dark language shortcut send queue sidebar compact archive english",
@@ -1466,7 +1468,8 @@
       "agents": "agent 接入 注册表 acp 启用 开关 registry enable",
       "service": "服务 重启 构建 部署 密钥 日志 守护 pid service restart build deploy key logs daemon",
       "diag": "诊断 体检 链路 模块 发送 检查 diagnose health probe module",
-      "about": "关于 版本 构建 version build about"
+      "about": "关于 版本 构建 version build about",
+      "persona": "persona sidechat agent proxy 分身"
     },
     "hub": "Overview",
     "hubDesc": "All settings for this local instance",
@@ -1846,7 +1849,13 @@
     "stepsN": "{{n}} steps",
     "runningN": "Step {{i}}/{{n}}",
     "runs": "Recent runs",
-    "runFailed": "failed"
+    "runFailed": "failed",
+    "runBatch": "Run batch…",
+    "batchTitle": "Batch run — {{name}}",
+    "batchDesc": "One session per input line (max 20). Write {{input}} in a step prompt to place each line; without the placeholder it is appended to every step.",
+    "batchPh": "One input per line…\ne.g. src/a.ts\nsrc/b.ts",
+    "batchN": "{{n}} runs",
+    "runningK": "{{k}} runs · step {{i}}/{{n}}"
   },
   "wiki": {
     "heading": "Wikis",
@@ -2025,5 +2034,24 @@
     "body": "No access key is configured — any device on this network can reach and operate this service.",
     "fix": "Set one under Service → Access key",
     "dismiss": "Don't show again"
+  },
+  "pa": {
+    "mode": "Persona mode",
+    "modeDesc": "When a working session ends its turn on a question for you, the persona answers on your behalf. escalated questions show a banner until you reply.",
+    "mode_off": "Off",
+    "mode_semi": "Semi",
+    "mode_auto": "Auto",
+    "webhook": "Webhook",
+    "webhookPh": "POST answer/escalate events to this URL (optional)",
+    "maxHour": "Rate cap",
+    "maxHourDesc": "max delegated answers per session per hour",
+    "personaSpec": "Persona spec",
+    "personaSpecDesc": "Behavioral spec (AGENTS.md) of the persona session — its principles, red lines and answer style. Edits apply to the next ask.",
+    "sidechatSpec": "Side-chat spec",
+    "sidechatSpecDesc": "Behavioral spec (AGENTS.md) of the dedicated side-chat assistant — how it answers questions about a session anchor.",
+    "saveSpec": "Save spec",
+    "decisions": "Decision log",
+    "noDecisions": "No delegated answers yet.",
+    "saved": "Saved"
   }
 }

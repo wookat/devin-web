@@ -76,33 +76,43 @@ function stepsOf(a: DwAutomation): { name: string; prompt: string }[] {
   return a.steps?.length ? a.steps : [{ name: "", prompt: a.prompt }];
 }
 
+/** Render the step prompts for one run — batch `input` substitutes every
+ *  {{input}} placeholder, or appends as the run's payload when absent. */
+function renderPrompts(a: DwAutomation, input?: string): string[] {
+  return stepsOf(a).map((s) => input == null ? s.prompt
+    : s.prompt.includes("{{input}}") ? s.prompt.replaceAll("{{input}}", input)
+    : `${s.prompt}\n\n${input}`);
+}
+
 /** Fully idle? inflight (in-memory) + openTurns (journaled / adopted turns)
  * + a parked queue all mean the turn is still owned by someone. */
 function sessionBusy(id: string): boolean {
   return inflight.has(id) || openTurns.has(id) || queueList(id).length > 0;
 }
 
-function sendStep(ctx: ApiContext, a: DwAutomation, sessionId: string, step: number) {
-  const st = stepsOf(a)[step];
-  if (!st) return;
-  a.running = { sessionId, step, sentAt: Date.now() };
+function sendStep(ctx: ApiContext, a: DwAutomation, sessionId: string, r: { step: number; sentAt: number; prompts: string[] }, step: number) {
+  const prompt = r.prompts[step];
+  if (prompt == null) return;
+  r.step = step;
+  r.sentAt = Date.now();
   saveReg();
   // Promise-bearing dispatch — a bare call would let a rejection escape to
   // unhandledRejection (auto-resume does the same dance).
-  void Promise.resolve(dispatchPrompt(ctx, sessionId, st.prompt, [])).catch((e) =>
+  void Promise.resolve(dispatchPrompt(ctx, sessionId, prompt, [])).catch((e) =>
     console.error(`[automations] ${a.name} step ${step + 1}: dispatch failed`, e));
 }
 
-/** Close out the running entry: history row (cap 10) + clear the marker. */
-function finishRun(a: DwAutomation) {
-  if (!a.running) return;
-  (a.runs ??= []).push({ at: a.lastRun ?? Date.now(), sessionId: a.running.sessionId });
+/** Close out one session's chain: history row (cap 10) + clear its marker. */
+function finishRun(a: DwAutomation, sessionId: string) {
+  if (!a.running?.[sessionId]) return;
+  (a.runs ??= []).push({ at: a.lastRun ?? Date.now(), sessionId });
   if (a.runs.length > 10) a.runs = a.runs.slice(-10);
-  delete a.running;
+  delete a.running[sessionId];
+  if (!Object.keys(a.running).length) delete a.running;
   saveReg();
 }
 
-async function fire(ctx: ApiContext, a: DwAutomation): Promise<string | null> {
+async function fire(ctx: ApiContext, a: DwAutomation, input?: string): Promise<string | null> {
   const cwd = a.cwd || ctx.primaryCwd;
   const agent = agentById(undefined);
   const acp = agent.multiSession
@@ -117,23 +127,31 @@ async function fire(ctx: ApiContext, a: DwAutomation): Promise<string | null> {
   captureLoadResponse(s.sessionId, s, acp.agent?.id ?? "devin");
     markLoadedOn(s.sessionId, acp);
   const mm = meta(ctx, s.sessionId);
-  mm.title = `⚙ ${a.name}`;
+  mm.title = `⚙ ${a.name}${input != null ? ` · ${input.slice(0, 24)}` : ""}`;
   mm.folder = ".automations";
   saveReg();
-  sendStep(ctx, a, s.sessionId, 0);
+  const prompts = renderPrompts(a, input);
+  (a.running ??= {})[s.sessionId] = { step: 0, sentAt: Date.now(), prompts };
+  sendStep(ctx, a, s.sessionId, a.running[s.sessionId]!, 0);
   return s.sessionId;
 }
 
-export async function runAutomation(ctx: ApiContext, id: string): Promise<string | null> {
+/** Fire one run — or a batch: `inputs` fans out one session per item, each
+ *  with {{input}} substituted into every step (appended when absent). */
+export async function runAutomation(ctx: ApiContext, id: string, inputs?: string[]): Promise<string | null> {
   const a = loadReg(ctx).automations?.[id];
   if (!a) return null;
-  delete a.running; // manual run supersedes any wedged chain marker
-  const sid = await fire(ctx, a);
+  const list = inputs?.length ? inputs.slice(0, 20).map((x) => x.slice(0, 4000)) : [undefined];
+  let first: string | null = null;
+  for (const inp of list) {
+    const sid = await fire(ctx, a, inp).catch(() => null);
+    if (first == null) first = sid;
+  }
   a.lastRun = Date.now();
-  a.lastSession = sid ?? undefined;
+  a.lastSession = first ?? undefined;
   a.nextRun = cronNext(a.schedule) ?? undefined;
   saveReg();
-  return sid;
+  return first;
 }
 
 // ---------------------------------------------------------------------------
@@ -154,19 +172,16 @@ async function tick(ctx: ApiContext) {
   const autos = reg.automations ?? {};
   const now = Date.now();
   for (const a of Object.values(autos)) {
-    // ── In-flight workflow chain (survives restarts — `running` is journaled)
-    const r = a.running;
-    if (r) {
-      if (!meta(ctx, r.sessionId)) { finishRun(a); continue; } // session deleted → abort chain
-      if (sessionBusy(r.sessionId)) continue;                   // turn still owned — keep waiting
-      if (now - r.sentAt < 10_000) continue;                    // grace: let the turn actually register
-      const steps = stepsOf(a);
-      if (r.step + 1 < steps.length) sendStep(ctx, a, r.sessionId, r.step + 1);
-      else finishRun(a);
-      continue;
+    // ── In-flight workflow chains (survive restarts — `running` is journaled)
+    for (const [sid, r] of Object.entries(a.running ?? {})) {
+      if (!meta(ctx, sid)) { finishRun(a, sid); continue; } // session deleted → abort chain
+      if (sessionBusy(sid)) continue;                       // turn still owned — keep waiting
+      if (now - r.sentAt < 10_000) continue;                // grace: let the turn actually register
+      if (r.step + 1 < r.prompts.length) sendStep(ctx, a, sid, r, r.step + 1);
+      else finishRun(a, sid);
     }
-    // ── Cron firing
-    if (!a.enabled || firing.has(a.id)) continue;
+    // ── Cron firing — skipped while ANY chain is live (no overlapping runs)
+    if (!a.enabled || firing.has(a.id) || a.running) continue;
     const next = a.nextRun ?? (a.nextRun = cronNext(a.schedule) ?? undefined);
     if (!next || next > now) continue;
     firing.add(a.id);
@@ -181,7 +196,6 @@ async function tick(ctx: ApiContext) {
       console.error(`[automations] ${a.name}: ${e instanceof Error ? e.message : e}`);
       (a.runs ??= []).push({ at: now, sessionId: null });
       if (a.runs.length > 10) a.runs = a.runs.slice(-10);
-      delete a.running; // session spawn failed — clear any marker fire() planted
       saveReg();
     } finally {
       firing.delete(a.id);

@@ -5,6 +5,7 @@ import { existsSync } from "node:fs";
 import type { CreateTerminalRequest, CreateTerminalResponse, TerminalOutputResponse, WaitForTerminalExitResponse } from "@agentclientprotocol/sdk";
 import type { DevinAcpEvents } from "./acp.js";
 import { sshSpawn } from "./ssh.js";
+import { ShellDecoder } from "./shelltext.js";
 
 interface Terminal {
   id: string;
@@ -91,14 +92,21 @@ export class TerminalRunner {
         const key = "Path" in env ? "Path" : "PATH";
         env[key] = [...GIT_BINS, env[key] ?? ""].filter(Boolean).join(path.delimiter);
       }
-      proc = spawn(params.command, params.args ?? [], {
-        cwd,
-        env,
-        stdio: ["ignore", "pipe", "pipe"],
-        // Windows: a bare spawn can't launch shell builtins (echo/cd), .cmd
-        // shims (npm), or whole-string commands — route through cmd.exe.
-        shell: process.platform === "win32",
-      });
+      // Windows: a bare spawn can't launch builtins/.cmd shims → route
+      // through cmd /c. Quoting keeps `&`/`|` literal inside args. Pipe
+      // output arrives as OEM bytes — decoded GBK-or-UTF8 per chunk in
+      // onData (chcp can't touch pipe encoding, so we don't bother).
+      if (process.platform === "win32") {
+        const cq = (a: string) => (/[\s"&|<>^%]/.test(a) ? `"${a.replace(/"/g, '""')}"` : a);
+        const line = `${params.command}${params.args?.length ? " " + params.args.map(cq).join(" ") : ""}`;
+        proc = spawn("cmd.exe", ["/d", "/s", "/c", line], { cwd, env, stdio: ["ignore", "pipe", "pipe"] });
+      } else {
+        proc = spawn(params.command, params.args ?? [], {
+          cwd,
+          env,
+          stdio: ["ignore", "pipe", "pipe"],
+        });
+      }
     }
 
     const term: Terminal = {
@@ -115,8 +123,9 @@ export class TerminalRunner {
     this.terminals.set(id, term);
     ev.onTerminalCreate(id, term.sessionId, [params.command, ...(params.args ?? [])].join(" "));
 
+    const dec = new ShellDecoder(!this.sshTarget && process.platform === "win32");
     const onData = (chunk: Buffer) => {
-      const data = chunk.toString("utf8");
+      const data = dec.push(chunk);
       term.output += data;
       if (term.output.length > term.limit) {
         term.output = term.output.slice(-term.limit);

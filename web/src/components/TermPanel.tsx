@@ -1,8 +1,8 @@
 import { useCallback, useEffect, useRef, useState } from 'react'
 import { useTranslation } from 'react-i18next'
-import { Bot, Plus, X } from 'lucide-react'
+import { Bot, PenLine, Play, Plus, X } from 'lucide-react'
 import { adminFetch } from '@/lib/api'
-import TermSession, { type TermSessionHandle } from './term/TermSession'
+import TermSession, { type TermSessionHandle, hlCmd } from './term/TermSession'
 import TermHistory from './term/TermHistory'
 
 /** Multi-terminal panel — official-style tabs, each its own xterm + /ws/term
@@ -31,6 +31,9 @@ export default function TermPanel({ id, run }: { id: string; run?: string }) {
   const [tabs, setTabs] = useState<TermTab[]>(() => [{ tid: 1, n: 1, live: false }])
   const [activeTid, setActiveTid] = useState(1)
   const [agentMode, setAgentMode] = useState(false)
+  // exec: returned command runs immediately. ask: it lands in the editable
+  // input line — user reviews/edits then Enter runs it.
+  const [agentRun, setAgentRun] = useState<'exec' | 'ask'>('exec')
   const [agentBusy, setAgentBusy] = useState(false)
   const busyRef = useRef(false)
   const [models, setModels] = useState<ModelOpt[]>([])
@@ -97,8 +100,9 @@ export default function TermPanel({ id, run }: { id: string; run?: string }) {
     }).then((r) => {
       const cmd = (r?.command ?? '').trim()
       if (cmd) {
-        h.write(`\x1b[2m◇ ${cmd}\x1b[0m\r\n`)
-        h.send(cmd + '\r')
+        h.write(`\x1b[2m◇ \x1b[0m${hlCmd(cmd)}\r\n`)
+        if (agentRun === 'ask') h.setLine(cmd)
+        else h.send(cmd + '\r')
         setHistLocal((hs) => [{ cmd, ts: new Date().toISOString() }, ...hs].slice(0, 50))
       } else {
         h.write(`\x1b[31m${t('tm.agentErr')}${r?.error ?? 'unknown'}\x1b[0m\r\n`)
@@ -110,7 +114,7 @@ export default function TermPanel({ id, run }: { id: string; run?: string }) {
       setAgentBusy(false)
       h.write(PROMPT)
     })
-  }, [id, model, t])
+  }, [id, model, agentRun, t])
 
   return (
     <div className="flex h-full min-h-0 flex-col bg-card font-mono text-[12px] text-foreground">
@@ -126,6 +130,16 @@ export default function TermPanel({ id, run }: { id: string; run?: string }) {
             >
               <Bot size={11} />{t('tm.agent')}
             </button>
+            {agentMode && (
+              <button
+                type="button"
+                onClick={() => setAgentRun((v) => (v === 'exec' ? 'ask' : 'exec'))}
+                title={t('tm.agentRunHint', { defaultValue: 'ask: 命令进输入行可编辑；exec: 直接执行' })}
+                className="flex cursor-pointer items-center gap-1 rounded-[5px] px-1.5 py-0.5 text-[11px] text-muted-foreground hover:text-foreground"
+              >
+                {agentRun === 'exec' ? <Play size={11} /> : <PenLine size={11} />}{agentRun}
+              </button>
+            )}
             {agentMode && (
               <select
                 value={model}

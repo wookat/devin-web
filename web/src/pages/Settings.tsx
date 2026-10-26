@@ -1,7 +1,7 @@
 import { useState } from 'react'
 import { useTranslation } from 'react-i18next'
 import { Link, useParams } from 'react-router-dom'
-import { ArrowLeft, PanelLeft, ChevronRight, SlidersHorizontal, KeyRound, Wrench, Stethoscope, Info, Boxes, Server, SquareTerminal } from 'lucide-react'
+import { ArrowLeft, PanelLeft, ChevronRight, SlidersHorizontal, KeyRound, Wrench, Stethoscope, Info, Boxes, Server, SquareTerminal, Bot } from 'lucide-react'
 import { PreferencesTab } from '@/pages/settings/PrefsSection'
 import { AccountsTab } from '@/pages/settings/AccountsSection'
 import { ResourcesTab } from '@/pages/settings/ResourcesSection'
@@ -10,6 +10,7 @@ import { CliTab } from '@/pages/settings/CliSection'
 import { AgentsTab } from '@/pages/settings/AgentsSection'
 import { ServiceTab, AboutTab } from '@/pages/settings/ServiceSection'
 import { DiagTab } from '@/pages/settings/DiagSection'
+import { PersonaTab } from '@/pages/settings/PersonaSection'
 
 /** Preferences — markup replicated from app.devin.ai/settings/preferences
  * (DOM extracted live 2026-10-19): content column `flex flex-col gap-[36px]
@@ -36,6 +37,7 @@ const CAT_CLS: Record<string, string> = {
 }
 const TABS: { key: string; group: 'personal' | 'instance'; cat: string; icon: React.ReactNode }[] = [
   { key: 'preferences', group: 'personal', cat: 'organization', icon: <SlidersHorizontal size={16} /> },
+  { key: 'persona', group: 'personal', cat: 'products', icon: <Bot size={16} /> },
   { key: 'accounts', group: 'instance', cat: 'administration', icon: <KeyRound size={16} /> },
   { key: 'resources', group: 'instance', cat: 'resources', icon: <Boxes size={16} /> },
   { key: 'ssh', group: 'instance', cat: 'products', icon: <Server size={16} /> },
@@ -143,6 +145,8 @@ export default function Settings() {
             })}
 
             {tab === 'preferences' && <PreferencesTab />}
+
+            {tab === 'persona' && <PersonaTab />}
 
             {tab === 'accounts' && <AccountsTab msg={prefsMsg} setMsg={setPrefsMsg} />}
 
