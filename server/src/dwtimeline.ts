@@ -4,6 +4,9 @@
  * Extracted from localweb.ts (mechanical move, behavior unchanged).
  */
 import type { ApiContext } from "./routes.js";
+import fs from "node:fs";
+import path from "node:path";
+import { confined } from "./confined.js";
 import { MAX_UPDATES_PER_SESSION } from "./sessionlog.js";
 import type { LogEntry } from "./sessiondb.js";
 import { loadInflight } from "./sessionplace.js";
@@ -240,6 +243,10 @@ interface TlState {
   produced: Map<string, string>;
   /** Session id — needed to build file-raw URLs for produced attachments. */
   sid: string;
+  /** Workspace root — produced attachments are only attached when the path
+   *  resolves INSIDE it (confined); also enables bare-name lookups when a
+   *  reply mentions a produced file by basename only. */
+  cwd?: string;
   /** Swap {$blob} refs in a disk-backed update for their payloads — set by
    * build entry points that can reach sessionLog. Entries keep refs when
    * unset (message text never offloads, so snapshot builds still render). */
@@ -269,7 +276,7 @@ function freshTlState(sid = ""): TlState {
 /** Extract output paths a shell command is likely to CREATE: `>`/`>>`
  * redirects (incl. `2>` but not `2>&1`), `-o`/`--output*` flag values, and
  * the first arg of PowerShell write cmdlets (Set-Content/Out-File/…). */
-function shellOutputPaths(cmd: string): string[] {
+export function shellOutputPaths(cmd: string): string[] {
   const tokens: string[] = [];
   const re = /"([^"]*)"|'([^']*)'|(\S+)/g;
   let m: RegExpExecArray | null;
@@ -282,31 +289,125 @@ function shellOutputPaths(cmd: string): string[] {
       && !/[*?]|^\$|^%/.test(s) && /\.[A-Za-z0-9]{1,10}$|[\\/]/.test(s) ? s : null;
   };
   const out = new Set<string>();
-  // Writers take the FIRST arg (Set-Content path); copy/move/ren take the
-  // LAST positional (the destination is the produced file).
+  // Writers take the FIRST arg (Set-Content path); copy/move/download and
+  // single-output converters take the LAST positional (the destination is
+  // the produced file). scp/rsync args can be remote (`u@h:path`/`h::m`) —
+  // strip those so uploads don't credit remote paths.
   const writeFirst = /^(set-content|add-content|out-file|tee-object|tee|certutil)$/i;
-  const writeLast = /^(copy|xcopy|move|ren|rename)$/i;
+  const writeLast = /^(copy|xcopy|move|ren|rename|cp|mv|scp|rsync|convert|magick|ffmpeg|gs|pdftoppm|pandoc|tar)$/i;
+  const isRemote = /^(scp|rsync)$/i;
+  const remoteTok = (x: string) => /^[^\s/\\]*@[^\s]*:/.test(x) || /^[^\s/\\]+::/.test(x);
+  // Positional-arg collector for copy/move commands: skip flags, redirect
+  // tokens (a `scp … 2>/dev/null` tail must not become the "dest"), and stop
+  // at shell control words (`for f in *; do mv $f $f.bak; done` — the mv's
+  // arg list ends at `done`, not at `sort -u` on the far side of `|`).
+  const CTRL = /^(;|&&?|\|\|?|done|do|then|else|elif|fi|esac|;)$/;
+  // A dest that names a directory keeps the source basename: `dir/`, `.`,
+  // `..`, bare separators — `mv a.png b/` produces b/a.png not b.
+  const dirDest = /^(?:\.{1,2}|[\\/]+)$|[\\/]$/;
+  const positionals = (from: number): string[] => {
+    const out: string[] = [];
+    for (const x of tokens.slice(from)) {
+      if (CTRL.test(x)) break;
+      if (/^[-/]/.test(x) || /^[0-9]?>>?/.test(x)) continue;
+      const clean = x.replace(/[;:]+$/, "");
+      if (clean) out.push(clean);
+      if (x !== clean) break; // `b;` ends this statement — next token is a new command
+    }
+    return out;
+  };
   const add = (s: string | undefined) => { const p = s && looksLikePath(s); if (p) out.add(p); };
   for (let i = 0; i < tokens.length; i++) {
     const t = tokens[i];
     if (writeFirst.test(t)) { add(tokens.slice(i + 1).find((x) => !/^[-/]/.test(x))); continue; }
-    if (writeLast.test(t)) { add(tokens.slice(i + 1).filter((x) => !/^[-/]/.test(x)).pop()); continue; }
+    if (isRemote.test(t)) {
+      // scp/rsync: only a DOWNLOAD produces a local file — last arg local
+      // while an earlier arg is remote. `scp u@h:dir/x.png .` ⇒ ./x.png.
+      const raw = positionals(i + 1);
+      const dest = raw[raw.length - 1];
+      if (dest && !remoteTok(dest) && raw.slice(0, -1).some(remoteTok)) {
+        if (dirDest.test(dest)) {
+          const src = [...raw].reverse().find(remoteTok);
+          const base = src?.replace(/^[^\s/\\]*@[^\s]*:/, "").replace(/^[^\s/\\]+::/, "").split(/[\\/]/).pop();
+          add(base && !/^(?:\.{1,2}|[\\/]+)$/.test(dest) ? `${dest.replace(/[\\/]+$/, "")}/${base}` : base);
+        } else add(dest);
+      }
+      continue;
+    }
+    if (writeLast.test(t)) {
+      const args = positionals(i + 1);
+      const dest = args.pop();
+      if (dest) {
+        if (dirDest.test(dest)) {
+          // `cp a.png dir/` — produced file is dir/a.png.
+          const base = args.pop()?.split(/[\\/]/).pop();
+          add(base && !/^(?:\.{1,2}|[\\/]+)$/.test(dest) ? `${dest.replace(/[\\/]+$/, "")}/${base}` : base);
+        } else add(dest);
+      }
+      continue;
+    }
     // Bare redirect token first — a `(.+)` tail pattern would let `>>`
     // backtrack into r[2]='>' and swallow the real target token.
     if (/^[0-9]?>>?$/.test(t)) { add(tokens[i + 1]); continue; }
     const r = /^[0-9]?>>?(.+)$/.exec(t);
     if (r) { add(r[1]); continue; }
-    if (/^(-o|--out|--output|--output-file|--output-path|-output|-filepath|-file)$/i.test(t)) { add(tokens[i + 1]); continue; }
-    const eq = /^(--out(?:put(?:-file|-path)?)?|-o)=(.+)$/.exec(t);
+    if (/^(-o|-O|--out|--output|--output-file|--output-path|-output|-filepath|-file)$/i.test(t)) { add(tokens[i + 1]); continue; }
+    const eq = /^(--out(?:put(?:-file|-path)?)?|-[oO])=(.+)$/.exec(t);
     if (eq) add(eq[2]);
   }
   return [...out];
 }
 
+/** A reply that names a workspace file (``fig.png``、`out/plot.pdf`) should
+ * surface it inline even when the producing command was invisible to
+ * shellOutputPaths (plt.savefig, remote+scp wildcards, heredoc generators).
+ * Extracts path-ish tokens ending in a displayable extension, resolves them
+ * inside cwd — absolute & relative hits direct, bare names by a bounded
+ * basename search. */
+const MEDIA_REF = /[A-Za-z0-9_./\\-]{1,240}?\.(?:png|jpe?g|gif|webp|avif|bmp|svg|mp4|webm|mov|pdf)\b/gi;
+const MEDIA_SKIP = /^(?:https?|file|data|mailto):/i;
+const MEDIA_DIR_SKIP = new Set([".git", "node_modules", "dist", ".next", "out", "build", ".cache", "vendor", "__pycache__"]);
+
+function findByBasename(root: string, base: string): string | null {
+  // BFS so shallow hits win; ~30k-entry cap bounds worst-case walks.
+  let seen = 0;
+  const q: string[] = [root];
+  while (q.length && seen < 30000) {
+    const dir = q.shift()!;
+    let ents: fs.Dirent[];
+    try { ents = fs.readdirSync(dir, { withFileTypes: true }); } catch { continue; }
+    for (const e of ents) {
+      if (++seen > 30000) return null;
+      if (e.name === base) return path.join(dir, e.name);
+      if (e.isDirectory() && !MEDIA_DIR_SKIP.has(e.name) && !e.name.startsWith(".")) q.push(path.join(dir, e.name));
+    }
+  }
+  return null;
+}
+
+function resolveMediaRef(st: TlState, token: string): string | null {
+  const cwd = st.cwd;
+  if (!cwd) return null;
+  const t = token.replace(/[\\/]+/g, path.sep === "\\" ? "\\" : "/");
+  if (/^(?:[A-Za-z]:[\\/]|\\\\|\/)/.test(t)) {
+    // absolute — must live inside cwd (confined does the realpath check)
+    try { return confined(cwd, t) && fs.statSync(t).isFile() ? t : null; } catch { return null; }
+  }
+  const joined = path.join(cwd, t);
+  try { if (fs.statSync(joined).isFile()) return joined; } catch { /* not a direct hit */ }
+  if (/[\\/]/.test(t)) return null; // had a path shape but missed — don't basename-fallback a stale dir
+  return findByBasename(cwd, path.basename(t));
+}
+
 /** Push collected produced-file paths onto the last devin message as
  * attachments (file-raw URLs the admin UI renders via AttachmentCard). */
 function flushProduced(st: TlState, dirty?: DwItem[], boundary = false): void {
-  if (!st.produced.size || !st.sid) return;
+  if (!st.sid) return;
+  // Early-exit only when there's literally nothing to do — an empty
+  // `produced` map must NOT skip the body-scan: a summarizing reply that
+  // names earlier media (``fig.png``) produced nothing this turn but
+  // still deserves inline attachments.
+  if (!st.produced.size && !st.cwd) { if (boundary) st.produced.clear(); return; }
   // lastMsg may be a thought row — walk back to the last devin message, but
   // never past a user row (files would leak into the previous turn's reply).
   let msg = st.lastMsg;
@@ -324,12 +425,47 @@ function flushProduced(st: TlState, dirty?: DwItem[], boundary = false): void {
   if (!msg) { if (boundary) st.produced.clear(); return; }
   const atts = msg.attachments ?? (msg.attachments = []);
   const have = new Set(atts.map((a) => a.url));
+  // Unresolved produced paths (remote-only / later-renamed files) can't be
+  // told apart from a second mention of the same name — dedupe them on
+  // basename so `/tmp/uw.json` and `uw.json` don't render as twin dead
+  // chips. Seed with every name already on the message: one message can
+  // collect attachments across several flushes (per-message + turn-end).
+  const haveUnresolved = new Set(atts.map((a) => a.name ?? ""));
   for (const [p] of st.produced) {
-    const url = `/api/admin/session/${st.sid}/file-raw?path=${encodeURIComponent(p)}`;
+    // Relative tokens were captured under the COMMAND's cwd (`cd pagecheck
+    // && scp … f.png`), not the session's — resolve through the same
+    // root-then-basename-find lookup so the chip points at the real file.
+    // Remote absolute paths (`ssh h "… > /tmp/uw.json"`) can't resolve
+    // locally; a basename hit (`scp h:/tmp/uw.json .`) still catches them.
+    const resolved = resolveMediaRef(st, p)
+      ?? (/[\\/]/.test(p) && st.cwd ? findByBasename(st.cwd, p.split(/[\\/]/).pop() || p) : null);
+    const full = resolved ?? p;
+    if (!resolved) {
+      const base = p.split(/[\\/]/).pop() || p;
+      if (haveUnresolved.has(base)) continue;
+      haveUnresolved.add(base);
+    }
+    const url = `/api/admin/session/${st.sid}/file-raw?path=${encodeURIComponent(full)}`;
     if (have.has(url)) continue;
     have.add(url);
-    atts.push({ url, name: p.split(/[\\/]/).pop() || p });
-    msg.resultFiles = [...(msg.resultFiles ?? []), p];
+    atts.push({ url, name: full.split(/[\\/]/).pop() || full });
+    msg.resultFiles = [...(msg.resultFiles ?? []), full];
+  }
+  // Catch-all: media files the reply NAMES (``fig.png``) but that no command
+  // parser could see — remote+scp pulls, plt.savefig, heredoc generators.
+  // Resolved paths get the same attachment chip → inline image thumbnail.
+  if (st.cwd && msg.body) {
+    for (const m0 of msg.body.matchAll(MEDIA_REF)) {
+      const tok = m0[0];
+      if (MEDIA_SKIP.test(tok)) continue;
+      const full = resolveMediaRef(st, tok);
+      if (!full) continue;
+      const url = `/api/admin/session/${st.sid}/file-raw?path=${encodeURIComponent(full)}`;
+      if (have.has(url)) continue;
+      have.add(url);
+      atts.push({ url, name: full.split(/[\\/]/).pop() || full });
+      msg.resultFiles = [...(msg.resultFiles ?? []), full];
+    }
   }
   dirty?.push(msg);
   st.produced.clear();
@@ -758,6 +894,9 @@ function buildTimeline(ctx: ApiContext, sessionId: string): { items: DwItem[]; r
     // Must be set BEFORE the seed loop — disk entries carry blob refs that
     // resolve only through this hook.
     st.resolve = (u) => ctx.sessionLog.resolveBlobs(u);
+    // Same cwd resolution file-raw uses (sub-sessions share the parent's
+    // workspace) — BEFORE the replay, flushProduced's media lookup needs it.
+    st.cwd = ctx.sessionCwd.get(sessionId.startsWith("sub:") ? sessionId.slice(4).split(":")[0] : sessionId) ?? ctx.primaryCwd;
     tlCacheSet(sessionId, st);
     rebuilt = true;
     for (let i = 0; i < src.length; i++) tlPush(st, src[i], i);
@@ -772,6 +911,9 @@ function buildTimeline(ctx: ApiContext, sessionId: string): { items: DwItem[]; r
     if (disk.length >= MAX_UPDATES_PER_SESSION) backfillTimeline(ctx, sessionId, logGen);
   }
   st.resolve = (u) => ctx.sessionLog.resolveBlobs(u);
+  // Media-reference attachment lookup needs the workspace root — same cwd
+  // resolution file-raw uses (sub-sessions share the parent's workspace).
+  st.cwd = ctx.sessionCwd.get(sessionId.startsWith("sub:") ? sessionId.slice(4).split(":")[0] : sessionId) ?? ctx.primaryCwd;
   for (const e of log) {
     const s = e.seq ?? -1;
     if (s > st.seenSeq) { tlPush(st, e, s); st.seenSeq = s; }
@@ -803,6 +945,9 @@ function backfillTimeline(ctx: ApiContext, sessionId: string, logGen: number) {
       if (out.length <= MAX_UPDATES_PER_SESSION) return; // no deeper history after all
       const st = freshTlState(sessionId);
       st.resolve = (u) => ctx.sessionLog.resolveBlobs(u);
+      // Same cwd resolution buildTimeline seeds — without it a backfilled
+      // state resolves every produced/media path as unresolved garbage.
+      st.cwd = ctx.sessionCwd.get(sessionId.startsWith("sub:") ? sessionId.slice(4).split(":")[0] : sessionId) ?? ctx.primaryCwd;
       for (let j = 0; j < out.length; j++) {
         tlPush(st, out[j], j);
         if (j % 4000 === 3999) {
