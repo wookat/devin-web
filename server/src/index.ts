@@ -27,6 +27,8 @@ import { brokerEnabled } from "./acpbroker.js";
 import { meta, loadReg, saveReg } from "./dwstore.js";
 import { sshInteractive } from "./ssh.js";
 import { ShellDecoder } from "./shelltext.js";
+import { translatePsInput } from "./psops.js";
+import { killTerminalTree, trackTerminalProcess } from "./termprocess.js";
 import { edition } from "./edition.js";
 import { adminKeyRequired } from "./authn.js";
 import { adminKey, allowedHostsRaw } from "./env.js";
@@ -218,7 +220,7 @@ const hub = new WsHub(
 // Interactive session terminal — one shell per WS connection, spawned in the
 // session's cwd. JSON frames: out {d} / in {d} / kill. noServer + manual
 // upgrade routing so /ws and /ws/term coexist (see WsHub).
-const termWss = new WebSocketServer({ noServer: true });
+const termWss = new WebSocketServer({ noServer: true, maxPayload: 128 * 1024 });
 const browserWss = new WebSocketServer({ noServer: true });
 initLocalBrowser(path.join(store.dataDir, "browser-profile"));
 initScreen(store.dataDir);
@@ -271,50 +273,98 @@ termWss.on("connection", (ws, req) => {
     if (ws.bufferedAmount > 8 * 1024 * 1024) { try { ws.terminate(); } catch {} return; }
     ws.send(JSON.stringify(o));
   };
-  // proc may arrive async (ssh2 password/key hosts connect first) — buffer
-  // keystrokes sent before it exists and flush on wire().
-  const early: string[] = [];
+  const pty = !!sessSsh || (run === "ssh" && sshArgOk);
+  const localPs = !sessSsh && command === "powershell.exe";
+  const grouped = process.platform !== "win32" && !sessSsh;
+  // No replay queue: before ready, or after a transport loss, execution is
+  // uncertain. A fresh connection always starts with zero queued commands.
   let proc: child_process.ChildProcess | null = null;
   let killed = false;
-  const wire = (p: child_process.ChildProcess) => {
+  let finished = false;
+  let ready = false;
+  let interrupted = false;
+  let stopping: Promise<void> | undefined;
+  const stop = () => {
+    if (finished || !proc) return;
+    return stopping ??= killTerminalTree(proc, grouped).catch((e) => { stopping = undefined; throw e; });
+  };
+  const wire = (p: child_process.ChildProcess, alreadySpawned = false) => {
     proc = p;
+    trackTerminalProcess(p, grouped);
     // cmd on a pipe emits OEM (CP936) bytes — decode GBK-or-UTF8 per chunk.
     // powershell was bootstrapped to UTF-8, ssh/posix are UTF-8 already.
-    const dec = new ShellDecoder(shellKind === "cmd" && !sessSsh);
-    p.stdout?.on("data", (d: Buffer) => send({ d: dec.push(d) }));
-    p.stderr?.on("data", (d: Buffer) => send({ d: dec.push(d) }));
+    const out = new ShellDecoder(shellKind === "cmd" && !sessSsh);
+    const err = new ShellDecoder(shellKind === "cmd" && !sessSsh);
+    p.stdout?.on("data", (d: Buffer) => send({ d: out.push(d) }));
+    p.stderr?.on("data", (d: Buffer) => send({ d: err.push(d) }));
     p.stdin?.on("error", () => {});
-    p.on("exit", (code) => { send({ exit: code }); try { ws.close(); } catch {} });
-    for (const d of early.splice(0)) { try { p.stdin?.write(d); } catch {} }
+    const finish = (code: number | null) => {
+      if (finished) return;
+      finished = true; ready = false;
+      const tail = out.flush() + err.flush();
+      if (tail) send({ d: tail });
+      send({ exit: code, interrupted });
+      try { ws.close(); } catch {}
+    };
+    // Real children close AFTER stdout/stderr drain; ssh2's wrapper emits
+    // exit only (already after its channel closes).
+    p.on(!p.pid ? "exit" : "close", finish);
+    p.on("error", (e) => { send({ d: `\r\n[spawn] ${e.message}\r\n` }); finish(-1); });
+    const markReady = () => { ready = true; send({ ready: true }); };
+    if (alreadySpawned) markReady();
+    else p.once("spawn", markReady);
   };
   ws.on("message", (raw) => {
     try {
       const m = JSON.parse(String(raw));
-      if (typeof m.d === "string") { if (proc) { try { proc.stdin?.write(m.d); } catch {} } else early.push(m.d); }
-      if (m.kill) { killed = true; try { proc?.kill(); } catch {} }
+      if (m.kill) {
+        killed = true; ready = false;
+        void stop()?.catch((e) => console.warn("[term kill]", e));
+        return;
+      }
+      if (m.interrupt && !pty && ready) {
+        interrupted = true; ready = false;
+        void stop()?.catch((e) => {
+          interrupted = false; ready = true;
+          send({ d: `\r\n[interrupt failed] ${e.message}\r\n`, ready: true });
+        });
+        return;
+      }
+      if (typeof m.d === "string") {
+        if (!ready || killed || m.d.length > 64 * 1024) return;
+        // Only complete local PS commands; SSH/PTY input is byte-transparent.
+        const d = localPs ? translatePsInput(m.d) : m.d;
+        try { proc?.stdin?.write(d); } catch {}
+      }
     } catch {}
   });
-  ws.on("close", () => { killed = true; try { proc?.kill(); } catch {} });
+  ws.on("close", () => {
+    killed = true; ready = false;
+    void stop()?.catch((e) => console.warn("[term close]", e));
+  });
   // Transport profile first — pty (ssh) echoes+edits remotely so the client
   // passes keystrokes through raw; pipe shells echo nothing until a line is
   // read, so the client runs a local line editor (visible typing, arrows,
-  // history, paste). Client+server ship from the same build — no compat gap.
-  send({ shell: sessSsh || run === "ssh" ? "pty" : "pipe" });
-  send({ d: `\x1b[90m[${cwd}]${sessSsh || run === "ssh" ? "" : ` ${shellKind}`}\x1b[0m\r\n` });
+  // history, paste). Explicit readiness also covers asynchronous SSH setup.
+  send({ shell: pty ? "pty" : "pipe", ready: false,
+    hint: pty ? "POSIX shell command" : localPs ? "Windows PowerShell 5.1 command" : shellKind === "cmd" ? "cmd.exe command" : "POSIX shell command" });
+  send({ d: `\x1b[90m[${cwd}]${pty ? "" : ` ${localPs ? shellKind : command}`}\x1b[0m\r\n` });
   if (sessSsh && !(run === "ssh" && sshArgOk)) {
     // sshInteractive: `ssh -tt` for agent-auth hosts, ssh2 pty for
     // password/key records — same ChildProcess shape either way.
     sshInteractive(String(sessSsh)).then((p) => {
       if (killed || ws.readyState !== ws.OPEN) { try { p.kill(); } catch {} return; }
-      wire(p);
+      wire(p, true);
     }).catch((e) => {
       send({ d: `\r\n\x1b[31m[ssh] ${e instanceof Error ? e.message : e}\x1b[0m\r\n` });
       try { ws.close(); } catch {}
     });
   } else {
     try {
-      const p = child_process.spawn(command, args, { cwd, env: process.env });
-      if (shellKind === "powershell") {
+      const p = child_process.spawn(command, args, {
+        cwd, env: process.env, windowsHide: true, detached: grouped,
+      });
+      if (localPs) {
         // pure-ASCII bootstrap: flip piped stdin/stdout + native-child
         // encoding to UTF-8 → CJK input & output both survive (the pipe
         // otherwise stays at the OEM codepage no matter what chcp says).
@@ -324,7 +374,11 @@ termWss.on("connection", (ws, req) => {
       }
       wire(p);
     }
-    catch (e) { send({ d: `\r\n[spawn] ${e instanceof Error ? e.message : e}\r\n` }); try { ws.close(); } catch {} }
+    catch (e) {
+      finished = true;
+      send({ d: `\r\n[spawn] ${e instanceof Error ? e.message : e}\r\n`, exit: -1 });
+      try { ws.close(); } catch {}
+    }
   }
 });
 

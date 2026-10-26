@@ -409,6 +409,46 @@ route code never changes.
   shell in the session cwd, JSON frames `{d}`). A `ws` WebSocketServer bound
   with `server`+`path` aborts (400) every non-matching upgrade — both endpoints
   use `noServer` + manual `server.on('upgrade')` routing.
+- `/ws/term` architecture (TermSession.tsx + term/terminalEditor.ts +
+  terminalHandle.ts client, index.ts + psops.ts + termprocess.ts +
+  shelltext.ts server): the win32 interactive default is **powershell.exe
+  -Command -** (an ASCII bootstrap flips piped stdin/stdout/child encoding to
+  UTF-8 → bidirectional CJK; cmd pipes stay OEM-pinned whatever chcp says),
+  `run=cmd` is the GBK-decoded escape hatch. Wire: out `{shell:"pty"|"pipe",
+  ready,hint}` profile then `{d}`/`{exit,interrupted?}`; in `{d}`/`{kill}`/
+  `{interrupt}`. `ready` is explicit — there is NO pre-ready/early-input
+  queue and NOTHING is replayed after a transport loss (execution is
+  uncertain; a fresh socket always starts empty). `TermSession` reconnects
+  with ≤8s backoff on close; `TerminalLifecycle` latches a clean `exit`
+  (typing `exit` must not respawn) while `{exit, interrupted:true}`
+  reconnects. `TermPanel` passes `hint` (server-reported dialect, e.g.
+  "Windows PowerShell 5.1 command") to term-agent instead of guessing.
+  Client input is split by profile: **pipe** shells run `TerminalEditor`
+  locally (grapheme-aware cursor, cell-width wrap-safe redraw that owns the
+  whole draft incl. wrapped rows, history, bracketed-paste, 450ms idle
+  prompt redraw, CJK combining marks); **pty** is byte-transparent. Ctrl+C:
+  a live draft cancels LOCALLY (with a hint that an empty-line Ctrl+C resets
+  the shell); an empty line on pipe sends `{interrupt}` → server
+  `killTerminalTree` (win32 `taskkill /T /F`, POSIX killpg on the detached
+  group — a stdin 0x03 is not a console interrupt) → exit{interrupted} →
+  auto-respawn fresh shell; on pty it forwards raw 0x03. Agent mode
+  (term-agent NL→command): the suggestion lands via `setLine` with
+  `fromAgent` provenance so Enter EXECUTES it in the shell once (history
+  keeps the flag; next plain NL goes back to the agent); `revision()` +
+  handle identity (`useTerminalHandle` keeps ONE object across callback-ref
+  churn) discard responses arriving after Ctrl+C/mode flip/new
+  input/reconnect/tab close. `psops.translatePsInput` rewrites TOP-LEVEL
+  `&&`/`||` to `; if ($?)/if (-not $?) {}` for PS 5.1 (quotes, backticks,
+  `#`, here-strings, `$(...)`, bracket groups all respected; invalid →
+  passthrough) — applied to complete local-PS commands only, never PTY
+  bytes. `termprocess.trackTerminalProcess` registers every /ws/term child
+  so ALL backend exit paths (restart, signals, watchdog) reap them in one
+  bounded taskkill, distinct from ACP-manager helpers. Offline coverage:
+  `test/unit-terminal.mjs` (editor + real xterm buffer + real PS5.1
+  semantics + real process-tree kills), `test/unit-terminal-react.mjs`
+  (real React ref churn/incarnation), `test/terminal-browser-smoke.mjs`
+  (mcp-playwright `browser_run_code_unsafe({filename})` — 21 scenarios:
+  real local shell I/O + mock term-agent + mock PTY).
 - `dw.json` `lastConfig` remembers the last model/mode/effort/speed pick and
   `POST /api/admin/sessions/new` applies it (desktop carries the pick forward).
 - New-session flow mirrors desktop: `/` redirects to `/admin/new`, which is the

@@ -6,16 +6,18 @@
 // to GB18030. GBK bytes almost always break strict UTF-8; UTF-8 always
 // passes — both producers come out right.
 
+import { StringDecoder } from "node:string_decoder";
 const utf8Strict = new TextDecoder("utf-8", { fatal: true });
-const gbk = new TextDecoder("gb18030");
 
 export class ShellDecoder {
   private carry: Buffer = Buffer.alloc(0);
+  private utf8 = new StringDecoder("utf8");
+  private gbk = new TextDecoder("gb18030");
 
   constructor(private readonly oem: boolean) {}
 
   push(chunk: Buffer): string {
-    if (!this.oem) return chunk.toString("utf8");
+    if (!this.oem) return this.utf8.write(chunk);
     const b = this.carry.length ? Buffer.concat([this.carry, chunk]) : chunk;
     // hold back ≤3 trailing bytes of an incomplete UTF-8 multibyte seq:
     // walk back over continuation bytes (0x80-0xBF), then check whether the
@@ -37,14 +39,15 @@ export class ShellDecoder {
       // strict UTF-8 failed → real GBK content. stream:true keeps a split
       // GBK pair inside the decoder for the next chunk.
       this.carry = Buffer.alloc(0);
-      return gbk.decode(b, { stream: true });
+      return this.gbk.decode(b, { stream: true });
     }
   }
 
   flush(): string {
+    if (!this.oem) return this.utf8.end();
     const rest = this.carry;
     this.carry = Buffer.alloc(0);
-    if (!rest.length) return "";
-    try { return utf8Strict.decode(rest); } catch { return gbk.decode(rest); }
+    if (!rest.length) return this.gbk.decode();
+    try { return utf8Strict.decode(rest) + this.gbk.decode(); } catch { return this.gbk.decode(rest); }
   }
 }

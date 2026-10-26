@@ -10,7 +10,7 @@ import TermHistory from './term/TermHistory'
  * `devin ssh`/`devin forward` args (query fragment, e.g. `run=ssh&arg=<s>`).
  *
  * Input is INLINE in the xterm prompt — there is no separate input box.
- * Shell mode (default): keystrokes go to the child verbatim. Agent mode
+ * Shell mode: pipe children use the local editor; PTYs get raw input. Agent mode
  * (chip in the tab bar): the typed line is captured locally and Enter POSTs
  * it to /term-agent, a separate NL→command agent (devin's
  * _cognition.ai/command/revise) — NOT the session's main agent. The
@@ -87,17 +87,21 @@ export default function TermPanel({ id, run }: { id: string; run?: string }) {
 
   const submitAgent = useCallback((tid: number, line: string) => {
     const h = handles.current.get(tid)
-    const PROMPT = '\x1b[36m❯\x1b[0m '
-    if (!h || !id) return
+    if (!h || !id || !h.isLive()) { h?.agentSettled(); return }
     const text = line.trim()
-    if (!text) { h.write(PROMPT); return }
-    if (busyRef.current) { h.write(`\x1b[2m(${t('tm.agentBusy')})\x1b[0m\r\n${PROMPT}`); return }
+    if (!text) { h.agentSettled(); return }
+    if (busyRef.current) { h.agentSettled(); h.write(`\x1b[2m(${t('tm.agentBusy')})\x1b[0m\r\n`); return }
     busyRef.current = true
     setAgentBusy(true)
+    const revision = h.revision()
+    const current = () => handles.current.get(tid) === h && h.isLive() && h.revision() === revision
     adminFetch<{ ok?: boolean; command?: string; error?: string }>(`/api/admin/session/${id}/term-agent`, {
       method: 'POST',
-      body: JSON.stringify({ text, model }),
+      // `run` is a query fragment, not a shell name. The server reports the
+      // actual dialect (including SSH sessions and the run=cmd override).
+      body: JSON.stringify({ text, model, note: h.shellHint() }),
     }).then((r) => {
+      if (!current()) return // mode flip, Ctrl+C, typing, closed tab or reconnect
       const cmd = (r?.command ?? '').trim()
       if (cmd) {
         h.write(`\x1b[2m◇ \x1b[0m${hlCmd(cmd)}\r\n`)
@@ -108,11 +112,12 @@ export default function TermPanel({ id, run }: { id: string; run?: string }) {
         h.write(`\x1b[31m${t('tm.agentErr')}${r?.error ?? 'unknown'}\x1b[0m\r\n`)
       }
     }).catch((e) => {
+      if (!current()) return
       h.write(`\x1b[31m${t('tm.agentErr')}${(e as Error).message}\x1b[0m\r\n`)
     }).finally(() => {
+      h.agentSettled()
       busyRef.current = false
       setAgentBusy(false)
-      h.write(PROMPT)
     })
   }, [id, model, agentRun, t])
 

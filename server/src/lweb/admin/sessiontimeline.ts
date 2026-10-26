@@ -774,7 +774,7 @@ export async function handleSessionTimeline(ctx: ApiContext, req: IncomingMessag
   // this build: {command:"list files", note:"shell command"} →
   // {"command":"ls"}. The session's main agent is NOT involved — this is
   // a separate one-shot inference. `text` → `command`; `note` defaults to
-  // a shell hint (cmd.exe locally on win32, POSIX shell otherwise and for
+  // a shell hint (PowerShell locally on win32, POSIX shell otherwise and for
   // ssh-hosted sessions). `model` is forwarded verbatim — the installed
   // build's CommandReviseParams has exactly those 3 fields and ignores
   // extras, so the pick is stored client-side and sent for forward-compat
@@ -789,7 +789,7 @@ export async function handleSessionTimeline(ctx: ApiContext, req: IncomingMessag
     const text = String(body.text ?? "").trim();
     if (!text) { json(res, 400, { error: "empty text" }); return true; }
     const note = String(body.note ?? "").trim()
-      || (meta(ctx, id).ssh || process.platform !== "win32" ? "shell command" : "cmd.exe command");
+      || (meta(ctx, id).ssh || process.platform !== "win32" ? "shell command" : "powershell command");
     const params: Record<string, unknown> = { sessionId: id, command: text, note };
     if (body.model) params.model = String(body.model);
     try {
