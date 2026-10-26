@@ -65,6 +65,10 @@ function ComposerToolbar({ isVisitor, caps, uploading, upload, isDraft, openMent
     const [voiceRecording, setVoiceRecording] = useState(false)
     const [attachOpen, setAttachOpen] = useState(false)
   const attachMenuRef = useRef<HTMLDivElement | null>(null)
+  // Stable ref cb: writes attachMenuRef AND focuses once on mount. An inline
+  // `el => {…; el?.focus()}` re-fires per re-render and steals focus back to
+  // the menu root while the user arrow-keys through items.
+  const attachMenuRefCb = useCallback((el: HTMLDivElement | null) => { attachMenuRef.current = el; el?.focus() }, [])
   // Composer pill collapse — official overflow-hysteresis (see useCollapseLevel):
   //   0 full labels · 1 icons only · 2 mode+model move into the "+" menu ·
   //   3 context meter joins them too (mirrors the mobile "+" menu).
@@ -204,7 +208,7 @@ function ComposerToolbar({ isVisitor, caps, uploading, upload, isDraft, openMent
                     <div
                       role="menu"
                       tabIndex={-1}
-                      ref={(el) => { attachMenuRef.current = el; el?.focus() }}
+                      ref={attachMenuRefCb}
                       onKeyDown={attachMenuKeyDown}
                       style={{ bottom: window.innerHeight - attachBtnRef.current.getBoundingClientRect().top + 6, left: attachBtnRef.current.getBoundingClientRect().left, maxHeight: Math.min(400, attachBtnRef.current.getBoundingClientRect().top - 14) }}
                       className="fixed z-50 flex w-[220px] flex-col overflow-hidden rounded-[10px] bg-[rgba(255,255,255,0.94)] shadow-[0_10px_15px_-3px_rgba(0,0,0,0.1),0_4px_6px_-2px_rgba(0,0,0,0.05)] outline outline-1 outline-black/[0.06] backdrop-blur-[8px] focus:outline-none dark:bg-[#1f1f1f]/[0.94] dark:outline-white/[0.06] [transition:transform_40ms_cubic-bezier(0.76,0,0.24,1),scale_40ms_cubic-bezier(0.76,0,0.24,1),opacity_40ms_cubic-bezier(0.76,0,0.24,1)]"

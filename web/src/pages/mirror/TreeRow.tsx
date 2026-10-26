@@ -22,6 +22,12 @@ type RowDrop = { accept: TreeAccept; items: string[] }
 
 type RowProps = { s: MirrorTreeSession; depth: number; activeDevinId: string; folders: string[]; onOpen: (s: MirrorTreeSession) => void; onPrefetch?: (s: MirrorTreeSession) => void; onRefresh?: () => void; archivedView?: boolean; compact?: boolean; propHidden?: Record<string, boolean>; /** Section drop context — absent = rows aren't drop targets (project buckets, archived). */ dndSection?: RowDrop; /** Session id the drag dwell wants expanded (parent-peek). */ dwellId?: string | null; /** True while a folder/group is dragged — rows go inert like the official v||m rule. */ suppressHover?: boolean; /** Shared ms timestamp of the last drag end/cancel — the row anchor suppresses the click a drop leaves behind. */ navGuard?: { current: number } }
 
+/** Select-all for mount-time — MUST be a stable function identity: an inline
+ *  `el => el?.select()` ref detaches+reattaches on every re-render, so each
+ *  keystroke's setState re-selected the whole draft and the next char
+ *  replaced the previous one (IME composition got aborted the same way). */
+const selectAllOnMount = (el: HTMLInputElement | null) => el?.select()
+
 type ImplProps = RowProps & { ghost?: boolean; dndRef?: (el: HTMLElement | null) => void; dndListeners?: DraggableSyntheticListeners; dndAttrs?: DraggableAttributes; dragging?: boolean; dropHighlight?: boolean }
 
 /** DraggableSidebarSessionRow: one node is both the `session:` drag source and
@@ -62,6 +68,11 @@ function TreeRowImpl({ s, depth, activeDevinId, folders, onOpen, onPrefetch, onR
   const [copiedAt, setCopiedAt] = useState(0)
   const [menuPos, setMenuPos] = useState<{ left: number; top: number }>({ left: 0, top: 0 })
   const [subPos, setSubPos] = useState<{ left: number; top: number }>({ left: 0, top: 0 })
+  // Focus the first item only when the menu OPENS on 'main' — an inline ref
+  // re-fires on every row re-render (tree refresh!) and yanks focus back.
+  const focusFirstMenuItem = useCallback((el: HTMLElement | null) => {
+    if (menu === 'main') el?.querySelector('button')?.focus()
+  }, [menu])
   const openFolderSub = (e: React.MouseEvent) => {
     const item = (e.currentTarget as HTMLElement).getBoundingClientRect()
     const panel = (e.currentTarget as HTMLElement).closest('[role="menu"]')?.getBoundingClientRect()
@@ -201,7 +212,7 @@ function TreeRowImpl({ s, depth, activeDevinId, folders, onOpen, onPrefetch, onR
           {editing ? (
             <input
               autoFocus
-              ref={(el) => el?.select()}
+              ref={selectAllOnMount}
               value={draft}
               placeholder={t('tree.sessionTitle')}
               onChange={(e) => setDraft(e.target.value)}
@@ -329,7 +340,7 @@ function TreeRowImpl({ s, depth, activeDevinId, folders, onOpen, onPrefetch, onR
             <div className="fixed inset-0 z-40" onClick={(e) => { e.stopPropagation(); setMenu('closed') }} />
             <div
               role="menu"
-              ref={(el) => { if (menu === 'main') el?.querySelector('button')?.focus() }}
+              ref={focusFirstMenuItem}
               onKeyDown={(e) => {
                 if (e.key === 'Escape') { e.stopPropagation(); setMenu('closed'); return }
                 if (e.key === 'ArrowRight' && menu === 'main' && (document.activeElement as HTMLElement)?.getAttribute('aria-haspopup') === 'menu') { e.stopPropagation(); openFolderSub({ currentTarget: document.activeElement } as unknown as React.MouseEvent); return }

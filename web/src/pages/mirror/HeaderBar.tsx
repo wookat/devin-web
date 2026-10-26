@@ -206,6 +206,11 @@ function HeaderBar({ isVisitor, sidebar, setPeek, setSidebar, detail, isDraft, c
   )
 }
 
+/** Mount-time select-all — stable identity so it can't re-fire per render
+ *  (an inline ref re-selects the draft on every keystroke, and the next
+ *  char replaces the previous one). */
+const selectAllOnMount = (el: HTMLInputElement | null) => el?.select()
+
 /* Title dropdown — official-style header affordance: clicking the title
  * opens a compact popover with parent navigation (child sessions), child
  * session links (parents), and an inline rename entry. The title itself
@@ -243,7 +248,7 @@ function TitleDropdown({ isDraft, title, parentId, parentTitle, kids, onNav }: {
     return (
       <input
         autoFocus
-        ref={(el) => el?.select()}
+        ref={selectAllOnMount}
         value={draft}
         onChange={(e) => setDraft(e.target.value)}
         onBlur={() => void commit(draft)}
