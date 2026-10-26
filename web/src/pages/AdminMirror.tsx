@@ -32,6 +32,7 @@ import { SessionMenu } from './mirror/SessionMenu'
 import { requestWsOpen } from './mirror/WsShared'
 import { SessionIndex } from './mirror/SessionIndex'
 import { TimelineGroup, StatusTail } from './mirror/TimelineGroups'
+import { RevertDialog, type RevertPreview } from './mirror/RevertDialog'
 import { DraftExplorer } from './mirror/DraftExplorer'
 import { PanelContent } from './mirror/panelRender'
 import { SidebarRail } from './mirror/SidebarRail'
@@ -81,6 +82,11 @@ export default function AdminMirrorPage() {
   const caps = vw.caps
   const nav = useNavigate()
   const [items, setItems] = useState<TimelineItem[]>([])
+  // ACP revert (devin ≥3000.11.216): userMessageId → rewindable step, fed by
+  // the revert_steps push + one pull on open. Empty = no rewind support.
+  const [revertSteps, setRevertSteps] = useState<Map<string, { userMessageId: string; summary?: string }>>(new Map())
+  const [revertConfirm, setRevertConfirm] = useState<{ userMessageId: string; preview: RevertPreview } | null>(null)
+  const [revertBusy, setRevertBusy] = useState(false)
   const [interrupted, setInterrupted] = useState<{ text: string; ts: number; kind?: 'continue' | 'resend'; attachments?: { url: string; name?: string; size?: number; mime?: string }[] } | null>(null)
   // 分身: per-session mode + escalation flag, ridden on the /timeline response.
   const [persona, setPersona] = useState<{ mode: string; escalated: boolean } | null>(null)
@@ -1249,6 +1255,19 @@ export default function AdminMirrorPage() {
         if (typeof ev.gen === 'number' && ev.gen !== windowGen.current) { deltaBuf = []; resync(ev.gen); return }
         deltaBuf.push(...(ev.items as TimelineItem[]))
         if (deltaTimer == null) deltaTimer = window.setTimeout(flushDeltaBuf, 160)
+      } else if (ev.type === 'revert_steps' && Array.isArray(ev.steps)) {
+        // Rewindable checkpoints pushed by the agent — rebuild the
+        // userMessageId→step map wholesale (the list is authoritative).
+        const m = new Map<string, { userMessageId: string; summary?: string }>()
+        for (const s of ev.steps as { userMessageId?: string; summary?: string }[]) {
+          if (s?.userMessageId) m.set(s.userMessageId, { userMessageId: s.userMessageId, summary: s.summary })
+        }
+        setRevertSteps(m)
+      } else if (ev.type === 'history_rewound') {
+        // The server's log was already truncated at firstRemovedUserMessageId;
+        // resync paints the rewound truth (delta gen is unchanged — a plain
+        // load() is the correct merge, no item-level surgery needed).
+        void load()
       } else if (ev.type === 'prompt_done' || ev.type === 'account_limited' || ev.type === 'account_rotated' || ev.type === 'persona_state') {
         void load()
       }
@@ -2115,6 +2134,68 @@ const groups = useMemo(() => groupItems(allItems, sessionWorking), [allItems, se
     return () => clearInterval(t)
   }, [statusState.enum])
 
+  // ACP revert — pull the checkpoint list once on open (the push often lands
+  // while the page is still mounting); empty/unsupported → buttons hide.
+  useEffect(() => {
+    setRevertSteps(new Map())
+    setRevertConfirm(null)
+    if (isVisitor || !id || id === 'new') return
+    let alive = true
+    void adminFetch<{ steps?: { userMessageId?: string; summary?: string }[] }>(`/api/sessions/${encodeURIComponent(id)}/revert-steps`)
+      .then((r) => {
+        if (!alive || !Array.isArray(r?.steps)) return
+        const m = new Map<string, { userMessageId: string; summary?: string }>()
+        for (const s of r.steps) if (s?.userMessageId) m.set(s.userMessageId, { userMessageId: s.userMessageId, summary: s.summary })
+        setRevertSteps(m)
+      })
+      .catch(() => {})
+    return () => { alive = false }
+  }, [id, isVisitor])
+
+  /** Revert flow (mirrors the desktop): preview → clean = execute right away;
+   *  warnings/conflicts = confirm dialog first. execute → history_rewound WS
+   *  resyncs; a conflict-forced fork returns a different session to open. */
+  async function revertPreview(umid: string) {
+    const pv = await adminFetch<RevertPreview>(`/api/sessions/${encodeURIComponent(id)}/revert`, {
+      method: 'POST', body: JSON.stringify({ userMessageId: umid, action: 'preview' }),
+    }).catch((e) => { setControlMsg(`${t('rv.failed')}: ${(e as Error).message}`); return null })
+    if (!pv) return
+    const dirty = (pv.fileActions?.length ?? 0) + (pv.irreversibleWarnings?.length ?? 0) + (pv.conflicts?.length ?? 0) > 0
+    if (dirty) setRevertConfirm({ userMessageId: umid, preview: pv })
+    else void revertExecute(umid)
+  }
+
+  async function revertExecute(umid: string) {
+    setRevertBusy(true)
+    try {
+      const r = await adminFetch<{ forkedSessionId?: string }>(`/api/sessions/${encodeURIComponent(id)}/revert`, {
+        method: 'POST', body: JSON.stringify({ userMessageId: umid, action: 'execute' }),
+      })
+      setRevertConfirm(null)
+      if (r?.forkedSessionId && r.forkedSessionId !== id) nav(`/admin/${r.forkedSessionId}`)
+      // In-place rewind: the history_rewound WS event triggers the resync.
+    } catch (e) {
+      setControlMsg(`${t('rv.failed')}: ${(e as Error).message}`)
+    } finally {
+      setRevertBusy(false)
+    }
+  }
+
+  async function revertForkStep(umid: string) {
+    setRevertBusy(true)
+    try {
+      const r = await adminFetch<{ forkedSessionId?: string }>(`/api/sessions/${encodeURIComponent(id)}/revert`, {
+        method: 'POST', body: JSON.stringify({ userMessageId: umid, action: 'fork' }),
+      })
+      setRevertConfirm(null)
+      if (r?.forkedSessionId) { setControlMsg(t('rv.forked')); nav(`/admin/${r.forkedSessionId}`) }
+    } catch (e) {
+      setControlMsg(`${t('rv.failed')}: ${(e as Error).message}`)
+    } finally {
+      setRevertBusy(false)
+    }
+  }
+
   async function control(action: 'pause' | 'resume') {
     if (controlling || isVisitor) return
     setControlling(true)
@@ -2524,7 +2605,7 @@ const groups = useMemo(() => groupItems(allItems, sessionWorking), [allItems, se
                   ) : row.g ? (
                     // keyed by the newest member: history backfill prepends older items and may
                     // extend the group backwards, which must not remount it (would drop open state)
-                    <TimelineGroup g={row.g} isLast={row.gi === groups.length - 1} id={id} isVisitor={isVisitor} isSub={isSub} caps={caps} detail={detail} status={status} panel={panel} mediaTok={mediaTok} permResolved={permResolved} secretProvided={secretProvided} provideSecret={provideSecret} wf={wf} onOpenWfRun={(runId) => { setWfRunId(runId || null); openTab('agents') }} onOpenPr={openPr} onOpenPermission={(it) => { setPermSide(it); setShowPanel(true) }} envSuperseded={envSuperseded} messageHeaders={messageHeaders} translations={translations} onTranslated={(itemId, tr) => setTranslations((p) => ({ ...p, [itemId]: tr }))} onFileRef={onFileRef} openFileTab={openFileTab} jumpToQuote={jumpToQuote} onSelQuote={setSelQuote} quoteGuardUntil={quoteGuardUntil} onControlMsg={setControlMsg} onSideChat={(it) => { setScAnchor({ id: it.id, ts: it.ts }); openTab('sidechat') }} onStepChanges={onStepChanges} onOpenProgress={onOpenProgress} onOpenSubagent={onOpenSubagent} onOpenWsFile={onOpenWsFile} worklogJump={worklogJump} tailThoughtId={tailThoughtId} urlPrs={urlPrs} urlFiles={urlFiles} />
+                    <TimelineGroup g={row.g} isLast={row.gi === groups.length - 1} id={id} isVisitor={isVisitor} isSub={isSub} caps={caps} detail={detail} status={status} panel={panel} mediaTok={mediaTok} permResolved={permResolved} secretProvided={secretProvided} provideSecret={provideSecret} wf={wf} onOpenWfRun={(runId) => { setWfRunId(runId || null); openTab('agents') }} onOpenPr={openPr} onOpenPermission={(it) => { setPermSide(it); setShowPanel(true) }} envSuperseded={envSuperseded} messageHeaders={messageHeaders} translations={translations} onTranslated={(itemId, tr) => setTranslations((p) => ({ ...p, [itemId]: tr }))} onFileRef={onFileRef} openFileTab={openFileTab} jumpToQuote={jumpToQuote} onSelQuote={setSelQuote} quoteGuardUntil={quoteGuardUntil} onControlMsg={setControlMsg} onSideChat={(it) => { setScAnchor({ id: it.id, ts: it.ts }); openTab('sidechat') }} onStepChanges={onStepChanges} onOpenProgress={onOpenProgress} onOpenSubagent={onOpenSubagent} onOpenWsFile={onOpenWsFile} worklogJump={worklogJump} tailThoughtId={tailThoughtId} urlPrs={urlPrs} urlFiles={urlFiles} revertSteps={revertSteps} onRevertStep={!isVisitor && caps.canSendMessage ? (umid) => void revertPreview(umid) : undefined} onForkStep={!isVisitor && caps.canSendMessage ? (umid) => void revertForkStep(umid) : undefined} />
                   ) : null}
                 </div>
               )
@@ -2719,6 +2800,16 @@ const groups = useMemo(() => groupItems(allItems, sessionWorking), [allItems, se
             openFileTab={openFileTab}
           />
         </aside>
+      )}
+      {revertConfirm && (
+        <RevertDialog
+          userMessageId={revertConfirm.userMessageId}
+          preview={revertConfirm.preview}
+          busy={revertBusy}
+          onExecute={() => void revertExecute(revertConfirm.userMessageId)}
+          onFork={() => void revertForkStep(revertConfirm.userMessageId)}
+          onClose={() => setRevertConfirm(null)}
+        />
       )}
     </div>
   )

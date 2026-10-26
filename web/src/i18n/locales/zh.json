@@ -1017,6 +1017,8 @@
   "sc": {
     "newWithPrompt": "用此提示开新会话",
     "forkHere": "从此消息分叉会话",
+    "revert": "回退到此消息之前",
+    "forkStep": "从此处分支新会话",
     "good": "回答得好",
     "bad": "回答得差",
     "copy": "复制",
@@ -1035,6 +1037,19 @@
     "translating": "正在翻译…",
     "translateUnavailable": "本地版不支持翻译",
     "mergeFail": "合并失败"
+  },
+  "rv": {
+    "title": "回退到此消息之前？",
+    "desc": "此消息及其后的全部内容将从历史中移除，工作区文件将恢复到该检查点。",
+    "fileActions": "个文件改动将被还原",
+    "warnings": "警告",
+    "conflicts": "存在冲突 —— 回退将分支为新会话",
+    "execute": "回退",
+    "fork": "改为分支",
+    "cancel": "取消",
+    "busy": "正在回退…",
+    "failed": "回退失败",
+    "forked": "已分支到新会话"
   },
   "perm": {
     "createAuto": "创建自动化",

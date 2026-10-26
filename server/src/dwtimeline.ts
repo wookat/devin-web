@@ -47,6 +47,9 @@ interface DwItem {
    * echo replaced by the real user chunk). Never appears in paged items. */
   _gone?: boolean;
   role?: "devin" | "user";
+  /** `cognition.ai/clientMessageId` of the user chunk — the revert anchor:
+   * every rewindable step is keyed by it (revert/stepsUpdated). */
+  userMessageId?: string;
   title?: string;
   body?: string;
   durationMs?: number;
@@ -522,6 +525,11 @@ function tlPush(st: TlState, e: { ts: number; seq?: number; update: Record<strin
     // When the real echo lands on a `_local` optimistic twin, CONVERT it in
     // place (same id, body := real text). Merging-then-deduping would splice
     // the item that now holds the real content — the user message vanished.
+    // Revert anchor: the step list (revert/stepsUpdated) is keyed by
+    // `cognition.ai/clientMessageId` — echo chunks carry it in _meta, and
+    // `_local` mirrors get it via sessionLog.tagUserMessage on prompt
+    // completion. Stamp it on every path that materializes/updates the row.
+    const clientMsgId = isUser ? uMeta["cognition.ai/clientMessageId"] : undefined;
     let twinAtLast: string | null = null;
     if (isUser && !u._local && st.lastMsg && st.localUser.size) {
       for (const [t, lo] of st.localUser) if (lo === st.lastMsg) { twinAtLast = t; break; }
@@ -532,6 +540,7 @@ function tlPush(st: TlState, e: { ts: number; seq?: number; update: Record<strin
       // so without this the attachment chips vanish when the twin converts.
       const keep = (st.lastMsg.body ?? "").split("\n").filter((l) => /^ATTACHMENT:"/.test(l.trim()));
       st.lastMsg.body = text + (keep.length ? `\n${keep.join("\n")}` : "");
+      if (typeof clientMsgId === "string" && clientMsgId) st.lastMsg.userMessageId = clientMsgId;
       // The echo's arrival ts can postdate whole turn rows (devin sometimes
       // emits it late) — the item must keep the send-time stamp or the client
       // sorts the reply ABOVE the user's message.
@@ -539,10 +548,11 @@ function tlPush(st: TlState, e: { ts: number; seq?: number; update: Record<strin
     } else if (twinAtLast == null && !u._local && st.lastMsg && st.lastMsg.kind === wantKind && st.lastMsg.role === role) {
       st.lastMsg.body = (st.lastMsg.body ?? "") + text;
       st.lastMsg.ts = iso;
+      if (typeof clientMsgId === "string" && clientMsgId) st.lastMsg.userMessageId = clientMsgId;
     } else {
       const atts = isUser && Array.isArray(u.attachments)
         ? (u.attachments as { url: string; name?: string; mime?: string; size?: number }[]) : undefined;
-      st.lastMsg = { id, ts: iso, kind: wantKind, role, body: text, raw_type: kind, eidx: gidx, ...(atts?.length ? { attachments: atts } : {}) };
+      st.lastMsg = { id, ts: iso, kind: wantKind, role, body: text, raw_type: kind, eidx: gidx, ...(atts?.length ? { attachments: atts } : {}), ...(typeof clientMsgId === "string" && clientMsgId ? { userMessageId: clientMsgId } : {}) };
       if (wantKind === "message") st.lastMsg.worklog = "output";
       st.items.push(st.lastMsg);
       if (isUser && u._local) st.localUser.set(text, st.lastMsg);

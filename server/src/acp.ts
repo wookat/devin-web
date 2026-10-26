@@ -60,8 +60,28 @@ export interface DevinAcpEvents {
     ok: boolean,
     errorMessage?: string,
   ) => void;
+  /** `_cognition.ai/revert/stepsUpdated` — the agent pushes the rewindable
+   * checkpoint list (one step per prompt) on load and after every change. */
+  onRevertSteps?: (sessionId: string, steps: RevertStep[]) => void;
+  /** `_cognition.ai/revert/historyRewound` — an execute actually rewound:
+   * `firstRemovedUserMessageId` and everything after it is gone from the
+   * authoritative history. */
+  onHistoryRewound?: (sessionId: string, params: { revertTargetNodeId?: number; firstRemovedUserMessageId?: string }) => void;
   onExit: (code: number | null) => void;
 }
+
+/** One user-message-anchored checkpoint, as delivered by
+ * `revert/stepsUpdated` / `revert/listSteps` (live-verified on
+ * devin 3000.11.216: prompt steps also carry `stepId` === `userMessageId`). */
+export type RevertStep = {
+  stepId: string;
+  stepNumber: number;
+  kind: string;
+  userMessageId: string;
+  revertTargetNodeId: number;
+  forkTargetNodeId: number;
+  summary?: string;
+};
 
 let permissionSeq = 0;
 
@@ -190,7 +210,7 @@ export class DevinAcp {
       : agent.shell
         ? (spawn(agentCommandLine(agent), { ...spawnOpts, shell: true }) as ChildProcessByStdio<Writable, Readable, Readable>)
         : spawn(agent.command, agent.args, spawnOpts);
-    return DevinAcp.init(cwd, terminal, ev, agent, proc, account);
+    return DevinAcp.init(cwd, terminal, ev, agent, proc, account, false, extraEnv.WINDSURF_API_KEY);
   }
 
   /** Broker-mode spawn: ctl spawn → data attach → shared init handshake. */
@@ -208,7 +228,7 @@ export class DevinAcp {
       shell: agent.shell === true, cmdline: agent.shell ? agentCommandLine(agent) : undefined, key: poolKey, account,
     });
     const { proc } = await brokerAttach(acpId, 0);
-    const self = await DevinAcp.init(cwd, terminal, ev, agent, proc, account);
+    const self = await DevinAcp.init(cwd, terminal, ev, agent, proc, account, false, extraEnv.WINDSURF_API_KEY);
     self.brokerId = acpId;
     void wireBrokerExit(acpId, proc).catch(() => {});
     return self;
@@ -225,9 +245,10 @@ export class DevinAcp {
     acpId: string,
     after: number,
     account: string | null = null,
+    apiKey?: string,
   ): Promise<DevinAcp> {
     const { proc } = await brokerAttach(acpId, after);
-    const self = await DevinAcp.init(cwd, terminal, ev, agent, proc, account, true);
+    const self = await DevinAcp.init(cwd, terminal, ev, agent, proc, account, true, apiKey);
     self.brokerId = acpId;
     void wireBrokerExit(acpId, proc).catch(() => {});
     return self;
@@ -244,6 +265,7 @@ export class DevinAcp {
     proc: ProcHandle,
     account: string | null,
     tolerateInit = false,
+    apiKey?: string,
   ): Promise<DevinAcp> {
     const pendingPermissions = new Map<string, PendingPermission>();
     proc.stderr?.on("data", () => { /* drain: see stdio note above */ });
@@ -321,6 +343,13 @@ export class DevinAcp {
           String(params.message ?? ""),
           String(params.level ?? "info"),
         );
+      } else if (method === "_cognition.ai/revert/stepsUpdated") {
+        ev.onRevertSteps?.(
+          String(params.sessionId ?? ""),
+          Array.isArray(params.steps) ? (params.steps as RevertStep[]) : [],
+        );
+      } else if (method === "_cognition.ai/revert/historyRewound") {
+        ev.onHistoryRewound?.(String(params.sessionId ?? ""), params as { revertTargetNodeId?: number; firstRemovedUserMessageId?: string });
       }
     };
 
@@ -469,7 +498,11 @@ export class DevinAcp {
             _meta: {
               // Declare support for devin's extension surfaces so the agent
               // emits subagent/chain/sidechain events and accepts control
-              // calls. Mirrors what devin desktop declares at handshake.
+              // calls. Mirrors what devin desktop declares at handshake
+              // (3000.11.216 extension.js): only capabilities this backend
+              // can actually serve — localTools/editorContext/fastContext/
+              // clientProvidedModels/... stay off because the agent would
+              // issue client requests we can't answer.
               "cognition.ai/subagentSupport": true,
               "cognition.ai/subagentControl": true,
               "cognition.ai/chains": true,
@@ -477,6 +510,22 @@ export class DevinAcp {
               "cognition.ai/messageGrouping": true,
               "cognition.ai/partialContent": true,
               "cognition.ai/clarificationRequested": true,
+              "cognition.ai/revert": true,
+              "cognition.ai/loadStats": true,
+              "cognition.ai/mcp": true,
+              "cognition.ai/plugins": true,
+              "cognition.ai/browserPreview": true,
+              "cognition.ai/browserPreviewOpen": true,
+              "cognition.ai/sessionListFolders": true,
+              "cognition.ai/sessionListPermissionScopes": true,
+              "cognition.ai/statelessShellReplay": true,
+              "cognition.ai/shellChainReads": true,
+              "cognition.ai/lazyRepoOptions": true,
+              "cognition.ai/queuedMessagesInfoUpdate": true,
+              "cognition.ai/diagnosticsSessionExport": true,
+              "cognition.ai/groupedSessionConfigOptions": true,
+              "cognition.ai/toolCallQuestions": true,
+              "cognition.ai/questionAnswerRows": true,
             },
           },
           clientInfo: { name: "devin-web", version: "0.1.0" },
@@ -501,6 +550,30 @@ export class DevinAcp {
       // every other RPC, so degrade caps and carry on.
       console.warn(`[acp] adopted ${agent.id} refused re-initialize (${String((err as Error)?.message ?? err).slice(0, 120)}) — running with cached/no capabilities`);
       self.capabilities = null;
+    }
+    // ACP-mode auth (devin ≥3000.11.216): local CLI credentials are ignored
+    // — the host must `authenticate` before ANY session opens ("ACP host is
+    // the sole source of credentials"). `devin-browser` accepts the API key
+    // via _meta.api_key (no browser flow is triggered when it is present —
+    // live-verified). Pre-auth agents without `authMethods` skip silently.
+    const authMethods = (self.capabilities as { authMethods?: { id?: string }[] } | null)?.authMethods;
+    if (apiKey && Array.isArray(authMethods) && authMethods.length) {
+      const methodId = authMethods.find((m) => m?.id === "devin-browser")?.id ?? authMethods[0]?.id;
+      if (methodId) {
+        try {
+          await conn.authenticate({ methodId, _meta: { api_key: apiKey } } as acp.AuthenticateRequest);
+        } catch (err) {
+          // Adopted acp may already be authenticated from their original
+          // stream — a refused second authenticate must not kill a working
+          // process. A fresh spawn with no auth is useless: fail fast.
+          if (tolerateInit) {
+            console.warn(`[acp] adopted ${agent.id} refused authenticate (${String((err as Error)?.message ?? err).slice(0, 120)}) — likely already authenticated`);
+          } else {
+            self.kill();
+            throw new Error(`acp authenticate failed: ${String((err as Error)?.message ?? err).slice(0, 160)}`);
+          }
+        }
+      }
     }
     handshaken = true;
     return self;
@@ -578,6 +651,38 @@ export class DevinAcp {
     richContent?: unknown[]; ensureAwake?: boolean;
   }) {
     return this.conn.extMethod(`_cognition.ai/sidechain/request`, params as Record<string, unknown>);
+  }
+
+  /** devin extension (3000.11.216, live-verified): rewindable checkpoints —
+   * one step per prompt, anchored on `userMessageId`. */
+  async revertListSteps(sessionId: string): Promise<{ steps: RevertStep[] }> {
+    return this.conn.extMethod("_cognition.ai/revert/listSteps", { sessionId }) as Promise<{ steps: RevertStep[] }>;
+  }
+
+  /** Dry-run a rewind: `{fileActions, irreversibleWarnings, conflicts}` —
+   * all three empty means the official client executes without a dialog. */
+  async revertPreview(sessionId: string, userMessageId: string) {
+    return this.conn.extMethod("_cognition.ai/revert/preview", { sessionId, userMessageId }) as Promise<{
+      fileActions?: unknown[]; irreversibleWarnings?: unknown[]; conflicts?: unknown[];
+    }>;
+  }
+
+  /** Rewind the session's history+workspace to just before `userMessageId`.
+   * Response `{forkedSessionId, outcomes}` — same sessionId on an in-place
+   * rewind, a NEW id when conflicts forced the branch-fork path. Emits
+   * `revert/historyRewound` + `revert/stepsUpdated` notifications. */
+  async revertExecute(sessionId: string, userMessageId: string, opts?: Record<string, unknown>) {
+    return this.conn.extMethod("_cognition.ai/revert/execute", { sessionId, userMessageId, ...opts }) as Promise<{
+      forkedSessionId?: string; outcomes?: unknown[];
+    }>;
+  }
+
+  /** Branch a NEW session continuing from before `userMessageId` — the
+   * original session is untouched. → `{forkedSessionId}` */
+  async revertFork(sessionId: string, userMessageId: string) {
+    return this.conn.extMethod("_cognition.ai/revert/forkFromStep", { sessionId, userMessageId }) as Promise<{
+      forkedSessionId?: string;
+    }>;
   }
 
   /** Raw extension-method passthrough (debug/probing). */

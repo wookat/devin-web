@@ -139,6 +139,9 @@ export interface TimelineItem {
     | 'workflow' | 'workflow_agent' | 'permission' | 'bot_flag' | 'env_suggestion'
     | 'secret_request' | 'secrets_sent' | 'other'
   role?: 'devin' | 'user'
+  /** `cognition.ai/clientMessageId` — the ACP revert anchor: rewindable
+   *  steps (revert/stepsUpdated) are keyed by it. Local backend only. */
+  userMessageId?: string
   /** Whether this user-authored event belongs to the current upstream viewer. */
   own?: boolean
   title?: string

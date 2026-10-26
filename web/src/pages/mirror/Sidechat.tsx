@@ -1,7 +1,7 @@
 import { useEffect, useState } from 'react'
 import { useTranslation } from 'react-i18next'
 import i18n from '@/i18n'
-import { Loader2, Copy, Check, ArrowUp, Square, Link2, MessageSquarePlus, SquarePen, Brain, Wrench, Reply, ThumbsUp, ThumbsDown, Languages, GitFork, TextQuote } from 'lucide-react'
+import { Loader2, Copy, Check, ArrowUp, Square, Link2, MessageSquarePlus, SquarePen, Brain, Wrench, Reply, ThumbsUp, ThumbsDown, Languages, GitFork, TextQuote, History, GitBranch } from 'lucide-react'
 import { adminFetch } from '@/lib/api'
 import { visibleInterval } from '@/lib/poll'
 import Markdown from '@/components/Markdown'
@@ -11,7 +11,7 @@ import { FeedbackDialog } from './dialogs'
 import { copyText } from '../../lib/clipboard'
 import { translateText } from '@/lib/translate'
 
-function MessageToolbar({ text, eid, ts, tab, onSideChat, onStartNewSession, onFork, onQuote, sessionId, onTranslated }: { text: string; eid: string; ts?: string; tab?: string; onSideChat?: () => void; onStartNewSession?: () => void; onFork?: () => void; onQuote?: () => void; sessionId?: string; onTranslated?: (t: string) => void }) {
+function MessageToolbar({ text, eid, ts, tab, onSideChat, onStartNewSession, onFork, onQuote, sessionId, onTranslated, onRevert, onForkStep }: { text: string; eid: string; ts?: string; tab?: string; onSideChat?: () => void; onStartNewSession?: () => void; onFork?: () => void; onQuote?: () => void; sessionId?: string; onTranslated?: (t: string) => void; onRevert?: () => void; onForkStep?: () => void }) {
   const { t } = useTranslation()
   const [done, setDone] = useState('')
   const [fb, setFb] = useState<'positive' | 'negative' | null>(null)
@@ -39,6 +39,16 @@ function MessageToolbar({ text, eid, ts, tab, onSideChat, onStartNewSession, onF
       {onFork && (
         <button aria-label={t('sc.forkHere')} title={t('sc.forkHere')} onClick={onFork} className={btn}>
           <GitFork size={16} />
+        </button>
+      )}
+      {onRevert && (
+        <button aria-label={t('sc.revert')} title={t('sc.revert')} onClick={onRevert} className={btn}>
+          <History size={16} />
+        </button>
+      )}
+      {onForkStep && (
+        <button aria-label={t('sc.forkStep')} title={t('sc.forkStep')} onClick={onForkStep} className={btn}>
+          <GitBranch size={16} />
         </button>
       )}
       {sessionId && (

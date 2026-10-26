@@ -1017,6 +1017,8 @@
   "sc": {
     "newWithPrompt": "Start new session with this prompt",
     "forkHere": "Fork session from this message",
+    "revert": "Rewind to before this message",
+    "forkStep": "Branch new session from this point",
     "good": "Good response",
     "bad": "Bad response",
     "copy": "Copy",
@@ -1035,6 +1037,19 @@
     "translating": "Translating...",
     "translateUnavailable": "Translation unavailable locally",
     "mergeFail": "merge failed"
+  },
+  "rv": {
+    "title": "Rewind to before this message?",
+    "desc": "This message and everything after it will be removed from history, and workspace files will be restored to the checkpoint.",
+    "fileActions": "file change(s) will be reverted",
+    "warnings": "Warnings",
+    "conflicts": "Conflicts — rewinding will branch into a new session",
+    "execute": "Rewind",
+    "fork": "Branch instead",
+    "cancel": "Cancel",
+    "busy": "Rewinding…",
+    "failed": "Rewind failed",
+    "forked": "Branched to a new session"
   },
   "perm": {
     "createAuto": "Create automation",

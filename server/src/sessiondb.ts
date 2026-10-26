@@ -162,6 +162,9 @@ export class SessionDb {
   private sDel;
   private sDelGen;
   private sDelOlder;
+  private sDelFromSeq;
+  private sSeqOfClientMsg;
+  private sTagClientMsg;
   private sBlob;
   private sDedupGet;
   private sDedupSet;
@@ -287,6 +290,15 @@ export class SessionDb {
     this.sDel = this.db.prepare("DELETE FROM events WHERE session_id=?");
     this.sDelGen = this.db.prepare("DELETE FROM events WHERE session_id=? AND gen=?");
     this.sDelOlder = this.db.prepare("DELETE FROM events WHERE session_id=? AND gen<?");
+    this.sDelFromSeq = this.db.prepare("DELETE FROM events WHERE session_id=? AND seq>=?");
+    this.sSeqOfClientMsg = this.db.prepare(
+      `SELECT seq FROM events WHERE session_id=? AND kind='user_message_chunk'
+       AND json_extract(data,'$._meta."cognition.ai/clientMessageId"')=? ORDER BY seq ASC LIMIT 1`,
+    );
+    this.sTagClientMsg = this.db.prepare(
+      `UPDATE events SET data=json_set(data,'$._meta."cognition.ai/clientMessageId"',?)
+       WHERE session_id=? AND seq=?`,
+    );
     this.sBlob = this.db.prepare("SELECT data FROM blobs WHERE sha=?");
     this.sDedupGet = this.db.prepare(
       "SELECT seq,gen,ts,json_extract(data,'$._local') AS loc FROM events WHERE session_id=? AND dedup=? LIMIT 1",
@@ -554,6 +566,31 @@ export class SessionDb {
   deleteOlderGens(sessionId: string, gen: number) {
     this.flush();
     this.sDelOlder.run(sessionId, gen);
+  }
+
+  /** Rewind: drop every row at/after `seq` — the ACP-side history already
+   * rewound (revert/execute), so the mirror must lose those turns too or the
+   * deleted rows resurrect on the next rehydrate. Seq is session-monotonic
+   * across generations, so no gen filter. */
+  deleteFromSeq(sessionId: string, seq: number): number {
+    this.flush();
+    return Number(this.sDelFromSeq.run(sessionId, seq).changes ?? 0);
+  }
+
+  /** The newest user-message row carrying this `cognition.ai/clientMessageId`
+   * — the rewind anchor for sessions whose ring no longer holds the row. */
+  seqOfClientMessage(sessionId: string, clientMessageId: string): number | null {
+    this.flush();
+    const r = this.sSeqOfClientMsg.get(sessionId, clientMessageId) as { seq: number } | undefined;
+    return r?.seq ?? null;
+  }
+
+  /** Backfill `clientMessageId` onto a journaled `_local` mirror row once the
+   * prompt response reveals it — guarantees the rewind anchor even when the
+   * real echo hasn't graduated the row yet. */
+  tagClientMessageId(sessionId: string, seq: number, clientMessageId: string) {
+    this.flush();
+    this.sTagClientMsg.run(clientMessageId, sessionId, seq);
   }
 
   /** Subagent-relevant rows of one generation in seq order — the DB-side

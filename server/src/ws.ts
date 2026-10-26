@@ -10,7 +10,7 @@ const KEEPALIVE_MS = 30_000;
 const MAX_BUFFERED = 8 * 1024 * 1024;
 /** High-rate session streams — scoped to subscribers; everything else is
  *  tiny and stays global (sidebar status dots, account notices, …). */
-const SCOPED_EVENTS = new Set(["session_update", "agent_log", "terminal_output", "timeline_delta"]);
+const SCOPED_EVENTS = new Set(["session_update", "agent_log", "terminal_output", "timeline_delta", "revert_steps", "history_rewound"]);
 
 type WsClient = WebSocket & { isAlive?: boolean; subs?: Set<string> | null };
 

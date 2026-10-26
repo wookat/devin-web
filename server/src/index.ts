@@ -13,7 +13,7 @@ import { Store, remapLegacyCwd } from "./store.js";
 import { WsHub } from "./ws.js";
 import { WebSocketServer } from "ws";
 import { SessionLog } from "./sessionlog.js";
-import { snapshotEntries } from "./dwtailsnap.js";
+import { snapshotEntries, dropTail } from "./dwtailsnap.js";
 import { handleApi, type ApiContext } from "./routes.js";
 import { handleLocalWb } from "./lweb/index.js";
 import { recordTerminal } from "./sessionview.js";
@@ -184,6 +184,8 @@ const sessionCwd = new class extends Map<string, string> {
 }();
 const sessionSsh = new Map<string, string>();
 const permissionOwner = new Map<string, import("./acp.js").DevinAcp>();
+/** sessionId → last pushed `revert/stepsUpdated` list (rewindable prompts). */
+const revertSteps = new Map<string, import("./acp.js").RevertStep[]>();
 const primaryCwd = process.cwd();
 const accounts = new AccountPool(store.dataDir);
 
@@ -424,6 +426,22 @@ const manager = new AcpManager({
     if (sessionId) sessionLog.append(sessionId, { sessionUpdate: "dw_term_exit", terminalId, exitCode, signal });
     hub.broadcast({ type: "terminal_exit", terminalId, sessionId, exitCode, signal });
   },
+  onRevertSteps: (sessionId, steps) => {
+    if (!sessionId) return;
+    revertSteps.set(sessionId, steps);
+    hub.broadcast({ type: "revert_steps", sessionId, steps });
+  },
+  onHistoryRewound: (sessionId, params) => {
+    if (!sessionId) return;
+    // The authoritative history just dropped firstRemovedUserMessageId and
+    // everything after it — cut the same tail out of the log mirror (and the
+    // persisted tail snapshot) or the rewound turns resurrect on rehydrate.
+    const anchor = params.firstRemovedUserMessageId;
+    if (anchor) sessionLog.rewind(sessionId, anchor);
+    dropTail(ctx, sessionId);
+    revertSteps.delete(sessionId); // the agent re-pushes fresh steps
+    hub.broadcast({ type: "history_rewound", sessionId, firstRemovedUserMessageId: anchor ?? null });
+  },
   onExit: (cwd, code, agent, sessionId) => {
     hub.broadcast({ type: "process_status", cwd, status: "exited", code, agent, sessionId });
   },
@@ -491,6 +509,7 @@ const ctx: ApiContext = {
   sessionCwd,
   sessionSsh,
   permissionOwner,
+  revertSteps,
 };
 
 // Re-seed the journaled cwds: dw meta first (authoritative), then the older

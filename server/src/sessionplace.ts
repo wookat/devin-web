@@ -43,3 +43,18 @@ export function markLoadedOn(id: string, host: DevinAcp): DevinAcp {
   sessionHost.set(id, host);
   return host;
 }
+
+/** acp → sessions created (not loaded) on it and never yet persisted.
+ * devin ≥3000.11.216 keeps `session/new` results in-memory until the first
+ * prompt — `session/load` on them errors "Session not found" and a host
+ * restart loses them entirely. Ops on such sessions must skip load and go
+ * straight to the creating process (markMemOnly also pins the host). */
+export const memOnly = new WeakMap<object, Set<string>>();
+
+export function markMemOnly(id: string, host: DevinAcp): DevinAcp {
+  markLoadedOn(id, host);
+  let s = memOnly.get(host);
+  if (!s) memOnly.set(host, (s = new Set()));
+  s.add(id);
+  return host;
+}

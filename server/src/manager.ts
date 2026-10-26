@@ -102,7 +102,7 @@ export class AcpManager {
         for (const [sid, m] of this.bySession) if (m.acp === acp) this.bySession.delete(sid);
         this.ev.onExit(cwd, code, agent.id);
       },
-    }, agent, acpId, after, account);
+    }, agent, acpId, after, account, this.envFor?.(agent).env.WINDSURF_API_KEY);
     instance = acp;
     // Only multi-session acp take pool slots — a dedicated key (bare agent.id)
     // is an identity marker, not a pool slot; its sessions live in bySession

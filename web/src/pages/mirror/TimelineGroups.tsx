@@ -70,9 +70,14 @@ type TimelineGroupProps = {
   tailThoughtId: string | undefined
   urlPrs: { pr_url?: string; number?: number }[]
   urlFiles: { href: string; name: string }[]
+  /** userMessageId → step, from ACP `revert/stepsUpdated` (devin ≥3000.11.216).
+   *  Empty map = agent lacks rewind support → affordances hide. */
+  revertSteps: Map<string, { userMessageId: string; summary?: string }>
+  onRevertStep?: (userMessageId: string) => void
+  onForkStep?: (userMessageId: string) => void
 }
 
-function TimelineGroupInner({ g, isLast, id, isVisitor, isSub, caps, detail, status, panel, mediaTok, permResolved, secretProvided, provideSecret, wf, onOpenWfRun, onOpenPr, onOpenPermission, envSuperseded, messageHeaders, translations, onTranslated, onFileRef, openFileTab, jumpToQuote, onSelQuote, quoteGuardUntil, onControlMsg, onSideChat, onStepChanges, onOpenProgress, onOpenSubagent, onOpenWsFile, worklogJump, tailThoughtId, urlPrs, urlFiles }: TimelineGroupProps) {
+function TimelineGroupInner({ g, isLast, id, isVisitor, isSub, caps, detail, status, panel, mediaTok, permResolved, secretProvided, provideSecret, wf, onOpenWfRun, onOpenPr, onOpenPermission, envSuperseded, messageHeaders, translations, onTranslated, onFileRef, openFileTab, jumpToQuote, onSelQuote, quoteGuardUntil, onControlMsg, onSideChat, onStepChanges, onOpenProgress, onOpenSubagent, onOpenWsFile, worklogJump, tailThoughtId, urlPrs, urlFiles, revertSteps, onRevertStep, onForkStep }: TimelineGroupProps) {
   const { t } = useTranslation()
   const nav = useNavigate()
   const setSelQuote = onSelQuote
@@ -254,6 +259,10 @@ function TimelineGroupInner({ g, isLast, id, isVisitor, isSub, caps, detail, sta
             })()
           } : undefined}
           onSideChat={isVisitor ? undefined : () => onSideChat(g.item)}
+          onRevert={!isVisitor && isUser && g.item.userMessageId && revertSteps.has(g.item.userMessageId) && onRevertStep
+            ? () => onRevertStep(g.item.userMessageId!) : undefined}
+          onForkStep={!isVisitor && isUser && g.item.userMessageId && revertSteps.has(g.item.userMessageId) && onForkStep
+            ? () => onForkStep(g.item.userMessageId!) : undefined}
           sessionId={g.item.role === 'user' || isVisitor ? undefined : id}
           onTranslated={isVisitor ? undefined : (tr) => onTranslated(g.item.id, tr)}
         />
@@ -386,6 +395,7 @@ const TimelineGroup = memo(TimelineGroupInner, (a, b) => {
     if (a.translations[item.id] !== b.translations[item.id]) return false
     if (a.permResolved.get(item.permission?.requestId || '') !== b.permResolved.get(item.permission?.requestId || '')) return false
     if (a.secretProvided.has(item.secretRequest?.requestId || '') !== b.secretProvided.has(item.secretRequest?.requestId || '')) return false
+    if (item.userMessageId && a.revertSteps.has(item.userMessageId) !== b.revertSteps.has(item.userMessageId)) return false
     if (item.kind === 'workflow') {
       const runId = item.workflow?.runId || ''
       if (a.wf.status.get(runId) !== b.wf.status.get(runId) || a.wf.agents.get(runId) !== b.wf.agents.get(runId)) return false

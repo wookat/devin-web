@@ -22,7 +22,7 @@ import { inflight, isDraining, isGracefulExit, lastActivity } from "./sessionliv
 import { openTurns, openTurnsLoad, openTurnsSave } from "./sessionturns.js";
 import { queueList, queueFlush } from "./sessionqueue.js";
 import { incMetric } from "./metrics.js";
-import { loadedOn, sessionHost } from "./sessionplace.js";
+import { loadedOn, sessionHost, memOnly } from "./sessionplace.js";
 import { turnSilenceMs } from "./env.js";
 
 // ---------------------------------------------------------------------------
@@ -410,6 +410,7 @@ export function dispatchPrompt(ctx: ApiContext, id: string, text: string, attach
   openTurnsLoad(ctx);
   openTurns.set(id, { text, ts: Date.now(), ...(attachments.length ? { attachments } : {}), resumeCount: openTurns.get(id)?.resumeCount ?? 0 });
   openTurnsSave(ctx);
+  let usedAcp: DevinAcp | undefined;
   const run = async () => {
     const blocks = await attachmentBlocks(ctx, attachments).catch((e: unknown) => {
       throw Object.assign(e instanceof Error ? e : new Error(String(e)), { stage: "attachments" });
@@ -444,10 +445,22 @@ export function dispatchPrompt(ctx: ApiContext, id: string, text: string, attach
         : `[Subagent relay] Call run_subagent(resume="${subagentId}", task=<message>) now and pass the user's message verbatim — this is your ONLY task, do not do anything else first. If the subagent is still running and cannot be resumed, just say so. User message: ${JSON.stringify(text)}`
       : text;
     const textBlock = ctxMeta ? { type: "text", text: promptText, _meta: ctxMeta } : { type: "text", text: promptText };
-    return promptWithRetry(ctx, id, () => deps.resolveAcp(ctx, id), (acp) => acp.prompt(id, [textBlock, ...blocks] as never, ctxMeta));
+    return promptWithRetry(ctx, id, () => deps.resolveAcp(ctx, id), (acp) => {
+      usedAcp = acp;
+      return acp.prompt(id, [textBlock, ...blocks] as never, ctxMeta).then((r) => {
+        // The prompt response's `cognition.ai/userMessageId` is the revert
+        // anchor — backfill it onto the `_local` mirror row so historyRewound
+        // can locate the cut seq without waiting for devin's echo.
+        const umsg = (r as { _meta?: Record<string, unknown> })?._meta?.["cognition.ai/userMessageId"];
+        if (typeof umsg === "string" && umsg) ctx.sessionLog.tagUserMessage(id, text, umsg);
+        return r;
+      });
+    });
   };
   void run()
     .then(() => {
+      // First prompt persisted the session — it survives its host now.
+      if (usedAcp) memOnly.get(usedAcp)?.delete(id);
       // Durable turn boundary — survives log replay via the tail re-append,
       // so interruptedTurn can tell "finished turn" from "cut turn".
       ctx.sessionLog.append(id, { sessionUpdate: "dw_turn_end" });

@@ -16,6 +16,8 @@ export interface WsServerEvent {
     | "account_rotated"
     | "session_status"
     | "persona_state"
+    | "revert_steps"
+    | "history_rewound"
     | "config";
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   [key: string]: any;

@@ -15,7 +15,7 @@ import { hostFor, acpForId, claimLockedHolder } from "./sessionload.js";
 import { attachmentBlocks, promptWithRetry } from "./sessionprompt.js";
 import { isSessionLocked } from "./sessioncfg.js";
 import { isDraining, inflight } from "./sessionlive.js";
-import { isSessionPinned } from "./sessionplace.js";
+import { isSessionPinned, markMemOnly, memOnly } from "./sessionplace.js";
 import type { UsageRecord } from "./types.js";
 
 export interface ApiContext {
@@ -37,6 +37,9 @@ export interface ApiContext {
   sessionSsh: Map<string, string>;
   /** permission requestId → owning acp process. */
   permissionOwner: Map<string, DevinAcp>;
+  /** sessionId → rewindable checkpoint list from `revert/stepsUpdated`
+   * (devin ≥3000.11.216 pushes it on load and after every change). */
+  revertSteps: Map<string, import("./acp.js").RevertStep[]>;
 }
 
 
@@ -159,6 +162,10 @@ export async function handleApi(
         ? await ctx.manager.get(cwd, agent)
         : await ctx.manager.startForSession(cwd, agent);
       const s = await acp.newSession(cwd);
+      // devin ≥3000.11.216: the new session is in-memory on its creator until
+      // the first prompt persists it — session/load can't find it yet, so it
+      // is pinned + flagged mem-only (ops route to the creating process).
+      markMemOnly(s.sessionId, acp);
       if (!agent.multiSession) {
         ctx.manager.bindSession(s.sessionId, acp);
         ctx.store.addAgentSession(s.sessionId, agent.id, cwd);
@@ -193,7 +200,10 @@ export async function handleApi(
         const body = await readJson(req);
         const acp = await acpForSession(ctx, id, body.cwd as string | undefined);
         try {
-          await acp.loadSession(id, acp.cwd);
+          // mem-only sessions (created-but-unpersisted on this acp) have
+          // nothing on disk for session/load — it would 404 them. They are
+          // already live on the host, which is what "open" means anyway.
+          if (!memOnly.get(acp)?.has(id)) await acp.loadSession(id, acp.cwd);
         } catch (e) {
           // Locked elsewhere: our own/broker holder already satisfies "open";
           // a foreign holder gets the error annotated with the culprit pid.
@@ -215,7 +225,7 @@ export async function handleApi(
         for (const b of blocks) {
           if (b.type === "text") {
             ctx.sessionLog.append(id, {
-              sessionUpdate: "user_message_chunk",
+              sessionUpdate: "user_message_chunk", _local: true,
               content: { type: "text", text: (b as { text: string }).text },
             });
           }
@@ -235,6 +245,8 @@ export async function handleApi(
               return (acp = await acpForId(ctx, id));
             },
             (a) => a.prompt(id, blocks));
+          // First prompt persisted the session — it survives its host now.
+          if (acp) memOnly.get(acp)?.delete(id);
           const usage = (done as { usage?: { inputTokens?: number; outputTokens?: number; totalTokens?: number } }).usage;
           if (usage?.totalTokens) {
             const rec: UsageRecord = {
@@ -248,6 +260,16 @@ export async function handleApi(
             ctx.store.recordUsage(rec);
           }
           ctx.store.touchAgentSession(id);
+          // Backfill the revert anchor: the prompt response's
+          // `cognition.ai/userMessageId` is the id `revert/stepsUpdated`
+          // keys this turn under — tag the journaled `_local` mirror row so
+          // historyRewound can find its seq even before devin's echo lands.
+          const umsgId = (done as { _meta?: Record<string, unknown> })?._meta?.["cognition.ai/userMessageId"];
+          if (typeof umsgId === "string" && umsgId) {
+            for (const b of blocks) {
+              if (b.type === "text") ctx.sessionLog.tagUserMessage(id, (b as { text: string }).text, umsgId);
+            }
+          }
           ctx.hub.broadcast({ type: "prompt_done", sessionId: id, result: done });
           return json(res, 200, done);
         } finally {
@@ -302,6 +324,55 @@ export async function handleApi(
 
       if (m === "GET" && action === "history") {
         return json(res, 200, { updates: ctx.sessionLog.get(id).map((e) => e.update) });
+      }
+
+      // GET /api/sessions/:id/revert-steps — the rewindable prompt list.
+      // Served from the pushed snapshot when present (the agent emits
+      // stepsUpdated on load + every change); pulled live otherwise.
+      if (m === "GET" && action === "revert-steps") {
+        const cached = ctx.revertSteps.get(id);
+        if (cached) return json(res, 200, { steps: cached, source: "push" });
+        const acp = await acpForSession(ctx, id);
+        try {
+          const r = await acp.revertListSteps(id);
+          ctx.revertSteps.set(id, r.steps ?? []);
+          return json(res, 200, { steps: r.steps ?? [], source: "pull" });
+        } catch (e) {
+          // Older agents don't implement revert — report as unsupported so
+          // the client hides the affordance instead of erroring.
+          if (e instanceof Error && /-32601|method.?not.?found/i.test(e.message)) {
+            return json(res, 200, { steps: [], supported: false });
+          }
+          throw e;
+        }
+      }
+
+      // POST /api/sessions/:id/revert {userMessageId, action:"preview"|"execute"|"fork", ...opts}
+      // preview → {fileActions, irreversibleWarnings, conflicts} (all empty =
+      // safe, official auto-executes); execute → {forkedSessionId, outcomes}
+      // + historyRewound notification; fork → {forkedSessionId} new session.
+      if (m === "POST" && action === "revert") {
+        const body = await readJson(req);
+        const userMessageId = String(body.userMessageId ?? "");
+        if (!userMessageId) return json(res, 400, { error: "userMessageId required" });
+        const act = String(body.action ?? "preview");
+        const acp = await acpForSession(ctx, id, body.cwd as string | undefined);
+        if (act === "preview") {
+          return json(res, 200, await acp.revertPreview(id, userMessageId));
+        }
+        if (act === "execute") {
+          const r = await acp.revertExecute(id, userMessageId, (body.opts ?? {}) as Record<string, unknown>);
+          // historyRewound handles the log cut + broadcast; a conflict-forced
+          // fork returns a NEW session id — track its cwd so it can open.
+          if (r.forkedSessionId && r.forkedSessionId !== id) ctx.sessionCwd.set(r.forkedSessionId, acp.cwd);
+          return json(res, 200, r);
+        }
+        if (act === "fork") {
+          const r = await acp.revertFork(id, userMessageId);
+          if (r.forkedSessionId) ctx.sessionCwd.set(r.forkedSessionId, acp.cwd);
+          return json(res, 200, r);
+        }
+        return json(res, 400, { error: `unknown action: ${act}` });
       }
     }
 

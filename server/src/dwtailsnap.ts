@@ -80,4 +80,13 @@ function snapshotItems(ctx: ApiContext, id: string): DwItem[] | null {
   return null;
 }
 
-export { persistTail, snapshotItems, snapshotEntries };
+/** ACP historyRewound: the persisted tail still holds post-rewind rows —
+ * drop cache+file so a hydrate can't resurrect them (persistTail rewrites
+ * the truncated window on its next tick). */
+function dropTail(ctx: ApiContext, id: string) {
+  tailCacheSet(id, []);
+  snapItemCache.delete(id);
+  try { fs.unlinkSync(tailFile(ctx, id)); } catch { /* absent */ }
+}
+
+export { persistTail, snapshotItems, snapshotEntries, dropTail };

@@ -308,6 +308,98 @@ export class SessionLog {
     for (const [fk, f] of this.folds) if (fk.startsWith(sessionId + "|")) { clearTimeout(f.timer); this.folds.delete(fk); }
   }
 
+  /** Backfill `cognition.ai/clientMessageId` onto the `_local` user-mirror
+   * row once `session/prompt` returns `_meta.userMessageId` — the rewind
+   * anchor exists immediately instead of waiting for devin's echo to
+   * graduate the row. Matches the newest matching mirror by text. */
+  tagUserMessage(sessionId: string, text: string, clientMessageId: string) {
+    const log = this.logs.get(sessionId);
+    if (!log) return;
+    for (let i = log.length - 1; i >= 0; i--) {
+      const e = log[i];
+      const u = e.update;
+      if (u.sessionUpdate !== "user_message_chunk" || u._local == null) continue;
+      const meta = u._meta as Record<string, unknown> | undefined;
+      if (meta?.["cognition.ai/clientMessageId"]) return; // an echo already owns this slot
+      const body = String((u.content as Record<string, unknown> | undefined)?.text ?? "");
+      if (body !== text) continue;
+      u._meta = { ...meta, "cognition.ai/clientMessageId": clientMessageId };
+      try { if (e.seq != null) this.db?.tagClientMessageId(sessionId, e.seq, clientMessageId); } catch { /* best-effort */ }
+      return;
+    }
+  }
+
+  /** ACP `revert/historyRewound`: the authoritative history lost
+   * `firstRemovedUserMessageId` and everything after it — mirror that by
+   * dropping the same tail here, or the rewound turns resurrect on the next
+   * rehydrate. The anchor row is the user_message_chunk whose
+   * `clientMessageId` matches (mirrors get the id via echo-graduation or
+   * `tagUserMessage`). Returns the cut seq, or null when the anchor wasn't
+   * found (ring + db both miss → nothing deleted, caller refetches). */
+  rewind(sessionId: string, userMessageId: string): number | null {
+    this.flushSessionFolds(sessionId);
+    let seq: number | null = null;
+    const log = this.logs.get(sessionId);
+    if (log) {
+      // Earliest match is the turn start — a mirror tagged by
+      // tagUserMessage AND a later echo can both carry the same
+      // clientMessageId; cutting from the earliest removes the whole turn.
+      for (let i = 0; i < log.length; i++) {
+        const e = log[i];
+        const meta = e.update?._meta as Record<string, unknown> | undefined;
+        if (e.update?.sessionUpdate === "user_message_chunk"
+            && meta?.["cognition.ai/clientMessageId"] === userMessageId) {
+          if (e.seq != null) seq = e.seq;
+          log.splice(i);
+          break;
+        }
+      }
+    }
+    if (seq == null && this.db) {
+      // The anchor fell out of the trimmed ring (or never hydrated) — ask
+      // the db; its rows are what a rehydrate would resurrect anyway.
+      try { seq = this.db.seqOfClientMessage(sessionId, userMessageId); } catch { seq = null; }
+    }
+    if (seq == null) return null;
+    if (this.db) { try { this.db.deleteFromSeq(sessionId, seq); } catch { /* best-effort */ } }
+    this.truncateMirror(sessionId, seq);
+    this.seqs.set(sessionId, seq); // new appends re-use the freed seq space
+    this.hydrated.delete(sessionId); // disk changed under the ring — re-probe
+    return seq;
+  }
+
+  /** The .jsonl mirror is append-only — a rewind has to physically cut the
+   *  file or the dropped tail resurrects if the store is ever rebuilt from
+   *  mirrors. Streams survivors (seq < cutSeq) to a temp file and renames it
+   *  over the original; the append fd is closed first (Windows rename). */
+  private truncateMirror(sessionId: string, cutSeq: number) {
+    if (!this.dir) return;
+    const f = this.file(sessionId);
+    try {
+      const fd = this.fds.get(sessionId);
+      this.fds.delete(sessionId);
+      if (fd != null) { try { fs.closeSync(fd); } catch {} }
+      if (!fs.existsSync(f)) return;
+      const tmp = f + ".rewind";
+      const out = fs.openSync(tmp, "w");
+      try {
+        let cutting = false;
+        eachFileLine(f, (line) => {
+          if (cutting) return;
+          let keep = true;
+          try {
+            const s = (JSON.parse(line) as LogEntry).seq;
+            if (typeof s === "number" && s >= cutSeq) cutting = true;
+          } catch { /* unparseable lines before the cut are kept as-is */ }
+          if (keep && !cutting) fs.writeSync(out, line + "\n");
+        });
+      } finally { fs.closeSync(out); }
+      fs.rmSync(f, { force: true });
+      fs.renameSync(tmp, f);
+      this.sidecars.invalidateCoverage(sessionId);
+    } catch { /* mirror is best-effort — the db holds the truth */ }
+  }
+
   private appendRaw(sessionId: string, update: Record<string, unknown>, dedupOverride?: string): boolean {
     // Any append makes a previous "empty disk" hydrate verdict stale.
     this.hydrated.delete(sessionId);
