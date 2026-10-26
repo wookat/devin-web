@@ -127,6 +127,21 @@ function Viewer({ id, path, file, rawUrl, draft, onDraft, onDiscard, onSaveText,
   const e = ext(path)
   const src = rawUrl(path)
 
+  // Desktop parity: document/didChangeDirty — fires only on the
+  // clean↔dirty transition (mounted baseline counts as clean; a draft equal
+  // to the file is clean). Must sit before the early returns below.
+  const dirtyNow = draft !== undefined && draft !== file?.text
+  const prevDirty = useRef<boolean | null>(null)
+  useEffect(() => {
+    if (prevDirty.current === null) { prevDirty.current = dirtyNow; return }
+    if (prevDirty.current === dirtyNow) return
+    prevDirty.current = dirtyNow
+    void fetch(`/api/admin/session/${encodeURIComponent(id)}/file-notify`, {
+      method: 'POST', headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ kind: 'dirty', path, dirty: dirtyNow }),
+    }).catch(() => {})
+  }, [dirtyNow, id, path])
+
   if (k === 'image') return <ImageEditor src={src} name={path} onSave={(blob) => onSaveBinary(path, blob)} />
   if (k === 'pdf') return <iframe src={src} title={path} className="h-full w-full border-0 bg-[#525659]" />
   if (k === 'av') {

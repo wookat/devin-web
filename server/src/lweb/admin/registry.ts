@@ -424,5 +424,40 @@ export async function handleRegistry(ctx: ApiContext, req: IncomingMessage, res:
     return true;
   }
 
+  // ---- MCP server management (desktop parity, live-verified shapes) ----
+  // Same account-level scope as plugins. Verified against devin
+  // 3000.11.216: listServers {}, listTools {serverId},
+  // connectServer {serverId}, installServer {serverId, config:{…}}.
+  // toggleServer/toggleTool/removeServer/disconnectServer exist in the
+  // binary but their param schema is unverified — the generic /call route
+  // forwards whatever shape the client sends so no route change is needed
+  // once the schema is discovered.
+  const mcpCall = async (method: string, params: Record<string, unknown>): Promise<unknown> =>
+    (await ctx.manager.get(ctx.primaryCwd)).extMethod("", method, params);
+  if (p === "/api/admin/mcp/servers" && m === "GET") {
+    try { json(res, 200, (await mcpCall("_cognition.ai/mcp/listServers", {})) ?? { servers: [] }); }
+    catch (e) { json(res, 200, { servers: [], error: (e as Error).message?.slice(0, 200) }); }
+    return true;
+  }
+  if (p === "/api/admin/mcp/tools" && m === "GET") {
+    const serverId = url.searchParams.get("server") ?? "";
+    if (!serverId) { json(res, 400, { error: "server required" }); return true; }
+    try { json(res, 200, (await mcpCall("_cognition.ai/mcp/listTools", { serverId })) ?? { tools: [] }); }
+    catch (e) { json(res, 200, { serverId, tools: [], error: (e as Error).message?.slice(0, 200) }); }
+    return true;
+  }
+  if (p === "/api/admin/mcp/call" && m === "POST") {
+    const body = await readJson(req);
+    const method = String(body.method ?? "");
+    if (!["listServers","listTools","connectServer","disconnectServer","installServer","removeServer","toggleServer","toggleTool","oauth/authorize"].includes(method)) {
+      json(res, 400, { error: "unknown mcp method" });
+      return true;
+    }
+    const params = (body.params && typeof body.params === "object" ? body.params : {}) as Record<string, unknown>;
+    try { json(res, 200, { ok: true, result: await mcpCall(`_cognition.ai/mcp/${method}`, params) }); }
+    catch (e) { json(res, 200, { ok: false, error: (e as Error).message?.slice(0, 200) }); }
+    return true;
+  }
+
   return false;
 }

@@ -135,4 +135,13 @@ devin-web 现状：仅调用 **14** 个 `_cognition.ai/*` 方法 → 方法面�
   - `file-ops` 成功后 → 同上（rename/move/copy 带上 dest）
   - `GET /file` 读到文本 → `document/didOpen {uri}`（60s/(session,path) 去抖——GET 也是程序化读取，只把首个 hit 当"打开"）
 - `GET /api/admin/plugins` → `plugins/list` 转发。
-- 未做：`document/didClose|didChangeDirty|didFocus`（web 端无干净边界）、`terminal/commandStarted|Completed`（交互 shell 无逐命令边界，需 PS prompt 钩子）、`workspace/didChangeRevision {branch?,uri?}`（file-git 已 8s 缓存，变更检测缺 diff 基线——可在 file-git 响应中对比 lastBranch 后补）。
+- `document/didClose|didChangeDirty|didFocus|didBlur`：新增 `POST /api/admin/session/:id/file-notify {kind,path,dirty?,languageId?}` 转发端点；前端 TabStrip closeTab→didClose、tab click→didFocus、Viewer 脏状态转换→didChangeDirty（挂载基线=clean）。
+- `terminal/commandStarted|Completed`：`powershell -Command -` 管道不调 prompt，采用**哨兵行注入**——每条用户行前排队 `$global:LASTEXITCODE=$null` 重置、行后排队 `[Console]::Out.Write(ESC]6973;C;<ec>BEL)` 哨兵；顺序执行使哨兵成为真实完成边界，exitCode = LASTEXITCODE ?? ($? ? 0 : 1)（实机验证 7/0/1 正确）；stdout 流正则剥离哨兵，FIFO 配对 commandLine。仅 localPs。
+- `workspace/didChangeRevision {branch,uri}`：file-git 轮询路径内比对 `branch@sha` 基线（per-session），变化时推送。
+
+### mcp/*（2026-10-26 第二轮实机探测）
+
+- **已证实**：`mcp/listServers {}`→`{servers:[{serverId,disabled,disabledTools,connectionStatus,sourcePath,transport,url}]}`；`mcp/listTools {serverId}`→`{tools:[{name,title,description}]}`；`mcp/connectServer {serverId}`→`{connectionStatus:"connected"}`；`mcp/installServer {serverId,config:{transport,url,…}}`→`{}`（真写入 mcp_config.json）。
+- **未破**：toggleServer/toggleTool/removeServer/disconnectServer——30+ 字段变体全 Invalid params，schema 待后续从 bundle 还原；路由已就位（`/api/admin/mcp/call` 白名单转发）。
+- 路由：`GET /api/admin/mcp/servers`、`GET /api/admin/mcp/tools?server=`、`POST /api/admin/mcp/call {method,params}`。
+- 通知：`_cognition.ai/mcp/serversChanged`→WS `mcp_servers_changed`；`authorizationPending|Required|Finished`→`mcp_auth_pending`（unscoped 广播）。

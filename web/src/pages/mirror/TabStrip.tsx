@@ -15,6 +15,21 @@ import { CtxMenu } from './WorkspacePanel'
 type FileTab = { href: string; name: string; raw?: boolean }
 type PrTab = { url: string; num: string; state: string; draft: boolean }
 
+/** Desktop parity: document lifecycle pushes (didClose/didFocus). File
+ * tabs key as `file:<href>` where href carries ?path= — POST the op to the
+ * backend which forwards it to the session's loaded acp. Fire-and-forget. */
+function docNotify(id: string, key: string, kind: 'close' | 'focus' | 'blur') {
+  if (!id || !key.startsWith('file:')) return
+  const href = key.slice(5)
+  let path = ''
+  try { path = new URL(href, window.location.origin).searchParams.get('path') ?? '' } catch { return }
+  if (!path) return
+  void fetch(`/api/admin/session/${encodeURIComponent(id)}/file-notify`, {
+    method: 'POST', headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ kind, path }),
+  }).catch(() => {})
+}
+
 /* Right-panel tab strip — the dnd-sortable panel/file/PR tab row plus the
  * "Add tab" menu (attachments + pull-requests submenus), the tab context
  * menu and the full-width/hide buttons. Owns the whole add-menu state
@@ -99,6 +114,7 @@ function TabStrip({ isVisitor, caps, allItems, detail, treeNode, id, mediaTok, p
   }
   const cancelAddSubClose = () => { if (addSubTimer.current) { clearTimeout(addSubTimer.current); addSubTimer.current = null } }
   const closeTab = useCallback((key: PanelKey) => {
+    docNotify(id, key, 'close')
     setClosedTabIds((prev) => new Set(prev).add(key))
     setTabs((prev) => {
       const next = prev.filter((k) => k !== key)
@@ -106,7 +122,7 @@ function TabStrip({ isVisitor, caps, allItems, detail, treeNode, id, mediaTok, p
       setPanel((cur) => (cur === key ? next[next.length - 1] ?? cur : cur))
       return next
     })
-  }, [setClosedTabIds, setTabs, setShowPanel, setPanel])
+  }, [id, setClosedTabIds, setTabs, setShowPanel, setPanel])
   return (
     <div className="flex h-11 items-center gap-1 overflow-hidden p-2">
       <div role="tablist" className="relative min-w-0 flex-1 flex items-center gap-1 overflow-x-auto [-ms-overflow-style:none] [scrollbar-width:none] [&::-webkit-scrollbar]:hidden"
@@ -123,7 +139,7 @@ function TabStrip({ isVisitor, caps, allItems, detail, treeNode, id, mediaTok, p
             'data-sortable-tab': '',
             'data-flash-key': key,
             onContextMenu: (e: ReactMouseEvent) => { e.preventDefault(); if (close) setPanelTabMenu({ x: e.clientX, y: e.clientY, close }) },
-            onClick: () => { tabSyncBlocked.current = false; setPanel(key); setUserPickedActiveTab(true); setPermSide(null) },
+            onClick: () => { tabSyncBlocked.current = false; setPanel(key); setUserPickedActiveTab(true); setPermSide(null); docNotify(id, key, 'focus') },
             onKeyDown: (e: ReactKeyboardEvent<HTMLDivElement>) => {
               if (e.key === 'Enter' || e.key === ' ') {
                 e.preventDefault()

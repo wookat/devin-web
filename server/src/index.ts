@@ -21,7 +21,7 @@ import { autoResumeInterrupted, setCfgCacheDir } from "./sessionload.js";
 import { adoptBrokerAcps, resolveTurnByReq } from "./sessionadopt.js";
 import { notePromptReq } from "./sessionturns.js";
 import { watchSubRateLimit } from "./sessionsub.js";
-import { loadInflight, sessionHost } from "./sessionplace.js";
+import { loadInflight, sessionHost, notifySessionCtx } from "./sessionplace.js";
 import { touchSessionActivity, markGracefulExit } from "./sessionlive.js";
 import { brokerEnabled } from "./acpbroker.js";
 import { meta, loadReg, saveReg } from "./dwstore.js";
@@ -278,6 +278,32 @@ termWss.on("connection", (ws, req) => {
   const pty = !!sessSsh || (run === "ssh" && sshArgOk);
   const localPs = !sessSsh && command === "powershell.exe";
   const grouped = process.platform !== "win32" && !sessSsh;
+  // Desktop parity: terminal/commandStarted|Completed. `powershell -Command -`
+  // never calls `prompt` on a pipe and carries no command boundary, so we
+  // queue one ASCII sentinel line behind every submitted line — sequential
+  // stdin execution makes the marker a real completion edge. The marker is
+  // parsed out of stdout and carries a best-effort exit code
+  // ($LASTEXITCODE ?? ($? ? 0 : 1)). commandStarted fires at submit.
+  const termId = `term-${crypto.randomUUID().slice(0, 8)}`;
+  const pendingCmds: string[] = [];
+  const PS_SENTINEL = `[Console]::Out.Write([string][char]27+']6973;C;'+$(if($null -ne $global:LASTEXITCODE){$global:LASTEXITCODE}elseif($?){0}else{1})+[char]7)`;
+  const SENTINEL_RE = /\x1b\]6973;C;(-?\d+)\x07/;
+  let sentinelCarry = "";
+  const stripSentinels = (text: string): string => {
+    if (!text.includes("\x1b]") && !sentinelCarry) return text;
+    let buf = sentinelCarry + text;
+    sentinelCarry = "";
+    let m: RegExpExecArray | null;
+    while ((m = SENTINEL_RE.exec(buf))) {
+      const line = pendingCmds.shift() ?? "";
+      notifySessionCtx(baseId, "_cognition.ai/terminal/commandCompleted", { commandLine: line, cwd, exitCode: Number(m[1]) });
+      buf = buf.slice(0, m.index) + buf.slice(m.index + m[0].length);
+    }
+    // A sentinel split at the chunk edge: hold back a trailing partial OSC.
+    const tail = buf.lastIndexOf("\x1b]");
+    if (tail >= 0 && !buf.includes("\x07", tail)) { sentinelCarry = buf.slice(tail); buf = buf.slice(0, tail); }
+    return buf;
+  };
   // No replay queue: before ready, or after a transport loss, execution is
   // uncertain. A fresh connection always starts with zero queued commands.
   let proc: child_process.ChildProcess | null = null;
@@ -297,7 +323,11 @@ termWss.on("connection", (ws, req) => {
     // powershell was bootstrapped to UTF-8, ssh/posix are UTF-8 already.
     const out = new ShellDecoder(shellKind === "cmd" && !sessSsh);
     const err = new ShellDecoder(shellKind === "cmd" && !sessSsh);
-    p.stdout?.on("data", (d: Buffer) => send({ d: out.push(d) }));
+    p.stdout?.on("data", (d: Buffer) => {
+      const text = out.push(d);
+      const clean = localPs ? stripSentinels(text) : text;
+      if (clean) send({ d: clean });
+    });
     p.stderr?.on("data", (d: Buffer) => send({ d: err.push(d) }));
     p.stdin?.on("error", () => {});
     const finish = (code: number | null) => {
@@ -336,7 +366,20 @@ termWss.on("connection", (ws, req) => {
         if (!ready || killed || m.d.length > 64 * 1024) return;
         // Only complete local PS commands; SSH/PTY input is byte-transparent.
         const d = localPs ? translatePsInput(m.d) : m.d;
-        try { proc?.stdin?.write(d); } catch {}
+        // Queue one completion sentinel per submitted line (sequential stdin
+        // execution → the marker is a real command boundary). LASTEXITCODE is
+        // sticky, so a reset line goes AHEAD of the user's input: the
+        // sentinel's (LASTEXITCODE ?? ($? ? 0 : 1)) can't inherit a previous
+        // native exit after a pure-cmdlet command.
+        const sentLines = localPs && baseId
+          ? d.split(/\r\n?|\n/).map((x: string) => x.trim()).filter((x: string) => x && !x.startsWith(PS_SENTINEL.slice(0, 20)))
+          : [];
+        try {
+          proc?.stdin?.write((sentLines.length ? "$global:LASTEXITCODE=$null\n" : "") + d);
+          if (sentLines.length) proc?.stdin?.write(sentLines.map(() => PS_SENTINEL).join("\n") + "\n");
+        } catch {}
+        for (const line of sentLines) pendingCmds.push(line);
+        if (sentLines.length) notifySessionCtx(baseId, "_cognition.ai/terminal/commandStarted", { terminalId: termId, commandLine: sentLines[0], cwd });
       }
     } catch {}
   });
@@ -441,6 +484,14 @@ const manager = new AcpManager({
     dropTail(ctx, sessionId);
     revertSteps.delete(sessionId); // the agent re-pushes fresh steps
     hub.broadcast({ type: "history_rewound", sessionId, firstRemovedUserMessageId: anchor ?? null });
+  },
+  onMcpServersChanged: (sessionId, params) => {
+    // MCP registry mutated server-side (install/connect/oauth). The payload
+    // is opaque to us — clients just refetch /api/admin/mcp/servers.
+    hub.broadcast({ type: "mcp_servers_changed", sessionId: sessionId || null, ...params });
+  },
+  onMcpAuthPending: (sessionId, params) => {
+    hub.broadcast({ type: "mcp_auth_pending", sessionId: sessionId || null, ...params });
   },
   onExit: (cwd, code, agent, sessionId) => {
     hub.broadcast({ type: "process_status", cwd, status: "exited", code, agent, sessionId });

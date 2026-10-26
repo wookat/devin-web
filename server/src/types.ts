@@ -18,6 +18,8 @@ export interface WsServerEvent {
     | "persona_state"
     | "revert_steps"
     | "history_rewound"
+    | "mcp_servers_changed"
+    | "mcp_auth_pending"
     | "config";
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   [key: string]: any;

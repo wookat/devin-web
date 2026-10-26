@@ -16,6 +16,8 @@ import { notifySessionCtx } from "../../sessionplace.js";
 
 /** file-git response cache — 8s per session (was lweb/common). */
 const gitStatusCache = new Map<string, { at: number; body: unknown }>();
+/** didChangeRevision baseline — last "branch@sha" seen per session id. */
+const lastGitRev = new Map<string, string>();
 
 /** file:/// URI the desktop notification schema expects. */
 function fileUri(absPath: string): string {
@@ -35,6 +37,35 @@ function notifyDidOpen(id: string, absPath: string): void {
 }
 
 export async function handleSessionFiles(ctx: ApiContext, req: IncomingMessage, res: ServerResponse, url: URL, m: string, sub: string, id: string): Promise<boolean> {
+  // POST file-notify — desktop-parity document lifecycle pushes
+  // (document/didClose|didChangeDirty|didFocus|didBlur). {kind,path,dirty?,
+  // languageId?}. Forwarded to the session's host acp when one is loaded;
+  // dropped silently otherwise. Editor-only, no session/load side effects.
+  if (sub === "file-notify" && m === "POST") {
+    const body = await readJson(req);
+    const cwd = cwdFor(ctx, id);
+    const rel = String(body.path ?? "");
+    const full = path.resolve(cwd, rel);
+    const relCheck = path.relative(cwd, full);
+    const kind = String(body.kind ?? "");
+    const METHODS: Record<string, string> = {
+      close: "_cognition.ai/document/didClose",
+      dirty: "_cognition.ai/document/didChangeDirty",
+      focus: "_cognition.ai/document/didFocus",
+      blur: "_cognition.ai/document/didBlur",
+    };
+    if (relCheck.startsWith("..") || path.isAbsolute(relCheck) || !METHODS[kind]) {
+      json(res, 400, { error: "bad notify" });
+      return true;
+    }
+    const params: Record<string, unknown> = { uri: fileUri(full) };
+    if (kind === "dirty") params.dirty = body.dirty !== false;
+    if (body.languageId) params.languageId = String(body.languageId);
+    notifySessionCtx(id, METHODS[kind], params);
+    json(res, 200, { ok: true });
+    return true;
+  }
+
   // Editor write/ops — ADMIN ONLY (never in sessionSubs: share links must
   // not write). All paths confined inside the session cwd.
   if (sub === "file-write" && m === "POST") {
@@ -100,6 +131,21 @@ export async function handleSessionFiles(ctx: ApiContext, req: IncomingMessage, 
         }
         body = { git: true, map };
       }
+      // Desktop parity: workspace/didChangeRevision — tell the agent the
+      // checkout moved (branch switch, pull, commit). Baseline tracked per
+      // session; only fires on an actual change, never on first sight.
+      try {
+        const rev = spawnSync("git", ["rev-parse", "--abbrev-ref", "HEAD", "HEAD"], { cwd, encoding: "utf8", timeout: 5000, windowsHide: true });
+        if (rev.status === 0 && typeof rev.stdout === "string") {
+          const [branch = "", sha = ""] = rev.stdout.split("\n");
+          const cur = `${branch.trim()}@${sha.trim()}`;
+          const last = lastGitRev.get(id);
+          lastGitRev.set(id, cur);
+          if (last && last !== cur) {
+            notifySessionCtx(id, "_cognition.ai/workspace/didChangeRevision", { branch: branch.trim(), uri: fileUri(cwd) });
+          }
+        }
+      } catch { /* rev-parse optional */ }
     } catch { /* git absent or not a repo */ }
     gitStatusCache.set(id, { at: Date.now(), body });
     json(res, 200, body);

@@ -67,6 +67,13 @@ export interface DevinAcpEvents {
    * `firstRemovedUserMessageId` and everything after it is gone from the
    * authoritative history. */
   onHistoryRewound?: (sessionId: string, params: { revertTargetNodeId?: number; firstRemovedUserMessageId?: string }) => void;
+  /** `_cognition.ai/mcp/serversChanged` — the agent-side MCP registry
+   * changed (connect/disconnect/install/oauth). `params` is the raw
+   * notification body (server list shape matches `mcp/listServers`). */
+  onMcpServersChanged?: (sessionId: string, params: Record<string, unknown>) => void;
+  /** `_cognition.ai/mcp/authorizationPending` / `authorizationRequired` —
+   * an OAuth-capable server needs the user to finish a browser flow. */
+  onMcpAuthPending?: (sessionId: string, params: Record<string, unknown>) => void;
   onExit: (code: number | null) => void;
 }
 
@@ -350,6 +357,10 @@ export class DevinAcp {
         );
       } else if (method === "_cognition.ai/revert/historyRewound") {
         ev.onHistoryRewound?.(String(params.sessionId ?? ""), params as { revertTargetNodeId?: number; firstRemovedUserMessageId?: string });
+      } else if (method === "_cognition.ai/mcp/serversChanged") {
+        ev.onMcpServersChanged?.(String(params.sessionId ?? ""), params);
+      } else if (method === "_cognition.ai/mcp/authorizationPending" || method === "_cognition.ai/mcp/authorizationRequired" || method === "_cognition.ai/mcp/authorizationFinished") {
+        ev.onMcpAuthPending?.(String(params.sessionId ?? ""), { method, ...params });
       }
     };
 
