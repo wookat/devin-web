@@ -17,7 +17,7 @@ function ComposerPopovers({ cardEl, suggestions, atCat, trigger, sugIdx, setSugI
   cardEl: HTMLDivElement | null
   suggestions: SuggestItem[]
   atCat: string | null
-  trigger: { char: '/' | '@'; query: string } | null
+  trigger: { char: '/' | '@' | '!'; query: string } | null
   sugIdx: number
   setSugIdx: Dispatch<SetStateAction<number>>
   applySuggestion: (s: SuggestItem) => void

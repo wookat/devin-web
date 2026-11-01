@@ -1863,6 +1863,8 @@
     "addStep": "Add step",
     "delStep": "Remove step",
     "saveTpl": "Save as template",
+    "macroPh": "!macro",
+    "macroTip": "Optional !macro — typing !macro in the composer expands this template",
     "tplLib": "Templates",
     "tplEmpty": "No templates yet — save one from the create form.",
     "useTpl": "Use",

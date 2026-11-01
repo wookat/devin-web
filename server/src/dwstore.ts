@@ -184,11 +184,17 @@ export interface DwAutomation {
 }
 
 /** Reusable task template ("playbook") shared by automations — official
- *  Devin parity for the "create from template" flow. */
+ *  Devin parity for the "create from template" flow. Desktop adds `macro`
+ *  (a `!trigger` shortcut that expands the playbook in the composer) and
+ *  `mode` (agent mode for sessions launched from it). */
 export interface DwPlaybook {
   id: string;
   name: string;
   prompt: string;
+  /** `!macro` composer trigger — unique across playbooks, [a-z0-9_-]+. */
+  macro?: string;
+  /** Agent mode override for sessions launched from this playbook. */
+  mode?: string;
   createdAt: number;
 }
 

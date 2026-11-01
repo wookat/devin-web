@@ -136,15 +136,23 @@ export async function handleRegistry(ctx: ApiContext, req: IncomingMessage, res:
       json(res, 200, { playbooks: Object.values(reg.playbooks).sort((a, b) => a.createdAt - b.createdAt) });
       return true;
     }
+    const macroOk = (v: unknown) => v == null || /^[a-z0-9_-]{1,64}$/i.test(String(v));
+    const macroTaken = (v: string, exceptId: string) =>
+      Object.values(reg.playbooks ?? {}).some((p) => p.id !== exceptId && p.macro?.toLowerCase() === v.toLowerCase());
     if (m === "POST" && !pid) {
       const body = await readJson(req);
       if (!String(body.name ?? "").trim() || !String(body.prompt ?? "").trim()) {
         json(res, 400, { error: "name and prompt are required" });
         return true;
       }
+      const macro = body.macro != null ? String(body.macro).trim().replace(/^!/, "") : "";
+      if (!macroOk(macro)) { json(res, 400, { error: "macro must match [a-z0-9_-]{1,64}" }); return true; }
+      if (macro && macroTaken(macro, "")) { json(res, 409, { error: "macro already in use" }); return true; }
       const pb: DwPlaybook = {
         id: `pb-${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 7)}`,
         name: String(body.name).slice(0, 120), prompt: String(body.prompt).slice(0, 20_000),
+        ...(macro ? { macro } : {}),
+        ...(body.mode != null && String(body.mode).trim() ? { mode: String(body.mode).slice(0, 64) } : {}),
         createdAt: Date.now(),
       };
       reg.playbooks[pb.id] = pb; saveReg();
@@ -155,6 +163,16 @@ export async function handleRegistry(ctx: ApiContext, req: IncomingMessage, res:
       const body = await readJson(req);
       if (body.name != null) one.name = String(body.name).slice(0, 120) || one.name;
       if (body.prompt != null) one.prompt = String(body.prompt).slice(0, 20_000) || one.prompt;
+      if (body.macro !== undefined) {
+        const macro = body.macro == null ? "" : String(body.macro).trim().replace(/^!/, "");
+        if (!macroOk(macro)) { json(res, 400, { error: "macro must match [a-z0-9_-]{1,64}" }); return true; }
+        if (macro && macroTaken(macro, pid)) { json(res, 409, { error: "macro already in use" }); return true; }
+        if (macro) one.macro = macro; else delete one.macro;
+      }
+      if (body.mode !== undefined) {
+        const mode = body.mode == null ? "" : String(body.mode).trim();
+        if (mode) one.mode = mode.slice(0, 64); else delete one.mode;
+      }
       saveReg();
       json(res, 200, { ok: true, playbook: one });
       return true;

@@ -43,11 +43,32 @@ devin-web 现状：仅调用 **14** 个 `_cognition.ai/*` 方法 → 方法面�
 5. **P2 goal/*、turn_stats/loadStats/compaction、scope_search、reads/*、browserPreview/capture、processMemory**
 6. **P3 云端 REST**（需 auth1）：notifications、secrets、wiki、session folders/tags/pin、plan/*
 
-### W2 — webapp bundle 收割（复用 devin-parity 管线）
+### W2 — webapp bundle 收割（进行中）
 
-- `devin-webapp-host/assets/` 复制进 `_devin_assets_desktop/` → `test/parity/deobfuscate-all.mjs` 全量反混淆 → 与现有 `_deob/` diff，得到增量功能清单
-- 优先模块：SessionPanes（多窗格）、SessionTimeline 新版、Playbooks/PlaybookPage、Oncall、Wiki、ReplaySessionPage、InsightsPage、plugins 编辑器、KaTeX、MarkdownEditor、通知中心、HomePage
-- 走既有三阶段：证据 → 移植 → 对拍
+桌面 `devin-webapp-host/assets/` 已复制进 `_devin_assets/`（+1868 文件 ~72.8MB，gitignored），
+`deobfuscate-all.mjs` 增量反混淆到 `_deob/all/`（2700+ 完成，大 bundle 尾部继续），
+`auto-map` + `build-index` 已跑 → `_deob/INDEX.md`（831 模块命中特征锚点）。
+
+**功能模块清单（已定位专用模块文件）**：
+- Playbooks：`PlaybooksPage/PlaybookPage/CreatePlaybookSheet/PlaybookSelect/playbookForm/unified-playbooks`
+  — 数据模型 `{title, macro(!触发), content, mode, category(org|enterprise|community)}`，macro 需唯一
+- Oncall：`OncallPage/OncallAgentModePicker/useOncallDevinMode` + 路由簇（oncall-responder/-reports/-org-stats/-ingestion + pagerduty/linear/jira/pylon/teams 集成）— **云端 REST，本地无对应物**
+- Wiki：`WikiHomePage/WikiRepoEditPage/wiki-/wikitext-/DeepWikiPanel` + REST `wiki/*`（get_full_multi_language_wiki/upload_wiki_config/…）— **云端 REST**
+- Insights：`InsightsPage/insights-/enterprise-insights/coach-/EnterpriseCoachPanel/ProductivityPanel/MemberUsagePane/ReadinessPage` — 云端 org 分析；可用本地 sessiondb 做精简版用量面板
+- Replay：`ReplaySessionPage/_replaySessionId/replayStats`
+- Notifications inbox：`notifications-×3/notification-row/AutoRechargeNotification` + prefs（sessions/billing/requests/automations 分组 + desktop/browser/system 渠道）
+- Plugins：`PluginManifestEditor/PluginDetailsSheet/CreatePluginDialog/UploadedPluginPanel/plugin-catalog/pluginContents(Editor)/managed-plugins/useManagedPlugins(Org)/plugin-install-warning-dialog` + `admin/plugin-catalog/facts/{subject,list,index,preview}`
+- 多窗格：`react-resizable-panels` 库 + `CustomizePaneRoute/SidePanel/useCollapsiblePanel/sidePanelCloseLock`
+- Automation 增强：`AutomationEditPanel/AutomationSidePanel/campaign-panel`、EmailDelivery/ConnectionDetail/HostTerminal panels
+
+**已落地（本地实现）**：playbook `macro`/`mode` 字段 + `!macro` composer 触发展开
+（composer-meta `playbooks[]` 返回真实数据；`!` 列出 playbook、选中把 prompt 展开进输入框；
+macro 唯一性 409；AutomationsPage 模板保存可加 `!` 宏输入框 + 列表徽标）。
+顺带修复 `catalogInfo(undefined)` → composer-meta 500 的存量 bug。
+
+**候选下一步（按 ROI）**：本地 Insights-lite（sessiondb 统计面板）、通知 inbox
+（WS 事件→本地 inbox）、插件管理 UI（plugins/list 已有数据）、Replay（jsonl 回放页）。
+Oncall/Wiki 属云端 REST，不做本地等价物。
 
 ### W3 — 桌面集成层（低优先级，情报为主）
 

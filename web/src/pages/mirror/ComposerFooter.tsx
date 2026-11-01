@@ -117,7 +117,7 @@ function ComposerFooter({
   suggestions: SuggestItem[]
   atCat: string | null
   setAtCat: Dispatch<SetStateAction<string | null>>
-  trigger: { char: '/' | '@'; query: string } | null
+  trigger: { char: '/' | '@' | '!'; query: string } | null
   sugIdx: number
   setSugIdx: Dispatch<SetStateAction<number>>
   applySuggestion: (s: SuggestItem) => void

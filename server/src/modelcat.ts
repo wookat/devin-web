@@ -257,6 +257,7 @@ function maps() {
  * fall back to the agent-advertised groups as-is.
  */
 export function catalogInfo(modelValue: string): CatalogInfo | null {
+  if (!modelValue) return null;
   const { families, varToFam, varPrices } = maps();
   // Longest family key that is a strict prefix (or exact) — groups flattened
   // variant entries under their family (glm-5-2-1m → glm-5-2).

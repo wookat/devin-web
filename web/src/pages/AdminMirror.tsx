@@ -628,11 +628,11 @@ export default function AdminMirrorPage() {
   const composerWrapRef = useRef<HTMLDivElement | null>(null)
 
   // Composer trigger token at end of input: `/` = commands+skills, `@` =
-  // mention categories. `!`/`$` (playbooks/secrets) have no local data source,
-  // so they don't trigger an always-empty listbox.
+  // mention categories, `!` = playbooks (local — selecting expands the
+  // playbook's prompt into the input). `$` (secrets) has no local source.
   const trigger = useMemo(() => {
-    const m = /(^|\s)([/@])([\w\u4e00-\u9fff./-]*)$/.exec(input)
-    return m ? { char: m[2] as '/' | '@', query: m[3].toLowerCase() } : null
+    const m = /(^|\s)([/@!])([\w\u4e00-\u9fff./-]*)$/.exec(input)
+    return m ? { char: m[2] as '/' | '@' | '!', query: m[3].toLowerCase() } : null
   }, [input])
 
   useEffect(() => {
@@ -664,6 +664,19 @@ export default function AdminMirrorPage() {
         .slice(0, 8)
         .map((s) => ({ key: `skill-${s.repo}-${s.name}`, title: s.name, sub: s.description, insert: `${s.name} ` }))
       return [...cmds, ...skills]
+    }
+    if (trigger.char === '!') {
+      // `!macro` playbook shortcut — select expands the playbook's prompt
+      // into the composer (transparent, editable before send).
+      return (composerMeta.playbooks ?? [])
+        .filter((p) => !q || p.name.toLowerCase().includes(q) || (p.shortcut ?? '').toLowerCase().includes(q))
+        .slice(0, 12)
+        .map((p) => ({
+          key: `pb-${p.name}`,
+          title: p.shortcut ? `!${p.shortcut}` : p.name,
+          sub: p.name,
+          insert: p.prompt ? `${p.prompt} ` : `!${p.shortcut ?? p.name} `,
+        }))
     }
     if (trigger.char === '@') {
       if (!atCat) {

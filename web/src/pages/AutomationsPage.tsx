@@ -20,7 +20,7 @@ interface Automation {
   runs?: { at: number; sessionId: string | null }[]
   running?: Record<string, { step: number; sentAt: number; prompts: string[] }>
 }
-interface Playbook { id: string; name: string; prompt: string }
+interface Playbook { id: string; name: string; prompt: string; macro?: string }
 
 const PAGE_MAX = 'max-w-[min(1200px,max(50vw,800px))]'
 const PAGE_PAD_X = 'px-4 sm:px-6'
@@ -107,7 +107,7 @@ export default function AutomationsPage() {
   const [delFor, setDelFor] = useState<Automation | null>(null)
   const [batchFor, setBatchFor] = useState<Automation | null>(null)
   const [batchText, setBatchText] = useState('')
-  const [form, setForm] = useState<{ open: boolean; name: string; prompt: string; preset: string; cron: string; cwd: string; steps: { name: string; prompt: string }[] }>({ open: false, name: '', prompt: '', preset: '0', cron: '', cwd: '', steps: [] })
+  const [form, setForm] = useState<{ open: boolean; name: string; prompt: string; preset: string; cron: string; cwd: string; macro: string; steps: { name: string; prompt: string }[] }>({ open: false, name: '', prompt: '', preset: '0', cron: '', cwd: '', macro: '', steps: [] })
   const [createMenu, setCreateMenu] = useState(false)
   const [playbooks, setPlaybooks] = useState<Playbook[]>([])
   const [tplPanel, setTplPanel] = useState(false)
@@ -125,8 +125,8 @@ export default function AutomationsPage() {
     setCreateMenu(false)
     setTplPanel(false)
     setForm(a
-      ? { open: true, name: t('au.copyOf', { name: a.name }), prompt: a.prompt, preset: String(PRESETS.length - 1), cron: a.schedule, cwd: a.cwd, steps: (a.steps ?? []).slice(1).map((s) => ({ ...s })) }
-      : { open: true, name: '', prompt: '', preset: '0', cron: '', cwd: '', steps: [] })
+      ? { open: true, name: t('au.copyOf', { name: a.name }), prompt: a.prompt, preset: String(PRESETS.length - 1), cron: a.schedule, cwd: a.cwd, macro: '', steps: (a.steps ?? []).slice(1).map((s) => ({ ...s })) }
+      : { open: true, name: '', prompt: '', preset: '0', cron: '', cwd: '', macro: '', steps: [] })
   }
   const create = async () => {
     setErr('')
@@ -139,7 +139,7 @@ export default function AutomationsPage() {
   }
   const saveTpl = async () => {
     if (!form.name.trim() || !form.prompt.trim()) return
-    try { await adminFetch('/api/admin/playbooks', { method: 'POST', body: JSON.stringify({ name: form.name.trim(), prompt: form.prompt.trim() }) }); load() } catch { /* toast-less */ }
+    try { await adminFetch('/api/admin/playbooks', { method: 'POST', body: JSON.stringify({ name: form.name.trim(), prompt: form.prompt.trim(), ...(form.macro.trim() ? { macro: form.macro.trim() } : {}) }) }); load() } catch { /* toast-less */ }
   }
   const useTpl = (pb: Playbook) => { setTplPanel(false); setForm((f) => ({ ...f, open: true, name: f.name || pb.name, prompt: pb.prompt })) }
   const delTpl = async (id: string) => { try { await adminFetch(`/api/admin/playbooks/${id}`, { method: 'DELETE' }); load() } catch { /* toast-less */ } }
@@ -260,7 +260,7 @@ export default function AutomationsPage() {
                 {playbooks.map((pb) => (
                   <div key={pb.id} className="flex items-center gap-2 rounded-md px-1.5 py-1.5 hover:bg-tint-secondary">
                     <div className="min-w-0 flex-1">
-                      <div className="truncate text-[13px]">{pb.name}</div>
+                      <div className="truncate text-[13px]">{pb.name}{pb.macro && <span className="ml-1.5 rounded border border-border-secondary bg-tint-secondary px-1 py-px font-mono text-[11px] text-muted-foreground">!{pb.macro}</span>}</div>
                       <div className="truncate text-[12px] text-muted-foreground">{pb.prompt}</div>
                     </div>
                     <button onClick={() => useTpl(pb)} className="shrink-0 cursor-pointer rounded-md px-2 py-1 text-[12px] hover:bg-accent">{t('au.useTpl')}</button>
@@ -306,6 +306,7 @@ export default function AutomationsPage() {
                   <button onClick={create} disabled={!form.name.trim() || !form.prompt.trim() || !schedule.trim() || form.steps.some((s) => !s.prompt.trim())} className="rounded-md bg-primary px-3 py-1.5 text-[13px] font-medium text-primary-foreground hover:opacity-90 disabled:opacity-50">{t('au.create')}</button>
                   <button onClick={() => setForm((f) => ({ ...f, open: false }))} className="rounded-md px-3 py-1.5 text-[13px] text-muted-foreground hover:bg-tint-secondary">{t('au.cancel')}</button>
                   <button onClick={saveTpl} disabled={!form.name.trim() || !form.prompt.trim()} className="rounded-md px-3 py-1.5 text-[13px] text-muted-foreground hover:bg-tint-secondary disabled:opacity-50">{t('au.saveTpl')}</button>
+                  <input value={form.macro} onChange={(e) => setForm((f) => ({ ...f, macro: e.target.value.replace(/^!+/, '') }))} placeholder={t('au.macroPh')} title={t('au.macroTip')} className="w-28 rounded-md border border-border bg-background px-2 py-1.5 font-mono text-[12px] outline-none placeholder:text-muted-foreground focus:border-ring" />
                   {err && <span className="text-[12px] text-red-500">{err}</span>}
                 </div>
               </div>

@@ -6,7 +6,7 @@ import { type LocalCfg } from './pageBits'
 interface ComposerMetaT {
   commands: { command: string; description: string; hint?: string }[]
   skills: { name: string; description: string; repo: string }[]
-  playbooks: { name: string; shortcut: string; author: string }[]
+  playbooks: { name: string; shortcut: string; author: string; prompt?: string }[]
   secrets: { name: string; description: string }[]
   macros: { name: string; description: string }[]
   repos: { name: string; org: string }[]
