@@ -636,6 +636,8 @@
     "noSub": "No spawnable subagent profiles.",
     "mcp": "MCP servers",
     "noMcp": "No MCP servers configured.",
+    "mcpEnable": "Enable",
+    "mcpDisable": "Disable",
     "sessionIdPh": "Session id (e.g. chestnut-feet or sub:<root>:<aid>)",
     "plans": "Plans",
     "noPlans": "No plans yet.",

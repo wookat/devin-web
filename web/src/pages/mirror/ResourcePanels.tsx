@@ -18,7 +18,21 @@ interface LocalSubagent {
 }
 
 /** Local subagents panel: list → detail (own transcript + direct message + control). */
-type McpServer = { name?: string; command?: string; url?: string; status?: string; tools?: { name?: string }[] | number; source?: string }
+type McpServer = { name?: string; command?: string; url?: string; status?: string; tools?: { name?: string }[] | number; source?: string; serverId?: string; sourcePath?: string; disabled?: boolean; connectionStatus?: string; transport?: string }
+/** Account-level MCP toggle (desktop parity: mcp/toggleServer
+ * {serverId,sourcePath} flips `disabled`). Refetches the resources panel
+ * via the parent's tick. */
+async function mcpToggle(x: McpServer, setTick: (fn: (t: number) => number) => void) {
+  if (!x.serverId || !x.sourcePath) return
+  try {
+    await adminFetch(`/api/admin/mcp/call`, {
+      method: 'POST',
+      body: JSON.stringify({ method: 'toggleServer', params: { serverId: x.serverId, sourcePath: x.sourcePath } }),
+    })
+  } catch { /* surface via next fetch's error field */ }
+  setTick((t) => t + 1)
+}
+
 type RuleEntry = { name?: string; source?: string; content?: string; path?: string; providerLabel?: string; trigger?: string; scope?: string }
 type PlanEntry = { name?: string; title?: string; status?: string; summary?: string; description?: string; path?: string; updatedAt?: string }
 type SessionResources = {
@@ -392,13 +406,19 @@ function ResourcesPanel({ id }: { id: string }) {
       <ResSection title={t('res.mcp')} count={r.mcpServers?.length ?? 0}>
         {probeErr('mcp', t('res.probeFail'))}
         {!r.mcpServers?.length ? <p className={empty}>{t('res.noMcp')}</p> : r.mcpServers.map((x, i) => (
-          <div key={i} className="mb-1.5 rounded-md border border-border bg-card px-2 py-1.5">
+          <div key={i} className={cn('mb-1.5 rounded-md border border-border bg-card px-2 py-1.5', x.disabled && 'opacity-60')}>
             <div className="flex items-center gap-2 text-[12px] font-medium">
-              {x.source !== 'config' && <span className={cn('size-1.5 shrink-0 rounded-full', x.status === 'connected' || x.status === 'running' ? 'bg-emerald-500' : 'bg-muted-foreground/40')} />}
-              <span className="truncate">{x.name || x.command || x.url}</span>
+              {x.source !== 'config' && <span className={cn('size-1.5 shrink-0 rounded-full', (x.status ?? x.connectionStatus) === 'connected' || x.status === 'running' ? 'bg-emerald-500' : 'bg-muted-foreground/40')} />}
+              <span className="truncate">{x.name || x.serverId || x.command || x.url}</span>
               {x.source === 'config' && <span className="shrink-0 rounded bg-tint px-1 py-px text-[9px] text-muted-foreground" title={t('res.fromConfigTitle')}>{t('res.fromConfig')}</span>}
               {typeof x.tools === 'number' && <span className="ml-auto shrink-0 text-[10px] text-muted-foreground">{t('res.toolCount', { n: x.tools })}</span>}
               {Array.isArray(x.tools) && <span className="ml-auto shrink-0 text-[10px] text-muted-foreground">{t('res.toolCount', { n: x.tools.length })}</span>}
+              {x.serverId && x.sourcePath && (
+                <button
+                  className={cn('shrink-0 rounded border px-1.5 py-px text-[10px]', x.disabled ? 'border-emerald-500/40 text-emerald-600 hover:bg-emerald-500/10' : 'border-border text-muted-foreground hover:bg-muted')}
+                  onClick={() => void mcpToggle(x, setTick)}
+                >{x.disabled ? t('res.mcpEnable') : t('res.mcpDisable')}</button>
+              )}
             </div>
             {(x.command || x.url) && <div className="mt-0.5 truncate font-mono text-[10px] text-muted-foreground">{x.command || x.url}</div>}
           </div>

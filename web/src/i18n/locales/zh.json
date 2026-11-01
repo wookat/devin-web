@@ -636,6 +636,8 @@
     "noSub": "没有可派生的子代理配置。",
     "mcp": "MCP 服务器",
     "noMcp": "未配置 MCP 服务器。",
+    "mcpEnable": "启用",
+    "mcpDisable": "禁用",
     "sessionIdPh": "会话 ID（如 chestnut-feet 或 sub:<root>:<aid>）",
     "plans": "计划",
     "noPlans": "暂无计划。",

@@ -142,6 +142,7 @@ devin-web 现状：仅调用 **14** 个 `_cognition.ai/*` 方法 → 方法面�
 ### mcp/*（2026-10-26 第二轮实机探测）
 
 - **已证实**：`mcp/listServers {}`→`{servers:[{serverId,disabled,disabledTools,connectionStatus,sourcePath,transport,url}]}`；`mcp/listTools {serverId}`→`{tools:[{name,title,description}]}`；`mcp/connectServer {serverId}`→`{connectionStatus:"connected"}`；`mcp/installServer {serverId,config:{transport,url,…}}`→`{}`（真写入 mcp_config.json）。
-- **未破**：toggleServer/toggleTool/removeServer/disconnectServer——30+ 字段变体全 Invalid params，schema 待后续从 bundle 还原；路由已就位（`/api/admin/mcp/call` 白名单转发）。
+- **已破（workbench.desktop.main.js `_toggleServer/_removeServer` 调用点取证）**：`toggleServer {serverId,sourcePath}`（翻转 disabled，实机往返验证）；`toggleTool {serverId,toolName,sourcePath}`；`removeServer {serverId,sourcePath}`；`disconnectServer {serverId,sourcePath,workspaceDirs?}`；`connectServer {serverId,workspaceDirs?}`。sourcePath 来自 listServers 输出。
+- UI：会话资源面板 MCP 行在 acp 原生形状下显示 启用/禁用 按钮 → `/api/admin/mcp/call toggleServer` → tick refetch。
 - 路由：`GET /api/admin/mcp/servers`、`GET /api/admin/mcp/tools?server=`、`POST /api/admin/mcp/call {method,params}`。
 - 通知：`_cognition.ai/mcp/serversChanged`→WS `mcp_servers_changed`；`authorizationPending|Required|Finished`→`mcp_auth_pending`（unscoped 广播）。
