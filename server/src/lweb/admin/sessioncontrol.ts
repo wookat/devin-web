@@ -18,13 +18,66 @@ import { dispatchPrompt } from "../../sessionprompt.js";
 import { queueList, queueAdd, queueFlush } from "../../sessionqueue.js";
 import { inflight, isDraining } from "../../sessionlive.js";
 import { json, readBody, readJson } from "../../httputil.js";
-import { subsAny } from "../session.js";
+import { subsAny, cwdFor } from "../session.js";
 import { resourceRootPath } from "./fsbrowse.js";
 
 export async function handleSessionControl(ctx: ApiContext, req: IncomingMessage, res: ServerResponse, url: URL, m: string, sub: string, id: string): Promise<boolean> {
   // Wake/resume on a main session is a UI no-op — nothing sleeps
   // server-side; the next message just dispatches on the live acp.
   if (sub === "resume" && m === "POST") { await readBody(req); json(res, 200, { ok: true }); return true; }
+
+  // ---- goal/* (desktop parity, live-verified shapes on 216) ----------
+  // get   {sessionId, goalId?}        → current goal object | null
+  // set   {sessionId, prompt:[blocks]} (blocks = session/prompt content blocks)
+  // resume {sessionId, goalId}
+  // clear {sessionId, config:{…}}     — schema unverified, forwarded raw
+  if (sub === "goal" && m === "GET") {
+    try {
+      const acp = await acpForId(ctx, id);
+      const goalId = url.searchParams.get("goalId");
+      const r = await acp.extMethod(id, "_cognition.ai/goal/get", goalId ? { sessionId: id, goalId } : { sessionId: id });
+      json(res, 200, r ?? { goal: null });
+    } catch (e) { json(res, 200, { goal: null, error: (e as Error).message?.slice(0, 200) }); }
+    return true;
+  }
+  if (sub === "goal" && m === "POST") {
+    const body = await readJson(req);
+    const action = String(body.action ?? "set");
+    try {
+      const acp = await acpForId(ctx, id);
+      let params: Record<string, unknown>;
+      let method: string;
+      if (action === "resume") {
+        method = "_cognition.ai/goal/resume";
+        params = { sessionId: id, goalId: String(body.goalId ?? "") };
+      } else if (action === "clear") {
+        method = "_cognition.ai/goal/clear";
+        params = { sessionId: id, ...(body.config && typeof body.config === "object" ? { config: body.config } : {}) };
+      } else {
+        method = "_cognition.ai/goal/set";
+        const prompt = Array.isArray(body.prompt) ? body.prompt : [{ type: "text", text: String(body.text ?? body.prompt ?? "") }];
+        params = { sessionId: id, prompt };
+      }
+      const r = await acp.extMethod(id, method, params);
+      json(res, 200, { ok: true, result: r });
+    } catch (e) { json(res, 200, { ok: false, error: (e as Error).message?.slice(0, 200) }); }
+    return true;
+  }
+
+  // GET .../scope-search?type=&q= — `_cognition.ai/scope_search`
+  // {scope_type,query,cwd?,additional_directories?} → {items}.
+  if (sub === "scope-search" && m === "GET") {
+    try {
+      const acp = await acpForId(ctx, id);
+      const r = await acp.extMethod(id, "_cognition.ai/scope_search", {
+        scope_type: url.searchParams.get("type") ?? "files",
+        query: url.searchParams.get("q") ?? "",
+        cwd: cwdFor(ctx, id),
+      });
+      json(res, 200, r ?? { items: [] });
+    } catch (e) { json(res, 200, { items: [], error: (e as Error).message?.slice(0, 200) }); }
+    return true;
+  }
 
   // Stop button posts /pause, End session posts /end — locally both
   // mean turn cancel (session/cancel settles the prompt RPC as

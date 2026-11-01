@@ -144,5 +144,12 @@ devin-web 现状：仅调用 **14** 个 `_cognition.ai/*` 方法 → 方法面�
 - **已证实**：`mcp/listServers {}`→`{servers:[{serverId,disabled,disabledTools,connectionStatus,sourcePath,transport,url}]}`；`mcp/listTools {serverId}`→`{tools:[{name,title,description}]}`；`mcp/connectServer {serverId}`→`{connectionStatus:"connected"}`；`mcp/installServer {serverId,config:{transport,url,…}}`→`{}`（真写入 mcp_config.json）。
 - **已破（workbench.desktop.main.js `_toggleServer/_removeServer` 调用点取证）**：`toggleServer {serverId,sourcePath}`（翻转 disabled，实机往返验证）；`toggleTool {serverId,toolName,sourcePath}`；`removeServer {serverId,sourcePath}`；`disconnectServer {serverId,sourcePath,workspaceDirs?}`；`connectServer {serverId,workspaceDirs?}`。sourcePath 来自 listServers 输出。
 - UI：会话资源面板 MCP 行在 acp 原生形状下显示 启用/禁用 按钮 → `/api/admin/mcp/call toggleServer` → tick refetch。
+
+### goal/* + scope_search（2026-11-02 取证落地）
+
+- `scope_search {scope_type, query, cwd?, additional_directories}` → `{items}`（sessions bundle 调用点取证 + 实机验证）。
+- `goal/get {sessionId, goalId?}`、`goal/set {sessionId, prompt:[{type:"text",text}]}`（block 数组）、`goal/resume {sessionId, goalId}` —— exe serde 字段表 + "Resource not found vs Invalid params" 判定法破解。`goal/clear` 的 `config` 字段仍未透。
+- `turn_stats`/`compaction`/`browserPreview/capture`/`session/brief`：本地 acp Method not found（云端路由）。
+- 路由：`GET|POST /api/admin/session/:id/goal`、`GET …/scope-search?type=&q=`（session-scoped acpForId）。
 - 路由：`GET /api/admin/mcp/servers`、`GET /api/admin/mcp/tools?server=`、`POST /api/admin/mcp/call {method,params}`。
 - 通知：`_cognition.ai/mcp/serversChanged`→WS `mcp_servers_changed`；`authorizationPending|Required|Finished`→`mcp_auth_pending`（unscoped 广播）。
