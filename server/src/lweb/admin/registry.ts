@@ -502,6 +502,28 @@ export async function handleRegistry(ctx: ApiContext, req: IncomingMessage, res:
     return true;
   }
 
+  // Workspace resource lists — same pooled-acp passthrough family as
+  // rules/list (verified schemas 2026-11-02): skills/plans/hooks/subagents.
+  // `plans/list` and takes no params; the rest take {cwd}.
+  for (const [route, method, needsCwd] of [
+    ["skills", "_cognition.ai/skills/list", true],
+    ["plans", "_cognition.ai/plans/list", false],
+    ["hooks", "_cognition.ai/hooks/list", true],
+    ["subagents", "_cognition.ai/subagents/list", true],
+  ] as const) {
+    if (p === `/api/admin/${route}` && m === "GET") {
+      try {
+        const cwd = url.searchParams.get("cwd") || ctx.primaryCwd;
+        const acp = await ctx.manager.get(cwd);
+        const r = await acp.extMethod("", method, needsCwd ? { cwd } : {});
+        json(res, 200, r ?? {});
+      } catch (e) {
+        json(res, 200, { error: (e as Error).message?.slice(0, 200) ?? "unavailable" });
+      }
+      return true;
+    }
+  }
+
   if (p === "/api/admin/mcp/servers" && m === "GET") {
     try { json(res, 200, (await mcpCall("_cognition.ai/mcp/listServers", {})) ?? { servers: [] }); }
     catch (e) { json(res, 200, { servers: [], error: (e as Error).message?.slice(0, 200) }); }

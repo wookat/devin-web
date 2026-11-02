@@ -561,6 +561,8 @@
     "envDiag": "Environment diagnostics",
     "modelCatalog": "Full model catalog (pricing/context)",
     "agentRules": "Agent rules",
+    "plans": "Plans",
+    "plansEmpty": "No saved plans",
     "rulesDir": "Rules directory",
     "skillsList": "Skills list",
     "skillsDir": "Skills directory",

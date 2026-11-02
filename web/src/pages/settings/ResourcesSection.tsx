@@ -1,6 +1,6 @@
 import { useEffect, useState } from 'react'
 import { useTranslation } from 'react-i18next'
-import { Activity, BookOpen, ChevronDown, ChevronRight, FileText, Puzzle } from 'lucide-react'
+import { Activity, BookOpen, ChevronDown, ChevronRight, FileText, Puzzle, Server } from 'lucide-react'
 import { adminFetch } from '@/lib/api'
 import { visibleInterval } from '@/lib/poll'
 import { CodeEditor } from '@/pages/mirror/WorkspacePanel'
@@ -262,7 +262,12 @@ function InsightsLite() {
  * expands to its skills + MCP servers. */
 interface Plugin {
   pluginKey: string; name: string; state: string; metadataStatus?: string
-  assets?: { skills?: { name: string; description?: string; userInvocable?: boolean }[]; skillsTotal?: number; mcpServers?: unknown[] }
+  origins?: { tier?: string; required?: boolean; source?: string }[]
+  assets?: {
+    skills?: { name: string; namespacedName?: string; description?: string; userInvocable?: boolean; skillPath?: string }[]
+    skillsTotal?: number
+    mcpServers?: { name: string; transport?: string; sourcePath?: string }[]
+  }
 }
 function PluginsPanel() {
   const { t } = useTranslation()
@@ -278,7 +283,8 @@ function PluginsPanel() {
       {data.map((p) => {
         const o = open === p.pluginKey
         const skills = p.assets?.skills ?? []
-        const mcpN = p.assets?.mcpServers?.length ?? 0
+        const mcps = p.assets?.mcpServers ?? []
+        const tier = p.origins?.[0]?.tier
         return (
           <div key={p.pluginKey}>
             <button onClick={() => setOpen(o ? null : p.pluginKey)}
@@ -286,22 +292,38 @@ function PluginsPanel() {
               {o ? <ChevronDown size={13} className="shrink-0 text-muted-foreground" /> : <ChevronRight size={13} className="shrink-0 text-muted-foreground" />}
               <Puzzle size={13} className="shrink-0 text-accent-primary" />
               <span className="min-w-0 flex-1 truncate text-13">{p.name}</span>
+              {tier && <span className="shrink-0 rounded-[5px] border border-border px-1 py-px text-10 text-muted-foreground">{tier}</span>}
               <span className="shrink-0 text-11 text-muted-foreground">
                 {skills.length > 0 && `${skills.length}${p.assets?.skillsTotal ? `/${p.assets.skillsTotal}` : ''} ${t('set.plgSkills')}`}
-                {skills.length > 0 && mcpN > 0 && ' · '}
-                {mcpN > 0 && `${mcpN} MCP`}
+                {skills.length > 0 && mcps.length > 0 && ' · '}
+                {mcps.length > 0 && `${mcps.length} MCP`}
               </span>
               <span className={`size-1.5 shrink-0 rounded-full ${p.state === 'installed' ? 'bg-green-500' : 'bg-border'}`} title={p.state} />
             </button>
             {o && (
               <div className="mx-3 mb-2 rounded-[8px] border border-border px-3 py-2">
                 {skills.map((s) => (
-                  <div key={s.name} className="border-t border-border-secondary py-[6px] first:border-0">
-                    <div className="truncate text-12 font-medium text-foreground">{s.name}</div>
+                  <div key={s.name} className="border-t border-border-secondary py-[6px] first:border-0" title={s.skillPath || s.namespacedName}>
+                    <div className="flex items-center gap-1.5">
+                      <span className="truncate text-12 font-medium text-foreground">{s.name}</span>
+                      {s.userInvocable && <span className="shrink-0 rounded-[5px] border border-border px-1 py-px text-10 text-muted-foreground" title={s.namespacedName}>/{s.name}</span>}
+                    </div>
                     {s.description && <div className="mt-0.5 text-11 text-muted-foreground line-clamp-2" title={s.description}>{s.description}</div>}
                   </div>
                 ))}
-                {skills.length === 0 && <div className="py-1 text-12 text-muted-foreground">{t('set.plgNoSkills')}</div>}
+                {skills.length === 0 && mcps.length === 0 && <div className="py-1 text-12 text-muted-foreground">{t('set.plgNoSkills')}</div>}
+                {mcps.length > 0 && (
+                  <div className="mt-1 border-t border-border pt-2">
+                    <div className="pb-1 text-11 font-medium text-muted-foreground">MCP</div>
+                    {mcps.map((m) => (
+                      <div key={m.name} className="flex items-center gap-1.5 py-[4px]" title={m.sourcePath}>
+                        <Server size={12} className="shrink-0 text-muted-foreground" />
+                        <span className="min-w-0 flex-1 truncate text-12 text-foreground">{m.name}</span>
+                        {m.transport && <span className="shrink-0 rounded-[5px] border border-border px-1 py-px text-10 text-muted-foreground">{m.transport}</span>}
+                      </div>
+                    ))}
+                  </div>
+                )}
               </div>
             )}
           </div>
@@ -337,6 +359,32 @@ function RulesPanel() {
   )
 }
 
+/* Plans — `_cognition.ai/plans/list`: the user's plan library
+ * (~/.devin/plans/*.md), no params. Read-only listing. */
+interface PlanFile { path: string; title?: string; description?: string }
+function PlansPanel() {
+  const { t } = useTranslation()
+  const [data, setData] = useState<PlanFile[] | null>(null)
+  useEffect(() => {
+    void adminFetch<{ plans: PlanFile[] }>('/api/admin/plans').then((r) => setData(r.plans ?? [])).catch(() => setData([]))
+  }, [])
+  if (!data) return <p className="px-[12px] py-[10px] text-13 text-secondary">{t('common.loading')}</p>
+  return (
+    <div className="px-[6px] py-[6px]">
+      {data.length === 0 && <p className="px-[6px] py-[8px] text-13 text-secondary">{t('set.plansEmpty')}</p>}
+      {data.map((pl) => (
+        <div key={pl.path} className="px-[12px] py-[7px] hover:bg-tint-secondary" title={pl.path}>
+          <div className="flex items-center gap-2">
+            <BookOpen size={13} className="shrink-0 text-accent-primary" />
+            <span className="min-w-0 flex-1 truncate text-13">{pl.title || pl.path.split(/[\\/]/).pop()}</span>
+          </div>
+          {pl.description && <div className="ml-5 mt-0.5 text-11 text-muted-foreground line-clamp-2" title={pl.description}>{pl.description}</div>}
+        </div>
+      ))}
+    </div>
+  )
+}
+
 /** Resources tab — system resource monitor + agent rules/skills browser. */
 export function ResourcesTab() {
   const { t } = useTranslation()
@@ -353,6 +401,9 @@ export function ResourcesTab() {
       </Section>
       <Section title={t('set.agentRules')}>
         <RulesPanel />
+      </Section>
+      <Section title={t('set.plans')}>
+        <PlansPanel />
       </Section>
       <Section title={t('set.agentRes')}>
         <AgentResources />

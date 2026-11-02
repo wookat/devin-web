@@ -561,6 +561,8 @@
     "envDiag": "环境诊断",
     "modelCatalog": "全量模型目录（含定价/上下文）",
     "agentRules": "Agent 规则",
+    "plans": "计划",
+    "plansEmpty": "暂无已存计划",
     "rulesDir": "规则目录位置",
     "skillsList": "Skills 清单",
     "skillsDir": "Skills 目录位置",

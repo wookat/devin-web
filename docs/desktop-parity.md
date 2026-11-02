@@ -179,6 +179,11 @@ Oncall/Wiki 属云端 REST，不做本地等价物。
 - `scope_search {scope_type, query, cwd?, additional_directories}` → `{items}`（sessions bundle 调用点取证 + 实机验证）。
 - `goal/get {sessionId, goalId?}`、`goal/set {sessionId, prompt:[{type:"text",text}]}`（block 数组）、`goal/resume {sessionId, goalId}`、`goal/clear {sessionId, goalId}` —— exe serde 字段表 + "Resource not found vs Invalid params" 判定法全数破解。
 - `rules/list {cwd}` ✅ → `{rules:[{name,path,provider,providerLabel,trigger,userInvocable,scope}]}` — agent 实际加载的规则集（global+workspace）。路由 `GET /api/admin/rules?cwd=`。
+- `skills/list {cwd}` ✅ → `{skills:[{name,displayName,description,path,provider,providerLabel,isBuiltin,scope}]}`。路由 `GET /api/admin/skills?cwd=`。
+- `plans/list {}` ✅ → `{plans:[{path,title,description}]}`（`~/.devin/plans/*.md`，无参数）。路由 `GET /api/admin/plans` + Settings Plans 面板。
+- `subagents/list {cwd}` ✅ → `{subagents:[{name,description,path,…}]}`（已配置 subagent profile）。路由 `GET /api/admin/subagents?cwd=`。
+- `hooks/list {cwd}` ✅ → `{hooks:[…]}`。路由 `GET /api/admin/hooks?cwd=`。
+- `workflows/list`：已注册未破（`WorkflowsMigrateParams` 3 字段：workflowPaths/workflowPath/skillPath）。`plugins/assets`：Method not found。
 - `config/read {}` ✅ → 完整 devin config（model prefs/permissions/hooks/mcpServers）。路由 `GET /api/admin/devin-config`。
 - `reads/recentModelUids {keySpace:"recentModelUids",limit}` ✅ → `{uids:[…]}`。keySpace 是必填枚举值。
 - `turn_stats`/`compaction`/`browserPreview/capture`/`session/brief`/`processMemory*`/`plugins/{install,remove,toggle,pin,marketplace,catalog}`/`clipboard/write`/`showModal`/`agentNotification`/`agent_stopped`/`output`/`after`/`tail`：本地 acp Method not found（云端路由或未注册）。plugins 在本 build 为只读。
