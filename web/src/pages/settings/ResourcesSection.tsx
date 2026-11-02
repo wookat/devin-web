@@ -1,6 +1,6 @@
 import { useEffect, useState } from 'react'
 import { useTranslation } from 'react-i18next'
-import { Activity, BookOpen, ChevronDown, ChevronRight, FileText } from 'lucide-react'
+import { Activity, BookOpen, ChevronDown, ChevronRight, FileText, Puzzle } from 'lucide-react'
 import { adminFetch } from '@/lib/api'
 import { visibleInterval } from '@/lib/poll'
 import { CodeEditor } from '@/pages/mirror/WorkspacePanel'
@@ -258,6 +258,59 @@ function InsightsLite() {
   )
 }
 
+/* Installed plugins — `_cognition.ai/plugins/list` passthrough; each row
+ * expands to its skills + MCP servers. */
+interface Plugin {
+  pluginKey: string; name: string; state: string; metadataStatus?: string
+  assets?: { skills?: { name: string; description?: string; userInvocable?: boolean }[]; skillsTotal?: number; mcpServers?: unknown[] }
+}
+function PluginsPanel() {
+  const { t } = useTranslation()
+  const [data, setData] = useState<Plugin[] | null>(null)
+  const [open, setOpen] = useState<string | null>(null)
+  useEffect(() => {
+    void adminFetch<{ plugins: Plugin[] }>('/api/admin/plugins').then((r) => setData(r.plugins ?? [])).catch(() => setData([]))
+  }, [])
+  if (!data) return <p className="px-[12px] py-[10px] text-13 text-secondary">{t('common.loading')}</p>
+  return (
+    <div className="px-[6px] py-[6px]">
+      {data.length === 0 && <p className="px-[6px] py-[8px] text-13 text-secondary">{t('set.plgEmpty')}</p>}
+      {data.map((p) => {
+        const o = open === p.pluginKey
+        const skills = p.assets?.skills ?? []
+        const mcpN = p.assets?.mcpServers?.length ?? 0
+        return (
+          <div key={p.pluginKey}>
+            <button onClick={() => setOpen(o ? null : p.pluginKey)}
+              className="flex w-full cursor-pointer items-center gap-2 px-[12px] py-[8px] text-left hover:bg-tint-secondary">
+              {o ? <ChevronDown size={13} className="shrink-0 text-muted-foreground" /> : <ChevronRight size={13} className="shrink-0 text-muted-foreground" />}
+              <Puzzle size={13} className="shrink-0 text-accent-primary" />
+              <span className="min-w-0 flex-1 truncate text-13">{p.name}</span>
+              <span className="shrink-0 text-11 text-muted-foreground">
+                {skills.length > 0 && `${skills.length}${p.assets?.skillsTotal ? `/${p.assets.skillsTotal}` : ''} ${t('set.plgSkills')}`}
+                {skills.length > 0 && mcpN > 0 && ' · '}
+                {mcpN > 0 && `${mcpN} MCP`}
+              </span>
+              <span className={`size-1.5 shrink-0 rounded-full ${p.state === 'installed' ? 'bg-green-500' : 'bg-border'}`} title={p.state} />
+            </button>
+            {o && (
+              <div className="mx-3 mb-2 rounded-[8px] border border-border px-3 py-2">
+                {skills.map((s) => (
+                  <div key={s.name} className="border-t border-border-secondary py-[6px] first:border-0">
+                    <div className="truncate text-12 font-medium text-foreground">{s.name}</div>
+                    {s.description && <div className="mt-0.5 text-11 text-muted-foreground line-clamp-2" title={s.description}>{s.description}</div>}
+                  </div>
+                ))}
+                {skills.length === 0 && <div className="py-1 text-12 text-muted-foreground">{t('set.plgNoSkills')}</div>}
+              </div>
+            )}
+          </div>
+        )
+      })}
+    </div>
+  )
+}
+
 /** Resources tab — system resource monitor + agent rules/skills browser. */
 export function ResourcesTab() {
   const { t } = useTranslation()
@@ -268,6 +321,9 @@ export function ResourcesTab() {
       </Section>
       <Section title={t('set.insights')}>
         <InsightsLite />
+      </Section>
+      <Section title={t('set.plugins')}>
+        <PluginsPanel />
       </Section>
       <Section title={t('set.agentRes')}>
         <AgentResources />
