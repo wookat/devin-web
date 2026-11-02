@@ -702,6 +702,29 @@ export class SessionDb {
     return v;
   }
 
+  /** Insights-lite: activity aggregations for the local usage panel —
+   *  per-day event/session counts (last `days` days), per-kind totals, and
+   *  the top sessions by event volume. All gens included (history counts). */
+  usageStats(days = 30) {
+    this.flush();
+    const since = Date.now() - days * 86_400_000;
+    const dayRows = this.db.prepare(
+      `SELECT strftime('%Y-%m-%d', ts/1000, 'unixepoch') AS day,
+              COUNT(*) AS events, COUNT(DISTINCT session_id) AS sessions,
+              COALESCE(SUM(bytes),0) AS bytes
+       FROM events WHERE ts >= ? GROUP BY day ORDER BY day`,
+    ).all(since) as { day: string; events: number; sessions: number; bytes: number }[];
+    const kindRows = this.db.prepare(
+      `SELECT kind, COUNT(*) AS n FROM events GROUP BY kind ORDER BY n DESC LIMIT 15`,
+    ).all() as { kind: string | null; n: number }[];
+    const topRows = this.db.prepare(
+      `SELECT session_id AS id, COUNT(*) AS events, COALESCE(SUM(bytes),0) AS bytes,
+              MIN(ts) AS firstTs, MAX(ts) AS lastTs
+       FROM events GROUP BY session_id ORDER BY events DESC LIMIT 20`,
+    ).all() as { id: string; events: number; bytes: number; firstTs: number; lastTs: number }[];
+    return { days: dayRows, kinds: kindRows, topSessions: topRows };
+  }
+
   /** Full VACUUM — rewrites the file (a 3GB db takes a while and pauses
    *  writers), so it's a deliberate repair action, never scheduled. Also
    *  the only way to flip auto_vacuum=INCREMENTAL on a pre-existing file;

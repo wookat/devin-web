@@ -644,6 +644,11 @@ export class SessionLog {
     return this.db ? this.db.vacuum() : null;
   }
 
+  /** Insights-lite aggregations (sessiondb) — null when the db is off. */
+  usageStats(days = 30) {
+    return this.db ? this.db.usageStats(days) : null;
+  }
+
   /** Newest user/agent message text for list views — the db path is one
    *  bounded DESC query; the .jsonl path scans a 600-entry tail. */
   lastMessage(sessionId: string): { body: string; ts: number } | null {

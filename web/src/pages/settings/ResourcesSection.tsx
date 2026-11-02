@@ -211,6 +211,53 @@ function SystemResources() {
   )
 }
 
+/* Insights-lite — local usage stats from sessiondb (official Insights
+ * parity, local data). 30d activity histogram + kind mix + top sessions. */
+interface Insights {
+  days: { day: string; events: number; sessions: number; bytes: number }[]
+  kinds: { kind: string | null; n: number }[]
+  topSessions: { id: string; events: number; bytes: number; firstTs: number; lastTs: number }[]
+}
+function InsightsLite() {
+  const { t } = useTranslation()
+  const [d, setD] = useState<Insights | null>(null)
+  useEffect(() => {
+    void adminFetch<Insights>('/api/admin/insights?days=30').then(setD).catch(() => setD({ days: [], kinds: [], topSessions: [] }))
+  }, [])
+  if (!d) return <p className="px-[12px] py-[10px] text-13 text-secondary">{t('common.loading')}</p>
+  const max = Math.max(1, ...d.days.map((x) => x.events))
+  return (
+    <div className="flex flex-col gap-3 px-[12px] py-[10px]">
+      <div className="flex h-[64px] items-end gap-[2px]" title={t('set.insAct')}>
+        {d.days.map((x) => (
+          <div key={x.day} title={`${x.day}: ${x.events} ${t('set.insEvents')}, ${x.sessions} ${t('set.insSessions')}`}
+            className="min-w-[3px] flex-1 rounded-t-[2px] bg-accent-primary/70 hover:bg-accent-primary"
+            style={{ height: `${Math.max(4, (x.events / max) * 100)}%` }} />
+        ))}
+        {d.days.length === 0 && <span className="text-12 text-secondary">{t('set.insEmpty')}</span>}
+      </div>
+      {d.kinds.length > 0 && (
+        <div className="flex flex-wrap gap-1.5">
+          {d.kinds.filter((k) => k.kind).slice(0, 10).map((k) => (
+            <span key={k.kind} className="rounded-[6px] border border-border px-1.5 py-0.5 text-11 text-secondary">{k.kind}: {k.n}</span>
+          ))}
+        </div>
+      )}
+      {d.topSessions.length > 0 && (
+        <div className="flex flex-col">
+          {d.topSessions.slice(0, 8).map((s) => (
+            <div key={s.id} className="flex items-center gap-2 border-t border-border-secondary py-[5px] text-12">
+              <span className="min-w-0 flex-1 truncate font-mono text-11 text-muted-foreground">{s.id}</span>
+              <span className="shrink-0 text-secondary">{s.events} {t('set.insEvents')}</span>
+              <span className="w-[90px] shrink-0 text-right text-muted-foreground">{(s.bytes / 1048576).toFixed(1)}MB</span>
+            </div>
+          ))}
+        </div>
+      )}
+    </div>
+  )
+}
+
 /** Resources tab — system resource monitor + agent rules/skills browser. */
 export function ResourcesTab() {
   const { t } = useTranslation()
@@ -218,6 +265,9 @@ export function ResourcesTab() {
     <>
       <Section title={t('set.sysRes')}>
         <SystemResources />
+      </Section>
+      <Section title={t('set.insights')}>
+        <InsightsLite />
       </Section>
       <Section title={t('set.agentRes')}>
         <AgentResources />

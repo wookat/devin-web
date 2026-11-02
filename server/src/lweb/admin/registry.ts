@@ -442,6 +442,15 @@ export async function handleRegistry(ctx: ApiContext, req: IncomingMessage, res:
     return true;
   }
 
+  // GET /api/admin/insights[?days=N] — local Insights-lite: sessiondb
+  // activity aggregations (per-day events/sessions, kind mix, top sessions).
+  if (p === "/api/admin/insights" && m === "GET") {
+    const days = Math.min(90, Math.max(1, Number(url.searchParams.get("days")) || 30));
+    const u = ctx.sessionLog.usageStats(days);
+    json(res, 200, u ?? { days: [], kinds: [], topSessions: [] });
+    return true;
+  }
+
   // ---- MCP server management (desktop parity, live-verified shapes) ----
   // Same account-level scope as plugins. Verified against devin
   // 3000.11.216: listServers {}, listTools {serverId},
