@@ -2,7 +2,7 @@ import { useCallback, useEffect, useRef, useState } from 'react'
 import { useTranslation } from 'react-i18next'
 import { createPortal } from 'react-dom'
 import { useNavigate } from 'react-router-dom'
-import { ChevronRight, Check, ArrowUpRight, Square, Link2, X, RotateCcw, Laptop, Folder as FolderIcon, Pencil, Share2, GitFork, Clock } from 'lucide-react'
+import { ChevronRight, Check, ArrowUpRight, Square, Link2, X, RotateCcw, Laptop, Folder as FolderIcon, Pencil, Share2, GitFork, Clock, Play } from 'lucide-react'
 import { fmtWorkedDur } from '@/components/Timeline'
 import { OArchive } from '../../components/officialIcons'
 import { adminFetch, type AdminSession } from '@/lib/api'
@@ -258,6 +258,16 @@ function SessionMenu({ detail, id, isSub, isDevinSession, current, treeNode, fol
             className={settingsRowCls}
           >
             <GitFork size={13} className="text-muted-foreground" /> {t('menu.forkSession')}
+          </button>}
+          {/* Replay — desktop ReplaySessionPage parity: read-only scrub
+              player over the full session timeline. */}
+          {!isSub && <button
+            role="menuitem"
+            onMouseEnter={() => setSettingsSub('none')}
+            onClick={() => { setSettingsOpen(false); setSettingsSub('none'); nav(`/admin/${id}/replay`) }}
+            className={settingsRowCls}
+          >
+            <Play size={13} className="text-muted-foreground" /> {t('menu.replay')}
           </button>}
           {/* Desktop "Open in new window" — each session can live in its
               own browser window. */}

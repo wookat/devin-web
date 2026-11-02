@@ -66,8 +66,16 @@ devin-web 现状：仅调用 **14** 个 `_cognition.ai/*` 方法 → 方法面�
 macro 唯一性 409；AutomationsPage 模板保存可加 `!` 宏输入框 + 列表徽标）。
 顺带修复 `catalogInfo(undefined)` → composer-meta 500 的存量 bug。
 
-**候选下一步（按 ROI）**：本地 Insights-lite（sessiondb 统计面板）、通知 inbox
-（WS 事件→本地 inbox）、插件管理 UI（plugins/list 已有数据）、Replay（jsonl 回放页）。
+**已落地（续）**：Insights-lite（sessiondb 聚合 → `/api/admin/insights` + Settings 面板）、
+通知 inbox（notifcenter 环形缓冲 + `notifications.json` + WS 广播 + bell 下拉分区 +
+页面不可见时系统通知）、插件管理面板（`plugins/list` → Settings Resources，
+只读——本地 acp 无写方法）、**Replay 页**（`/admin/:id/replay`：cursor 全量分页
+拉取 timeline → 缩放时钟播放/步进/拖动条；SessionMenu 入口）、KaTeX
+（remark-math + rehype-katex 接线 + 字体打包，strict:ignore 容错）、
+Agent rules 面板（`rules/list` → agent 实际加载的规则集）。
+
+**候选下一步（按 ROI）**：插件面板 skill/MCP 明细展开、`goal/clear` config
+字段、`reads/promptHistory`/`config/write`/`workflows/migrate` 未破 schema。
 Oncall/Wiki 属云端 REST，不做本地等价物。
 
 ### W3 — 桌面集成层（低优先级，情报为主）

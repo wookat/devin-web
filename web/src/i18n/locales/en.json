@@ -322,6 +322,7 @@
     "saveToEnv": "Save to environment",
     "readonlyBanner": "Read-only share — you can only view this session",
     "openNewWindow": "Open in new window",
+    "replay": "Replay",
     "subagentCancelled": "Subagent cancelled",
     "sessionEndSent": "Session end dispatched",
     "endFailed": "End failed",
@@ -1049,17 +1050,11 @@
     "mergeFail": "merge failed"
   },
   "rv": {
-    "title": "Rewind to before this message?",
-    "desc": "This message and everything after it will be removed from history, and workspace files will be restored to the checkpoint.",
-    "fileActions": "file change(s) will be reverted",
-    "warnings": "Warnings",
-    "conflicts": "Conflicts — rewinding will branch into a new session",
-    "execute": "Rewind",
-    "fork": "Branch instead",
-    "cancel": "Cancel",
-    "busy": "Rewinding…",
-    "failed": "Rewind failed",
-    "forked": "Branched to a new session"
+    "title": "Review a pull request",
+    "ph": "https://github.com/owner/repo/pull/123 or owner/repo#123",
+    "go": "Go to PR",
+    "bad": "Paste a github.com PR link (owner/repo/pull/N)",
+    "back": "Review"
   },
   "perm": {
     "createAuto": "Create automation",
@@ -1806,13 +1801,6 @@
     "connecting": "Connecting to Devin's Computer…",
     "reconnecting": "Reconnecting..."
   },
-  "rv": {
-    "title": "Review a pull request",
-    "ph": "https://github.com/owner/repo/pull/123 or owner/repo#123",
-    "go": "Go to PR",
-    "bad": "Paste a github.com PR link (owner/repo/pull/N)",
-    "back": "Review"
-  },
   "stub": {
     "na": "This surface isn't available in the local build — no local equivalent of the official product."
   },
@@ -2094,5 +2082,17 @@
     "decisions": "Decision log",
     "noDecisions": "No delegated answers yet.",
     "saved": "Saved"
+  },
+  "replay": {
+    "back": "Back to session",
+    "empty": "Nothing to replay yet",
+    "finished": "Replay finished",
+    "play": "Play",
+    "pause": "Pause",
+    "stepBack": "Step back",
+    "stepFwd": "Step forward",
+    "toStart": "Jump to start",
+    "toEnd": "Jump to end",
+    "scrub": "Scrub"
   }
 }

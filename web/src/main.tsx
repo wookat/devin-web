@@ -15,6 +15,7 @@ const StubPage = lazy(() => import('./pages/StubPage'))
 const AutomationsPage = lazy(() => import('./pages/AutomationsPage'))
 const WikiPage = lazy(() => import('./pages/WikiPage'))
 const SecurityPage = lazy(() => import('./pages/SecurityPage'))
+const ReplayPage = lazy(() => import('./pages/ReplayPage'))
 import { initTheme } from './lib/theme'
 import { initScrollReveal } from './lib/scrollReveal'
 import { prefetchAdmin, prefetchShare } from './lib/api'
@@ -97,6 +98,7 @@ function mount(boot: RouteModule | null) {
           <Route path="/admin/wiki" element={<WikiPage />} />
           <Route path="/admin/wiki/:owner/:repo" element={<WikiPage />} />
           <Route path="/admin/sessions" element={<SessionsPage />} />
+          <Route path="/admin/:id/replay" element={<ReplayPage />} />
           <Route path="/admin/:id" element={<Mirror />} />
           <Route path="/admin/:id/mirror" element={<Mirror />} />
           <Route path="/admin/:id/classic" element={<AdminSessionPage />} />

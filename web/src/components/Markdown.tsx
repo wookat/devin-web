@@ -2,7 +2,10 @@ import { useEffect, useState } from 'react'
 import { useTranslation } from 'react-i18next'
 import ReactMarkdown from 'react-markdown'
 import rehypeRaw from 'rehype-raw'
+import rehypeKatex from 'rehype-katex'
 import remarkGfm from 'remark-gfm'
+import remarkMath from 'remark-math'
+import 'katex/dist/katex.min.css'
 import { Copy, Check, WrapText } from 'lucide-react'
 import { Link } from 'react-router-dom'
 import { LightboxImage } from './Lightbox'
@@ -232,8 +235,8 @@ export default function Markdown({ text, rewriteUrl, onFileRef, variant }: {
       ? 'prose-chat prose-thoughts min-w-0 select-text break-words text-[13px] leading-[18px] text-muted-foreground [overflow-wrap:anywhere]'
       : 'prose-chat text-[14px] leading-[20px] break-words [overflow-wrap:anywhere]'}>
       <ReactMarkdown
-        remarkPlugins={[remarkGfm]}
-        rehypePlugins={[rehypeRaw]}
+        remarkPlugins={[remarkGfm, remarkMath]}
+        rehypePlugins={[rehypeRaw, [rehypeKatex, { strict: 'ignore', throwOnError: false }]]}
         components={{
           pre: ({ children }) => <>{children}</>,
           code: ({ className, children, ...props }) => {

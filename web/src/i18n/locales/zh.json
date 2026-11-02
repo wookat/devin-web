@@ -322,6 +322,7 @@
     "saveToEnv": "保存到环境",
     "readonlyBanner": "只读分享，仅可查看会话",
     "openNewWindow": "在新窗口打开",
+    "replay": "回放",
     "subagentCancelled": "子代理已取消",
     "sessionEndSent": "会话结束指令已发送",
     "endFailed": "结束失败",
@@ -1049,17 +1050,11 @@
     "mergeFail": "合并失败"
   },
   "rv": {
-    "title": "回退到此消息之前？",
-    "desc": "此消息及其后的全部内容将从历史中移除，工作区文件将恢复到该检查点。",
-    "fileActions": "个文件改动将被还原",
-    "warnings": "警告",
-    "conflicts": "存在冲突 —— 回退将分支为新会话",
-    "execute": "回退",
-    "fork": "改为分支",
-    "cancel": "取消",
-    "busy": "正在回退…",
-    "failed": "回退失败",
-    "forked": "已分支到新会话"
+    "title": "评审 Pull Request",
+    "ph": "https://github.com/owner/repo/pull/123 或 owner/repo#123",
+    "go": "打开 PR",
+    "bad": "粘贴 github.com PR 链接（owner/repo/pull/N）",
+    "back": "评审"
   },
   "perm": {
     "createAuto": "创建自动化",
@@ -1806,13 +1801,6 @@
     "connecting": "正在连接 Devin 的电脑…",
     "reconnecting": "重新连接中…"
   },
-  "rv": {
-    "title": "评审 Pull Request",
-    "ph": "https://github.com/owner/repo/pull/123 或 owner/repo#123",
-    "go": "打开 PR",
-    "bad": "粘贴 github.com PR 链接（owner/repo/pull/N）",
-    "back": "评审"
-  },
   "stub": {
     "na": "此功能面在本地版暂不可用——官方产品无对应本地实现。"
   },
@@ -2094,5 +2082,17 @@
     "decisions": "代答记录",
     "noDecisions": "还没有代答记录。",
     "saved": "已保存"
+  },
+  "replay": {
+    "back": "返回会话",
+    "empty": "暂无可回放内容",
+    "finished": "回放结束",
+    "play": "播放",
+    "pause": "暂停",
+    "stepBack": "上一步",
+    "stepFwd": "下一步",
+    "toStart": "跳到开头",
+    "toEnd": "跳到结尾",
+    "scrub": "拖动进度"
   }
 }
