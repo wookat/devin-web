@@ -524,6 +524,40 @@ export async function handleRegistry(ctx: ApiContext, req: IncomingMessage, res:
     }
   }
 
+  // GET /api/admin/workflows?cwd=&scope= — `_cognition.ai/workflows/list`:
+  // agent-resolved workflow files. Schema (verified 2026-11-02):
+  // {workspaceDirectories:[...], scope:"all"|"workspace"|"global"} → {results}.
+  if (p === "/api/admin/workflows" && m === "GET") {
+    try {
+      const cwd = url.searchParams.get("cwd") || ctx.primaryCwd;
+      const scope = url.searchParams.get("scope") || "all";
+      const acp = await ctx.manager.get(cwd);
+      const r = await acp.extMethod("", "_cognition.ai/workflows/list", { workspaceDirectories: [cwd], scope });
+      json(res, 200, r ?? { results: [] });
+    } catch (e) {
+      json(res, 200, { results: [], error: (e as Error).message?.slice(0, 200) ?? "unavailable" });
+    }
+    return true;
+  }
+
+  // POST /api/admin/devin-config — `_cognition.ai/config/write`: key-path
+  // navigation write into the agent's devin config. Schema (verified
+  // 2026-11-02): {path:string[], config:any} — path segments walk the config
+  // tree ("Path segment 'x' not found" on a bad key). Body {path, config}.
+  if (p === "/api/admin/devin-config" && m === "POST") {
+    const body = await readJson(req);
+    const pth = Array.isArray(body.path) ? body.path.filter((s: unknown) => typeof s === "string") : null;
+    if (!pth?.length || !("config" in body)) { json(res, 400, { error: "path (string[]) + config required" }); return true; }
+    try {
+      const acp = await ctx.manager.get(ctx.primaryCwd);
+      const r = await acp.extMethod("", "_cognition.ai/config/write", { path: pth, config: body.config });
+      json(res, 200, { ok: true, result: r ?? null });
+    } catch (e) {
+      json(res, 200, { ok: false, error: (e as Error).message?.slice(0, 200) ?? "write failed" });
+    }
+    return true;
+  }
+
   if (p === "/api/admin/mcp/servers" && m === "GET") {
     try { json(res, 200, (await mcpCall("_cognition.ai/mcp/listServers", {})) ?? { servers: [] }); }
     catch (e) { json(res, 200, { servers: [], error: (e as Error).message?.slice(0, 200) }); }

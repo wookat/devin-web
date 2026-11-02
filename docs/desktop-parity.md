@@ -74,8 +74,8 @@ macro 唯一性 409；AutomationsPage 模板保存可加 `!` 宏输入框 + 列�
 （remark-math + rehype-katex 接线 + 字体打包，strict:ignore 容错）、
 Agent rules 面板（`rules/list` → agent 实际加载的规则集）。
 
-**候选下一步（按 ROI）**：插件面板 skill/MCP 明细展开、`goal/clear` config
-字段、`reads/promptHistory`/`config/write`/`workflows/migrate` 未破 schema。
+**候选下一步（按 ROI）**：剩余未路由的已破 schema 仅 `workflows/migrate`
+（旧 .codeium 工作流迁移，本地无可迁对象，未路由）。
 Oncall/Wiki 属云端 REST，不做本地等价物。
 
 ### W3 — 桌面集成层（低优先级，情报为主）
@@ -183,11 +183,12 @@ Oncall/Wiki 属云端 REST，不做本地等价物。
 - `plans/list {}` ✅ → `{plans:[{path,title,description}]}`（`~/.devin/plans/*.md`，无参数）。路由 `GET /api/admin/plans` + Settings Plans 面板。
 - `subagents/list {cwd}` ✅ → `{subagents:[{name,description,path,…}]}`（已配置 subagent profile）。路由 `GET /api/admin/subagents?cwd=`。
 - `hooks/list {cwd}` ✅ → `{hooks:[…]}`。路由 `GET /api/admin/hooks?cwd=`。
-- `workflows/list`：已注册未破（`WorkflowsMigrateParams` 3 字段：workflowPaths/workflowPath/skillPath）。`plugins/assets`：Method not found。
+- `workflows/list|workflows/migrate {workspaceDirectories:[…], scope:"all"|"workspace"|"global"}` ✅ → `{results:[…]}`（serde `missing field` 自 stderr 捕获）。路由 `GET /api/admin/workflows?cwd=&scope=`；`workflows/migrate`（旧 .codeium/windsurf 工作流迁移）未路由——写操作且本地无旧工作流可迁。
 - `config/read {}` ✅ → 完整 devin config（model prefs/permissions/hooks/mcpServers）。路由 `GET /api/admin/devin-config`。
+- `config/write {path:[段…], config:<值>}` ✅ — config 树键路径导航写（"Path segment 'x' not found" 校验键名）。路由 `POST /api/admin/devin-config {path,config}`。
+- `reads/promptHistory {sessionId, currentSessionOnly, limit}` ✅ → `{entries:[{text,isShell}]}` — composer ↑ 历史回溯数据源。路由 `GET /api/admin/session/:id/prompt-history`。
 - `reads/recentModelUids {keySpace:"recentModelUids",limit}` ✅ → `{uids:[…]}`。keySpace 是必填枚举值。
-- `turn_stats`/`compaction`/`browserPreview/capture`/`session/brief`/`processMemory*`/`plugins/{install,remove,toggle,pin,marketplace,catalog}`/`clipboard/write`/`showModal`/`agentNotification`/`agent_stopped`/`output`/`after`/`tail`：本地 acp Method not found（云端路由或未注册）。plugins 在本 build 为只读。
-- 未破 schema（已注册、全变体 Invalid params）：`reads/promptHistory`、`config/write`（`ConfigWriteParams` 2 字段，含 `configPath`）、`workflows/migrate`。
+- `turn_stats`/`compaction`/`browserPreview/capture`/`session/brief`/`processMemory*`/`plugins/{install,remove,toggle,pin,marketplace,catalog,assets}`/`clipboard/write`/`showModal`/`agentNotification`/`agent_stopped`/`output`/`after`/`tail`：本地 acp Method not found（云端路由或未注册）。plugins 在本 build 为只读。
 - 路由：`GET|POST /api/admin/session/:id/goal`、`GET …/scope-search?type=&q=`（session-scoped acpForId）。
 - 路由：`GET /api/admin/mcp/servers`、`GET /api/admin/mcp/tools?server=`、`POST /api/admin/mcp/call {method,params}`。
 - 通知：`_cognition.ai/mcp/serversChanged`→WS `mcp_servers_changed`；`authorizationPending|Required|Finished`→`mcp_auth_pending`（unscoped 广播）。
