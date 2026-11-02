@@ -3,6 +3,7 @@ import { useTranslation } from 'react-i18next'
 import { createPortal } from 'react-dom'
 import { Check, ChevronDown, Pin, PinOff, Search, SlidersHorizontal, Sparkles } from 'lucide-react'
 import { cn } from '@/lib/utils'
+import { adminFetch } from '@/lib/api'
 import DwMark from '@/components/DwMark'
 import type { LocalCfgOption } from './pageBits'
 
@@ -120,6 +121,21 @@ export default function ModelPicker({ model, effortGroup, speedGroup, extraGroup
   const [q, setQ] = useState('')
   const [pins, setPins] = useState<string[]>(() => readList(PINS_KEY))
   const [recent, setRecent] = useState<string[]>(() => readList(RECENT_KEY))
+  // Agent-side recents (`reads/recentModelUids`) seed an empty local list —
+  // desktop picks carry over. Local selections take precedence thereafter.
+  useEffect(() => {
+    if (readList(RECENT_KEY).length) return
+    void adminFetch<{ uids?: unknown[] }>('/api/admin/recent-models').then((r) => {
+      const uids = Array.isArray(r?.uids) ? r.uids.filter((u): u is string => typeof u === 'string') : []
+      if (!uids.length) return
+      setRecent((cur) => {
+        if (cur.length) return cur
+        const next = [...uids, ...readList(RECENT_KEY).filter((x) => !uids.includes(x))].slice(0, 6)
+        writeList(RECENT_KEY, next)
+        return next
+      })
+    }).catch(() => {})
+  }, [])
   const [hover, setHover] = useState<Row | null>(null)
   const [detailPos, setDetailPos] = useState<{ left: number; top: number; width: number } | null>(null)
   const [effortMenu, setEffortMenu] = useState(false)

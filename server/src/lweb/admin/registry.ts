@@ -558,6 +558,20 @@ export async function handleRegistry(ctx: ApiContext, req: IncomingMessage, res:
     return true;
   }
 
+  // GET /api/admin/recent-models — `_cognition.ai/reads/recentModelUids`:
+  // the agent-side "recently used models" store the desktop picker reads.
+  // {keySpace:"recentModelUids" (required enum), limit} → {uids:[…]}.
+  if (p === "/api/admin/recent-models" && m === "GET") {
+    try {
+      const acp = await ctx.manager.get(ctx.primaryCwd);
+      const r = await acp.extMethod("", "_cognition.ai/reads/recentModelUids", { keySpace: "recentModelUids", limit: 12 });
+      json(res, 200, r ?? { uids: [] });
+    } catch (e) {
+      json(res, 200, { uids: [], error: (e as Error).message?.slice(0, 200) ?? "unavailable" });
+    }
+    return true;
+  }
+
   if (p === "/api/admin/mcp/servers" && m === "GET") {
     try { json(res, 200, (await mcpCall("_cognition.ai/mcp/listServers", {})) ?? { servers: [] }); }
     catch (e) { json(res, 200, { servers: [], error: (e as Error).message?.slice(0, 200) }); }

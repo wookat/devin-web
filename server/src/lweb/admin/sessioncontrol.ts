@@ -71,7 +71,11 @@ export async function handleSessionControl(ctx: ApiContext, req: IncomingMessage
   // Live-verified: false = cross-session history (composer ↑-recall source).
   if (sub === "prompt-history" && m === "GET") {
     try {
-      const acp = await acpForId(ctx, id);
+      // Pool acp, not acpForId — reads/promptHistory answers session-scoped
+      // history without session/load (verified: fresh acp + bare sessionId
+      // responds instantly). acpForId would stall cold sessions on a full
+      // load just to read a history store.
+      const acp = await ctx.manager.get(ctx.primaryCwd);
       const limit = Math.min(200, Math.max(1, parseInt(url.searchParams.get("limit") ?? "50", 10) || 50));
       const r = await acp.extMethod(id, "_cognition.ai/reads/promptHistory", {
         sessionId: id,
