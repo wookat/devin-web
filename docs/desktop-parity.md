@@ -188,7 +188,8 @@ Oncall/Wiki 属云端 REST，不做本地等价物。
 - `config/write {path:[段…], config:<值>}` ✅ — config 树键路径导航写（"Path segment 'x' not found" 校验键名）。路由 `POST /api/admin/devin-config {path,config}`。
 - `reads/promptHistory {sessionId, currentSessionOnly, limit}` ✅ → `{entries:[{text,isShell}]}` — composer ↑ 历史回溯数据源。路由 `GET /api/admin/session/:id/prompt-history`。
 - `reads/recentModelUids {keySpace:"recentModelUids",limit}` ✅ → `{uids:[…]}`。keySpace 是必填枚举值。
-- `turn_stats`/`compaction`/`browserPreview/capture`/`session/brief`/`processMemory*`/`plugins/{install,remove,toggle,pin,marketplace,catalog,assets}`/`clipboard/write`/`showModal`/`agentNotification`/`agent_stopped`/`output`/`after`/`tail`：本地 acp Method not found（云端路由或未注册）。plugins 在本 build 为只读。
+- `turn_stats`/`compaction`/`browserPreview/capture`/`session/brief`/`processMemory*`/`plugins/{install,remove,toggle,pin,marketplace,catalog,assets}`/`clipboard/write`/`showModal`/`agentNotification`/`agent_stopped`/`output`/`after`/`tail`/`repos/list`/`session/fork`/`snapshot-setup/trigger-build`：本地 acp Method not found（云端路由或未注册）。plugins 在本 build 为只读。
+- `session/share`：已注册（`{sessionId}` 通过 serde → "Session not found"），功能本体走云端，未路由。
 - 路由：`GET|POST /api/admin/session/:id/goal`、`GET …/scope-search?type=&q=`（session-scoped acpForId）。
 - 路由：`GET /api/admin/mcp/servers`、`GET /api/admin/mcp/tools?server=`、`POST /api/admin/mcp/call {method,params}`。
 - 通知：`_cognition.ai/mcp/serversChanged`→WS `mcp_servers_changed`；`authorizationPending|Required|Finished`→`mcp_auth_pending`（unscoped 广播）。
