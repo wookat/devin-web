@@ -193,3 +193,13 @@ Oncall/Wiki 属云端 REST，不做本地等价物。
 - 路由：`GET|POST /api/admin/session/:id/goal`、`GET …/scope-search?type=&q=`（session-scoped acpForId）。
 - 路由：`GET /api/admin/mcp/servers`、`GET /api/admin/mcp/tools?server=`、`POST /api/admin/mcp/call {method,params}`。
 - 通知：`_cognition.ai/mcp/serversChanged`→WS `mcp_servers_changed`；`authorizationPending|Required|Finished`→`mcp_auth_pending`（unscoped 广播）。
+
+## Cloud REST 层（app.devin.ai/api/* — auth1 token + x-cog-org-id）
+
+本地 acp 面收割完毕后的新方向：走 cloudapi.ts（代理感知 fetch + token/org 文件 + 读路径白名单）。
+
+- **凭证**：`DEVIN_WEB_DEVIN_TOKEN`/`devin-web.org` env 或 `<dataDir>/devin-web.token|org`；`NODE_USE_ENV_PROXY` 令 fetch 走系统代理（直连 CN 出口 403）。
+- **路由**：`GET /api/admin/cloud/account`（9 读端点聚合：organizations/{org} + settings + members + session-tags + slash-commands + billing/subscription + invoices + account prefs + notification-preferences + automations/schemas，每端点独立降级 `{error}`）；`GET /api/admin/cloud/proxy?path=`（白名单转发，仅 CLOUD_READ_PATHS）。
+- **UI**：Settings → 资源 "云端账户" 面板——org/套餐状态/账单数/通知组/自动化事件类型/布尔开关汇总 + 成员列表；无凭证显示 `cloudNoCreds`，单项失败不拖垮面板。
+- **实机实测**（代理通）：`GET /organizations` 200；`/organizations/{org}/{settings,members,session-tags,slash-commands}` 200；`/billing/{subscription,invoices}` 200（sub.status="past_due", slug="pro"）；`/account/{commit-email,pr-open-as,devin-pr-merge}` 200；`/users/notification-preferences` 200；`/automations/schemas` 200（github/pagerduty/jira/jira-cloud/slack_trigger/linear + ssh_cmd）。
+- **定案（非 bug）**：`GET /notifications` 404；`GET /sessions` 405（session/list 本来走 acp）；`GET /billing/usage/current` 404；`/knowledge-suggestions/suggestions/{org}` 缺 `devin_id` 必填参数（422）。

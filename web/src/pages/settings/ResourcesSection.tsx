@@ -2,6 +2,7 @@ import { useEffect, useState } from 'react'
 import { useTranslation } from 'react-i18next'
 import { Activity, BookOpen, ChevronDown, ChevronRight, FileText, Puzzle, Server } from 'lucide-react'
 import { adminFetch } from '@/lib/api'
+import { cn } from '@/lib/utils'
 import { visibleInterval } from '@/lib/poll'
 import { CodeEditor } from '@/pages/mirror/WorkspacePanel'
 import { Section } from './atoms'
@@ -385,11 +386,76 @@ function PlansPanel() {
   )
 }
 
+/* Cloud account — app.devin.ai/api/* reads (auth1 token + x-cog-org-id):
+ * org/members/settings/billing/notification prefs. What only the cloud can
+ * answer; each sub-read degrades independently. */
+interface CloudAccount {
+  ok?: boolean; error?: string
+  org?: { org_id?: string; display_name?: string } | { error?: string }
+  members?: { name?: string; email?: string; role?: string }[] | { error?: string }
+  settings?: Record<string, unknown> | { error?: string }
+  subscription?: { slug?: string; status?: string; planId?: string } | { error?: string }
+  invoices?: { invoices?: { id?: string; status?: string; amount?: number; date?: number }[] } | { error?: string }
+  notificationPrefs?: { groups?: { group?: string; name?: string }[] } | { error?: string }
+  sessionTags?: { tags?: unknown[]; default_tag?: unknown } | { error?: string }
+  slashCommands?: { commands?: unknown[] } | { error?: string }
+  automationSchemas?: Record<string, Record<string, unknown>> | { error?: string }
+}
+function CloudPanel() {
+  const { t } = useTranslation()
+  const [d, setD] = useState<CloudAccount | null>(null)
+  useEffect(() => {
+    void adminFetch<CloudAccount>('/api/admin/cloud/account').then(setD).catch(() => setD({ ok: false, error: 'fetch failed' }))
+  }, [])
+  if (!d) return <p className="px-[12px] py-[10px] text-13 text-secondary">{t('common.loading')}</p>
+  if (!d.ok) return <p className="px-[12px] py-[10px] text-13 text-amber-600">{t('set.cloudNoCreds')}{d.error ? ` — ${d.error}` : ''}</p>
+  const org = d.org && !('error' in d.org) ? d.org : null
+  const sub = d.subscription && !('error' in d.subscription) ? d.subscription : null
+  const members = Array.isArray(d.members) ? d.members : []
+  const settings = d.settings && !('error' in d.settings) ? d.settings : null
+  const inv = d.invoices && !('error' in d.invoices) ? (d.invoices.invoices ?? []) : []
+  const groups = d.notificationPrefs && !('error' in d.notificationPrefs) ? (d.notificationPrefs.groups ?? []) : []
+  const schemas = d.automationSchemas && !('error' in d.automationSchemas) ? d.automationSchemas : null
+  const schemaEvents = schemas ? Object.values(schemas).flatMap((src) => Object.values(src ?? {}).map((s) => (s as { event_type?: string }).event_type).filter(Boolean)) : []
+  const flags = settings ? Object.entries(settings).filter(([, v]) => typeof v === 'boolean') : []
+  return (
+    <div className="px-[6px] py-[6px]">
+      <div className="px-[6px] py-[4px]">
+        {org && <Kv k={t('set.cloudOrg')} v={`${org.display_name ?? org.org_id} ${org.org_id ? `(${org.org_id.slice(0, 18)}…)` : ''}`} />}
+        {sub && <Kv k={t('set.cloudPlan')} v={
+          <span className="flex items-center gap-2">
+            <span className={cn('text-13 font-medium', sub.status === 'past_due' || sub.status === 'unpaid' ? 'text-amber-600' : 'text-foreground')}>{sub.slug ?? sub.planId ?? '—'}</span>
+            {sub.status && <span className={cn('rounded-[5px] border px-1 py-px text-10', sub.status === 'active' ? 'border-emerald-500/40 text-emerald-600' : 'border-amber-500/40 text-amber-600')}>{sub.status}</span>}
+          </span>
+        } />}
+        {inv.length > 0 && <Kv k={t('set.cloudInvoices')} v={`${inv.length} · ${t('set.cloudLatest')}: ${inv[0].status ?? '?'} ${typeof inv[0].amount === 'number' ? `$${(inv[0].amount / 100).toFixed(2)}` : ''}`} />}
+        {groups.length > 0 && <Kv k={t('set.cloudNotifGroups')} v={groups.length} />}
+        {schemaEvents.length > 0 && <Kv k={t('set.cloudAutomationEvents')} v={schemaEvents.length} />}
+        {!!flags.length && <Kv k={t('set.cloudFlags')} v={flags.filter(([, v]) => v).map(([k]) => k).join(', ') || '—'} />}
+      </div>
+      {members.length > 0 && (
+        <div className="mt-[4px] border-t border-border-secondary pt-[4px]">
+          {members.map((m, i) => (
+            <div key={i} className="flex items-center gap-2 px-[12px] py-[5px] text-13">
+              <span className="min-w-0 flex-1 truncate">{m.name || m.email}</span>
+              {m.email && <span className="shrink-0 truncate text-11 text-muted-foreground">{m.email}</span>}
+              {m.role && <span className="shrink-0 rounded-[5px] border border-border px-1 py-px text-10 text-muted-foreground">{m.role}</span>}
+            </div>
+          ))}
+        </div>
+      )}
+    </div>
+  )
+}
+
 /** Resources tab — system resource monitor + agent rules/skills browser. */
 export function ResourcesTab() {
   const { t } = useTranslation()
   return (
     <>
+      <Section title={t('set.cloudAccount')}>
+        <CloudPanel />
+      </Section>
       <Section title={t('set.sysRes')}>
         <SystemResources />
       </Section>

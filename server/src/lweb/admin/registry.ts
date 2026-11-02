@@ -572,6 +572,45 @@ export async function handleRegistry(ctx: ApiContext, req: IncomingMessage, res:
     return true;
   }
 
+  // GET /api/admin/cloud/account — aggregated cloud REST reads (auth1 token
+  // + x-cog-org-id, app.devin.ai/api/*): org, members, settings, billing,
+  // notification prefs, tags, slash commands, automation schemas. Each read
+  // is independently fault-tolerant — a dead token degrades the panel, not
+  // the route. The cloud layer is what only app.devin.ai can answer; local
+  // acp handles everything session-scoped.
+  if (p === "/api/admin/cloud/account" && m === "GET") {
+    const { cloudGet, cloudOrgPath, cloudCreds } = await import("../../cloudapi.js");
+    if (!cloudCreds()) { json(res, 200, { ok: false, error: "no devin token/org configured" }); return true; }
+    const paths: [string, string][] = [
+      ["org", cloudOrgPath("")!],
+      ["members", cloudOrgPath("members")!],
+      ["settings", cloudOrgPath("settings")!],
+      ["subscription", "billing/subscription"],
+      ["invoices", "billing/invoices"],
+      ["notificationPrefs", "users/notification-preferences"],
+      ["sessionTags", cloudOrgPath("session-tags")!],
+      ["slashCommands", cloudOrgPath("slash-commands")!],
+      ["automationSchemas", "automations/schemas"],
+    ];
+    const settled = await Promise.all(paths.map(async ([key, path]) => {
+      const r = await cloudGet(path);
+      return [key, r.status === 200 ? r.body : { error: `http ${r.status}` }] as const;
+    }));
+    json(res, 200, { ok: true, ...Object.fromEntries(settled) });
+    return true;
+  }
+  // GET /api/admin/cloud/proxy?path= — whitelisted single-read passthrough
+  // (same creds); keeps future one-off reads route-free.
+  if (p === "/api/admin/cloud/proxy" && m === "GET") {
+    const { cloudGet, cloudOrgPath, CLOUD_READ_PATHS } = await import("../../cloudapi.js");
+    const want = url.searchParams.get("path") ?? "";
+    const path = CLOUD_READ_PATHS.has(want) ? want : want.startsWith("org:") ? cloudOrgPath(want.slice(4)) : null;
+    if (!path) { json(res, 400, { error: "path not allowed" }); return true; }
+    const r = await cloudGet(path);
+    json(res, r.status === 200 ? 200 : 502, { status: r.status, body: r.body });
+    return true;
+  }
+
   if (p === "/api/admin/mcp/servers" && m === "GET") {
     try { json(res, 200, (await mcpCall("_cognition.ai/mcp/listServers", {})) ?? { servers: [] }); }
     catch (e) { json(res, 200, { servers: [], error: (e as Error).message?.slice(0, 200) }); }
