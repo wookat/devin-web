@@ -257,15 +257,31 @@ export class SessionDb {
       // across ALL gens, so an invisible old-gen row can suppress a needed
       // re-append under the live gen — stale gens are not just dead weight,
       // they are poison. Adopt orphans (seq-collision dedupes), then drop.
-      this.db.exec(`INSERT OR IGNORE INTO events(session_id,seq,gen,ts,kind,bytes,data,dedup)
-        SELECT e.session_id, e.seq,
-          (SELECT MAX(g.gen) FROM events g WHERE g.session_id=e.session_id),
-          e.ts, e.kind, e.bytes, e.data, e.dedup
-        FROM events e
-        WHERE e.gen < (SELECT MAX(h.gen) FROM events h WHERE h.session_id=e.session_id)`);
-      this.db.exec(`DELETE FROM events
-        WHERE gen < (SELECT MAX(g.gen) FROM events g WHERE g.session_id=events.session_id)`);
-      this.db.exec("PRAGMA user_version=3");
+      //
+      // The correlated-subquery form was O(rows × index-lookup) over a
+      // multi-GB table — worse, the outer scan reads every row's data blob.
+      // On a 3.4GB db it outlived the supervisor's ~68s boot grace, got
+      // SIGTERM'd mid-transaction, rolled back, and repeated forever
+      // (restart-loop outage 2026-11-02). This shape is one index-only
+      // GROUP BY to detect stale gens (usually zero → skip the rewrite
+      // entirely), then a single join pass only when there is work.
+      this.db.exec("BEGIN IMMEDIATE");
+      try {
+        const stale = this.db.prepare(
+          "SELECT 1 AS x FROM events GROUP BY session_id HAVING MIN(gen)<>MAX(gen) LIMIT 1",
+        ).get();
+        if (stale) {
+          this.db.exec("CREATE TEMP TABLE maxgen AS SELECT session_id, MAX(gen) g FROM events GROUP BY session_id");
+          this.db.exec(`INSERT OR IGNORE INTO events(session_id,seq,gen,ts,kind,bytes,data,dedup)
+            SELECT e.session_id, e.seq, m.g, e.ts, e.kind, e.bytes, e.data, e.dedup
+            FROM events e JOIN maxgen m ON m.session_id=e.session_id WHERE e.gen < m.g`);
+          this.db.exec(`DELETE FROM events WHERE EXISTS
+            (SELECT 1 FROM maxgen m WHERE m.session_id=events.session_id AND events.gen < m.g)`);
+          this.db.exec("DROP TABLE maxgen");
+        }
+        this.db.exec("PRAGMA user_version=3");
+        this.db.exec("COMMIT");
+      } catch (e) { try { this.db.exec("ROLLBACK"); } catch {} throw e; }
     }
     this.sInsEvent = this.db.prepare(
       "INSERT OR REPLACE INTO events(session_id,seq,gen,ts,kind,bytes,data,dedup) VALUES (?,?,?,?,?,?,?,?)",

@@ -66,6 +66,23 @@ export async function handleSessionControl(ctx: ApiContext, req: IncomingMessage
     return true;
   }
 
+  // GET .../prompt-history?limit=&all=1 — `_cognition.ai/reads/promptHistory`
+  // {sessionId, currentSessionOnly, limit} → {entries:[{text,isShell}]}.
+  // Live-verified: false = cross-session history (composer ↑-recall source).
+  if (sub === "prompt-history" && m === "GET") {
+    try {
+      const acp = await acpForId(ctx, id);
+      const limit = Math.min(200, Math.max(1, parseInt(url.searchParams.get("limit") ?? "50", 10) || 50));
+      const r = await acp.extMethod(id, "_cognition.ai/reads/promptHistory", {
+        sessionId: id,
+        currentSessionOnly: url.searchParams.get("all") !== "1",
+        limit,
+      });
+      json(res, 200, r ?? { entries: [] });
+    } catch (e) { json(res, 200, { entries: [], error: (e as Error).message?.slice(0, 200) }); }
+    return true;
+  }
+
   // GET .../scope-search?type=&q= — `_cognition.ai/scope_search`
   // {scope_type,query,cwd?,additional_directories?} → {items}.
   if (sub === "scope-search" && m === "GET") {

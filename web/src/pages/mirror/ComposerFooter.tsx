@@ -1,4 +1,4 @@
-import { useState, type Dispatch, type RefObject, type SetStateAction } from 'react'
+import { useRef, useState, type Dispatch, type RefObject, type SetStateAction } from 'react'
 import { useTranslation } from 'react-i18next'
 import { ChevronDown, X } from 'lucide-react'
 import { FileIcon } from '@/lib/fileIcon'
@@ -11,6 +11,7 @@ import { LightboxImage } from '@/components/Lightbox'
 import QuoteChip from '@/components/QuoteChip'
 import { IMAGE_RE } from '@/components/UserAttachments'
 import { cn } from '@/lib/utils'
+import { adminFetch } from '@/lib/api'
 import { type SessionDetail, type LocalCfg, type LocalCfgOption } from './pageBits'
 import { type ComposerMetaT, type SuggestItem, QueuePlaceholder } from './composerMeta'
 import { stText, type ReducedStatus } from './statusReduce'
@@ -178,6 +179,34 @@ function ComposerFooter({
   // card is `overflow-hidden` AND lives under the BeardBand `relative z-30`
   // stacking context, so any in-tree popup is both clipped and out-z'd.
   const [cardEl, setCardEl] = useState<HTMLDivElement | null>(null)
+  // Prompt-history recall (desktop composer ↑ parity): `reads/promptHistory`
+  // on the hosting acp. Lazily fetched on first ↑ on an empty input;
+  // ↑/↓ cycle, ↓ past the newest restores the in-progress draft. Entries
+  // arrive chronological → recall walks from the end.
+  const [hist, setHist] = useState<string[] | null>(null)
+  const [histIdx, setHistIdx] = useState<number | null>(null)
+  const histDraftRef = useRef('')
+  const histSessionRef = useRef('')
+  const recall = (dir: 1 | -1) => {
+    if (histSessionRef.current !== id) { histSessionRef.current = id; setHist(null); setHistIdx(null) }
+    const go = (list: string[]) => {
+      if (list.length === 0) return
+      if (histIdx === null) {
+        histDraftRef.current = input
+        const i = dir === -1 ? list.length - 1 : 0
+        setHistIdx(i); setInput(list[i])
+      } else {
+        const i = histIdx + dir
+        if (i < 0) { setHistIdx(0); setInput(list[0]) } // ↑ past oldest: stick
+        else if (i >= list.length) { setHistIdx(null); setInput(histDraftRef.current) }
+        else { setHistIdx(i); setInput(list[i]) }
+      }
+    }
+    if (hist) { go(hist); return }
+    void adminFetch<{ entries: { text: string; isShell?: boolean }[] }>(`/api/admin/session/${id}/prompt-history?limit=80`)
+      .then((r) => { const list = (r.entries ?? []).map((e) => e.text).filter(Boolean); setHist(list); go(list) })
+      .catch(() => setHist([]))
+  }
 
   return (
         <footer className={cn('relative max-md:z-20', effShowPanel && 'max-md:hidden')}>
@@ -280,6 +309,12 @@ function ComposerFooter({
                   if (e.key === 'ArrowUp') { e.preventDefault(); setSugIdx((i) => (i - 1 + suggestions.length) % suggestions.length); return }
                   if (e.key === 'Enter' || e.key === 'Tab') { e.preventDefault(); applySuggestion(suggestions[sugIdx]); return }
                   if (e.key === 'Escape') { e.preventDefault(); setAtCat(null); setInput((v) => v.replace(/[/!@$][\w\u4e00-\u9fff-]*$/, '')); return }
+                }
+                // ↑/↓ prompt-history recall: empty input or already cycling,
+                // suggestions closed, not on the draft page.
+                if (!isDraft && !e.nativeEvent.isComposing && suggestions.length === 0 &&
+                    (e.key === 'ArrowUp' || e.key === 'ArrowDown') && (histIdx !== null || input === '')) {
+                  e.preventDefault(); recall(e.key === 'ArrowUp' ? -1 : 1); return
                 }
                 if (e.key === 'Enter' && !e.nativeEvent.isComposing && editingQ && input.trim()) {
                   e.preventDefault()
