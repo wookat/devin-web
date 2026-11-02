@@ -1379,6 +1379,8 @@
     "sysRes": "System resources",
     "insights": "Usage insights",
     "plugins": "Plugins",
+    "agentRules": "Agent rules",
+    "rulesEmpty": "No rules resolved",
     "plgEmpty": "No plugins installed",
     "plgSkills": "skills",
     "plgNoSkills": "No skills in this plugin",

@@ -311,6 +311,32 @@ function PluginsPanel() {
   )
 }
 
+/* Agent rules — `_cognition.ai/rules/list`: the resolved rule set the
+ * agent actually loads for the workspace (global + workspace scope). */
+interface AgentRule { name: string; path: string; provider: string; providerLabel?: string; trigger?: string; userInvocable?: boolean; scope?: string }
+function RulesPanel() {
+  const { t } = useTranslation()
+  const [data, setData] = useState<AgentRule[] | null>(null)
+  useEffect(() => {
+    void adminFetch<{ rules: AgentRule[] }>('/api/admin/rules').then((r) => setData(r.rules ?? [])).catch(() => setData([]))
+  }, [])
+  if (!data) return <p className="px-[12px] py-[10px] text-13 text-secondary">{t('common.loading')}</p>
+  return (
+    <div className="px-[6px] py-[6px]">
+      {data.length === 0 && <p className="px-[6px] py-[8px] text-13 text-secondary">{t('set.rulesEmpty')}</p>}
+      {data.map((r) => (
+        <div key={r.path} className="flex items-center gap-2 px-[12px] py-[7px] hover:bg-tint-secondary">
+          <FileText size={13} className="shrink-0 text-accent-primary" />
+          <span className="min-w-0 flex-1 truncate text-13" title={r.path}>{r.name}</span>
+          {r.scope && <span className="shrink-0 rounded-[5px] border border-border px-1 py-px text-10 text-muted-foreground">{r.scope}</span>}
+          {r.trigger && <span className="shrink-0 rounded-[5px] border border-border px-1 py-px text-10 text-muted-foreground">{r.trigger}</span>}
+          {r.providerLabel && <span className="shrink-0 text-11 text-muted-foreground">{r.providerLabel}</span>}
+        </div>
+      ))}
+    </div>
+  )
+}
+
 /** Resources tab — system resource monitor + agent rules/skills browser. */
 export function ResourcesTab() {
   const { t } = useTranslation()
@@ -324,6 +350,9 @@ export function ResourcesTab() {
       </Section>
       <Section title={t('set.plugins')}>
         <PluginsPanel />
+      </Section>
+      <Section title={t('set.agentRules')}>
+        <RulesPanel />
       </Section>
       <Section title={t('set.agentRes')}>
         <AgentResources />

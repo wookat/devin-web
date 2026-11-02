@@ -54,7 +54,19 @@ function SidebarRail({ isVisitor, sidebar, peek, setSidebar, setPeek, isDraft, n
       .then((r) => { setNotifs(r.items ?? []); setReadAt(r.readAt ?? 0) })
       .catch(() => {})
     const off = subscribeWs((ev) => {
-      if (ev.type === 'notification' && ev.item) setNotifs((cur) => [ev.item as NItem, ...cur].slice(0, 60))
+      if (ev.type === 'notification' && ev.item) {
+        const it = ev.item as NItem
+        setNotifs((cur) => [it, ...cur].slice(0, 60))
+        // Desktop-style system toast when the tab is hidden (browser
+        // Notification permission is the gate — ask once on first event).
+        if (document.hidden && 'Notification' in window) {
+          if (Notification.permission === 'granted') {
+            try { new Notification(`${it.title}`, { body: it.body ?? it.type, tag: it.id }) } catch { /* unsupported */ }
+          } else if (Notification.permission === 'default') {
+            void Notification.requestPermission().catch(() => {})
+          }
+        }
+      }
     })
     return off
   }, [])

@@ -474,6 +474,34 @@ export async function handleRegistry(ctx: ApiContext, req: IncomingMessage, res:
   // once the schema is discovered.
   const mcpCall = async (method: string, params: Record<string, unknown>): Promise<unknown> =>
     (await ctx.manager.get(ctx.primaryCwd)).extMethod("", method, params);
+  // GET /api/admin/rules?cwd= — `_cognition.ai/rules/list`: the agent's
+  // resolved rule set for a workspace (global + workspace scope, provider,
+  // trigger mode). Read-only; pooled acp answers it like plugins/list.
+  if (p === "/api/admin/rules" && m === "GET") {
+    try {
+      const cwd = url.searchParams.get("cwd") || ctx.primaryCwd;
+      const acp = await ctx.manager.get(cwd);
+      const r = await acp.extMethod("", "_cognition.ai/rules/list", { cwd });
+      json(res, 200, r ?? { rules: [] });
+    } catch (e) {
+      json(res, 200, { rules: [], error: (e as Error).message?.slice(0, 200) ?? "rules unavailable" });
+    }
+    return true;
+  }
+
+  // GET /api/admin/devin-config — `_cognition.ai/config/read`: the CLI's
+  // effective config (model prefs, permissions, hooks). Read-only surface.
+  if (p === "/api/admin/devin-config" && m === "GET") {
+    try {
+      const acp = await ctx.manager.get(ctx.primaryCwd);
+      const r = await acp.extMethod("", "_cognition.ai/config/read", {});
+      json(res, 200, r ?? { config: null });
+    } catch (e) {
+      json(res, 200, { config: null, error: (e as Error).message?.slice(0, 200) ?? "config unavailable" });
+    }
+    return true;
+  }
+
   if (p === "/api/admin/mcp/servers" && m === "GET") {
     try { json(res, 200, (await mcpCall("_cognition.ai/mcp/listServers", {})) ?? { servers: [] }); }
     catch (e) { json(res, 200, { servers: [], error: (e as Error).message?.slice(0, 200) }); }

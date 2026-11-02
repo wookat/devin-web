@@ -51,8 +51,10 @@ export async function handleSessionControl(ctx: ApiContext, req: IncomingMessage
         method = "_cognition.ai/goal/resume";
         params = { sessionId: id, goalId: String(body.goalId ?? "") };
       } else if (action === "clear") {
+        // Live-probed on 216: {sessionId, goalId} passes schema validation
+        // (Resource not found); the earlier `config` guess was Invalid params.
         method = "_cognition.ai/goal/clear";
-        params = { sessionId: id, ...(body.config && typeof body.config === "object" ? { config: body.config } : {}) };
+        params = { sessionId: id, goalId: String(body.goalId ?? "") };
       } else {
         method = "_cognition.ai/goal/set";
         const prompt = Array.isArray(body.prompt) ? body.prompt : [{ type: "text", text: String(body.text ?? body.prompt ?? "") }];
