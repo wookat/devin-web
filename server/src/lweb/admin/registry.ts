@@ -14,6 +14,7 @@ import { cronNext, runAutomation } from "../../automations.js";
 import { publicSshHost, type SshHost } from "../../ssh.js";
 import { json, readBody, readJson, UNSUPPORTED } from "../../httputil.js";
 import { translateText } from "../../translate.js";
+import { notifList, notifRead } from "../../notifcenter.js";
 import { parseSubId, cwdFor, subsAny, subTreeRow, treeSession, titleFromLog } from "../session.js";
 import { indexWorkspace } from "../admin.js";
 
@@ -448,6 +449,18 @@ export async function handleRegistry(ctx: ApiContext, req: IncomingMessage, res:
     const days = Math.min(90, Math.max(1, Number(url.searchParams.get("days")) || 30));
     const u = ctx.sessionLog.usageStats(days);
     json(res, 200, u ?? { days: [], kinds: [], topSessions: [] });
+    return true;
+  }
+
+  // /api/admin/notifications — local inbox ring (notifcenter).
+  // GET → {items, readAt}; POST /read {at?} advances the read watermark.
+  if (p === "/api/admin/notifications" && m === "GET") {
+    json(res, 200, notifList(ctx));
+    return true;
+  }
+  if (p === "/api/admin/notifications/read" && m === "POST") {
+    const body = (await readJson(req).catch(() => ({}))) as { at?: unknown };
+    json(res, 200, notifRead(ctx, Number(body?.at) || undefined));
     return true;
   }
 

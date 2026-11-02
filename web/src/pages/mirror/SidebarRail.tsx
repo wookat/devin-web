@@ -5,6 +5,7 @@ import { Link } from 'react-router-dom'
 import { ChevronDown, Settings2, Globe, RotateCcw, RefreshCw, Rows3, Zap, Shield, GitPullRequest, BookOpen } from 'lucide-react'
 import { OBell, OCollapse, OCompose, OSearch } from '../../components/officialIcons'
 import { adminFetch, type AdminSession } from '@/lib/api'
+import { subscribeWs } from '@/lib/ws'
 import { StatusDot } from '@/components/ui'
 import LocalDock from '@/components/LocalDock'
 import { cn } from '@/lib/utils'
@@ -44,7 +45,25 @@ function SidebarRail({ isVisitor, sidebar, peek, setSidebar, setPeek, isDraft, n
   const { t } = useTranslation()
   const [orgMenu, setOrgMenu] = useState(false)
   const [notifOpen, setNotifOpen] = useState(false)
-  const unreadCount = unreadSessions.length
+  // Notification inbox — local ring + read watermark, live WS pushes.
+  interface NItem { id: string; ts: number; type: string; sessionId?: string; title: string; body?: string }
+  const [notifs, setNotifs] = useState<NItem[]>([])
+  const [readAt, setReadAt] = useState(0)
+  useEffect(() => {
+    void adminFetch<{ items: NItem[]; readAt: number }>('/api/admin/notifications')
+      .then((r) => { setNotifs(r.items ?? []); setReadAt(r.readAt ?? 0) })
+      .catch(() => {})
+    const off = subscribeWs((ev) => {
+      if (ev.type === 'notification' && ev.item) setNotifs((cur) => [ev.item as NItem, ...cur].slice(0, 60))
+    })
+    return off
+  }, [])
+  const notifUnread = notifs.filter((n) => n.ts > readAt).length
+  const unreadCount = unreadSessions.length + notifUnread
+  const markNotifsRead = () => {
+    setReadAt(Date.now())
+    void adminFetch('/api/admin/notifications/read', { method: 'POST', body: JSON.stringify({}) }).catch(() => {})
+  }
   // Session-list scroll memory + the dock overlay height. The scroll region
   // runs to the page bottom; the dock floats over it (padding keeps the last
   // rows reachable).
@@ -155,7 +174,26 @@ function SidebarRail({ isVisitor, sidebar, peek, setSidebar, setPeek, isDraft, n
             {notifOpen && (
               <>
                 <div className="fixed inset-0 z-20" onClick={() => setNotifOpen(false)} />
-                <div className="absolute left-0 right-0 top-10 z-30 mx-2 overflow-hidden rounded-[10px] bg-card/95 p-1 shadow-lg ring-1 ring-border backdrop-blur-[8px]">
+                <div className="absolute left-0 right-0 top-10 z-30 mx-2 max-h-[60vh] overflow-y-auto overflow-x-hidden rounded-[10px] bg-card/95 p-1 shadow-lg ring-1 ring-border backdrop-blur-[8px]">
+                  <div className="flex items-center justify-between px-2 pb-1 pt-2">
+                    <span className="text-[12px] font-medium text-muted-foreground">{t('menu.notifications')}</span>
+                    {notifUnread > 0 && <button onClick={markNotifsRead} className="cursor-pointer text-[11px] text-muted-foreground hover:text-foreground">{t('menu.markAllRead')}</button>}
+                  </div>
+                  {notifs.length === 0 && <div className="px-2 pb-2 pt-1 text-[13px] text-muted-foreground">{t('menu.noNotifs')}</div>}
+                  {notifs.slice(0, 15).map((n) => (
+                    <button
+                      key={n.id}
+                      role="menuitem"
+                      onClick={() => { setNotifOpen(false); if (n.sessionId) nav(`/admin/${n.sessionId}`) }}
+                      className="flex w-full cursor-pointer select-none items-center gap-2 rounded-[6px] px-2 py-1.5 text-left text-[13px] leading-[18px] text-foreground hover:bg-tint-secondary"
+                    >
+                      <span className={`size-1.5 shrink-0 rounded-full ${n.ts > readAt ? 'bg-amber-500' : 'bg-border'}`} />
+                      <span className="min-w-0 flex-1 truncate">
+                        {n.type === 'permission' ? t('menu.ntPerm') : n.type === 'account' ? t('menu.ntAcct') : n.type === 'rewind' ? t('menu.ntRewind') : n.type === 'mcp_auth' ? t('menu.ntMcp') : t('menu.ntDone')}
+                        {' '}{n.title}
+                      </span>
+                    </button>
+                  ))}
                   <div className="px-2 pb-1 pt-2 text-[12px] font-medium text-muted-foreground">{t('menu.unreadSessions')}</div>
                   {unreadSessions.length === 0 && <div className="px-2 pb-2 pt-1 text-[13px] text-muted-foreground">{t('menu.noUnread')}</div>}
                   {unreadSessions.slice(0, 8).map((s) => (

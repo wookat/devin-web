@@ -25,6 +25,7 @@ import { loadInflight, sessionHost, notifySessionCtx } from "./sessionplace.js";
 import { touchSessionActivity, markGracefulExit } from "./sessionlive.js";
 import { brokerEnabled } from "./acpbroker.js";
 import { meta, loadReg, saveReg } from "./dwstore.js";
+import { notify } from "./notifcenter.js";
 import { sshInteractive } from "./ssh.js";
 import { ShellDecoder } from "./shelltext.js";
 import { translatePsInput } from "./psops.js";
@@ -444,6 +445,8 @@ const manager = new AcpManager({
   onPermissionRequest: (requestId, sessionId, toolCall, options) => {
     sessionLog.append(sessionId, { sessionUpdate: "permission_request", requestId, toolCall, options });
     hub.broadcast({ type: "permission_request", requestId, sessionId, toolCall, options });
+    const tcTitle = (toolCall as { title?: unknown } | null)?.title;
+    notify(ctx, { type: "permission", sessionId, title: meta(ctx, sessionId).title || sessionId, body: typeof tcTitle === "string" ? tcTitle.slice(0, 120) : undefined });
     noteUpdate(ctx, sessionId);
   },
   onPermissionOwner: (requestId, owner) => {
@@ -484,6 +487,7 @@ const manager = new AcpManager({
     dropTail(ctx, sessionId);
     revertSteps.delete(sessionId); // the agent re-pushes fresh steps
     hub.broadcast({ type: "history_rewound", sessionId, firstRemovedUserMessageId: anchor ?? null });
+    notify(ctx, { type: "rewind", sessionId, title: meta(ctx, sessionId).title || sessionId });
   },
   onMcpServersChanged: (sessionId, params) => {
     // MCP registry mutated server-side (install/connect/oauth). The payload
@@ -492,6 +496,7 @@ const manager = new AcpManager({
   },
   onMcpAuthPending: (sessionId, params) => {
     hub.broadcast({ type: "mcp_auth_pending", sessionId: sessionId || null, ...params });
+    notify(ctx, { type: "mcp_auth", sessionId: sessionId || undefined, title: sessionId ? (meta(ctx, sessionId).title || sessionId) : "MCP auth" });
   },
   onExit: (cwd, code, agent, sessionId) => {
     hub.broadcast({ type: "process_status", cwd, status: "exited", code, agent, sessionId });
@@ -504,6 +509,7 @@ const manager = new AcpManager({
     if (name) {
       accounts.markLimited(name, retryAfterSeconds(message));
       hub.broadcast({ type: "account_limited", account: name, sessionId, message });
+      notify(ctx, { type: "account", sessionId: sessionId || undefined, title: `Rate limited: ${name}`, body: message?.slice(0, 120) });
     }
     rotate("rate-limit");
   },
