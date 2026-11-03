@@ -764,8 +764,16 @@ export class SessionDb {
   private ensureFts(): boolean {
     if (this.ftsState !== "unknown") return this.ftsState === "ok";
     try {
-      this.db.exec(`CREATE VIRTUAL TABLE IF NOT EXISTS msg_fts USING fts5(text, session_id UNINDEXED, seq UNINDEXED, ts UNINDEXED, kind UNINDEXED)`);
+      this.db.exec(`CREATE VIRTUAL TABLE IF NOT EXISTS msg_fts USING fts5(text, session_id UNINDEXED, seq UNINDEXED, gen UNINDEXED, ts UNINDEXED, kind UNINDEXED)`);
       this.db.exec(`CREATE TABLE IF NOT EXISTS fts_meta(k TEXT PRIMARY KEY, v INTEGER)`);
+      // Schema drift: a pre-`gen` msg_fts can't map rows back to (gen,seq)
+      // for retention pruning — rebuild it once and re-index from scratch.
+      const cols = (this.db.prepare(`SELECT name FROM pragma_table_info('msg_fts')`).all() as { name: string }[]).map((c) => c.name);
+      if (!cols.includes("gen")) {
+        this.db.exec(`DROP TABLE msg_fts`);
+        this.db.exec(`CREATE VIRTUAL TABLE msg_fts USING fts5(text, session_id UNINDEXED, seq UNINDEXED, gen UNINDEXED, ts UNINDEXED, kind UNINDEXED)`);
+        this.db.prepare(`INSERT OR REPLACE INTO fts_meta VALUES('wm',0)`).run();
+      }
       // Orphans from deleted sessions — one sweep per process lifetime.
       this.db.exec(`DELETE FROM msg_fts WHERE session_id NOT IN (SELECT DISTINCT session_id FROM events)`);
       this.ftsState = "ok";
@@ -789,8 +797,8 @@ export class SessionDb {
     let n = 0;
     try {
       const r = this.db.prepare(
-        `INSERT INTO msg_fts(session_id,seq,ts,kind,text)
-         SELECT session_id, seq, ts, kind,
+        `INSERT INTO msg_fts(session_id,seq,gen,ts,kind,text)
+         SELECT session_id, seq, gen, ts, kind,
            COALESCE(json_extract(data,'$.content.text'), json_extract(data,'$.notice'))
          FROM events
          WHERE rowid > ? AND rowid <= ?
@@ -805,6 +813,49 @@ export class SessionDb {
       throw e;
     }
     return n;
+  }
+
+  /** Per-session retention: keep the newest `keepPerSession` events (by
+   *  insertion rowid) of every session over the cap, and rebuild that
+   *  session's msg_fts rows in the same transaction so search never serves
+   *  pruned content. Replay dedup keys die with their rows — a re-loaded
+   *  pruned session can re-append its old tail, but the next sweep re-trims
+   *  it, so storage stays bounded. Returns {sessions, deleted}. */
+  retentionSweep(keepPerSession: number): { sessions: number; deleted: number } {
+    this.flush();
+    if (!(keepPerSession > 0)) return { sessions: 0, deleted: 0 };
+    const fat = this.db.prepare(
+      `SELECT session_id, COUNT(*) AS n FROM events GROUP BY session_id HAVING n > ?`,
+    ).all(keepPerSession) as { session_id: string; n: number }[];
+    const fts = this.ensureFts();
+    let deleted = 0;
+    for (const s of fat) {
+      const cut = this.db.prepare(
+        `SELECT rowid FROM events WHERE session_id=? ORDER BY rowid DESC LIMIT 1 OFFSET ?`,
+      ).get(s.session_id, keepPerSession) as { rowid: number } | undefined;
+      if (!cut) continue;
+      this.db.exec("BEGIN");
+      try {
+        deleted += Number(this.db.prepare(`DELETE FROM events WHERE session_id=? AND rowid <= ?`).run(s.session_id, cut.rowid).changes);
+        if (fts) {
+          this.db.prepare(`DELETE FROM msg_fts WHERE session_id=?`).run(s.session_id);
+          this.db.prepare(
+            `INSERT INTO msg_fts(session_id,seq,gen,ts,kind,text)
+             SELECT session_id, seq, gen, ts, kind,
+               COALESCE(json_extract(data,'$.content.text'), json_extract(data,'$.notice'))
+             FROM events
+             WHERE session_id=? AND kind IN ('user_message_chunk','agent_message_chunk','dw_notice')
+               AND COALESCE(json_extract(data,'$.content.text'), json_extract(data,'$.notice')) IS NOT NULL`,
+          ).run(s.session_id);
+        }
+        this.db.exec("COMMIT");
+      } catch (e) {
+        try { this.db.exec("ROLLBACK"); } catch {}
+        throw e;
+      }
+    }
+    if (deleted) { try { this.db.exec(`PRAGMA incremental_vacuum(512)`); } catch {} }
+    return { sessions: fat.length, deleted };
   }
 
   /** bm25-ranked hits across every session's messages. `q` is split into

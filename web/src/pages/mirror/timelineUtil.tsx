@@ -73,7 +73,21 @@ function mergeItems(prev: TimelineItem[], next: TimelineItem[]): TimelineItem[] 
     }
   }
   if (!changed) return prev
-  return [...byId.values()].sort((a, b) => a.ts.localeCompare(b.ts))
+  const merged = [...byId.values()].sort((a, b) => a.ts.localeCompare(b.ts))
+  // Dev guard for the ref-stability contract (see AGENTS.md — every link is
+  // required): any row whose compared fields are identical to its previous
+  // version MUST keep the old object reference, else every delta frame
+  // re-renders the whole mounted timeline.
+  if (import.meta.env.DEV) {
+    const p = new Map(prev.map((i) => [i.id, i]))
+    for (const it of merged) {
+      const o = p.get(it.id)
+      if (o && o !== it && o.ts === it.ts && o.body === it.body && o.title === it.title && o.output === it.output && o.durationMs === it.durationMs && o.exitCode === it.exitCode) {
+        console.error('[mergeItems] ref-stability violated: unchanged row got a new reference', it.id)
+      }
+    }
+  }
+  return merged
 }
 
 function groupItems(items: TimelineItem[], working = false): Group[] {

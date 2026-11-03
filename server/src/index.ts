@@ -17,6 +17,7 @@ import { snapshotEntries, dropTail } from "./dwtailsnap.js";
 import { handleApi, type ApiContext } from "./routes.js";
 import { handleLocalWb } from "./lweb/index.js";
 import { recordTerminal } from "./sessionview.js";
+import { recordHttp } from "./metrics.js";
 import { autoResumeInterrupted, setCfgCacheDir } from "./sessionload.js";
 import { adoptBrokerAcps, resolveTurnByReq } from "./sessionadopt.js";
 import { notePromptReq } from "./sessionturns.js";
@@ -613,7 +614,12 @@ httpServer.on("request", (req, res) => {
         return;
       }
       void (async () => {
-        if (!(await handleLocalWb(ctx, req, res, url))) await handleApi(ctx, req, res, url);
+        const t0 = performance.now();
+        try {
+          if (!(await handleLocalWb(ctx, req, res, url))) await handleApi(ctx, req, res, url);
+        } finally {
+          recordHttp(req.method ?? "GET", url.pathname, performance.now() - t0, res.statusCode);
+        }
       })();
     } else {
       serveStatic(req, res, url);
@@ -663,15 +669,23 @@ httpServer.listen(PORT, HOST, async () => {
   }, 4000);
   startAutomations(ctx);
   resumeScans(ctx);
-  // Global message search — first FTS pass over the whole event store can
-  // scan for a while; run it in the boot background so /api/admin/search is
-  // already warm (queries self-index incrementally anyway).
-  setTimeout(() => {
+  // Global message search + event-store retention. Retention runs FIRST so
+  // the bulk fts pass never indexes rows about to be pruned; re-swept daily
+  // (re-loaded pruned sessions can regrow their tail via dedup misses —
+  // the sweep re-trims). keep=0 disables; default 500k events/session.
+  const sessionlogKeep = Number(process.env.DEVIN_WEB_SESSIONLOG_KEEP ?? 500_000) || 0;
+  const sweepLogs = () => {
     try {
+      if (sessionlogKeep) {
+        const r = ctx.sessionLog.retentionSweep(sessionlogKeep);
+        if (r.deleted) console.error(`[sessionlog] retention: pruned ${r.deleted} events across ${r.sessions} session(s)`);
+      }
       const n = ctx.sessionLog.indexSearchable();
       if (n) console.error(`[search] indexed ${n} messages`);
-    } catch (e) { console.error("[search] initial index failed:", e); }
-  }, 6000);
+    } catch (e) { console.error("[sessionlog] boot sweep failed:", e); }
+  };
+  setTimeout(sweepLogs, 6000);
+  setInterval(sweepLogs, 24 * 3600 * 1000).unref();
   // RSS watchdog — native allocator retention (sqlite churn, buffers) can
   // hold RSS far above the JS heap on Windows and never returns it. Past
   // the cap, take the same graceful exit a restart uses: markGracefulExit

@@ -658,6 +658,24 @@ export class SessionLog {
   searchMessages(q: string, limit = 40) {
     return this.db?.searchMessages(q, limit) ?? [];
   }
+  /** Per-session retention — keep the newest `keep` events per session,
+   *  rebuilding that session's fts rows in the same transaction. */
+  retentionSweep(keep: number) {
+    try { return this.db?.retentionSweep(keep) ?? { sessions: 0, deleted: 0 }; }
+    catch (e) { console.error("[sessionlog] retention sweep failed:", e); return { sessions: 0, deleted: 0 }; }
+  }
+  /** Diagnostic exposure: count sessions over the retention cap. */
+  retentionStatus(keep: number) {
+    try {
+      if (!this.db || keep <= 0) return { sessionsOverCap: 0, totalEvents: 0 };
+      const db = this.db as any;
+      const fat = db.prepare?.(`SELECT session_id, COUNT(*) AS n FROM events GROUP BY session_id HAVING n > ?`).all(keep) as { session_id: string; n: number }[] | undefined;
+      const over = fat?.length ?? 0;
+      const totalEvents = fat ? fat.reduce((a, r) => a + r.n, 0) : 0;
+      return { sessionsOverCap: over, totalEvents };
+    } catch { return { sessionsOverCap: 0, totalEvents: 0 }; }
+  }
+
 
   /** Newest user/agent message text for list views — the db path is one
    *  bounded DESC query; the .jsonl path scans a 600-entry tail. */

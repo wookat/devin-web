@@ -208,10 +208,15 @@ session-scoped — clients send `{type:"sub",sessions:[id]}` (web client
 watchdog logs the full memoryUsage() split and writes a `.heapsnapshot`
 to the data dir on fire; `POST /api/admin/heapdump` dumps on demand.
 `metrics.ts` counts ws.sent/scopedSkips/droppedClients,
-prompts.dispatched, acp.memRecycles → `resources/system.metrics`.
+prompts.dispatched, acp.memRecycles → `resources/system.metrics`. HTTP
+layer adds per-route request counts and cumulative latency (per-key avg);
+`recordHttp` normalizes path segments (ids → `:x`) and caps at 300 keys.
 `sessionlog.db`: auto_vacuum=INCREMENTAL + `incremental_vacuum(256)`
 per checkpoint tick (new dbs; existing needs one VACUUM — repair fix
-`vacuum-logs`). Global message search: `msg_fts` FTS5 table indexes
+`vacuum-logs`). Per-session retention (default 500k events/session) via
+`retentionSweep` — boot sweep + daily re-sweep, pruning rows with same-
+transaction fts rebuild; diagnose page exposes `trim-logs` fix. Global
+message search: `msg_fts` FTS5 table indexes
 `user_message_chunk`/`agent_message_chunk`/`thought_chunk` text via a
 `fts_meta` rowid watermark — `searchMessages` tops the index up then
 serves bm25 hits (`GET /api/admin/search?q=` powers the SessionsPage

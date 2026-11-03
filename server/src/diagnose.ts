@@ -140,6 +140,20 @@ export async function diagnose(ctx: ApiContext): Promise<{ ok: boolean; checks: 
       detail: `${freeGb.toFixed(1)} GB free` });
   } catch {}
 
+  // sessionlog retention — per-session event cap (default 500k)
+  const keep = Number(process.env.DEVIN_WEB_SESSIONLOG_KEEP ?? 500_000) || 0;
+  if (keep > 0) {
+    try {
+      const status = ctx.sessionLog.retentionStatus(keep);
+      const over = status.sessionsOverCap;
+      const totalEvents = status.totalEvents;
+      checks.push({ id: "sessionlog-retention", group: "service", label: "Sessionlog retention",
+        level: over ? "warn" : "ok",
+        detail: over ? `${over} session(s) over ${keep.toLocaleString()} events (total ${totalEvents.toLocaleString()})` : `no session over ${keep.toLocaleString()} events`,
+        fix: over ? "trim-logs" : undefined });
+    } catch {}
+  }
+
   // public reachability — the box itself often can't hairpin back through the
   // tunnel, so check the LOCAL cloudflared daemon instead: it IS the tunnel.
   if (process.platform === "win32") {
@@ -188,6 +202,10 @@ export async function repair(ctx: ApiContext, fixes: string[] | "all"): Promise<
       } else if (fix === "vacuum-logs") {
         const r = ctx.sessionLog.vacuum();
         results[fix] = r ? `sessionlog.db ${r.beforeMb}MB → ${r.afterMb}MB` : "no sqlite store (file-mode logs)";
+      } else if (fix === "trim-logs") {
+        const keep = Number(process.env.DEVIN_WEB_SESSIONLOG_KEEP ?? 500_000) || 0;
+        const r = ctx.sessionLog.retentionSweep(keep);
+        results[fix] = r.deleted ? `pruned ${r.deleted} events across ${r.sessions} session(s) (keep=${keep})` : `nothing over the cap (keep=${keep})`;
       } else if (fix === "restart-now") {
         results[fix] = "exiting — supervisor respawns immediately";
         setTimeout(() => {

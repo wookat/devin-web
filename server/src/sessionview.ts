@@ -167,7 +167,7 @@ export function agentLevelConfig(base: { configOptions?: ConfigOption[]; modes?:
  *  pickers/version mapping always see leaf {value,name} entries; a leaf
  *  missing a name inherits its group's. */
 type ModelLeaf = { value: string; name?: string };
-function flatModelLeaves(opts: { value?: string; name?: string; options?: ModelLeaf[] }[] | undefined): ModelLeaf[] {
+export function flatModelLeaves(opts: { value?: string; name?: string; options?: ModelLeaf[] }[] | undefined): ModelLeaf[] {
   const out: ModelLeaf[] = [];
   for (const o of opts ?? []) {
     if (Array.isArray(o.options) && o.options.length) {
