@@ -15,6 +15,8 @@ interface MirrorTreeSession {
   updated_at: string
   snippet: string
   folder: string | null
+  /** User annotation — preferred over snippet as the row's secondary text. */
+  note?: string | null
   is_unread: boolean
   is_pinned: boolean
   /** Manual row order within its section — index into the server's stored

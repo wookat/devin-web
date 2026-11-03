@@ -1321,6 +1321,8 @@
     "propFolder": "Folder",
     "exportCsv": "Export to CSV",
     "exportMd": "Export Markdown",
+    "note": "Note",
+    "notePh": "Session note (empty clears)",
     "loadKids": "Load children",
     "deadBadge": "Expired",
     "noNotif": "No notifications",

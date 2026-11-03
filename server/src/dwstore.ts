@@ -15,6 +15,9 @@ interface DwSessionMeta {
   folder?: string | null;
   pinned?: boolean;
   archived?: boolean;
+  /** User annotation — editable from the sessions row, shown as the row's
+   *  secondary text. */
+  note?: string | null;
   permission?: string;
   /** last real updatedAt seen from session/list — survives restarts so the
    * sidebar never has to fall back to "now". */

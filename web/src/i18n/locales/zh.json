@@ -1321,6 +1321,8 @@
     "propFolder": "文件夹",
     "exportCsv": "导出 CSV",
     "exportMd": "导出 Markdown",
+    "note": "备注",
+    "notePh": "会话备注（留空清除）",
     "loadKids": "加载子会话",
     "deadBadge": "已失效",
     "noNotif": "暂无通知",

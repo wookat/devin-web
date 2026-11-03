@@ -2,7 +2,7 @@ import { useEffect, useMemo, useRef, useState, type MouseEvent as ReactMouseEven
 import { useTranslation } from 'react-i18next'
 import { Link, useNavigate } from 'react-router-dom'
 import { createPortal } from 'react-dom'
-import { Bot, Download, FolderInput, Plus, Tag } from 'lucide-react'
+import { Bot, Download, FolderInput, Pencil, Plus, Tag } from 'lucide-react'
 import { OArchive, OCheck, OChevronDown, OChevronRight, OExpand, OPin, OSearch, OX } from '../components/officialIcons'
 import { adminFetch } from '@/lib/api'
 import { subscribeWs } from '@/lib/ws'
@@ -297,7 +297,7 @@ export default function SessionsPage() {
             {s.is_pinned && <OPin size={11} className="shrink-0 text-muted-foreground" />}
           </div>
           <div className="flex min-w-0 max-w-[50%] flex-1 items-center overflow-hidden">
-            <span className="truncate text-[13px] leading-[18px] text-muted-foreground">{s.snippet}</span>
+            <span className="truncate text-[13px] leading-[18px] text-muted-foreground" title={s.note ?? s.snippet}>{s.note ?? s.snippet}</span>
           </div>
           <div className="mr-auto" />
           <div className="relative flex shrink-0 items-center gap-[12px]">
@@ -313,6 +313,9 @@ export default function SessionsPage() {
               <a href={`/api/admin/session/${s.devin_id}/export`} download onClick={(e) => e.stopPropagation()} title={t('sp.exportMd')} aria-label={t('sp.exportMd')} className={cn('flex size-7 cursor-pointer items-center justify-center rounded-[6px] text-muted-foreground hover:bg-tint-secondary hover:text-foreground', FOCUS_RING)}>
                 <Download size={14} />
               </a>
+              <button onClick={(e) => { e.stopPropagation(); const n = window.prompt(t('sp.notePh'), s.note ?? ''); if (n !== null) void act('/api/admin/mirror/session-note', { devin_id: s.devin_id, note: n }).then(load) }} title={t('sp.note')} aria-label={t('sp.note')} className={cn('flex size-7 cursor-pointer items-center justify-center rounded-[6px] text-muted-foreground hover:bg-tint-secondary hover:text-foreground', FOCUS_RING)}>
+                <Pencil size={14} />
+              </button>
             </span>
             {showFolder && s.folder && <span className="flex items-center gap-1 text-[13px] leading-[18px] text-muted-foreground"><Tag size={12} />{s.folder}</span>}
             {showCreated && <span className="text-[13px] leading-[18px] text-muted-foreground">{fmtDay(s.created_at)}</span>}

@@ -144,6 +144,7 @@ export function treeSession(ctx: ApiContext, s: ListedSession) {
     forder: (loadReg(ctx).sessionOrder?.[m.pinned ? "_pinned" : (m.folder ?? "")] ?? []).indexOf(s.id),
     is_unread: false,
     is_pinned: !!m.pinned,
+    note: m.note ?? null,
     // Project context for grouping + the header cwd chip.
     cwd: s.cwd,
     // SSH-hosted session → the cwd is a remote path; hydrate the live map so

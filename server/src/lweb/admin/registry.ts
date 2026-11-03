@@ -258,6 +258,7 @@ export async function handleRegistry(ctx: ApiContext, req: IncomingMessage, res:
         break;
       }
       case "session-archive": mm.archived = !!body.archived; break;
+      case "session-note": mm.note = String(body.note ?? "").trim().slice(0, 300) || null; break;
     }
     saveReg();
     json(res, 200, { ok: true });
