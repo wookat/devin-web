@@ -1,6 +1,6 @@
 # devin-web 系统设计说明书（SDD）
 
-版本：v0.4.0 ｜ 状态：as-built 设计记录 ｜ 对应代码：`main @ 07abfcd`
+版本：v0.4.0 ｜ 状态：as-built 设计记录 ｜ 代码基线：`main @ 07abfcd`（其后仅文档提交）｜ 核对日期：2026-11-03
 
 > 与 `docs/architecture.md`（模块图与不变式）互补：本文按**子系统**展开设
 > 计动机、机制与权衡，含数据设计与故障矩阵。
@@ -286,13 +286,13 @@ TimelineGroup (React.memo) → 结构化比较（item refs 元素级 + scalar �
 
 ## 5. 接口设计
 
-### 5.1 HTTP 路由分类表（/api/admin/*，约 60 个）
+### 5.1 HTTP 路由分类表（/api/admin/*：50 个字面路由 + 4 个表驱动模板路由 + 会话级 `:id` 模式）
 
 | 类别 | 代表路由 | 说明 |
 |---|---|---|
 | 会话 | `GET /api/admin/sessions`、`POST …/new`、`…/session/:id/{config,version,goal,scope-search,prompt-history,resources,file-notify,ext}` | 生命周期 + 会话级 acp |
 | 服务管理 | `POST …/{restart,redeploy}`、`GET …/drain`、`GET …/heapdump` | 重启三级见 §2 |
-| 池级 acp | `GET …/{rules,skills,plans,hooks,subagents,workflows,plugins,devin-config,recent-models}`、`POST …/devin-config`、`…/mcp/{servers,tools,call}`、`POST …/skill-install`、`POST …/ext` | 全局方法直通 |
+| 池级 acp | `GET …/{rules,skills,plans,hooks,subagents,workflows,plugins,devin-config,recent-models}`、`POST …/devin-config`、`…/mcp/{servers,tools,call}`、`POST …/skill-install` | 全局方法直通（skills/plans/hooks/subagents 走表驱动循环；通用转发仅 `mcp/call` 与会话级 `…/session/:id/ext`） |
 | 工作区 | `…/fs/{dirs,list,file}`、`…/ssh/{dirs,fs,test}`、`…/resource-file` | 文件/SSH |
 | mirror | `…/mirror/{sessions,members,parent,precheck,folder-*,session-*,indexed-paths,transcribe,translate}` | 分组/语音/翻译 |
 | 云端 | `GET …/cloud/{account,proxy}` | §3.5 |

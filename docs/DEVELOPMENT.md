@@ -1,6 +1,6 @@
 # devin-web 开发文档（Development Guide）
 
-版本：v0.4.0 ｜ 读者：维护者与贡献者
+版本：v0.4.0 ｜ 读者：维护者与贡献者 ｜ 代码基线：`main @ 07abfcd` ｜ 核对日期：2026-11-03
 
 > 前置阅读：`AGENTS.md`（权威约束）、`docs/architecture.md`（模块图）、
 > `docs/SDD.md`（子系统设计）。本文是"动手改代码"的操作手册。
@@ -127,14 +127,26 @@ acp/acpbroker → store/env），禁止反向 import——加代码前先对图�
 
 ### 6.1 新增一个 admin 路由
 
+`handleRegistry`（registry.ts）按域分段的 `if` 守卫模式——命中即
+`return true`：
+
 ```ts
-// server/src/lweb/admin/registry.ts 内，按域找位置插入
-{ method: 'GET', path: '/api/admin/foo', handler: async ({ res, ctx }) => {
-  const mgr = ctx.manager.get(ctx.primaryCwd)          // 池级 acp
-  const out = await mgr.extMethod('_cognition.ai/foo', { cwd: ctx.primaryCwd })
-  json(res, out)
-}}
+// GET /api/admin/foo — `_cognition.ai/foo`: <一句语义>. Read-only.
+if (p === "/api/admin/foo" && m === "GET") {
+  try {
+    const cwd = url.searchParams.get("cwd") || ctx.primaryCwd;
+    const acp = await ctx.manager.get(cwd);            // 池级 acp
+    const r = await acp.extMethod("", "_cognition.ai/foo", { cwd });
+    json(res, 200, r ?? { items: [] });
+  } catch (e) {
+    json(res, 200, { items: [], error: (e as Error).message?.slice(0, 200) ?? "foo unavailable" });
+  }
+  return true;
+}
 ```
+
+注意惯例：错误不冒 500——各端点降级为空集 + `error` 字段（云端面板/
+单端点失败不拖垮整体是同一原则）。
 
 前端侧：
 
@@ -151,8 +163,8 @@ if (!data) return <p className="…">{t('common.loading')}</p>
 ### 6.2 接入一个新 `_cognition.ai/*` 方法
 
 1. **探测 schema**：独立 spawn `devin acp`（**勿 attach 生产 acp**——
-   latest-wins 会顶掉后端连接）。探针模式见根目录 `probe-*.mjs` 残骸与
-   parity 文档"判定法"节
+   latest-wins 会顶掉后端连接）。探针脚本是一次性的（用完即删，根目
+   录已清）；方法论与每方法的判定记录见 `docs/desktop-parity.md`
 2. **参数取证**：`Invalid params` 只报通用码；**真实 serde 错误在 acp
    stderr**——给探针接上 stderr 逐轮补 `missing field 'x'`；
    资源类方法用 "Resource not found" vs "Invalid params" 区分 schema

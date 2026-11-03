@@ -1,6 +1,6 @@
 # devin-web 系统需求规格说明书（SRS）
 
-版本：v0.4.0 ｜ 状态：已实现基线 ｜ 对应代码：`main @ 07abfcd`
+版本：v0.4.0 ｜ 状态：已实现基线 ｜ 代码基线：`main @ 07abfcd`（其后仅文档提交）｜ 核对日期：2026-11-03
 
 > 本文档描述 devin-web **已交付系统**的需求基线（as-built SRS），而非立项时
 > 的前瞻性规格。每条需求均可追溯到现有实现与验证记录。
@@ -104,7 +104,7 @@ devin-web 是承载它的工作台（workbench）。
 |---|---|---|
 | FR-SES-1 | 本地会话列表：分组、搜索、状态徽标、unread 计数 | `GET /api/admin/sessions` + SessionsPage |
 | FR-SES-2 | 新会话：cwd 选择、SSH 目标、草稿持久化 | `POST /api/admin/sessions/new` |
-| FR-SES-3 | 会话操作：rename/end/archive/pin/setTags/share | `sessioncontrol.ts`（rename/share 经 acp 直通） |
+| FR-SES-3 | 会话操作：rename/end/archive/folder/tags/share-link(本地)/share(云端)/restart(kill acp+replay=本地 reboot)/fork(transcript-seed handoff)；子代理 subagentControl(cancel/foreground/background) | `sessioncontrol.ts` + `sessionlifecycle.ts`（rename/share 经 acp 直通；本地 acp 无原生 fork） |
 | FR-SES-4 | 会话恢复：冷会话经 `session/load`；恢复证据（open-turns + log 尾）给出 `continue`/`resend` 提示 | `sessionload.ts` + interrupted banner |
 | FR-SES-5 | 文件夹/mirror 分组与索引路径 | `mirror/*` 路由族 |
 
@@ -236,7 +236,7 @@ devin-web 是承载它的工作台（workbench）。
 
 ### 5.1 HTTP API
 
-约 60 个 admin 路由（`docs/SDD.md` §5 给出分类表）。公共入口全部经
+54 个 admin 路由（50 字面 + 4 表驱动模板）+ 会话级 `:id` 模式（`docs/SDD.md` §5 给出分类表）。公共入口全部经
 supervisor :7791 反代；后端直连 :7792 仅诊断用。
 
 ### 5.2 WebSocket
