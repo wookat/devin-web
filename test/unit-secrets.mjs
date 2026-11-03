@@ -69,6 +69,8 @@ test("totp: RFC 6238 test vector, injected env gets the live code", (t) => {
   assert.match(env.OTP_KEY, /^\d{6}$/);
   assert.notEqual(env.OTP_KEY, seed); // the seed itself never reaches env
   assert.equal(secrets.listSecrets(ctx)[0].type, "totp");
+  // the live code is in the masking set — `echo $OTP_KEY` must not reach transcripts
+  assert.ok(secrets.sessionSecretValues(ctx, "s1").includes(env.OTP_KEY));
 });
 
 test("stream redactor masks values across chunk boundaries", () => {
@@ -120,4 +122,40 @@ test("audit journal records grant mutations without values", (t) => {
   assert.deepEqual(lines.map((l) => l.op), ["create", "bind", "unbind", "delete"]);
   assert.equal(lines[1].sessionId, "s9");
   assert.equal(JSON.stringify(lines).includes("aud-val-1"), false); // no values in audit
+});
+
+test("at-rest: v2 envelope, dpapi ciphertext on win32, v1 migration, poisoned file", (t) => {
+  const ctx = tmpCtx(t);
+  secrets.upsertSecret(ctx, "ENC_KEY", "enc-val-7", "", undefined);
+  const f = path.join(ctx.store.dataDir, "secrets.json");
+  const raw = fs.readFileSync(f, "utf8");
+  const j = JSON.parse(raw);
+  assert.equal(j.version, 2);
+  if (process.platform === "win32" && process.env.DEVIN_WEB_SECRETS_PLAIN !== "1") {
+    assert.equal(j.enc, "dpapi");
+    assert.equal(raw.includes("enc-val-7"), false); // ciphertext at rest
+    assert.equal(typeof j.data, "string");
+    // decrypts back through the mtime-cached load path
+    secrets.bindSessionSecrets(ctx, "s1", ["ENC_KEY"]);
+    assert.equal(secrets.sessionSecretEnv(ctx, "s1").ENC_KEY, "enc-val-7");
+  } else {
+    assert.equal(j.enc, "plain");
+    assert.equal(j.data.secrets.ENC_KEY.value, "enc-val-7");
+  }
+
+  // legacy v1 flat file still loads and upgrades to v2 on the next write
+  const ctx2 = tmpCtx(t);
+  const f2 = path.join(ctx2.store.dataDir, "secrets.json");
+  fs.writeFileSync(f2, JSON.stringify({ secrets: { OLD_KEY: { value: "oldval-1" } }, sessions: { s1: ["OLD_KEY"] } }));
+  assert.equal(secrets.sessionSecretEnv(ctx2, "s1").OLD_KEY, "oldval-1");
+  secrets.upsertSecret(ctx2, "NEW_KEY", "newval-1");
+  assert.equal(JSON.parse(fs.readFileSync(f2, "utf8")).version, 2);
+
+  // poisoned: an undecodable file reads empty but is never overwritten
+  const ctx3 = tmpCtx(t);
+  const f3 = path.join(ctx3.store.dataDir, "secrets.json");
+  fs.writeFileSync(f3, "{ not json at all !!!");
+  assert.deepEqual(secrets.listSecrets(ctx3), []);
+  secrets.upsertSecret(ctx3, "X_KEY", "x-val-1"); // must NOT clobber the file
+  assert.equal(fs.readFileSync(f3, "utf8"), "{ not json at all !!!");
 });

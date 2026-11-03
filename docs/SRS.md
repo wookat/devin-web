@@ -167,6 +167,7 @@ devin-web 是承载它的工作台（workbench）。
 | FR-SEC-9 | request_secret/send_secrets 会话更新映射为 `secret_request`/`secrets_sent` timeline 项（requestId/name/secretType/note/save；应答标记翻转卡片、带 names 渲染用户侧行） | `dwtimeline.ts` |
 | FR-SEC-10 | 保留名防护：环境关键变量名（PATH/HOME/COMSPEC/NODE_OPTIONS/LD_*/DEVIN_WEB_*…）拒绝创建——secrets 合并末位胜出，否则覆盖子进程 PATH 类变量 | `upsertSecret` `reserved_name` |
 | FR-SEC-11 | 授权审计：`secrets-audit.jsonl` 记录 create/rotate/delete/bind/unbind（>512KiB 截半；不含值） | `audit()` |
+| FR-SEC-12 | 静态加密：v2 信封 `{version,enc,data}`；win32 走 DPAPI(CurrentUser)——文件跨机/跨用户不可读，挡住云同步与拷贝外泄；非 win32 与 `DEVIN_WEB_SECRETS_PLAIN=1` 存 `enc:"plain"`；v1 平铺文件读取兼容、下次写自动升级；不可读文件判毒化只读禁覆写；mtime 缓存使 DPAPI 解密每文件变更一次、spawn 路径零开销；TOTP 绑定遮蔽当前±30s 活码 | `load`/`save`/`dpapi`/`sessionSecretValues` |
 
 ### 3.7 云端 REST 面（FR-CLD）
 

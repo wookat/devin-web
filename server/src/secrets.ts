@@ -1,9 +1,16 @@
 /**
  * Local secrets store — devin-web's answer to Devin cloud org secrets.
  *
- * `<dataDir>/secrets.json` (0600):
- *   { secrets: { NAME: { value, description, createdAt, updatedAt } },
- *     sessions: { sessionId: [NAME, …] } }
+ * `<dataDir>/secrets.json` (0600), v2 envelope:
+ *   { version: 2, enc: "dpapi"|"plain", data: <b64 blob | object> }
+ *   inner = { secrets: { NAME: { value, description, createdAt, updatedAt,
+ *            type? } }, sessions: { sessionId: [NAME, …] } }
+ * On win32 the inner JSON is DPAPI-encrypted (CurrentUser scope — the file
+ * is unreadable on another machine/user, which blocks cloud-sync and
+ * file-copy exfiltration; a same-user local process can still decrypt,
+ * that's DPAPI's documented boundary). Non-win32 and
+ * DEVIN_WEB_SECRETS_PLAIN=1 store `enc:"plain"`. Legacy v1 flat files
+ * (no `version`) read as plaintext and upgrade on the next write.
  *
  * Invariants:
  *  - Values NEVER leave the backend: list/composer-meta carry name+description
@@ -13,12 +20,17 @@
  *  - Bindings accumulate per session: every `@secrets:NAME` mention in a
  *    dispatched prompt unions NAME into `sessions[id]` — a session only ever
  *    gains access, matching the cloud model (once granted, granted).
- *  - The store is read-modify-write per call; writes are rare and user-driven,
- *    so a plain writeFileSync + chmod 0600 is enough.
+ *  - The store is read-modify-write per call. Reads are mtime-cached: DPAPI
+ *    decryption costs one PowerShell spawn and only happens when the file
+ *    actually changed, so every terminal spawn stays sync and cheap.
+ *  - An unreadable file (corrupt, or encrypted by another user/machine)
+ *    reads as empty AND is poisoned — save() refuses to clobber it, so a
+ *    migrated file can't be silently wiped by the next mutation.
  */
 import fs from "node:fs";
 import path from "node:path";
 import crypto from "node:crypto";
+import { execFileSync } from "node:child_process";
 import type { ApiContext } from "./routes.js";
 
 export interface SecretEntry {
@@ -36,6 +48,14 @@ interface SecretsFile {
   secrets?: Record<string, Partial<SecretEntry>>;
   sessions?: Record<string, string[]>;
 }
+
+interface SecretsEnvelope {
+  version?: number;
+  enc?: string;
+  data?: unknown;
+}
+
+const FILE_VERSION = 2;
 
 const NAME_RE = /^[A-Za-z_][A-Za-z0-9_]{0,127}$/;
 
@@ -57,19 +77,95 @@ function file(ctx: ApiContext): string {
   return path.join(ctx.store.dataDir, "secrets.json");
 }
 
+// ---- at-rest encryption: DPAPI via PowerShell (win32) --------------------
+// ProtectedData lives in System.Security — no native addon needed. One
+// process call per decrypt, amortised by the mtime cache below.
+
+function psExe(): string {
+  const root = process.env.SystemRoot;
+  return root ? path.join(root, "System32", "WindowsPowerShell", "v1.0", "powershell.exe") : "powershell.exe";
+}
+
+function dpapi(op: "Protect" | "Unprotect", data: Buffer): Buffer {
+  const script =
+    "Add-Type -AssemblyName System.Security;" +
+    "$b=[Convert]::FromBase64String([Console]::In.ReadToEnd());" +
+    `[Console]::Out.Write([Convert]::ToBase64String([System.Security.Cryptography.ProtectedData]::${op}($b,$null,'CurrentUser')))`;
+  const out = execFileSync(psExe(), ["-NoProfile", "-NonInteractive", "-Command", script], {
+    input: data.toString("base64"),
+    timeout: 15_000,
+    windowsHide: true,
+    maxBuffer: 64 * 1024 * 1024,
+  });
+  return Buffer.from(out.toString("utf8").trim(), "base64");
+}
+
+let dpapiState: "unknown" | "ok" | "broken" = "unknown";
+
+/** Whether this process should encrypt at rest. Self-tests once, then
+ *  remembers — a broken DPAPI must not retry a PowerShell spawn per call. */
+function wantDpapi(): boolean {
+  if (process.env.DEVIN_WEB_SECRETS_PLAIN === "1") return false;
+  if (process.platform !== "win32") return false;
+  if (dpapiState === "unknown") {
+    try {
+      dpapiState = dpapi("Unprotect", dpapi("Protect", Buffer.from("dw-probe"))).toString("utf8") === "dw-probe" ? "ok" : "broken";
+    } catch {
+      dpapiState = "broken";
+    }
+    if (dpapiState === "broken") console.warn("[secrets] DPAPI unavailable — secrets.json stays 0600 plaintext");
+  }
+  return dpapiState === "ok";
+}
+
+// Decrypted-state cache keyed by file mtime+size — DPAPI only runs when the
+// file actually changed, so per-spawn env resolution stays sync and cheap.
+const readCache = new Map<string, { mtimeMs: number; size: number; d: Required<SecretsFile> }>();
+/** Files that failed to decode — read as empty but never overwritten. */
+const poisoned = new Set<string>();
+
 function load(ctx: ApiContext): Required<SecretsFile> {
+  const f = file(ctx);
   try {
-    const j = JSON.parse(fs.readFileSync(file(ctx), "utf8")) as SecretsFile;
-    return { secrets: j.secrets ?? {}, sessions: j.sessions ?? {} };
-  } catch {
+    const st = fs.statSync(f);
+    const hit = readCache.get(f);
+    if (hit && hit.mtimeMs === st.mtimeMs && hit.size === st.size) return hit.d;
+    const j = JSON.parse(fs.readFileSync(f, "utf8")) as SecretsFile & SecretsEnvelope;
+    let inner: SecretsFile;
+    if (j.version === FILE_VERSION && j.enc === "dpapi" && typeof j.data === "string") {
+      inner = JSON.parse(dpapi("Unprotect", Buffer.from(j.data, "base64")).toString("utf8")) as SecretsFile;
+    } else if (j.version === FILE_VERSION && j.enc === "plain" && j.data && typeof j.data === "object") {
+      inner = j.data as SecretsFile;
+    } else {
+      inner = j; // v1 flat file
+    }
+    const d = { secrets: inner.secrets ?? {}, sessions: inner.sessions ?? {} };
+    readCache.set(f, { mtimeMs: st.mtimeMs, size: st.size, d });
+    return d;
+  } catch (e) {
+    if ((e as NodeJS.ErrnoException).code === "ENOENT") return { secrets: {}, sessions: {} };
+    poisoned.add(f); // corrupt or foreign-machine file — never clobber it
+    console.warn(`[secrets] ${f} unreadable (${(e as Error).message}) — treating as empty, refusing to overwrite`);
     return { secrets: {}, sessions: {} };
   }
 }
 
 function save(ctx: ApiContext, d: Required<SecretsFile>): void {
   const f = file(ctx);
-  fs.writeFileSync(f, JSON.stringify(d, null, 2), { mode: 0o600 });
+  if (poisoned.has(f)) {
+    console.warn(`[secrets] ${f} is unreadable — refusing to overwrite (delete it manually to start fresh)`);
+    return;
+  }
+  const inner = { secrets: d.secrets, sessions: d.sessions };
+  const out = wantDpapi()
+    ? JSON.stringify({ version: FILE_VERSION, enc: "dpapi", data: dpapi("Protect", Buffer.from(JSON.stringify(inner), "utf8")).toString("base64") }) + "\n"
+    : JSON.stringify({ version: FILE_VERSION, enc: "plain", data: inner }, null, 2) + "\n";
+  const tmp = f + ".tmp";
+  fs.writeFileSync(tmp, out, { mode: 0o600 });
+  fs.renameSync(tmp, f); // atomic — no torn writes on crash
   try { fs.chmodSync(f, 0o600); } catch { /* best effort — win32 acl */ }
+  const st = fs.statSync(f);
+  readCache.set(f, { mtimeMs: st.mtimeMs, size: st.size, d });
 }
 
 /** Access audit — every grant mutation leaves a line in
@@ -192,7 +288,17 @@ export function sessionSecretValues(ctx: ApiContext, sessionId: string): string[
   const out: string[] = [];
   for (const n of d.sessions[sessionId] ?? []) {
     const s = d.secrets[n];
-    if (s?.value) out.push(s.value);
+    if (!s?.value) continue;
+    out.push(s.value);
+    // TOTP: `echo $NAME` prints the live 6-digit code, not the seed — mask the
+    // code for the current step ±1 so a boundary-crossing echo is covered.
+    if (s.type === "totp") {
+      const now = Date.now();
+      for (const dt of [-30_000, 0, 30_000]) {
+        const c = totpCode(s.value, 30, 6, now + dt);
+        if (c) out.push(c);
+      }
+    }
   }
   return out;
 }

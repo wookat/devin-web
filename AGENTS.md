@@ -272,10 +272,18 @@ flag carried) + binding + a `send_secrets` marker that flips the card.
 Routes: `GET/POST /api/admin/secrets`, `…/delete`, `…/unbind`.
 Reserved-name denylist (PATH/HOME/NODE_OPTIONS/LD_*/DEVIN_WEB_*…) — a
 secret merging last would otherwise clobber child env; the mask set
-covers raw + base64 forms (the `|base64` echo bypass); grant mutations
-journal to `secrets-audit.jsonl` (no values). Masking hides values from
-the TRANSCRIPT only — a prompt-injected agent can still exfiltrate over
-the network; that's inherent to env secrets everywhere (same as GitHub).
+covers raw + base64 forms (the `|base64` echo bypass) plus the live
+TOTP codes (±30s); grant mutations journal to `secrets-audit.jsonl`
+(no values). Masking hides values from the TRANSCRIPT only — a
+prompt-injected agent can still exfiltrate over the network; that's
+inherent to env secrets everywhere (same as GitHub).
+At rest the file is a v2 envelope: win32 encrypts the inner JSON with
+DPAPI CurrentUser via PowerShell (no native dep), non-win32 /
+DEVIN_WEB_SECRETS_PLAIN=1 store enc:"plain"; v1 flat files upgrade on
+the next write. Reads are mtime-cached so the one-PowerShell decrypt
+happens once per file change, not per spawn; an undecodable file
+(corrupt or encrypted by another user/machine) is poisoned — reads
+empty, writes refused.
 
 ## Test
 
