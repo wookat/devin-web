@@ -58,6 +58,46 @@ function shq(a: string): string {
   return `'${a.replace(/'/g, `'\\''`)}'`;
 }
 
+export const SECRET_MASK = "••••••";
+/** Values shorter than this are not masked — masking "ab" would shred
+ *  ordinary output (and a 3-char secret is worthless anyway). */
+export const MIN_REDACT_LEN = 4;
+
+export function scrubSecrets(text: string, values: string[]): string {
+  for (const v of values) {
+    if (v.length >= MIN_REDACT_LEN) text = text.split(v).join(SECRET_MASK);
+  }
+  return text;
+}
+
+/** Stream redactor: secrets can straddle chunk boundaries, so the last
+ *  (maxLen-1) bytes are held back and merged into the next chunk. Order
+ *  matters: the WHOLE buffer is scrubbed BEFORE the emit/tail split — a
+ *  secret fully inside the buffer is masked in place; one straddling the
+ *  boundary has its head (≤ maxLen-1 bytes) inside the held-back tail, so
+ *  it joins the next buffer and is masked as a unit there. flush() emits
+ *  the remainder on process settle. */
+export function makeStreamRedactor(values: string[]): { push: (chunk: string) => string; flush: () => string } {
+  const vals = values.filter((v) => v.length >= MIN_REDACT_LEN);
+  if (!vals.length) return { push: (c) => c, flush: () => "" };
+  const maxLen = Math.max(...vals.map((v) => v.length));
+  let tail = "";
+  return {
+    push(chunk) {
+      const buf = scrubSecrets(tail + chunk, vals);
+      const emitLen = buf.length - (maxLen - 1);
+      if (emitLen <= 0) { tail = buf; return ""; }
+      tail = buf.slice(emitLen);
+      return buf.slice(0, emitLen);
+    },
+    flush() {
+      const out = scrubSecrets(tail, vals);
+      tail = "";
+      return out;
+    },
+  };
+}
+
 export class TerminalRunner {
   private terminals = new Map<string, Terminal>();
 
@@ -72,6 +112,20 @@ export class TerminalRunner {
    *  remote env can't be set without embedding values in the command line
    *  (which would leak them into the transcript). */
   secretEnv: ((sessionId: string) => Record<string, string>) | null = null;
+
+  /** Session-bound secret VALUES for output redaction. Also applied on SSH
+   *  runners: nothing is injected there, but a bound value that reaches the
+   *  remote side any other way (user-exported env, seeded file) still must
+   *  not echo back into the transcript. */
+  secretValues: ((sessionId: string) => string[]) | null = null;
+
+  /** Redact bound secret values in a text destined for the agent/log —
+   *  used by fs/read_text_file so a seeded .env the agent cats out can't
+   *  smuggle the plaintext past the terminal scrubber. */
+  redactFor(sessionId: string, text: string): string {
+    const vals = this.secretValues?.(sessionId) ?? [];
+    return scrubSecrets(text, vals);
+  }
 
   async create(
     defaultCwd: string,
@@ -134,8 +188,13 @@ export class TerminalRunner {
     ev.onTerminalCreate(id, term.sessionId, [params.command, ...(params.args ?? [])].join(" "));
 
     const dec = new ShellDecoder(!this.sshTarget && process.platform === "win32");
-    const onData = (chunk: Buffer) => {
-      const data = dec.push(chunk);
+    // Redact the session's bound secret values from stdout/stderr — this is
+    // the choke point that feeds term.output (agent read-back), the session
+    // log, the timeline, and the WS broadcast, so one scrub covers every
+    // downstream consumer.
+    const redactor = makeStreamRedactor(this.secretValues?.(params.sessionId) ?? []);
+    const emit = (data: string) => {
+      if (!data) return;
       term.output += data;
       if (term.output.length > term.limit) {
         term.output = term.output.slice(-term.limit);
@@ -143,12 +202,17 @@ export class TerminalRunner {
       }
       ev.onTerminalOutput(id, term.sessionId, data);
     };
+    const onData = (chunk: Buffer) => {
+      emit(redactor.push(dec.push(chunk)));
+    };
     proc.stdout!.on("data", onData);
     proc.stderr!.on("data", onData);
     const settle = (code: number | null, signal: string | null) => {
       if (term.exitCode !== null || term.signal !== null) return;
       term.exitCode = code;
       term.signal = signal;
+      emit(dec.flush ? dec.flush() : "");
+      emit(redactor.flush());
       ev.onTerminalExit(id, term.sessionId, code, signal);
       for (const w of term.waiters) w();
       term.waiters = [];

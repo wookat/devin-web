@@ -47,7 +47,13 @@ export class AcpManager {
     let instance: DevinAcp | null = null;
     const inj = this.envFor?.(agent) ?? { env: {}, account: null };
     const term = ssh ? new TerminalRunner(ssh) : this.terminal;
-    if (ssh) this.sshTerminals.add(term);
+    if (ssh) {
+      this.sshTerminals.add(term);
+      // SSH runners skip env INJECTION (values can't cross ssh without
+      // landing in the remote command line) but still redact bound values
+      // in output — a remote-side echo must not reach the transcript.
+      term.secretValues = this.terminal.secretValues;
+    }
     const acp = await DevinAcp.start(
       cwd,
       term,

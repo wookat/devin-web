@@ -1,6 +1,6 @@
 import { useEffect, useState } from 'react'
 import { useTranslation } from 'react-i18next'
-import { Activity, BookOpen, ChevronDown, ChevronRight, FileText, KeyRound, Puzzle, Server, Trash2 } from 'lucide-react'
+import { Activity, BookOpen, ChevronDown, ChevronRight, FileText, KeyRound, Pencil, Puzzle, Server, Trash2 } from 'lucide-react'
 import { adminFetch } from '@/lib/api'
 import { cn } from '@/lib/utils'
 import { visibleInterval } from '@/lib/poll'
@@ -479,15 +479,17 @@ function CloudPanel() {
 /* Secrets — local equivalent of cloud org secrets. Values are write-only:
  * the list carries name+description; the agent receives values as terminal
  * env vars bound per session via @secrets:NAME mentions. */
-interface SecretRow { name: string; description: string; createdAt: number; updatedAt: number }
+interface SecretRow { name: string; description: string; createdAt: number; updatedAt: number; type?: 'totp'; sessions?: string[] }
 function SecretsPanel() {
   const { t } = useTranslation()
   const [rows, setRows] = useState<SecretRow[] | null>(null)
   const [name, setName] = useState('')
   const [value, setValue] = useState('')
   const [desc, setDesc] = useState('')
+  const [totp, setTotp] = useState(false)
   const [busy, setBusy] = useState(false)
   const [err, setErr] = useState('')
+  const [open, setOpen] = useState<string | null>(null)
   const refresh = () => {
     void adminFetch<{ secrets: SecretRow[] }>('/api/admin/secrets').then((r) => setRows(r.secrets ?? [])).catch(() => setRows([]))
   }
@@ -497,12 +499,15 @@ function SecretsPanel() {
     setBusy(true); setErr('')
     const r = await adminFetch<{ ok: boolean; error?: string }>('/api/admin/secrets', {
       method: 'POST',
-      body: JSON.stringify({ name: name.trim(), value, description: desc.trim() }),
+      body: JSON.stringify({ name: name.trim(), value, description: desc.trim(), ...(totp ? { type: 'totp' } : {}) }),
       headers: { 'content-type': 'application/json' },
     }).catch(() => null)
     setBusy(false)
-    if (!r?.ok) { setErr(r?.error === 'invalid_name' ? t('set.secretBadName') : t('common.failed')); return }
-    setName(''); setValue(''); setDesc('')
+    if (!r?.ok) {
+      setErr(r?.error === 'invalid_name' ? t('set.secretBadName') : r?.error === 'invalid_totp_seed' ? t('set.secretBadTotp') : t('common.failed'))
+      return
+    }
+    setName(''); setValue(''); setDesc(''); setTotp(false)
     refresh()
   }
   const del = async (n: string) => {
@@ -513,23 +518,68 @@ function SecretsPanel() {
     }).catch(() => null)
     refresh()
   }
+  const unbind = async (n: string, sid: string) => {
+    await adminFetch('/api/admin/secrets/unbind', {
+      method: 'POST',
+      body: JSON.stringify({ name: n, sessionId: sid }),
+      headers: { 'content-type': 'application/json' },
+    }).catch(() => null)
+    refresh()
+  }
+  const edit = (s: SecretRow) => {
+    setName(s.name); setDesc(s.description); setTotp(s.type === 'totp'); setValue('')
+  }
   if (!rows) return <p className="px-[12px] py-[10px] text-13 text-secondary">{t('common.loading')}</p>
   return (
     <div className="px-[6px] py-[6px]">
       <p className="px-[12px] pb-[6px] text-11 text-muted-foreground">{t('set.secretsHint')}</p>
       {rows.length === 0 && <p className="px-[12px] py-[8px] text-13 text-secondary">{t('set.secretsEmpty')}</p>}
       {rows.map((s) => (
-        <div key={s.name} className="flex items-center gap-2 px-[12px] py-[7px] hover:bg-tint-secondary">
-          <KeyRound size={13} className="shrink-0 text-accent-primary" />
-          <span className="min-w-0 flex-1 truncate text-13 font-mono">{s.name}</span>
-          {s.description && <span className="shrink-0 truncate text-11 text-muted-foreground" title={s.description}>{s.description}</span>}
-          <button
-            className="shrink-0 rounded-[5px] p-1 text-muted-foreground hover:bg-tint-secondary hover:text-red-500"
-            title={t('common.delete')}
-            onClick={() => void del(s.name)}
-          >
-            <Trash2 size={13} />
-          </button>
+        <div key={s.name}>
+          <div className="flex items-center gap-2 px-[12px] py-[7px] hover:bg-tint-secondary">
+            <KeyRound size={13} className="shrink-0 text-accent-primary" />
+            <span className="min-w-0 flex-1 truncate text-13 font-mono">{s.name}</span>
+            {s.type === 'totp' && <span className="shrink-0 rounded-[5px] border border-border px-1 py-px text-10 text-muted-foreground">TOTP</span>}
+            {!!s.sessions?.length && (
+              <button
+                className="shrink-0 cursor-pointer rounded-[5px] border border-border px-1 py-px text-10 text-muted-foreground hover:bg-tint-secondary"
+                title={t('set.secretBoundHint')}
+                onClick={() => setOpen(open === s.name ? null : s.name)}
+              >
+                {t('set.secretBound', { n: s.sessions.length })}
+              </button>
+            )}
+            {s.description && <span className="shrink-0 max-w-[140px] truncate text-11 text-muted-foreground" title={s.description}>{s.description}</span>}
+            <button
+              className="shrink-0 rounded-[5px] p-1 text-muted-foreground hover:bg-tint-secondary"
+              title={t('set.secretRotate')}
+              onClick={() => edit(s)}
+            >
+              <Pencil size={13} />
+            </button>
+            <button
+              className="shrink-0 rounded-[5px] p-1 text-muted-foreground hover:bg-tint-secondary hover:text-red-500"
+              title={t('common.delete')}
+              onClick={() => void del(s.name)}
+            >
+              <Trash2 size={13} />
+            </button>
+          </div>
+          {open === s.name && !!s.sessions?.length && (
+            <div className="mx-[12px] mb-[4px] rounded-[6px] border border-border-secondary px-2 py-1">
+              {s.sessions.map((sid) => (
+                <div key={sid} className="flex items-center gap-2 py-[2px]">
+                  <span className="min-w-0 flex-1 truncate font-mono text-11 text-muted-foreground">{sid}</span>
+                  <button
+                    className="shrink-0 rounded-[4px] px-1.5 text-11 text-muted-foreground hover:bg-tint-secondary hover:text-red-500"
+                    onClick={() => void unbind(s.name, sid)}
+                  >
+                    {t('set.secretUnbind')}
+                  </button>
+                </div>
+              ))}
+            </div>
+          )}
         </div>
       ))}
       <div className="mt-[6px] border-t border-border-secondary px-[12px] pt-[8px]">
@@ -546,13 +596,17 @@ function SecretsPanel() {
             value={desc}
             onChange={(e) => setDesc(e.target.value)}
           />
+          <label className="flex shrink-0 cursor-pointer items-center gap-1 text-11 text-muted-foreground" title={t('set.secretTotpHint')}>
+            <input type="checkbox" checked={totp} onChange={(e) => setTotp(e.target.checked)} />
+            TOTP
+          </label>
         </div>
         <div className="mt-2 flex items-center gap-2">
           <input
             className="h-[28px] min-w-0 flex-1 rounded-[6px] border border-border bg-transparent px-2 font-mono text-12 outline-none focus:border-accent-primary"
             type="password"
             autoComplete="new-password"
-            placeholder={t('set.secretValuePh')}
+            placeholder={totp ? t('set.secretSeedPh') : t('set.secretValuePh')}
             value={value}
             onChange={(e) => setValue(e.target.value)}
           />

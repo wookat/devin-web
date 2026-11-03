@@ -249,6 +249,28 @@ MyMemory). `devinChatProbe()` gives an explicit liveness check.
 (index.ts) AND the supervisor injects it into the spawn env, so fetch
 honors a user-level `HTTPS_PROXY` when present.
 
+Local secrets (`server/src/secrets.ts`, `<dataDir>/secrets.json` 0600) —
+the devin.ai org-secrets equivalent. Three invariants: values never leave
+the backend (list/meta = name+desc only), they reach the agent ONLY as
+env vars on `terminal/create` spawns (`manager.terminal.secretEnv`
+resolved per spawn → next command picks up new bindings, SSH runners
+skip injection because values can't cross ssh without landing in the
+remote command line), and bound values are scrubbed to `••••••` before
+output reaches the transcript — `makeStreamRedactor` masks at the
+`onData` choke point (scrub the whole buffer THEN split, hold back
+maxLen-1 bytes for boundary-straddlers, <4-char values unmasked), which
+covers term.output/sessionlog/timeline/WS/agent read-back in one place;
+`fs/read_text_file` redacts via `terminal.redactFor`. `type:"totp"`
+stores the base32 seed and injects the current RFC-6238 code instead.
+Composer `@` → Secrets → lock pill serializes to `@secrets:NAME`;
+`dispatchPrompt` unions mentions into the session's durable binding,
+injects the names+descriptions hint on EVERY prompt while bound, and
+logs a `dw_notice` for unknown names. `request_secret`/`send_secrets`
+session updates map to `secret_request`/`secrets_sent` timeline items;
+`POST …/secret-response` answers cards by upserting the secret (totp
+flag carried) + binding + a `send_secrets` marker that flips the card.
+Routes: `GET/POST /api/admin/secrets`, `…/delete`, `…/unbind`.
+
 ## Test
 
 ```cmd

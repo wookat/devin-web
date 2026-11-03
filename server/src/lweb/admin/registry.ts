@@ -622,8 +622,8 @@ export async function handleRegistry(ctx: ApiContext, req: IncomingMessage, res:
   }
   if (p === "/api/admin/secrets" && m === "POST") {
     const { upsertSecret } = await import("../../secrets.js");
-    const body = (await readJson(req)) as { name?: string; value?: string; description?: string };
-    const r = upsertSecret(ctx, String(body?.name ?? "").trim(), String(body?.value ?? ""), String(body?.description ?? "").trim());
+    const body = (await readJson(req)) as { name?: string; value?: string; description?: string; type?: string };
+    const r = upsertSecret(ctx, String(body?.name ?? "").trim(), String(body?.value ?? ""), String(body?.description ?? "").trim(), body?.type);
     json(res, r.ok ? 200 : 400, r);
     return true;
   }
@@ -634,6 +634,17 @@ export async function handleRegistry(ctx: ApiContext, req: IncomingMessage, res:
     json(res, r.ok ? 200 : 404, r);
     return true;
   }
+  // POST /api/admin/secrets/unbind {name, sessionId} — revoke one session's
+  // access without deleting the secret for everyone.
+  if (p === "/api/admin/secrets/unbind" && m === "POST") {
+    const { unbindSessionSecret } = await import("../../secrets.js");
+    const body = (await readJson(req)) as { name?: string; sessionId?: string };
+    if (!body?.name || !body?.sessionId) { json(res, 400, { error: "name and sessionId required" }); return true; }
+    json(res, 200, unbindSessionSecret(ctx, body.sessionId, body.name));
+    return true;
+  }
+  // GET /api/admin/secrets returns each secret's bound session ids in its
+  // `sessions` field — no separate session-scoped route needed.
 
   if (p === "/api/admin/mcp/servers" && m === "GET") {
     try { json(res, 200, (await mcpCall("_cognition.ai/mcp/listServers", {})) ?? { servers: [] }); }

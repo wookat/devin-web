@@ -156,13 +156,15 @@ devin-web 是承载它的工作台（workbench）。
 
 | 编号 | 需求 | 实现 |
 |---|---|---|
-| FR-SEC-1 | 密钥存储 `<dataDir>/secrets.json`（0600）：name→{value,description,ts} + 会话绑定表 | `secrets.ts` |
+| FR-SEC-1 | 密钥存储 `<dataDir>/secrets.json`（0600）：name→{value,description,type,ts} + 会话绑定表；`type:"totp"` 存 base32 种子 | `secrets.ts` |
 | FR-SEC-2 | 值永不出后端：列表/composer-meta 只含 name+description | 路由 + `listSecrets` |
 | FR-SEC-3 | composer `@` → Secrets 选择器 → 锁定图标 pill → 序列化 `@secrets:NAME` | AT_CATEGORIES + `sec-` pill |
-| FR-SEC-4 | 派发时提取 `@secrets:NAME` → 绑定到会话（并集、持久化）+ prompt 追加 env-var 提示（含描述，无值） | `dispatchPrompt` |
-| FR-SEC-5 | agent terminal/create 的 env 合并会话绑定密钥（值覆盖 params.env）；SSH 远端不注入（避免命令行泄漏） | `TerminalRunner.secretEnv` |
-| FR-SEC-6 | CRUD：`GET/POST /api/admin/secrets`、`POST /api/admin/secrets/delete`；`POST …/secret-response` 应答 request_secret 卡（存值+绑定+`send_secrets` 标记） | registry + sessioncontrol |
-| FR-SEC-7 | Settings → 资源 Secrets 面板：列表（name/desc）+ 新增（name/value write-only/desc）+ 删除 | SecretsPanel |
+| FR-SEC-4 | 派发时提取 `@secrets:NAME` → 绑定到会话（并集、持久化）；已绑定密钥的 env-var 提示随**每条** prompt 注入（授权是环境态非单回合）；提及未知名写 `dw_notice` 上 timeline | `dispatchPrompt` |
+| FR-SEC-5 | agent terminal/create 的 env 合并会话绑定密钥（值覆盖 params.env）；TOTP 条目注入当前 6 位码（RFC 6238）而非种子；SSH 远端不注入（避免命令行泄漏） | `TerminalRunner.secretEnv` + `totpCode` |
+| FR-SEC-6 | CRUD：`GET/POST /api/admin/secrets`（含 `type`）、`POST /api/admin/secrets/delete`、`POST /api/admin/secrets/unbind`；`POST …/secret-response` 应答 request_secret 卡（存值+绑定+按 `secret_type` 记 TOTP+`send_secrets` 标记） | registry + sessioncontrol |
+| FR-SEC-7 | Settings → 资源 Secrets 面板：列表（name/desc/TOTP 徽标/绑定会话数）+ 新增（value write-only + TOTP 勾选）+ 编辑/轮换 + 展开解绑 + 删除 | SecretsPanel |
+| FR-SEC-8 | **回显脱敏**：会话绑定值在 terminal stdout/stderr 与 fs/read_text_file 通道统一替换为 `••••••`（跨 chunk 边界安全：块尾保留 maxLen-1 字节、先整缓冲脱敏再切分；<4 字符不脱敏防误伤）；`term.output`/sessionlog/timeline/WS/agent 读回全下游获益 | `makeStreamRedactor` + `redactFor` |
+| FR-SEC-9 | request_secret/send_secrets 会话更新映射为 `secret_request`/`secrets_sent` timeline 项（requestId/name/secretType/note/save；应答标记翻转卡片、带 names 渲染用户侧行） | `dwtimeline.ts` |
 
 ### 3.7 云端 REST 面（FR-CLD）
 
@@ -234,6 +236,8 @@ devin-web 是承载它的工作台（workbench）。
 | NFR-S2 | Allowed Hosts 白名单（supervisor 注入隧道默认） | DEVIN_WEB_ALLOWED_HOSTS |
 | NFR-S3 | 云端 token 只驻留后端，任何路由不回传 token 本体 | cloudapi 出站注入 |
 | FR-S4 → NFR-S4 | share 链接只读、可吊销 | share.ts |
+| NFR-S5 | 密钥值三不变量：不出后端 / 只经 terminal env 入 agent / 输出端遮蔽后不进 transcript | secrets.ts + 流式脱敏 |
+| NFR-S6 | dataDir（secrets.json/token/sessionlog）对 fs/dirs、fs/list、fs/file 浏览路由返回 403 | fsbrowse `inDataDir` |
 
 ### 4.5 可维护性
 

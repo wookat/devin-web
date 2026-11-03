@@ -245,7 +245,7 @@ TimelineGroup (React.memo) → 结构化比较（item refs 元素级 + scalar �
 | persona | `persona.ts` | turnEndHooks 同款注册模式；wake/thinking persona |
 | 上传/附件 | `uploads.ts` | upload-stage 暂存 + session 引用 |
 | diagnose/repair | `diagnose.ts` | 全量状态导出 + 修复动作白名单（kill-orphans/stop-turns/clear-open-turns/restart-now/vacuum-logs） |
-| 密钥 | `secrets.ts` | `secrets.json` 0600 存储 + 会话绑定并集；值仅经 TerminalRunner env 注入 agent 命令，不进 transcript；SSH 不注入（防命令行泄漏）；`secret-response` 把 request_secret 应答落成新密钥并绑定会话 |
+| 密钥 | `secrets.ts` + `terminal.ts` 脱敏器 | `secrets.json` 0600 存储 + 会话绑定并集；值仅经 TerminalRunner env 注入（TOTP 注入活码非种子），SSH 不注入（防命令行泄漏）；**回显脱敏**：`makeStreamRedactor` 在 onData 源头遮蔽绑定值（整缓冲先脱敏再切分、块尾保留 maxLen-1 防跨界泄漏），覆盖 term.output→sessionlog→timeline→WS→agent 读回全下游；fs/read_text_file 同法 `redactFor`；`secret-response` 把 request_secret 应答落成新密钥（按 secret_type 记 TOTP）并绑定会话；request_secret/send_secrets 映射为 timeline 卡片项 |
 | 多账户轮换 | `accounts.ts` | SWE rate-limit 轮换 |
 | security/wiki | `security.ts`/`wiki.ts` | 独立页面后端 |
 

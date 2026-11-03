@@ -311,7 +311,9 @@ export class DevinAcp {
 
       readTextFile: async (params) => {
         const p = confine(cwd, params.path);
-        const content = await fs.readFile(p, "utf8");
+        // Redact session-bound secret values — a seeded .env or a file the
+        // agent wrote a secret into must not return plaintext to the model.
+        const content = terminal.redactFor(params.sessionId, await fs.readFile(p, "utf8"));
         if (params.line == null && params.limit == null) return { content };
         const lines = content.split("\n");
         const start = Math.max(0, (params.line ?? 1) - 1);

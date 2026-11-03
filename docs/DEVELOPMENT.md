@@ -88,6 +88,8 @@ server/src/
   lweb/admin/registry.ts admin 路由注册表（~60 路由）
   lweb/admin/*.ts        路由分域：sessioncontrol/sessionfiles/sessiontimeline/…
   cloudapi.ts            云端只读面（凭证/代理/白名单）
+  secrets.ts             本地密钥存储 + 会话绑定 + TOTP(RFC6238) + 值脱敏
+  terminal.ts            ACP terminal/* 实现 + spawn env 注入 + 流式脱敏器
   notifcenter.ts         通知中心（环形缓冲 + 持久化 + WS）
   sessiondb.ts           node:sqlite sessionlog.db（gen 模型 + 迁移）
   translate.ts           翻译 provider 链

@@ -74,6 +74,11 @@ interface DwItem {
   /** read of an image file: workspace path for inline preview via file-raw. */
   image?: { path: string };
   callout?: "error" | "warning" | "info";
+  /** request_secret card metadata — the VALUE is never on the timeline. */
+  secretRequest?: { requestId: string; name: string; secretType: "plain" | "totp"; note?: string; save?: boolean; saveScope?: string };
+  /** send_secrets: answered request ids (flips cards) + names when the
+   *  answer also stored a reusable secret (renders a user-side row). */
+  secretsSent?: { requestIds: string[]; names?: string[] };
   /** Machine tag on dw_notice rows: "conflict" (session open elsewhere) or
    * "error:<stage>" — lets the client localize/actionable-render it. */
   notice_kind?: string;
@@ -844,6 +849,36 @@ function tlPush(st: TlState, e: { ts: number; seq?: number; update: Record<strin
   // mode/config churn is composer state, not transcript rows
   if (kind === "current_mode_update") return;
   if (kind === "config_option_update" || kind === "available_commands_update") return;
+  // request_secret → the credential-request card (metadata only — the value
+  // is never part of any timeline item). Field names tolerate both the acp
+  // snake_case wire shape and the camelCase variant seen in replay files.
+  if (kind === "request_secret") {
+    push({
+      id, ts: iso, kind: "secret_request", raw_type: kind,
+      secretRequest: {
+        requestId: String(u.request_id ?? u.requestId ?? (u._meta as Record<string, unknown> | undefined)?.["request_id"] ?? ""),
+        name: String(u.name ?? ""),
+        secretType: String(u.secret_type ?? u.secretType ?? "plain") === "totp" ? "totp" : "plain",
+        ...(u.note || u.prompt ? { note: String(u.note ?? u.prompt) } : {}),
+        ...(u.save != null || u.shouldSave != null ? { save: Boolean(u.save ?? u.shouldSave) } : {}),
+        ...(u.save_scope || u.saveScope ? { saveScope: String(u.save_scope ?? u.saveScope) } : {}),
+      },
+    });
+    return;
+  }
+  // send_secrets → answers request cards (requestIds flip them to provided);
+  // carrying names also renders a user-side "secrets provided" row.
+  if (kind === "send_secrets") {
+    const ids = (u.request_ids ?? u.requestIds ?? []) as string[];
+    push({
+      id, ts: iso, kind: "secrets_sent", raw_type: kind,
+      secretsSent: {
+        requestIds: Array.isArray(ids) ? ids.map(String) : [],
+        ...(Array.isArray(u.names) ? { names: (u.names as unknown[]).map(String) } : {}),
+      },
+    });
+    return;
+  }
   push({ id, ts: iso, kind: "other", title: kind || "update", body: JSON.stringify(u).slice(0, 2000), raw_type: kind });
 }
 

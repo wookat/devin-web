@@ -264,16 +264,20 @@ export async function handleSessionControl(ctx: ApiContext, req: IncomingMessage
     if (!rid || !value) { json(res, 400, { error: "request_id and value required" }); return true; }
     // Recover the request's declared name from the session log — the card
     // sends only request_id, the env-var name lives on the request item.
-    const tail = ctx.sessionLog.readDiskTail(id, 500) as { sessionUpdate?: string; name?: string; request_id?: string; requestId?: string; _meta?: Record<string, unknown> }[];
+    const tail = ctx.sessionLog.readDiskTail(id, 500) as { sessionUpdate?: string; name?: string; secret_type?: string; secretType?: string; request_id?: string; requestId?: string; _meta?: Record<string, unknown> }[];
     const reqItem = tail.find((it) => it.sessionUpdate === "request_secret" && (it.request_id === rid || it.requestId === rid || (it._meta as Record<string, unknown> | undefined)?.["request_id"] === rid));
     const name = String(body.name ?? reqItem?.name ?? "").trim() || `SECRET_${rid.slice(0, 8).toUpperCase()}`;
+    const secretType = (reqItem?.secret_type ?? reqItem?.secretType) === "totp" ? "totp" : undefined;
     const { upsertSecret, bindSessionSecrets } = await import("../../secrets.js");
-    const up = upsertSecret(ctx, name, value, reqItem ? `requested in session ${id}` : "");
+    const up = upsertSecret(ctx, name, value, reqItem ? `requested in session ${id}` : "", secretType);
     if (!up.ok) { json(res, 400, { ok: false, error: up.error }); return true; }
     bindSessionSecrets(ctx, id, [name]);
     // Mark the request provided in the log — the timeline's send_secrets
-    // reducer flips the card to "Secret provided".
-    ctx.sessionLog.append(id, { sessionUpdate: "send_secrets", request_ids: [rid], names: [name], _local: true });
+    // reducer flips the card to "Secret provided". Same fan-out as
+    // onSessionUpdate: append persists + the broadcast pushes the flip to
+    // live clients instead of waiting for the next timeline poll.
+    const marker = { sessionUpdate: "send_secrets", request_ids: [rid], names: [name], _local: true };
+    if (ctx.sessionLog.append(id, marker)) ctx.hub.broadcast({ type: "session_update", sessionId: id, update: marker });
     json(res, 200, { ok: true });
     return true;
   }

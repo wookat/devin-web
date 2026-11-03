@@ -434,21 +434,33 @@ export function dispatchPrompt(ctx: ApiContext, id: string, text: string, attach
     // "relay this" phrasing lets the lead misread the message body as a task
     // for itself (observed: it went off debugging the content instead of
     // calling the tool).
-    // `@secrets:NAME` mentions → bind NAME to this session (union, durable)
-    // and tell the agent the values live as env vars on its terminal spawns.
+    // `@secrets:NAME` mentions → bind NAME to this session (union, durable).
+    // The env-var hint rides EVERY prompt while the session has bindings —
+    // the grant is ambient (env injected on every terminal spawn), so the
+    // agent must know its names every turn, not only the mentioning turn.
     // Name+description ride the prompt (both are picker-visible anyway); the
     // VALUE never enters the transcript — TerminalRunner resolves it into
     // env at terminal/create time.
     let secretsHint = "";
     if (!subagentId) {
       const mentioned = [...text.matchAll(/@secrets:([A-Za-z_][A-Za-z0-9_]*)/g)].map((m) => m[1]);
+      const { bindSessionSecrets, sessionSecretHints, knownSecretNames } = await import("./secrets.js");
       if (mentioned.length) {
-        const { bindSessionSecrets, sessionSecretHints } = await import("./secrets.js");
         bindSessionSecrets(ctx, id, mentioned);
-        const hints = sessionSecretHints(ctx, id);
-        if (hints.length) {
-          secretsHint = `\n\n[devin-web] secrets bound to this session are available as env vars in terminal commands: ${hints.map((h) => `$${h.name}${h.description ? ` — ${h.description}` : ""}`).join(", ")}`;
+        // A typo'd mention binds nothing — surface it instead of silently
+        // dropping (the agent would otherwise assume the env var exists).
+        const known = knownSecretNames(ctx);
+        const unknown = [...new Set(mentioned.filter((n) => !known.has(n)))];
+        if (unknown.length) {
+          ctx.sessionLog.append(id, {
+            sessionUpdate: "dw_notice",
+            notice: `未知名钥：${unknown.map((n) => `@secrets:${n}`).join("、")} — 请在 设置 → 资源 中创建后再引用`,
+          });
         }
+      }
+      const hints = sessionSecretHints(ctx, id);
+      if (hints.length) {
+        secretsHint = `\n\n[devin-web] secrets bound to this session are available as env vars in terminal commands: ${hints.map((h) => `$${h.name}${h.description ? ` — ${h.description}` : ""}`).join(", ")}`;
       }
     }
     if (subagentId) deps.pingSubagent(subagentId);

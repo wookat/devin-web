@@ -53,6 +53,8 @@ export async function handleFsBrowse(ctx: ApiContext, req: IncomingMessage, res:
         return true;
       }
       const target = path.resolve(raw || ctx.primaryCwd);
+      const dd = path.resolve(ctx.store.dataDir);
+      if (target === dd || target.startsWith(dd + path.sep)) { json(res, 403, { error: "restricted" }); return true; }
       if (!fs.statSync(target).isDirectory()) throw new Error("not a dir");
       const parent = path.dirname(target);
       json(res, 200, {
@@ -104,8 +106,15 @@ export async function handleFsBrowse(ctx: ApiContext, req: IncomingMessage, res:
 
   // Draft-page project browser: list dirs+files / read text, same shape as
   // the session workspace endpoints but rooted anywhere the picker reached.
+  // dataDir is off-limits: it holds secrets.json, the auth token and the
+  // session log — none are picker content.
+  const inDataDir = (t: string) => {
+    const dd = path.resolve(ctx.store.dataDir);
+    return t === dd || t.startsWith(dd + path.sep);
+  };
   if (p === "/api/admin/fs/list" && m === "GET") {
     const target = path.resolve(url.searchParams.get("path") || ctx.primaryCwd);
+    if (inDataDir(target)) { json(res, 403, { error: "restricted" }); return true; }
     try {
       const entries = fs.readdirSync(target, { withFileTypes: true })
         .filter((e) => !e.name.startsWith(".git") && e.name !== "node_modules")
@@ -118,6 +127,7 @@ export async function handleFsBrowse(ctx: ApiContext, req: IncomingMessage, res:
   }
   if (p === "/api/admin/fs/file" && m === "GET") {
     const target = path.resolve(url.searchParams.get("path") || "");
+    if (inDataDir(target)) { json(res, 403, { error: "restricted" }); return true; }
     try {
       const buf = fs.readFileSync(target);
       if (buf.length > 2 * 1024 * 1024) { json(res, 413, { error: "too large" }); return true; }
