@@ -133,7 +133,7 @@ export async function handleRegistry(ctx: ApiContext, req: IncomingMessage, res:
     const q = String(url.searchParams.get("q") ?? "");
     const limit = Math.min(60, Math.max(1, Number(url.searchParams.get("limit")) || 40));
     const reg2 = loadReg(ctx);
-    const hits = ctx.sessionLog.searchMessages(q, limit)
+    const hits = ctx.sessionLog.searchMessages(q, limit, url.searchParams.get("sid") ?? undefined)
       .filter((h) => ctx.sessionCwd.has(h.sessionId) || !!ctx.store.agentSession(h.sessionId) || reg2.sessions[h.sessionId] != null)
       .map((h) => ({ ...h, title: meta(ctx, h.sessionId).title ?? h.sessionId }));
     json(res, 200, { hits });

@@ -428,7 +428,7 @@ export default function SessionsPage() {
               {msgHits.slice(0, 8).map((h) => (
                 <button
                   key={`${h.sessionId}#${h.seq}`}
-                  onClick={() => nav(`/admin/${h.sessionId}`)}
+                  onClick={() => nav(`/admin/${h.sessionId}?seq=${h.seq}`)}
                   className="flex w-full cursor-pointer items-baseline gap-2 rounded-[6px] px-2 py-1.5 text-left hover:bg-tint-secondary"
                 >
                   <span className="shrink-0 text-[13px] font-medium leading-[18px] text-foreground">{h.title}</span>

@@ -132,13 +132,22 @@ export async function diagnose(ctx: ApiContext): Promise<{ ok: boolean; checks: 
         (rings ? ` · log rings ${rings.sessions}/${rings.entries} entries` : "") });
   } catch {}
 
-  // disk headroom on the data-dir volume
+  // devin.exe version — the AGENTS-documented floor is 3000.11.205 (first
+  // upstream PTY-leak fix; the fix was incomplete, older builds are strictly
+  // worse). Below that = warn so the user knows to update.
   try {
-    const st = fs.statfsSync(ctx.store.dataDir);
-    const freeGb = (st.bavail * st.bsize) / 1e9;
-    checks.push({ id: "disk", group: "service", label: "Disk free", level: freeGb > 2 ? "ok" : "fail",
-      detail: `${freeGb.toFixed(1)} GB free` });
+    const v = (await ctx.devinCheck()) as { installed?: boolean; version?: string | null; detail?: string };
+    const m = /(\d+)\.(\d+)\.(\d+)/.exec(v.version ?? "");
+    const num = m ? Number(m[1]) * 1e6 + Number(m[2]) * 1e3 + Number(m[3]) : 0;
+    const floor = 3000 * 1e6 + 11 * 1e3 + 205;
+    checks.push({ id: "devin-version", group: "service", label: "devin.exe version",
+      level: !v.installed ? "fail" : num >= floor ? "ok" : "warn",
+      detail: v.installed
+        ? `${v.version ?? "unknown"}${num && num < floor ? " — below 3000.11.205 (PTY-leak fix floor): run devin update" : ""}`
+        : `not installed — ${(v.detail ?? "").slice(0, 120)}` });
   } catch {}
+
+  // disk headroom on the data-dir volume
 
   // sessionlog retention — per-session event cap (default 500k)
   const keep = Number(process.env.DEVIN_WEB_SESSIONLOG_KEEP ?? 500_000) || 0;

@@ -1348,9 +1348,14 @@ export default function AdminMirrorPage() {
         const row = eidToRowRef.current.get(it.id)
         if (row != null) { gi = row; break }
       }
-    } else if (location.hash.startsWith('#e-')) {
-      const eid = decodeURIComponent(location.hash.slice(3))
-      gi = eidToRowRef.current.get(eid) ?? null
+    } else {
+      // ?seq=<n> — search-hit deep link: eids are `e<seq>`.
+      const seqParam = new URLSearchParams(location.search).get('seq')
+      if (seqParam) gi = eidToRowRef.current.get(`e${seqParam}`) ?? null
+      else if (location.hash.startsWith('#e-')) {
+        const eid = decodeURIComponent(location.hash.slice(3))
+        gi = eidToRowRef.current.get(eid) ?? null
+      }
     }
     if (gi == null) return
     stickBottom.current = false
@@ -1359,6 +1364,7 @@ export default function AdminMirrorPage() {
     requestAnimationFrame(() => tlVirtRef.current?.scrollToIndex(row, { align: 'center' }))
     const cleanUrl = new URL(window.location.href)
     cleanUrl.searchParams.delete('ts')
+    cleanUrl.searchParams.delete('seq')
     if (cleanUrl.hash.startsWith('#e-')) cleanUrl.hash = ''
     if (cleanUrl.toString() !== window.location.href) {
       window.history.replaceState(window.history.state, '', cleanUrl.toString())

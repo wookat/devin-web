@@ -663,8 +663,8 @@ export class SessionLog {
     try { return this.db?.indexSearchable(limitRows) ?? { indexed: 0, remaining: 0 }; }
     catch { return { indexed: 0, remaining: 0 }; }
   }
-  searchMessages(q: string, limit = 40) {
-    return this.db?.searchMessages(q, limit) ?? [];
+  searchMessages(q: string, limit = 40, sessionId?: string) {
+    return this.db?.searchMessages(q, limit, sessionId) ?? [];
   }
   /** Per-session retention — keep the newest `keep` events per session,
    *  rebuilding that session's fts rows in the same transaction. */

@@ -868,15 +868,20 @@ export class SessionDb {
   /** bm25-ranked hits across every session's messages. `q` is split into
    *  AND-joined quoted terms (FTS-safe — no syntax errors on stray quotes or
    *  operators). Snippet markers are « » for the client to highlight. */
-  searchMessages(q: string, limit = 40): { sessionId: string; seq: number; ts: number; kind: string; snip: string }[] {
+  searchMessages(q: string, limit = 40, sessionId?: string): { sessionId: string; seq: number; ts: number; kind: string; snip: string }[] {
     const terms = q.trim().split(/\s+/).filter(Boolean).slice(0, 8)
       .map((t) => `"${t.replace(/"/g, "")}"`);
     if (!terms.length || !this.ensureFts()) return [];
     try { this.indexSearchable(); } catch { /* serve from the stale index */ }
-    const rows = this.db.prepare(
-      `SELECT session_id, seq, ts, kind, text, snippet(msg_fts,0,'«','»','…',14) AS snip
-       FROM fts.msg_fts WHERE msg_fts MATCH ? ORDER BY rank LIMIT ?`,
-    ).all(terms.join(" "), limit * 3) as { session_id: string; seq: number; ts: number; kind: string; text: string; snip: string }[];
+    const rows = sessionId
+      ? this.db.prepare(
+          `SELECT session_id, seq, ts, kind, text, snippet(msg_fts,0,'«','»','…',14) AS snip
+           FROM fts.msg_fts WHERE msg_fts MATCH ? AND session_id = ? ORDER BY rank LIMIT ?`,
+        ).all(terms.join(" "), sessionId, limit * 3) as { session_id: string; seq: number; ts: number; kind: string; text: string; snip: string }[]
+      : this.db.prepare(
+          `SELECT session_id, seq, ts, kind, text, snippet(msg_fts,0,'«','»','…',14) AS snip
+           FROM fts.msg_fts WHERE msg_fts MATCH ? ORDER BY rank LIMIT ?`,
+        ).all(terms.join(" "), limit * 3) as { session_id: string; seq: number; ts: number; kind: string; text: string; snip: string }[];
     // Dedupe by (session,text): replays re-log the same message at a new seq,
     // which would surface as identical hits — keep the best-ranked copy.
     const seen = new Set<string>();

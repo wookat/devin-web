@@ -345,6 +345,7 @@ export async function handleSystem(ctx: ApiContext, req: IncomingMessage, res: S
         topRings: rings.top.map((r) => ({ ...r, title: metas[r.id]?.title ?? null })),
       },
       metrics: metricsSnapshot(),
+      usage: ctx.sessionLog.usageStats?.(30) ?? null,
       dataDir: {
         sessionlogDbMb: mb(size("sessionlog.db")), walMb: mb(size("sessionlog.db-wal")),
         dwJsonKb: Math.round(size("dw.json") / 1024),
