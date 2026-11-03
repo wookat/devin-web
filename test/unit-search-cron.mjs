@@ -14,14 +14,14 @@ const { flatModelLeaves, cloudVersionToModel } = await tsImport("../server/src/s
 function tmpDb(t) {
   const dir = fs.mkdtempSync(path.join(os.tmpdir(), "dw-fts-"));
   t.after(() => { try { fs.rmSync(dir, { recursive: true, force: true }); } catch {} });
-  return new SessionDb(path.join(dir, "t.db"));
+  return { db: new SessionDb(path.join(dir, "t.db")), dir };
 }
 
 const msg = (text) => ({ sessionUpdate: "agent_message_chunk", content: { text } });
 const user = (text) => ({ sessionUpdate: "user_message_chunk", content: { text } });
 
 test("fts: incremental index, MATCH, dedup of replayed text", (t) => {
-  const db = tmpDb(t);
+  const { db, dir } = tmpDb(t);
   db.append("sess-a", 1, 0, 1000, user("deploy the frobnicate service"));
   db.append("sess-a", 2, 0, 1001, msg("deploying frobnicate now"));
   db.append("sess-b", 1, 0, 1002, msg("unrelated carrot"));
@@ -48,6 +48,8 @@ test("fts: incremental index, MATCH, dedup of replayed text", (t) => {
   const h2 = db.searchMessages("frobnicate", 10);
   assert.equal(h2.length, 3);
   assert.ok(h2.some((h) => h.sessionId === "sess-b"));
+  // The index lives in a side file, not inside the event db.
+  assert.ok(fs.existsSync(path.join(dir, "t-fts.db")));
   db.close();
 });
 
@@ -67,7 +69,7 @@ test("fts: existing db gets the index on first search (lazy migration)", (t) => 
 });
 
 test("retentionSweep: keeps newest N, fts stops serving pruned text", (t) => {
-  const db = tmpDb(t);
+  const { db } = tmpDb(t);
   for (let i = 1; i <= 10; i++) db.append("fat", i, 0, 1000 + i, msg(`message number ${i} ${i <= 3 ? "ancient-tok" : ""}`));
   assert.equal(db.searchMessages("ancient-tok", 10).length, 3);
   const r = db.retentionSweep(5);

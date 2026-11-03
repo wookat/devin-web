@@ -44,6 +44,10 @@ export class SessionLog {
   /** Content-key index for the no-db degraded path (process lifetime only —
    * the db path indexes keys on the rows themselves). */
   private dedupSeen = new Map<string, Set<string>>();
+  /** DEVIN_WEB_LOG_MIRROR=0 disables the .jsonl write-through (read once —
+   *  env is set before process start). The db stays authoritative; only a
+   *  dead db still falls back to mirror writes. */
+  private readonly mirrorOn = process.env.DEVIN_WEB_LOG_MIRROR !== "0";
   /** SQLite event store — the authoritative query side (readDisk/diskSize/
    * seq-resume). The .jsonl stays as a write-through mirror: appends land in
    * both, .bak/restore keeps its file-level semantics, and a legacy file is
@@ -473,7 +477,10 @@ export class SessionLog {
         } catch { /* db is best-effort — the .jsonl mirror still records it */ }
       }
       const line = JSON.stringify({ ts: entry.ts, seq, update: storedUpdate }) + "\n";
-      let fd = this.writer(sessionId);
+      // The .jsonl mirror is write-through redundancy — DEVIN_WEB_LOG_MIRROR=0
+      // skips it while the db is healthy (the db is authoritative; mirror only
+      // earns its keep as the persistence fallback when sqlite is gone).
+      let fd = this.db && !this.mirrorOn ? null : this.writer(sessionId);
       // Rotate an over-cap mirror BEFORE this line lands — the fresh file
       // keeps only post-rotation entries; archives are cold backups that
       // readDisk never touches (the db holds the complete history).

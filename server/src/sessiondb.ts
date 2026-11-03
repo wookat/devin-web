@@ -764,18 +764,21 @@ export class SessionDb {
   private ensureFts(): boolean {
     if (this.ftsState !== "unknown") return this.ftsState === "ok";
     try {
-      this.db.exec(`CREATE VIRTUAL TABLE IF NOT EXISTS msg_fts USING fts5(text, session_id UNINDEXED, seq UNINDEXED, gen UNINDEXED, ts UNINDEXED, kind UNINDEXED)`);
-      this.db.exec(`CREATE TABLE IF NOT EXISTS fts_meta(k TEXT PRIMARY KEY, v INTEGER)`);
-      // Schema drift: a pre-`gen` msg_fts can't map rows back to (gen,seq)
-      // for retention pruning — rebuild it once and re-index from scratch.
-      const cols = (this.db.prepare(`SELECT name FROM pragma_table_info('msg_fts')`).all() as { name: string }[]).map((c) => c.name);
-      if (!cols.includes("gen")) {
-        this.db.exec(`DROP TABLE msg_fts`);
-        this.db.exec(`CREATE VIRTUAL TABLE msg_fts USING fts5(text, session_id UNINDEXED, seq UNINDEXED, gen UNINDEXED, ts UNINDEXED, kind UNINDEXED)`);
-        this.db.prepare(`INSERT OR REPLACE INTO fts_meta VALUES('wm',0)`).run();
-      }
+      // The fts store lives in a SIDE FILE (<db>-fts.db) attached as `fts` —
+      // independent WAL, no contention with event writes, and deleting the
+      // file self-heals (fresh tables → watermark 0 → full re-index).
+      const ftsFile = this.file.replace(/\.db$/i, "") + "-fts.db";
+      this.db.exec(`ATTACH DATABASE '${ftsFile.replace(/'/g, "''")}' AS fts`);
+      this.db.exec(`CREATE VIRTUAL TABLE IF NOT EXISTS fts.msg_fts USING fts5(text, session_id UNINDEXED, seq UNINDEXED, gen UNINDEXED, ts UNINDEXED, kind UNINDEXED)`);
+      this.db.exec(`CREATE TABLE IF NOT EXISTS fts.fts_meta(k TEXT PRIMARY KEY, v INTEGER)`);
+      // Legacy in-db copies from the pre-sidecar schema — dropped so the next
+      // vacuum reclaims them; re-index happens automatically from wm=0. The
+      // `main.` qualifier is load-bearing: unqualified names resolve against
+      // attached schemas too, which would drop the freshly-created fts tables.
+      this.db.exec(`DROP TABLE IF EXISTS main.msg_fts`);
+      this.db.exec(`DROP TABLE IF EXISTS main.fts_meta`);
       // Orphans from deleted sessions — one sweep per process lifetime.
-      this.db.exec(`DELETE FROM msg_fts WHERE session_id NOT IN (SELECT DISTINCT session_id FROM events)`);
+      this.db.exec(`DELETE FROM fts.msg_fts WHERE session_id NOT IN (SELECT DISTINCT session_id FROM events)`);
       this.ftsState = "ok";
     } catch {
       this.ftsState = "no";
@@ -790,14 +793,14 @@ export class SessionDb {
   indexSearchable(): number {
     if (!this.ensureFts()) return 0;
     this.flush();
-    const wm = Number((this.db.prepare("SELECT v FROM fts_meta WHERE k='wm'").get() as { v?: number } | undefined)?.v ?? 0);
+    const wm = Number((this.db.prepare("SELECT v FROM fts.fts_meta WHERE k='wm'").get() as { v?: number } | undefined)?.v ?? 0);
     const upper = Number((this.db.prepare("SELECT MAX(rowid) m FROM events").get() as { m: number | null }).m ?? 0);
     if (upper <= wm) return 0;
     this.db.exec("BEGIN");
     let n = 0;
     try {
       const r = this.db.prepare(
-        `INSERT INTO msg_fts(session_id,seq,gen,ts,kind,text)
+        `INSERT INTO fts.msg_fts(session_id,seq,gen,ts,kind,text)
          SELECT session_id, seq, gen, ts, kind,
            COALESCE(json_extract(data,'$.content.text'), json_extract(data,'$.notice'))
          FROM events
@@ -806,7 +809,7 @@ export class SessionDb {
            AND COALESCE(json_extract(data,'$.content.text'), json_extract(data,'$.notice')) IS NOT NULL`,
       ).run(wm, upper);
       n = Number(r.changes);
-      this.db.prepare("INSERT OR REPLACE INTO fts_meta VALUES('wm',?)").run(upper);
+      this.db.prepare("INSERT OR REPLACE INTO fts.fts_meta VALUES('wm',?)").run(upper);
       this.db.exec("COMMIT");
     } catch (e) {
       try { this.db.exec("ROLLBACK"); } catch {}
@@ -838,9 +841,9 @@ export class SessionDb {
       try {
         deleted += Number(this.db.prepare(`DELETE FROM events WHERE session_id=? AND rowid <= ?`).run(s.session_id, cut.rowid).changes);
         if (fts) {
-          this.db.prepare(`DELETE FROM msg_fts WHERE session_id=?`).run(s.session_id);
+          this.db.prepare(`DELETE FROM fts.msg_fts WHERE session_id=?`).run(s.session_id);
           this.db.prepare(
-            `INSERT INTO msg_fts(session_id,seq,gen,ts,kind,text)
+            `INSERT INTO fts.msg_fts(session_id,seq,gen,ts,kind,text)
              SELECT session_id, seq, gen, ts, kind,
                COALESCE(json_extract(data,'$.content.text'), json_extract(data,'$.notice'))
              FROM events
@@ -868,7 +871,7 @@ export class SessionDb {
     try { this.indexSearchable(); } catch { /* serve from the stale index */ }
     const rows = this.db.prepare(
       `SELECT session_id, seq, ts, kind, text, snippet(msg_fts,0,'«','»','…',14) AS snip
-       FROM msg_fts WHERE msg_fts MATCH ? ORDER BY rank LIMIT ?`,
+       FROM fts.msg_fts WHERE msg_fts MATCH ? ORDER BY rank LIMIT ?`,
     ).all(terms.join(" "), limit * 3) as { session_id: string; seq: number; ts: number; kind: string; text: string; snip: string }[];
     // Dedupe by (session,text): replays re-log the same message at a new seq,
     // which would surface as identical hits — keep the best-ranked copy.

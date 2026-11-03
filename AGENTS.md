@@ -216,12 +216,19 @@ per checkpoint tick (new dbs; existing needs one VACUUM — repair fix
 `vacuum-logs`). Per-session retention (default 500k events/session) via
 `retentionSweep` — boot sweep + daily re-sweep, pruning rows with same-
 transaction fts rebuild; diagnose page exposes `trim-logs` fix. Global
-message search: `msg_fts` FTS5 table indexes
-`user_message_chunk`/`agent_message_chunk`/`thought_chunk` text via a
-`fts_meta` rowid watermark — `searchMessages` tops the index up then
+message search: `msg_fts` FTS5 table lives in the SIDE FILE
+`<db>-fts.db` (ATTACHed as `fts` — independent WAL, delete the file to
+self-heal via full re-index from watermark 0). It indexes
+`user_message_chunk`/`agent_message_chunk`/`dw_notice` text via a
+`fts.fts_meta` rowid watermark — `searchMessages` tops the index up then
 serves bm25 hits (`GET /api/admin/search?q=` powers the SessionsPage
-"消息内容" hits section; boot fires one background bulk index at +6s).
-Replay re-logs dedupe by (session,text). `LanKeyBanner` warns once on
+"消息内容" hits section; boot fires one background bulk index at +6s —
+~250k msgs takes seconds and BLOCKS the loop while running).
+Unqualified DROP/DELETE name-resolve into attached schemas — always
+schema-qualify (`main.`/`fts.`). Replay re-logs dedupe by
+(session,text). The `.jsonl` write-through mirror can be disabled via
+`DEVIN_WEB_LOG_MIRROR=0` (db-healthy only; a dead db still writes the
+mirror as its persistence fallback). `LanKeyBanner` warns once on
 non-loopback access with no ADMIN_KEY.
 
 Timeline render path — a strict ref-stability chain, every link required:
