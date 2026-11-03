@@ -504,7 +504,7 @@ function SecretsPanel() {
     }).catch(() => null)
     setBusy(false)
     if (!r?.ok) {
-      setErr(r?.error === 'invalid_name' ? t('set.secretBadName') : r?.error === 'invalid_totp_seed' ? t('set.secretBadTotp') : t('common.failed'))
+      setErr(r?.error === 'invalid_name' ? t('set.secretBadName') : r?.error === 'invalid_totp_seed' ? t('set.secretBadTotp') : r?.error === 'reserved_name' ? t('set.secretReserved') : t('common.failed'))
       return
     }
     setName(''); setValue(''); setDesc(''); setTotp(false)

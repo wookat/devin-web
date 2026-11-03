@@ -163,8 +163,10 @@ devin-web 是承载它的工作台（workbench）。
 | FR-SEC-5 | agent terminal/create 的 env 合并会话绑定密钥（值覆盖 params.env）；TOTP 条目注入当前 6 位码（RFC 6238）而非种子；SSH 远端不注入（避免命令行泄漏） | `TerminalRunner.secretEnv` + `totpCode` |
 | FR-SEC-6 | CRUD：`GET/POST /api/admin/secrets`（含 `type`）、`POST /api/admin/secrets/delete`、`POST /api/admin/secrets/unbind`；`POST …/secret-response` 应答 request_secret 卡（存值+绑定+按 `secret_type` 记 TOTP+`send_secrets` 标记） | registry + sessioncontrol |
 | FR-SEC-7 | Settings → 资源 Secrets 面板：列表（name/desc/TOTP 徽标/绑定会话数）+ 新增（value write-only + TOTP 勾选）+ 编辑/轮换 + 展开解绑 + 删除 | SecretsPanel |
-| FR-SEC-8 | **回显脱敏**：会话绑定值在 terminal stdout/stderr 与 fs/read_text_file 通道统一替换为 `••••••`（跨 chunk 边界安全：块尾保留 maxLen-1 字节、先整缓冲脱敏再切分；<4 字符不脱敏防误伤）；`term.output`/sessionlog/timeline/WS/agent 读回全下游获益 | `makeStreamRedactor` + `redactFor` |
+| FR-SEC-8 | **回显脱敏**：会话绑定值在 terminal stdout/stderr 与 fs/read_text_file 通道统一替换为 `••••••`（跨 chunk 边界安全：块尾保留 maxLen-1 字节、先整缓冲脱敏再切分；<4 字符不脱敏防误伤；raw+base64 双形态遮蔽堵 `base64` 管道绕过）；`term.output`/sessionlog/timeline/WS/agent 读回全下游获益 | `makeStreamRedactor` + `maskForms` + `redactFor` |
 | FR-SEC-9 | request_secret/send_secrets 会话更新映射为 `secret_request`/`secrets_sent` timeline 项（requestId/name/secretType/note/save；应答标记翻转卡片、带 names 渲染用户侧行） | `dwtimeline.ts` |
+| FR-SEC-10 | 保留名防护：环境关键变量名（PATH/HOME/COMSPEC/NODE_OPTIONS/LD_*/DEVIN_WEB_*…）拒绝创建——secrets 合并末位胜出，否则覆盖子进程 PATH 类变量 | `upsertSecret` `reserved_name` |
+| FR-SEC-11 | 授权审计：`secrets-audit.jsonl` 记录 create/rotate/delete/bind/unbind（>512KiB 截半；不含值） | `audit()` |
 
 ### 3.7 云端 REST 面（FR-CLD）
 

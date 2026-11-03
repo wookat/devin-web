@@ -21,6 +21,10 @@ test("store: upsert/list redacts values; delete removes bindings", (t) => {
   assert.equal(secrets.upsertSecret(ctx, "MY_KEY", "s3cret-value-9", "test key").ok, true);
   assert.equal(secrets.upsertSecret(ctx, "BAD-NAME!", "x").ok, false);
   assert.equal(secrets.upsertSecret(ctx, "1LEADING", "x").ok, false);
+  // env-critical names are refused — a PATH secret would clobber the child's PATH
+  for (const n of ["PATH", "Path", "HOME", "COMSPEC", "NODE_OPTIONS", "LD_PRELOAD", "DEVIN_WEB_PORT"]) {
+    assert.deepEqual(secrets.upsertSecret(ctx, n, "x").ok, false, n);
+  }
   const list = secrets.listSecrets(ctx);
   assert.equal(list.length, 1);
   assert.equal(list[0].name, "MY_KEY");
@@ -93,4 +97,27 @@ test("stream redactor masks values across chunk boundaries", () => {
 
 test("scrubSecrets redacts for the fs read channel", () => {
   assert.equal(scrubSecrets("KEY=topsecret1\nOTHER=ok", ["topsecret1"]), `KEY=${SECRET_MASK}\nOTHER=ok`);
+});
+
+test("redactor also masks the base64 echo form", () => {
+  const secret = "sk-live-abcdef0123456789";
+  const b64 = Buffer.from(secret, "utf8").toString("base64");
+  const r = makeStreamRedactor([secret]);
+  const out = r.push(`plain:${secret} enc:${b64} done`) + r.flush();
+  assert.equal(out.includes(secret), false);
+  assert.equal(out.includes(b64), false);
+  assert.equal(out.split(SECRET_MASK).length - 1, 2);
+});
+
+test("audit journal records grant mutations without values", (t) => {
+  const ctx = tmpCtx(t);
+  secrets.upsertSecret(ctx, "AUD_KEY", "aud-val-1");
+  secrets.bindSessionSecrets(ctx, "s9", ["AUD_KEY"]);
+  secrets.unbindSessionSecret(ctx, "s9", "AUD_KEY");
+  secrets.deleteSecret(ctx, "AUD_KEY");
+  const lines = fs.readFileSync(path.join(ctx.store.dataDir, "secrets-audit.jsonl"), "utf8")
+    .trim().split("\n").map((l) => JSON.parse(l));
+  assert.deepEqual(lines.map((l) => l.op), ["create", "bind", "unbind", "delete"]);
+  assert.equal(lines[1].sessionId, "s9");
+  assert.equal(JSON.stringify(lines).includes("aud-val-1"), false); // no values in audit
 });

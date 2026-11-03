@@ -63,6 +63,19 @@ export const SECRET_MASK = "••••••";
  *  ordinary output (and a 3-char secret is worthless anyway). */
 export const MIN_REDACT_LEN = 4;
 
+/** Mask forms per value: the raw string PLUS its base64 — `echo $K | base64`
+ *  is the documented GitHub-Actions masking bypass; covering the common
+ *  transform here costs nothing. Longest-first so a value that happens to
+ *  be a substring of its own encoding can't corrupt the longer match. */
+function maskForms(values: string[]): string[] {
+  const out: string[] = [];
+  for (const v of values) {
+    if (v.length < MIN_REDACT_LEN) continue;
+    out.push(v, Buffer.from(v, "utf8").toString("base64"));
+  }
+  return out.sort((a, b) => b.length - a.length);
+}
+
 export function scrubSecrets(text: string, values: string[]): string {
   for (const v of values) {
     if (v.length >= MIN_REDACT_LEN) text = text.split(v).join(SECRET_MASK);
@@ -78,7 +91,7 @@ export function scrubSecrets(text: string, values: string[]): string {
  *  it joins the next buffer and is masked as a unit there. flush() emits
  *  the remainder on process settle. */
 export function makeStreamRedactor(values: string[]): { push: (chunk: string) => string; flush: () => string } {
-  const vals = values.filter((v) => v.length >= MIN_REDACT_LEN);
+  const vals = maskForms(values);
   if (!vals.length) return { push: (c) => c, flush: () => "" };
   const maxLen = Math.max(...vals.map((v) => v.length));
   let tail = "";
@@ -123,8 +136,7 @@ export class TerminalRunner {
    *  used by fs/read_text_file so a seeded .env the agent cats out can't
    *  smuggle the plaintext past the terminal scrubber. */
   redactFor(sessionId: string, text: string): string {
-    const vals = this.secretValues?.(sessionId) ?? [];
-    return scrubSecrets(text, vals);
+    return scrubSecrets(text, maskForms(this.secretValues?.(sessionId) ?? []));
   }
 
   async create(

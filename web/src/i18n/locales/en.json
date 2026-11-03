@@ -1389,6 +1389,7 @@
     "secretBoundHint": "Click to list bound sessions",
     "secretUnbind": "Unbind",
     "secretRotate": "Edit / rotate (same name overwrites)",
+    "secretReserved": "That name is a reserved env var (PATH, HOME, NODE_OPTIONS…)",
     "cloudAccount": "Cloud account",
     "cloudNoCreds": "No devin token/org configured — cloud reads unavailable",
     "cloudOrg": "Organization",

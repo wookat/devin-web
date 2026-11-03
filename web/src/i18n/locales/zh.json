@@ -1389,6 +1389,7 @@
     "secretBoundHint": "点击展开查看已授权会话",
     "secretUnbind": "解绑",
     "secretRotate": "编辑/轮换（同名覆盖）",
+    "secretReserved": "该名字是系统保留环境变量（如 PATH、HOME、NODE_OPTIONS）",
     "cloudAccount": "云端账户",
     "cloudNoCreds": "未配置 devin token/org——云端读取不可用",
     "cloudOrg": "组织",

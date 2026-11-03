@@ -270,6 +270,12 @@ session updates map to `secret_request`/`secrets_sent` timeline items;
 `POST …/secret-response` answers cards by upserting the secret (totp
 flag carried) + binding + a `send_secrets` marker that flips the card.
 Routes: `GET/POST /api/admin/secrets`, `…/delete`, `…/unbind`.
+Reserved-name denylist (PATH/HOME/NODE_OPTIONS/LD_*/DEVIN_WEB_*…) — a
+secret merging last would otherwise clobber child env; the mask set
+covers raw + base64 forms (the `|base64` echo bypass); grant mutations
+journal to `secrets-audit.jsonl` (no values). Masking hides values from
+the TRANSCRIPT only — a prompt-injected agent can still exfiltrate over
+the network; that's inherent to env secrets everywhere (same as GitHub).
 
 ## Test
 

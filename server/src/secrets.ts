@@ -39,6 +39,20 @@ interface SecretsFile {
 
 const NAME_RE = /^[A-Za-z_][A-Za-z0-9_]{0,127}$/;
 
+/** Reserved env names — a secret named PATH would clobber the child's PATH
+ *  (secrets merge last, over process.env AND params.env), and names like
+ *  NODE_OPTIONS/LD_PRELOAD would inject into runtime loaders. Same class of
+ *  guardrail as GitHub's GITHUB_* prefix ban. */
+const RESERVED = new Set([
+  "PATH", "Path", "PATHEXT", "COMSPEC", "SHELL", "HOME", "HOMEDRIVE", "HOMEPATH",
+  "USERPROFILE", "SystemRoot", "SystemDrive", "windir", "TEMP", "TMP",
+  "PSModulePath", "NODE_OPTIONS", "NODE_PATH", "LD_PRELOAD", "LD_LIBRARY_PATH",
+  "DYLD_INSERT_LIBRARIES", "DYLD_LIBRARY_PATH", "PYTHONPATH", "RUBYOPT",
+  "BASH_ENV", "ENV", "CDPATH", "IFS", "PS1", "PS2",
+]);
+const isReserved = (n: string) =>
+  RESERVED.has(n) || n.toUpperCase() === "PATH" || n.startsWith("DEVIN_WEB_") || n.startsWith("_DEVIN");
+
 function file(ctx: ApiContext): string {
   return path.join(ctx.store.dataDir, "secrets.json");
 }
@@ -56,6 +70,22 @@ function save(ctx: ApiContext, d: Required<SecretsFile>): void {
   const f = file(ctx);
   fs.writeFileSync(f, JSON.stringify(d, null, 2), { mode: 0o600 });
   try { fs.chmodSync(f, 0o600); } catch { /* best effort — win32 acl */ }
+}
+
+/** Access audit — every grant mutation leaves a line in
+ *  `<dataDir>/secrets-audit.jsonl` (Vault/GitHub-style access log; values
+ *  are never logged). Over 512 KiB the file is halved — audit is a bounded
+ *  journal, not an archive. */
+function audit(ctx: ApiContext, op: string, name: string, extra?: Record<string, unknown>): void {
+  try {
+    const f = path.join(ctx.store.dataDir, "secrets-audit.jsonl");
+    const line = JSON.stringify({ ts: new Date().toISOString(), op, name, ...extra }) + "\n";
+    fs.appendFileSync(f, line, { mode: 0o600 });
+    if (fs.statSync(f).size > 512 * 1024) {
+      const lines = fs.readFileSync(f, "utf8").split("\n");
+      fs.writeFileSync(f, lines.slice(Math.floor(lines.length / 2)).join("\n"), { mode: 0o600 });
+    }
+  } catch { /* audit must never break the mutation it records */ }
 }
 
 export function listSecrets(ctx: ApiContext): { name: string; description: string; createdAt: number; updatedAt: number; type?: "totp"; sessions: string[] }[] {
@@ -76,6 +106,7 @@ const B32 = /^[A-Za-z2-7]+=*$/;
 
 export function upsertSecret(ctx: ApiContext, name: string, value: string, description = "", type?: string): { ok: boolean; error?: string } {
   if (!NAME_RE.test(name)) return { ok: false, error: "invalid_name" };
+  if (isReserved(name)) return { ok: false, error: "reserved_name" };
   if (!value) return { ok: false, error: "empty_value" };
   if (type === "totp" && !B32.test(value.replace(/\s/g, ""))) return { ok: false, error: "invalid_totp_seed" };
   const d = load(ctx);
@@ -88,6 +119,7 @@ export function upsertSecret(ctx: ApiContext, name: string, value: string, descr
     ...(type === "totp" ? { type: "totp" as const } : {}),
   };
   save(ctx, d);
+  audit(ctx, prev ? "rotate" : "create", name);
   return { ok: true };
 }
 
@@ -104,6 +136,7 @@ export function deleteSecret(ctx: ApiContext, name: string): { ok: boolean; dele
     }
   }
   save(ctx, d);
+  audit(ctx, "delete", name, { sessions: deletedBound.length });
   return { ok: true, deletedBound };
 }
 
@@ -123,6 +156,7 @@ export function bindSessionSecrets(ctx: ApiContext, sessionId: string, names: st
   if (added.length) {
     d.sessions[sessionId] = [...cur];
     save(ctx, d);
+    for (const n of added) audit(ctx, "bind", n, { sessionId });
   }
   return added;
 }
@@ -136,6 +170,7 @@ export function unbindSessionSecret(ctx: ApiContext, sessionId: string, name: st
   d.sessions[sessionId] = cur.filter((n) => n !== name);
   if (!d.sessions[sessionId].length) delete d.sessions[sessionId];
   save(ctx, d);
+  audit(ctx, "unbind", name, { sessionId });
   return { ok: true, removed: true };
 }
 
