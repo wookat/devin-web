@@ -2181,7 +2181,7 @@ const groups = useMemo(() => groupItems(allItems, sessionWorking), [allItems, se
   async function revertPreview(umid: string) {
     const pv = await adminFetch<RevertPreview>(`/api/sessions/${encodeURIComponent(id)}/revert`, {
       method: 'POST', body: JSON.stringify({ userMessageId: umid, action: 'preview' }),
-    }).catch((e) => { setControlMsg(`${t('rv.failed')}: ${(e as Error).message}`); return null })
+    }).catch((e) => { setControlMsg(`${t('revert.failed')}: ${(e as Error).message}`); return null })
     if (!pv) return
     const dirty = (pv.fileActions?.length ?? 0) + (pv.irreversibleWarnings?.length ?? 0) + (pv.conflicts?.length ?? 0) > 0
     if (dirty) setRevertConfirm({ userMessageId: umid, preview: pv })
@@ -2198,7 +2198,7 @@ const groups = useMemo(() => groupItems(allItems, sessionWorking), [allItems, se
       if (r?.forkedSessionId && r.forkedSessionId !== id) nav(`/admin/${r.forkedSessionId}`)
       // In-place rewind: the history_rewound WS event triggers the resync.
     } catch (e) {
-      setControlMsg(`${t('rv.failed')}: ${(e as Error).message}`)
+      setControlMsg(`${t('revert.failed')}: ${(e as Error).message}`)
     } finally {
       setRevertBusy(false)
     }
@@ -2211,9 +2211,9 @@ const groups = useMemo(() => groupItems(allItems, sessionWorking), [allItems, se
         method: 'POST', body: JSON.stringify({ userMessageId: umid, action: 'fork' }),
       })
       setRevertConfirm(null)
-      if (r?.forkedSessionId) { setControlMsg(t('rv.forked')); nav(`/admin/${r.forkedSessionId}`) }
+      if (r?.forkedSessionId) { setControlMsg(t('revert.forked')); nav(`/admin/${r.forkedSessionId}`) }
     } catch (e) {
-      setControlMsg(`${t('rv.failed')}: ${(e as Error).message}`)
+      setControlMsg(`${t('revert.failed')}: ${(e as Error).message}`)
     } finally {
       setRevertBusy(false)
     }

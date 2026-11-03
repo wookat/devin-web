@@ -193,10 +193,14 @@ async function tick(ctx: ApiContext) {
       a.lastSession = sid ?? undefined;
       saveReg();
     } catch (e) {
-      console.error(`[automations] ${a.name}: ${e instanceof Error ? e.message : e}`);
+      const msg = e instanceof Error ? e.message : String(e);
+      console.error(`[automations] ${a.name}: ${msg}`);
       (a.runs ??= []).push({ at: now, sessionId: null });
       if (a.runs.length > 10) a.runs = a.runs.slice(-10);
       saveReg();
+      // Surface on the bell — a silent cron failure otherwise looks healthy.
+      const { notify } = await import("./notifcenter.js");
+      notify(ctx, { type: "notice", title: `自动化「${a.name}」触发失败`, body: msg.slice(0, 300) });
     } finally {
       firing.delete(a.id);
     }

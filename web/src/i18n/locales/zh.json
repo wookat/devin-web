@@ -1060,6 +1060,19 @@
     "bad": "粘贴 github.com PR 链接（owner/repo/pull/N）",
     "back": "评审"
   },
+  "revert": {
+    "title": "回退到此步骤",
+    "desc": "将会话回退到所选步骤，其后的消息会从线程中移除。",
+    "fileActions": "个文件变更将被恢复",
+    "warnings": "警告",
+    "conflicts": "冲突",
+    "cancel": "取消",
+    "fork": "从此处分叉",
+    "busy": "回退中…",
+    "execute": "执行回退",
+    "failed": "回退失败",
+    "forked": "已创建分叉会话"
+  },
   "perm": {
     "createAuto": "创建自动化",
     "name": "名称",
@@ -1409,6 +1422,8 @@
     "plgEmpty": "未安装插件",
     "plgSkills": "技能",
     "plgNoSkills": "此插件无技能",
+    "plans": "计划",
+    "plansEmpty": "暂无计划",
     "insAct": "每日事件量（30 天）",
     "insEvents": "事件",
     "insSessions": "会话",

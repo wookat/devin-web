@@ -76,12 +76,13 @@ export function sessionConfig(ctx: ApiContext, id: string): SessionConfig {
   const modelOpt = out.options.find((o) => o.id === "model" || /model/i.test(String(o.id ?? "")));
   if (modelOpt) {
     const cur = String(modelOpt.currentValue ?? "");
-    const name = modelOpt.options?.find((o) => o.value === cur)?.name ?? cur;
+    const leaves = flatModelLeaves(modelOpt.options);
+    const name = leaves.find((o) => o.value === cur)?.name ?? cur;
     out.model = {
       id: String(modelOpt.id ?? "model"),
       current: cur,
       currentName: name,
-      options: (modelOpt.options ?? []).map((o) => {
+      options: leaves.map((o) => {
         // Per-family data decoded from the local model catalog — ACP only
         // exposes global thought_level/speed groups; fast/ctx1m gate whether
         // the desktop-style flyout shows Speed / 1M Context sections.
@@ -136,12 +137,13 @@ export function agentLevelConfig(base: { configOptions?: ConfigOption[]; modes?:
   const modelOpt = out.options.find((o) => o.id === "model" || /model/i.test(String(o.id ?? "")));
   if (modelOpt) {
     const cur = String(modelOpt.currentValue ?? "");
-    const name = modelOpt.options?.find((o) => o.value === cur)?.name ?? cur;
+    const leaves = flatModelLeaves(modelOpt.options);
+    const name = leaves.find((o) => o.value === cur)?.name ?? cur;
     out.model = {
       id: String(modelOpt.id ?? "model"),
       current: cur,
       currentName: name,
-      options: (modelOpt.options ?? []).map((o) => {
+      options: leaves.map((o) => {
         const info = catalogInfo(o.value);
         return {
           value: o.value,
@@ -155,6 +157,24 @@ export function agentLevelConfig(base: { configOptions?: ConfigOption[]; modes?:
         };
       }),
     };
+  }
+  return out;
+}
+
+/** devin's model configOptions can arrive GROUPED — options[] entries with
+ *  their own nested options[] carrying the real values ("SWE-1.6 Slow"
+ *  group → [{value:"swe-1-6-slow"}]). Flatten one level so downstream
+ *  pickers/version mapping always see leaf {value,name} entries; a leaf
+ *  missing a name inherits its group's. */
+type ModelLeaf = { value: string; name?: string };
+function flatModelLeaves(opts: { value?: string; name?: string; options?: ModelLeaf[] }[] | undefined): ModelLeaf[] {
+  const out: ModelLeaf[] = [];
+  for (const o of opts ?? []) {
+    if (Array.isArray(o.options) && o.options.length) {
+      for (const leaf of o.options) out.push({ value: String(leaf.value ?? ""), name: leaf.name ?? o.name });
+    } else if (o.value != null) {
+      out.push({ value: String(o.value), name: o.name });
+    }
   }
   return out;
 }

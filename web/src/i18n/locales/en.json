@@ -1060,6 +1060,19 @@
     "bad": "Paste a github.com PR link (owner/repo/pull/N)",
     "back": "Review"
   },
+  "revert": {
+    "title": "Revert to this step",
+    "desc": "Rewind the session to the selected step. Later messages are removed from the thread.",
+    "fileActions": "file change(s) will be restored",
+    "warnings": "Warnings",
+    "conflicts": "Conflicts",
+    "cancel": "Cancel",
+    "fork": "Fork here",
+    "busy": "Reverting…",
+    "execute": "Revert",
+    "failed": "Revert failed",
+    "forked": "Forked session created"
+  },
   "perm": {
     "createAuto": "Create automation",
     "name": "Name",
@@ -1409,6 +1422,8 @@
     "plgEmpty": "No plugins installed",
     "plgSkills": "skills",
     "plgNoSkills": "No skills in this plugin",
+    "plans": "Plans",
+    "plansEmpty": "No plans yet",
     "insAct": "Events per day (30d)",
     "insEvents": "events",
     "insSessions": "sessions",
