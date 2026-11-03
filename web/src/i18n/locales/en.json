@@ -1244,6 +1244,16 @@
       "eyes": "Eyes"
     }
   },
+  "notice": {
+    "account": {
+      "rotate": "Switched to account {{name}} — resending",
+      "limited": "All accounts are rate-limited"
+    },
+    "secrets": {
+      "unknown": "Unknown secrets: {{names}} — create them in Settings → Resources first"
+    },
+    "error": "Error [{{stage}}]: {{msg}}"
+  },
   "sp": {
     "st": {
       "working": "Active",
@@ -1310,6 +1320,7 @@
     "propUser": "User",
     "propFolder": "Folder",
     "exportCsv": "Export to CSV",
+    "exportMd": "Export Markdown",
     "loadKids": "Load children",
     "deadBadge": "Expired",
     "noNotif": "No notifications",

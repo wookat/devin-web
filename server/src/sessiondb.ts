@@ -790,12 +790,16 @@ export class SessionDb {
    *  `upper` snapshots MAX(rowid) BEFORE the batch, so rows landing mid-pass
    *  are picked up next call. Called by searchMessages (up-to-date = cheap
    *  no-op range scan) and once at boot for the bulk pass. */
-  indexSearchable(): number {
-    if (!this.ensureFts()) return 0;
+  indexSearchable(limitRows = Number.POSITIVE_INFINITY): { indexed: number; remaining: number } {
+    const done = { indexed: 0, remaining: 0 };
+    if (!this.ensureFts()) return done;
     this.flush();
     const wm = Number((this.db.prepare("SELECT v FROM fts.fts_meta WHERE k='wm'").get() as { v?: number } | undefined)?.v ?? 0);
     const upper = Number((this.db.prepare("SELECT MAX(rowid) m FROM events").get() as { m: number | null }).m ?? 0);
-    if (upper <= wm) return 0;
+    // Chunked cap — the boot pump passes a rowid budget per call so the bulk
+    // pass yields the event loop between slices instead of freezing it.
+    const end = Math.min(upper, wm + limitRows);
+    if (end <= wm) return done;
     this.db.exec("BEGIN");
     let n = 0;
     try {
@@ -807,15 +811,15 @@ export class SessionDb {
          WHERE rowid > ? AND rowid <= ?
            AND kind IN ('user_message_chunk','agent_message_chunk','dw_notice')
            AND COALESCE(json_extract(data,'$.content.text'), json_extract(data,'$.notice')) IS NOT NULL`,
-      ).run(wm, upper);
+      ).run(wm, end);
       n = Number(r.changes);
-      this.db.prepare("INSERT OR REPLACE INTO fts.fts_meta VALUES('wm',?)").run(upper);
+      this.db.prepare("INSERT OR REPLACE INTO fts.fts_meta VALUES('wm',?)").run(end);
       this.db.exec("COMMIT");
     } catch (e) {
       try { this.db.exec("ROLLBACK"); } catch {}
       throw e;
     }
-    return n;
+    return { indexed: n, remaining: Math.max(0, upper - end) };
   }
 
   /** Per-session retention: keep the newest `keepPerSession` events (by

@@ -560,6 +560,19 @@ export async function handleSessionTimeline(ctx: ApiContext, req: IncomingMessag
     return true;
   }
 
+  // GET .../export — full transcript as a Markdown download. Reads the
+  // persisted log (buildTimeline) without kicking off a session/load —
+  // export must stay free like peek mode.
+  if (sub === "export" && m === "GET") {
+    const { items } = buildTimeline(ctx, id);
+    res.writeHead(200, {
+      "content-type": "text/markdown; charset=utf-8",
+      "content-disposition": `attachment; filename="${encodeURIComponent(id)}.md"`,
+    });
+    res.end(sessionMarkdown(ctx, id, items));
+    return true;
+  }
+
   if (sub === "changes" && m === "GET") {
     // Memory-only panel data — replay is already driven by /timeline.
     const items = buildTimeline(ctx, id).items;
@@ -829,4 +842,41 @@ export async function handleSessionTimeline(ctx: ApiContext, req: IncomingMessag
   }
 
   return false;
+}
+
+/** Markdown transcript for .../export — one section per timeline item.
+ *  Message/thought rows get their own headings; tool-ish rows collapse to
+ *  title + output code block; statuses become blockquotes. Output bodies
+ *  cap at 4k chars so a 100MB build log doesn't balloon the file. */
+function sessionMarkdown(ctx: ApiContext, id: string, items: ReturnType<typeof buildTimeline>["items"]): string {
+  const day = (iso: string) => iso.slice(0, 16).replace("T", " ");
+  const cap = (s: string | undefined, n: number) => {
+    if (!s) return "";
+    return s.length > n ? `${s.slice(0, n)}\n… (${(s.length - n).toLocaleString()} chars truncated)` : s;
+  };
+  const out: string[] = [`# ${id}`, ``];
+  const cwd = ctx.sessionCwd.get(id);
+  if (cwd) out.push(`> ${cwd}`, ``);
+  for (const it of items) {
+    if (it.kind === "message") {
+      out.push(`## ${day(it.ts)} · ${it.role === "user" ? "User" : "Devin"}`, ``, cap(it.body, 20_000), ``);
+    } else if (it.kind === "thought") {
+      const b = cap(it.body, 4_000);
+      if (b) out.push(`## ${day(it.ts)} · Thought`, ``, `_${b}_`, ``);
+    } else if (it.kind === "status") {
+      out.push(`> ${day(it.ts)} — ${it.title ?? ""}`, ``);
+    } else if (it.kind === "todo") {
+      const rows = (it.todos ?? []).map((x) => `- [${x.status === "completed" ? "x" : " "}] ${x.content ?? x.activeForm ?? ""}`);
+      if (rows.length) out.push(`## ${day(it.ts)} · Plan`, ``, ...rows, ``);
+    } else {
+      const head = it.title || it.kind;
+      const body = cap(it.body, 2_000);
+      const output = cap(it.output, 4_000);
+      if (!head && !body && !output) continue;
+      out.push(`### ${day(it.ts)} · ${head}`, ``);
+      if (body) out.push(body, ``);
+      if (output) out.push("```", output, "```", ``);
+    }
+  }
+  return out.join("\n");
 }

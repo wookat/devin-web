@@ -203,6 +203,9 @@ export interface TimelineItem {
   /** dw_notice machine tag: 'conflict' = session open in another process;
    * 'error:<stage>' otherwise. Localizes the card into actionable guidance. */
   notice_kind?: string
+  /** dw_notice structured params — the client renders `notice.<kind>` i18n
+   * text when a translation exists, else falls back to the raw title. */
+  notice_params?: Record<string, unknown>
   subagent?: { finished: boolean; failed: boolean; actions?: { label: string; ts: string }[]; truncated?: boolean; agentId?: string; title?: string; task?: string; profile?: string; model?: string; isBackground?: boolean; depth?: number; summary?: string }
   /** Official scripted_tools_group children (tool rows emitted inside the script). */
   nested?: { label: string; ts: string }[]
@@ -256,8 +259,12 @@ export function BrowserPreviewChip({ item }: { item: TimelineItem }) {
 
 /** Official prominent callout (`ReportBlockerCard` hard/soft-blocked banner): variant-tinted card with title + headline. */
 export function CalloutCard({ item, timestamp }: { item: TimelineItem; timestamp?: string }) {
-  const { t } = useTranslation()
+  const { t, i18n } = useTranslation()
   const conflict = item.notice_kind === 'conflict'
+  // Locale-rendered notice: server-tagged kinds map to notice.* keys; the
+  // raw title stays as fallback for untagged/legacy rows.
+  const noticeKey = item.notice_kind && i18n.exists(`notice.${item.notice_kind}`) ? `notice.${item.notice_kind}` : null
+  const title = noticeKey ? t(noticeKey, item.notice_params as Record<string, string> | undefined) : item.title
   const v = item.callout || 'warning'
   const tone = v === 'error'
     ? 'border-red-500/30 bg-red-500/[0.06] text-red-700 dark:text-red-300'
@@ -271,7 +278,7 @@ export function CalloutCard({ item, timestamp }: { item: TimelineItem; timestamp
         <Icon size={16} className="mt-0.5 shrink-0" />
         <div className="min-w-0 flex-1">
           <div className="flex items-start gap-2">
-            <span className="min-w-0 flex-1 text-[13px] font-medium leading-[18px]">{conflict ? t('tl.conflictTitle') : item.title}</span>
+            <span className="min-w-0 flex-1 text-[13px] font-medium leading-[18px]">{conflict ? t('tl.conflictTitle') : title}</span>
             {timestamp && <span className="shrink-0 text-[12px] leading-[18px] text-muted-foreground">{timestamp}</span>}
           </div>
           {conflict && <p className="mt-0.5 break-words text-[13px] leading-[18px] text-foreground">{t('tl.conflictBody')}</p>}

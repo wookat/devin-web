@@ -106,7 +106,8 @@ devin-web 是承载它的工作台（workbench）。
 | FR-SES-2 | 新会话：cwd 选择、SSH 目标、草稿持久化 | `POST /api/admin/sessions/new` |
 | FR-SES-3 | 会话操作：rename/end/archive/folder/tags/share-link(本地)/share(云端)/restart(kill acp+replay=本地 reboot)/fork(transcript-seed handoff)；子代理 subagentControl(cancel/foreground/background) | `sessioncontrol.ts` + `sessionlifecycle.ts`（rename/share 经 acp 直通；本地 acp 无原生 fork） |
 | FR-SES-4 | 会话恢复：冷会话经 `session/load`；恢复证据（open-turns + log 尾）给出 `continue`/`resend` 提示 | `sessionload.ts` + interrupted banner |
-| FR-SES-5 | 全局消息搜索：FTS5 索引 user/agent 消息（sidecar 文件 `<db>-fts.db`，ATTACH 挂载，删文件自愈重建），`GET /api/admin/search?q=` 返回会话+高亮片段 | `sessiondb.ts` `fts.msg_fts` + `searchMessages` + SessionsPage 命中区 |
+| FR-SES-5 | 全局消息搜索：FTS5 索引 user/agent 消息（sidecar 文件 `<db>-fts.db`，ATTACH 挂载，删文件自愈重建），`GET /api/admin/search?q=` 返回会话+高亮片段；boot 分片索引（20k rowid/片，片间 yield） | `sessiondb.ts` `fts.msg_fts` + `searchMessages` + SessionsPage 命中区 |
+| FR-SES-5b | 会话导出：`GET /api/admin/session/:id/export` 流式输出 Markdown（消息/思考/工具/plan/notice 分区，输出截断 4k），不触发 session/load | `sessiontimeline.ts` + SessionsPage 行悬停下载钮 |
 | FR-SES-6 | sessionlog 保留策略：per-session 事件上限（`DEVIN_WEB_SESSIONLOG_KEEP`，默认 500k），每日扫描 prune 超限事件，FTS 同事务重建；诊断页暴露 `trim-logs` 修复 | `sessiondb.ts` `retentionSweep` + `diagnose.ts` + DoctorDialog |
 | FR-SES-7 | 文件夹/mirror 分组与索引路径 | `mirror/*` 路由族 |
 

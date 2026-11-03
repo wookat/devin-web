@@ -222,8 +222,11 @@ self-heal via full re-index from watermark 0). It indexes
 `user_message_chunk`/`agent_message_chunk`/`dw_notice` text via a
 `fts.fts_meta` rowid watermark — `searchMessages` tops the index up then
 serves bm25 hits (`GET /api/admin/search?q=` powers the SessionsPage
-"消息内容" hits section; boot fires one background bulk index at +6s —
-~250k msgs takes seconds and BLOCKS the loop while running).
+"消息内容" hits section; boot pumps 20k-rowid slices with yields at +6s).
+dw_notice rows carry machine `notice_kind`/`notice_params` (account.rotate /
+account.limited / secrets.unknown / error) — the client renders
+`notice.*` i18n keys when present, else the raw Chinese fallback text.
+`GET /api/admin/session/:id/export` streams a Markdown transcript.
 Unqualified DROP/DELETE name-resolve into attached schemas — always
 schema-qualify (`main.`/`fts.`). Replay re-logs dedupe by
 (session,text). The `.jsonl` write-through mirror can be disabled via

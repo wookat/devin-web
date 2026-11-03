@@ -362,6 +362,8 @@ export async function promptWithRetry<T>(
       ctx.sessionLog.append(id, {
         sessionUpdate: "dw_notice",
         notice: next ? `已切换到账号 ${next}，重新发送` : "全部账号限速中",
+        notice_kind: next ? "account.rotate" : "account.limited",
+        notice_params: next ? { name: next } : {},
       });
       noteUpdate(ctx, id);
       if (!next) throw Object.assign(err instanceof Error ? err : new Error(msg), {
@@ -455,6 +457,8 @@ export function dispatchPrompt(ctx: ApiContext, id: string, text: string, attach
           ctx.sessionLog.append(id, {
             sessionUpdate: "dw_notice",
             notice: `未知名钥：${unknown.map((n) => `@secrets:${n}`).join("、")} — 请在 设置 → 资源 中创建后再引用`,
+            notice_kind: "secrets.unknown",
+            notice_params: { names: unknown.map((n) => `@secrets:${n}`).join(", ") },
           });
         }
       }
@@ -504,6 +508,8 @@ export function dispatchPrompt(ctx: ApiContext, id: string, text: string, attach
       ctx.sessionLog.append(id, {
         sessionUpdate: "dw_notice",
         notice: `错误[${stage}]: ${msg.slice(0, 200)}`,
+        notice_kind: "error",
+        notice_params: { stage, msg: msg.slice(0, 200) },
       });
       noteUpdate(ctx, id);
     })

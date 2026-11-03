@@ -680,8 +680,18 @@ httpServer.listen(PORT, HOST, async () => {
         const r = ctx.sessionLog.retentionSweep(sessionlogKeep);
         if (r.deleted) console.error(`[sessionlog] retention: pruned ${r.deleted} events across ${r.sessions} session(s)`);
       }
-      const n = ctx.sessionLog.indexSearchable();
-      if (n) console.error(`[search] indexed ${n} messages`);
+      // Chunked pump — 20k rowids per slice with a yield between slices so a
+      // quarter-million-row bulk index doesn't freeze the event loop.
+      let total = 0;
+      const pump = () => {
+        try {
+          const r = ctx.sessionLog.indexSearchable(20_000);
+          total += r.indexed;
+          if (r.remaining > 0) setTimeout(pump, 15);
+          else if (total) console.error(`[search] indexed ${total} messages`);
+        } catch (e) { console.error("[search] index pump failed:", e); }
+      };
+      pump();
     } catch (e) { console.error("[sessionlog] boot sweep failed:", e); }
   };
   setTimeout(sweepLogs, 6000);

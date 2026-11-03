@@ -659,8 +659,9 @@ export class SessionLog {
   /** Global FTS across sessions — [] when the db is in degraded mode.
    *  indexSearchable() runs the bulk pass once at boot; searchMessages
    *  incrementally indexes before every query. */
-  indexSearchable(): number {
-    try { return this.db?.indexSearchable() ?? 0; } catch { return 0; }
+  indexSearchable(limitRows?: number): { indexed: number; remaining: number } {
+    try { return this.db?.indexSearchable(limitRows) ?? { indexed: 0, remaining: 0 }; }
+    catch { return { indexed: 0, remaining: 0 }; }
   }
   searchMessages(q: string, limit = 40) {
     return this.db?.searchMessages(q, limit) ?? [];

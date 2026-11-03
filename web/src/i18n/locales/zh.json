@@ -1244,6 +1244,16 @@
       "eyes": "围观"
     }
   },
+  "notice": {
+    "account": {
+      "rotate": "已切换到账号 {{name}}，重新发送",
+      "limited": "全部账号限速中"
+    },
+    "secrets": {
+      "unknown": "未知名钥：{{names}} — 请在 设置 → 资源 中创建后再引用"
+    },
+    "error": "错误[{{stage}}]: {{msg}}"
+  },
   "sp": {
     "st": {
       "working": "进行中",
@@ -1310,6 +1320,7 @@
     "propUser": "用户",
     "propFolder": "文件夹",
     "exportCsv": "导出 CSV",
+    "exportMd": "导出 Markdown",
     "loadKids": "加载子会话",
     "deadBadge": "已失效",
     "noNotif": "暂无通知",

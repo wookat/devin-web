@@ -55,7 +55,8 @@ const SNIFF_SETTLE_DELAY_MS = 30_000;
 function settleRecoveredTurn(ctx: ApiContext, id: string, ok = true, errMsg?: string) {
   ctx.sessionLog.append(id, ok
     ? { sessionUpdate: "dw_turn_end" }
-    : { sessionUpdate: "dw_notice", notice: `错误[prompt]: ${(errMsg ?? "prompt request failed").slice(0, 200)}` });
+    : { sessionUpdate: "dw_notice", notice: `错误[prompt]: ${(errMsg ?? "prompt request failed").slice(0, 200)}`,
+        notice_kind: "error", notice_params: { stage: "prompt", msg: (errMsg ?? "prompt request failed").slice(0, 200) } });
   if (openTurns.delete(id)) openTurnsSave(ctx);
   persistTail(ctx, id);
   noteUpdate(ctx, id);

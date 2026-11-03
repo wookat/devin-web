@@ -79,9 +79,12 @@ interface DwItem {
   /** send_secrets: answered request ids (flips cards) + names when the
    *  answer also stored a reusable secret (renders a user-side row). */
   secretsSent?: { requestIds: string[]; names?: string[] };
-  /** Machine tag on dw_notice rows: "conflict" (session open elsewhere) or
-   * "error:<stage>" — lets the client localize/actionable-render it. */
+  /** Machine tag on dw_notice rows: "conflict" (session open elsewhere),
+   *  account.rotate / account.limited / secrets.unknown / error, or
+   *  "error:<stage>" on legacy rows — lets the client localize/actionable-render it. */
   notice_kind?: string;
+  /** Structured params for locale-rendered notice text (i18n notice.* keys). */
+  notice_params?: Record<string, unknown>;
   suffix?: string;
   worklog?: "output" | "input";
   raw_type: string;
@@ -840,10 +843,14 @@ function tlPush(st: TlState, e: { ts: number; seq?: number; update: Record<strin
     // process" = the session is owned by another acp/desktop instance —
     // the fix lives outside this UI (close it there), hence a dedicated kind.
     const errStage = /^错误\[(\w+)\]:/.exec(notice)?.[1];
-    const noticeKind = /already open in another process/i.test(notice)
+    // Stored machine tag wins — new notices carry notice_kind/notice_params
+    // written at append time; the regex fallback classifies legacy rows.
+    const noticeKind = typeof u.notice_kind === "string" ? u.notice_kind
+      : /already open in another process/i.test(notice)
       ? "conflict"
       : errStage ? `error:${errStage}` : undefined;
-    push({ id, ts: iso, kind: "status", title: notice, callout: errStage ? "error" : "info", notice_kind: noticeKind, raw_type: "status_update" });
+    push({ id, ts: iso, kind: "status", title: notice, callout: errStage ? "error" : "info",
+      notice_kind: noticeKind, notice_params: u.notice_params as Record<string, unknown> | undefined, raw_type: "status_update" });
     return;
   }
   // mode/config churn is composer state, not transcript rows

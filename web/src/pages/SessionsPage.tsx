@@ -310,6 +310,9 @@ export default function SessionsPage() {
               <button onClick={(e) => { e.stopPropagation(); archRow(s) }} title={s.status_enum === 'archived' ? t('sp.unarchive') : t('sp.archive')} aria-label={s.status_enum === 'archived' ? t('sp.unarchive') : t('sp.archive')} className={cn('flex size-7 cursor-pointer items-center justify-center rounded-[6px] text-muted-foreground hover:bg-tint-secondary hover:text-foreground', FOCUS_RING)}>
                 {s.status_enum === 'archived' ? <OArchive size={14} /> : <OArchive size={14} />}
               </button>
+              <a href={`/api/admin/session/${s.devin_id}/export`} download onClick={(e) => e.stopPropagation()} title={t('sp.exportMd')} aria-label={t('sp.exportMd')} className={cn('flex size-7 cursor-pointer items-center justify-center rounded-[6px] text-muted-foreground hover:bg-tint-secondary hover:text-foreground', FOCUS_RING)}>
+                <Download size={14} />
+              </a>
             </span>
             {showFolder && s.folder && <span className="flex items-center gap-1 text-[13px] leading-[18px] text-muted-foreground"><Tag size={12} />{s.folder}</span>}
             {showCreated && <span className="text-[13px] leading-[18px] text-muted-foreground">{fmtDay(s.created_at)}</span>}
