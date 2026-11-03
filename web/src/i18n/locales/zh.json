@@ -1380,6 +1380,8 @@
     "cloudInvoices": "账单",
     "cloudLatest": "最新",
     "cloudNotifGroups": "通知组",
+    "cloudSessionTags": "会话标签",
+    "cloudSlashCommands": "斜杠命令",
     "cloudAutomationEvents": "自动化事件类型",
     "cloudFlags": "已开启开关",
     "sysRes": "系统资源",

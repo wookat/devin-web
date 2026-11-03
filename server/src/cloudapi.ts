@@ -36,6 +36,12 @@ export const CLOUD_READ_PATHS = new Set([
   "account/commit-email", "account/pr-open-as", "account/devin-pr-merge",
   "users/notification-preferences", "automations/schemas",
 ]);
+/** Prefix-allowed read paths (dynamic segments — org id, devin_id, query). */
+export const CLOUD_READ_PREFIXES = ["knowledge-suggestions/", "knowledge/"];
+export function cloudReadAllowed(path: string): boolean {
+  const clean = path.replace(/^\/+/, "");
+  return CLOUD_READ_PATHS.has(clean) || CLOUD_READ_PREFIXES.some((pre) => clean.startsWith(pre));
+}
 export function cloudOrgPath(tail: string): string | null {
   const creds = cloudCreds(); if (!creds) return null;
   const ok = new Set(["", "settings", "members", "session-tags", "slash-commands", "managed-plugins", "account-managed-plugins"]);

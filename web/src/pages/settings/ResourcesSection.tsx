@@ -389,17 +389,21 @@ function PlansPanel() {
 /* Cloud account — app.devin.ai/api/* reads (auth1 token + x-cog-org-id):
  * org/members/settings/billing/notification prefs. What only the cloud can
  * answer; each sub-read degrades independently. */
+interface CloudMember {
+  user_id?: string; name?: string; email?: string; preferred_name?: string
+  roles?: { id?: string; label?: string }[]; seat_type?: string
+}
 interface CloudAccount {
   ok?: boolean; error?: string
-  org?: { org_id?: string; display_name?: string } | { error?: string }
-  members?: { name?: string; email?: string; role?: string }[] | { error?: string }
-  settings?: Record<string, unknown> | { error?: string }
-  subscription?: { slug?: string; status?: string; planId?: string } | { error?: string }
-  invoices?: { invoices?: { id?: string; status?: string; amount?: number; date?: number }[] } | { error?: string }
-  notificationPrefs?: { groups?: { group?: string; name?: string }[] } | { error?: string }
-  sessionTags?: { tags?: unknown[]; default_tag?: unknown } | { error?: string }
-  slashCommands?: { commands?: unknown[] } | { error?: string }
-  automationSchemas?: Record<string, Record<string, unknown>> | { error?: string }
+  org?: { org_id?: string; display_name?: string } | { error: string }
+  members?: CloudMember[] | { error: string }
+  settings?: Record<string, unknown> | { error: string }
+  subscription?: { slug?: string; status?: string; planId?: string } | { error: string }
+  invoices?: { invoices?: { id?: string; status?: string; amount?: number; date?: number }[] } | { error: string }
+  notificationPrefs?: { groups?: { group?: string; name?: string }[] } | { error: string }
+  sessionTags?: { tags?: unknown[]; default_tag?: unknown } | { error: string }
+  slashCommands?: { commands?: { name?: string }[] } | { error: string }
+  automationSchemas?: Record<string, Record<string, { event_type?: string }>> | { error: string }
 }
 function CloudPanel() {
   const { t } = useTranslation()
@@ -416,7 +420,15 @@ function CloudPanel() {
   const inv = d.invoices && !('error' in d.invoices) ? (d.invoices.invoices ?? []) : []
   const groups = d.notificationPrefs && !('error' in d.notificationPrefs) ? (d.notificationPrefs.groups ?? []) : []
   const schemas = d.automationSchemas && !('error' in d.automationSchemas) ? d.automationSchemas : null
-  const schemaEvents = schemas ? Object.values(schemas).flatMap((src) => Object.values(src ?? {}).map((s) => (s as { event_type?: string }).event_type).filter(Boolean)) : []
+  const schemaBySrc = schemas
+    ? Object.entries(schemas).map(([src, evts]) => ({
+        src,
+        events: Object.values(evts ?? {}).map((s) => s.event_type).filter(Boolean) as string[],
+      }))
+    : []
+  const schemaEventCount = schemaBySrc.reduce((n, s) => n + s.events.length, 0)
+  const tagCount = d.sessionTags && !('error' in d.sessionTags) ? (d.sessionTags.tags?.length ?? 0) : null
+  const cmdCount = d.slashCommands && !('error' in d.slashCommands) ? (d.slashCommands.commands?.length ?? 0) : null
   const flags = settings ? Object.entries(settings).filter(([, v]) => typeof v === 'boolean') : []
   return (
     <div className="px-[6px] py-[6px]">
@@ -430,16 +442,32 @@ function CloudPanel() {
         } />}
         {inv.length > 0 && <Kv k={t('set.cloudInvoices')} v={`${inv.length} · ${t('set.cloudLatest')}: ${inv[0].status ?? '?'} ${typeof inv[0].amount === 'number' ? `$${(inv[0].amount / 100).toFixed(2)}` : ''}`} />}
         {groups.length > 0 && <Kv k={t('set.cloudNotifGroups')} v={groups.length} />}
-        {schemaEvents.length > 0 && <Kv k={t('set.cloudAutomationEvents')} v={schemaEvents.length} />}
+        {tagCount !== null && <Kv k={t('set.cloudSessionTags')} v={tagCount} />}
+        {cmdCount !== null && <Kv k={t('set.cloudSlashCommands')} v={cmdCount} />}
+        {schemaEventCount > 0 && <Kv k={t('set.cloudAutomationEvents')} v={schemaEventCount} />}
         {!!flags.length && <Kv k={t('set.cloudFlags')} v={flags.filter(([, v]) => v).map(([k]) => k).join(', ') || '—'} />}
       </div>
+      {schemaBySrc.length > 0 && (
+        <div className="mt-[4px] border-t border-border-secondary pt-[4px]">
+          {schemaBySrc.map(({ src, events }) => (
+            <div key={src} className="px-[12px] py-[5px]" title={events.join(', ')}>
+              <div className="flex items-center gap-2">
+                <span className="min-w-0 flex-1 truncate text-13">{src}</span>
+                <span className="shrink-0 rounded-[5px] border border-border px-1 py-px text-10 text-muted-foreground">{events.length}</span>
+              </div>
+              <div className="mt-0.5 text-11 text-muted-foreground truncate">{events.map((e) => e.split(':').pop()).join(', ')}</div>
+            </div>
+          ))}
+        </div>
+      )}
       {members.length > 0 && (
         <div className="mt-[4px] border-t border-border-secondary pt-[4px]">
           {members.map((m, i) => (
-            <div key={i} className="flex items-center gap-2 px-[12px] py-[5px] text-13">
-              <span className="min-w-0 flex-1 truncate">{m.name || m.email}</span>
+            <div key={m.user_id ?? i} className="flex items-center gap-2 px-[12px] py-[5px] text-13">
+              <span className="min-w-0 flex-1 truncate">{m.preferred_name || m.name || m.email}</span>
               {m.email && <span className="shrink-0 truncate text-11 text-muted-foreground">{m.email}</span>}
-              {m.role && <span className="shrink-0 rounded-[5px] border border-border px-1 py-px text-10 text-muted-foreground">{m.role}</span>}
+              {m.seat_type && <span className="shrink-0 text-11 text-muted-foreground">{m.seat_type}</span>}
+              {m.roles?.[0]?.label && <span className="shrink-0 rounded-[5px] border border-border px-1 py-px text-10 text-muted-foreground">{m.roles[0].label}</span>}
             </div>
           ))}
         </div>

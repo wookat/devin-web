@@ -1380,6 +1380,8 @@
     "cloudInvoices": "Invoices",
     "cloudLatest": "latest",
     "cloudNotifGroups": "Notification groups",
+    "cloudSessionTags": "Session tags",
+    "cloudSlashCommands": "Slash commands",
     "cloudAutomationEvents": "Automation event types",
     "cloudFlags": "Enabled flags",
     "sysRes": "System resources",

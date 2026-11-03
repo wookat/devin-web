@@ -602,9 +602,9 @@ export async function handleRegistry(ctx: ApiContext, req: IncomingMessage, res:
   // GET /api/admin/cloud/proxy?path= — whitelisted single-read passthrough
   // (same creds); keeps future one-off reads route-free.
   if (p === "/api/admin/cloud/proxy" && m === "GET") {
-    const { cloudGet, cloudOrgPath, CLOUD_READ_PATHS } = await import("../../cloudapi.js");
+    const { cloudGet, cloudOrgPath, cloudReadAllowed } = await import("../../cloudapi.js");
     const want = url.searchParams.get("path") ?? "";
-    const path = CLOUD_READ_PATHS.has(want) ? want : want.startsWith("org:") ? cloudOrgPath(want.slice(4)) : null;
+    const path = cloudReadAllowed(want) ? want : want.startsWith("org:") ? cloudOrgPath(want.slice(4)) : null;
     if (!path) { json(res, 400, { error: "path not allowed" }); return true; }
     const r = await cloudGet(path);
     json(res, r.status === 200 ? 200 : 502, { status: r.status, body: r.body });

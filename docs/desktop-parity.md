@@ -202,4 +202,6 @@ Oncall/Wiki 属云端 REST，不做本地等价物。
 - **路由**：`GET /api/admin/cloud/account`（9 读端点聚合：organizations/{org} + settings + members + session-tags + slash-commands + billing/subscription + invoices + account prefs + notification-preferences + automations/schemas，每端点独立降级 `{error}`）；`GET /api/admin/cloud/proxy?path=`（白名单转发，仅 CLOUD_READ_PATHS）。
 - **UI**：Settings → 资源 "云端账户" 面板——org/套餐状态/账单数/通知组/自动化事件类型/布尔开关汇总 + 成员列表；无凭证显示 `cloudNoCreds`，单项失败不拖垮面板。
 - **实机实测**（代理通）：`GET /organizations` 200；`/organizations/{org}/{settings,members,session-tags,slash-commands}` 200；`/billing/{subscription,invoices}` 200（sub.status="past_due", slug="pro"）；`/account/{commit-email,pr-open-as,devin-pr-merge}` 200；`/users/notification-preferences` 200；`/automations/schemas` 200（github/pagerduty/jira/jira-cloud/slack_trigger/linear + ssh_cmd）。
-- **定案（非 bug）**：`GET /notifications` 404；`GET /sessions` 405（session/list 本来走 acp）；`GET /billing/usage/current` 404；`/knowledge-suggestions/suggestions/{org}` 缺 `devin_id` 必填参数（422）。
+- **定案（非 bug）**：`GET /notifications` 404；`GET /sessions` 405（session/list 本来走 acp）；`GET /billing/usage/current` 404；`GET /users/me` 404；`/knowledge-suggestions/suggestions/{org}` 缺 `devin_id` 必填参数（422），`devin_id=user-*`（org member id）→ 403——它要的是云端 session 的 devin id，本地 acp 会话无对应物，无云会话 id 时此线死路。
+- **写面定案**：knowledge-suggestions accept/dismiss 阻塞于 devin_id 死路；`POST /automations` 创建=真实付费副作用且 org past_due，需用户显式确认再建。
+- **白名单规则**：`cloud/proxy` 只放行 `CLOUD_READ_PATHS` 精确命中或 `CLOUD_READ_PREFIXES` 前缀（knowledge-suggestions/、knowledge/）；`org:<tail>` 走 cloudOrgPath 尾段白名单。
