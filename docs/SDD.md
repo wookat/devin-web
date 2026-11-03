@@ -245,6 +245,7 @@ TimelineGroup (React.memo) → 结构化比较（item refs 元素级 + scalar �
 | persona | `persona.ts` | turnEndHooks 同款注册模式；wake/thinking persona |
 | 上传/附件 | `uploads.ts` | upload-stage 暂存 + session 引用 |
 | diagnose/repair | `diagnose.ts` | 全量状态导出 + 修复动作白名单（kill-orphans/stop-turns/clear-open-turns/restart-now/vacuum-logs） |
+| 密钥 | `secrets.ts` | `secrets.json` 0600 存储 + 会话绑定并集；值仅经 TerminalRunner env 注入 agent 命令，不进 transcript；SSH 不注入（防命令行泄漏）；`secret-response` 把 request_secret 应答落成新密钥并绑定会话 |
 | 多账户轮换 | `accounts.ts` | SWE rate-limit 轮换 |
 | security/wiki | `security.ts`/`wiki.ts` | 独立页面后端 |
 
@@ -264,6 +265,7 @@ TimelineGroup (React.memo) → 结构化比较（item refs 元素级 + scalar �
 | `broker-state.json` | broker | supervisor 清扫 | broker 进程期间 |
 | `broker.token`（0600） | broker | attach 鉴权 | broker 进程期间 |
 | `notifications.json` | notifcenter | 通知中心 | 环形，有界 |
+| `secrets.json`（0600） | secrets.ts 路由/terminal env | 密钥值 + 会话绑定 | 手动删除条目 |
 | `devin-web.token`/`.org` | 用户手放 | cloudapi/translate | 手动刷新 |
 | `supervisor.stopped` | _super/stop | watchdog | 标记文件 |
 | `server.log`/`supervisor.log`/`broker.log` | 各进程 | 诊断/轮转 | 轮转 |

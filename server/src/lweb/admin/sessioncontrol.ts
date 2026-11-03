@@ -251,6 +251,33 @@ export async function handleSessionControl(ctx: ApiContext, req: IncomingMessage
     return true;
   }
 
+  // POST .../secret-response {request_id, value} — answer a request_secret
+  // card. Local semantics: persist the value into the secrets store (named
+  // after the request) and bind it to this session so later turns get it as
+  // a terminal env var. The running turn can't receive it mid-flight (no
+  // acp-side secret channel on this build) — same as cloud where a provided
+  // secret applies to subsequent steps.
+  if (sub === "secret-response" && m === "POST") {
+    const body = (await readJson(req)) as { request_id?: string; value?: string; name?: string };
+    const rid = String(body?.request_id ?? "");
+    const value = String(body?.value ?? "");
+    if (!rid || !value) { json(res, 400, { error: "request_id and value required" }); return true; }
+    // Recover the request's declared name from the session log — the card
+    // sends only request_id, the env-var name lives on the request item.
+    const tail = ctx.sessionLog.readDiskTail(id, 500) as { sessionUpdate?: string; name?: string; request_id?: string; requestId?: string; _meta?: Record<string, unknown> }[];
+    const reqItem = tail.find((it) => it.sessionUpdate === "request_secret" && (it.request_id === rid || it.requestId === rid || (it._meta as Record<string, unknown> | undefined)?.["request_id"] === rid));
+    const name = String(body.name ?? reqItem?.name ?? "").trim() || `SECRET_${rid.slice(0, 8).toUpperCase()}`;
+    const { upsertSecret, bindSessionSecrets } = await import("../../secrets.js");
+    const up = upsertSecret(ctx, name, value, reqItem ? `requested in session ${id}` : "");
+    if (!up.ok) { json(res, 400, { ok: false, error: up.error }); return true; }
+    bindSessionSecrets(ctx, id, [name]);
+    // Mark the request provided in the log — the timeline's send_secrets
+    // reducer flips the card to "Secret provided".
+    ctx.sessionLog.append(id, { sessionUpdate: "send_secrets", request_ids: [rid], names: [name], _local: true });
+    json(res, 200, { ok: true });
+    return true;
+  }
+
   const subMatch = /^subagent\/([^/]+)\/(timeline|message|control)$/.exec(sub);
   if (subMatch) {
     const agentId = decodeURIComponent(subMatch[1]);

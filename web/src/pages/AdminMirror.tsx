@@ -629,7 +629,8 @@ export default function AdminMirrorPage() {
 
   // Composer trigger token at end of input: `/` = commands+skills, `@` =
   // mention categories, `!` = playbooks (local — selecting expands the
-  // playbook's prompt into the input). `$` (secrets) has no local source.
+  // playbook's prompt into the input). `@` → Secrets lists the local
+  // store; the pill serializes to `@secrets:NAME` like the official app.
   const trigger = useMemo(() => {
     const m = /(^|\s)([/@!])([\w\u4e00-\u9fff./-]*)$/.exec(input)
     return m ? { char: m[2] as '/' | '@' | '!', query: m[3].toLowerCase() } : null
@@ -719,6 +720,15 @@ export default function AdminMirrorPage() {
           .filter((s) => s.title.toLowerCase().includes(q))
           .slice(0, 10)
           .map((s) => ({ key: `ses-${s.id}`, title: s.title, sub: s.snippet, insert: `${s.id} ` }))
+      }
+      if (atCat === 'secrets') {
+        // Official @secrets: picker — pill serializes to `@secrets:NAME` in
+        // the message text; dispatchPrompt binds NAME to the session and the
+        // agent gets the VALUE as a terminal env var (never in transcript).
+        return (composerMeta.secrets ?? [])
+          .filter((s) => s.name.toLowerCase().includes(q) || s.description.toLowerCase().includes(q))
+          .slice(0, 12)
+          .map((s) => ({ key: `sec-${s.name}`, title: s.name, sub: s.description, insert: `@secrets:${s.name} ` }))
       }
     }
     return []

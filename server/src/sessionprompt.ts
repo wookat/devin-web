@@ -434,6 +434,23 @@ export function dispatchPrompt(ctx: ApiContext, id: string, text: string, attach
     // "relay this" phrasing lets the lead misread the message body as a task
     // for itself (observed: it went off debugging the content instead of
     // calling the tool).
+    // `@secrets:NAME` mentions → bind NAME to this session (union, durable)
+    // and tell the agent the values live as env vars on its terminal spawns.
+    // Name+description ride the prompt (both are picker-visible anyway); the
+    // VALUE never enters the transcript — TerminalRunner resolves it into
+    // env at terminal/create time.
+    let secretsHint = "";
+    if (!subagentId) {
+      const mentioned = [...text.matchAll(/@secrets:([A-Za-z_][A-Za-z0-9_]*)/g)].map((m) => m[1]);
+      if (mentioned.length) {
+        const { bindSessionSecrets, sessionSecretHints } = await import("./secrets.js");
+        bindSessionSecrets(ctx, id, mentioned);
+        const hints = sessionSecretHints(ctx, id);
+        if (hints.length) {
+          secretsHint = `\n\n[devin-web] secrets bound to this session are available as env vars in terminal commands: ${hints.map((h) => `$${h.name}${h.description ? ` — ${h.description}` : ""}`).join(", ")}`;
+        }
+      }
+    }
     if (subagentId) deps.pingSubagent(subagentId);
     // respawnRow: the old handle is dead — the lead spawns a SUCCESSOR
     // (fresh agent, same profile, prior task+tail as context) instead of
@@ -444,7 +461,7 @@ export function dispatchPrompt(ctx: ApiContext, id: string, text: string, attach
         ? `[Subagent relay] Subagent "${subagentId}" is permanently dead (its host process was recycled) — do NOT resume it. Call run_subagent(title=${JSON.stringify(respawnRow.title || "Subagent successor")}, profile=${JSON.stringify(respawnRow.profile || "subagent_general")}, task=<task>) now to spawn a SUCCESSOR agent — this is your ONLY task. Compose <task> as: "You continue the work of a previous subagent. Original task: ${JSON.stringify(respawnRow.task.slice(0, 600))}. Its last output before the handle died: ${JSON.stringify(tail)}. New instruction from the user: ${JSON.stringify(text)}"`
         : `[Subagent relay] Call run_subagent(resume="${subagentId}", task=<message>) now and pass the user's message verbatim — this is your ONLY task, do not do anything else first. If the subagent is still running and cannot be resumed, just say so. User message: ${JSON.stringify(text)}`
       : text;
-    const textBlock = ctxMeta ? { type: "text", text: promptText, _meta: ctxMeta } : { type: "text", text: promptText };
+    const textBlock = ctxMeta ? { type: "text", text: promptText + secretsHint, _meta: ctxMeta } : { type: "text", text: promptText + secretsHint };
     return promptWithRetry(ctx, id, () => deps.resolveAcp(ctx, id), (acp) => {
       usedAcp = acp;
       return acp.prompt(id, [textBlock, ...blocks] as never, ctxMeta).then((r) => {

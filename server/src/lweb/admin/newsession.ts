@@ -169,7 +169,9 @@ export async function handleNewSession(ctx: ApiContext, req: IncomingMessage, re
     const playbooks = Object.values(reg.playbooks ?? {})
       .sort((a, b) => a.createdAt - b.createdAt)
       .map((p) => ({ name: p.name, shortcut: p.macro ?? "", author: "", prompt: p.prompt }));
-    json(res, 200, { commands, skills: scanLocalSkills(ctx), playbooks, secrets: [], macros: [], repos, sessions, primary_cwd: ctx.primaryCwd, cfg, last_config: loadReg(ctx).lastConfigAgent && loadReg(ctx).lastConfigAgent === (wantAgent || "devin") ? (loadReg(ctx).lastConfig ?? {}) : {}, agents, ssh_hosts: (loadReg(ctx).prefs?.sshHosts ?? []).map(publicSshHost) });
+    const { listSecrets } = await import("../../secrets.js");
+    const secrets = listSecrets(ctx).map((s) => ({ name: s.name, description: s.description }));
+    json(res, 200, { commands, skills: scanLocalSkills(ctx), playbooks, secrets, macros: [], repos, sessions, primary_cwd: ctx.primaryCwd, cfg, last_config: loadReg(ctx).lastConfigAgent && loadReg(ctx).lastConfigAgent === (wantAgent || "devin") ? (loadReg(ctx).lastConfig ?? {}) : {}, agents, ssh_hosts: (loadReg(ctx).prefs?.sshHosts ?? []).map(publicSshHost) });
     return true;
   }
 

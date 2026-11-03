@@ -611,6 +611,30 @@ export async function handleRegistry(ctx: ApiContext, req: IncomingMessage, res:
     return true;
   }
 
+  // ---- Local secrets store (devin-web equivalent of cloud org secrets) ----
+  // Values NEVER leave the backend: the list carries name+description only;
+  // the agent receives values as terminal-spawn env vars (secrets.ts +
+  // TerminalRunner), so nothing lands in the transcript or session log.
+  if (p === "/api/admin/secrets" && m === "GET") {
+    const { listSecrets } = await import("../../secrets.js");
+    json(res, 200, { secrets: listSecrets(ctx) });
+    return true;
+  }
+  if (p === "/api/admin/secrets" && m === "POST") {
+    const { upsertSecret } = await import("../../secrets.js");
+    const body = (await readJson(req)) as { name?: string; value?: string; description?: string };
+    const r = upsertSecret(ctx, String(body?.name ?? "").trim(), String(body?.value ?? ""), String(body?.description ?? "").trim());
+    json(res, r.ok ? 200 : 400, r);
+    return true;
+  }
+  if (p === "/api/admin/secrets/delete" && m === "POST") {
+    const { deleteSecret } = await import("../../secrets.js");
+    const body = (await readJson(req)) as { name?: string };
+    const r = deleteSecret(ctx, String(body?.name ?? ""));
+    json(res, r.ok ? 200 : 404, r);
+    return true;
+  }
+
   if (p === "/api/admin/mcp/servers" && m === "GET") {
     try { json(res, 200, (await mcpCall("_cognition.ai/mcp/listServers", {})) ?? { servers: [] }); }
     catch (e) { json(res, 200, { servers: [], error: (e as Error).message?.slice(0, 200) }); }

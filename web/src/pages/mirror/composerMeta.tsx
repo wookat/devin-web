@@ -54,14 +54,17 @@ function QueuePlaceholder() {
   )
 }
 
-// `@` mention categories backed by real local data — playbooks/secrets/
-// macros/plugins have no local source (composer-meta returns []), so they
-// are intentionally absent rather than listed as dead empty categories.
+// `@` mention categories backed by real local data — playbooks/macros/
+// plugins have no local source (composer-meta returns []), so they are
+// intentionally absent rather than listed as dead empty categories.
+// secrets IS backed: the local store at <dataDir>/secrets.json feeds
+// composer-meta; names+descriptions only, values never leave the backend.
 const AT_CATEGORIES: { cat: string; title: string; sub: string }[] = [
   { cat: 'repos', title: 'composer.catRepos', sub: 'composer.catReposSub' },
   { cat: 'sessions', title: 'composer.catSessions', sub: 'composer.catSessionsSub' },
   { cat: 'files', title: 'composer.catFiles', sub: 'composer.catFilesSub' },
   { cat: 'skills', title: 'composer.catSkills', sub: 'composer.catSkillsSub' },
+  { cat: 'secrets', title: 'composer.catSecrets', sub: 'composer.catSecretsSub' },
 ]
 
 type Group =

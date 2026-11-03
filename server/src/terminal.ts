@@ -66,6 +66,13 @@ export class TerminalRunner {
    *  used when the ACP agent itself runs on a remote host. */
   constructor(private sshTarget: string | null = null) {}
 
+  /** Session-bound secret env (secrets.ts). Resolved per spawn — each
+   *  terminal/create is a fresh process so a newly bound secret applies on
+   *  the agent's next command with no respawn. SSH runners ignore it:
+   *  remote env can't be set without embedding values in the command line
+   *  (which would leak them into the transcript). */
+  secretEnv: ((sessionId: string) => Record<string, string>) | null = null;
+
   async create(
     defaultCwd: string,
     params: CreateTerminalRequest,
@@ -87,6 +94,9 @@ export class TerminalRunner {
       const env = {
         ...process.env,
         ...Object.fromEntries((params.env ?? []).map((e) => [e.name, e.value])),
+        // Secrets win last: a bound name must resolve to the store's value,
+        // not whatever the agent chose to pass in params.env.
+        ...(this.secretEnv?.(params.sessionId) ?? {}),
       };
       if (GIT_BINS.length) {
         const key = "Path" in env ? "Path" : "PATH";

@@ -26,6 +26,7 @@ import { touchSessionActivity, markGracefulExit } from "./sessionlive.js";
 import { brokerEnabled } from "./acpbroker.js";
 import { meta, loadReg, saveReg } from "./dwstore.js";
 import { notify } from "./notifcenter.js";
+import { sessionSecretEnv } from "./secrets.js";
 import { sshInteractive } from "./ssh.js";
 import { ShellDecoder } from "./shelltext.js";
 import { translatePsInput } from "./psops.js";
@@ -548,6 +549,13 @@ function rotate(reason: string, target?: string): string | null {
   console.log(`[accounts] rotated [${reason}]: ${from} -> ${next}`);
   return next;
 }
+
+// Session-bound secrets → env on the agent's terminal spawns (TerminalRunner
+// merges this over params.env so a bound name always resolves to the store's
+// value). Resolved per terminal/create — new bindings apply to the next
+// command with no acp/shell respawn. SSH runners skip injection (values
+// can't cross ssh without landing in the remote command line = transcript).
+manager.terminal.secretEnv = (sid) => sessionSecretEnv(ctx, sid);
 
 // (subCalls + watchSubRateLimit moved to sessionsub.ts — the subagent
 //  domain module; index.ts only wires the call into onAgentLog.)

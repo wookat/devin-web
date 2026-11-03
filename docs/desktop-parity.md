@@ -41,7 +41,8 @@ devin-web 现状：仅调用 **14** 个 `_cognition.ai/*` 方法 → 方法面�
 3. **P1 workspace/document 事件推送** ✅ 已落地（didOpen/didChangeFiles）；subagent bg/fg、terminal/commandCompleted、queuedMessages/update 待做
 4. **P1 plugins/* + mcp/***：本地插件/MCP 管理 UI（exe 已实现全部端点）—— plugins/list 已通（只读）
 5. **P2 goal/*、turn_stats/loadStats/compaction、scope_search、reads/*、browserPreview/capture、processMemory**
-6. **P3 云端 REST**（需 auth1）：notifications、secrets、wiki、session folders/tags/pin、plan/*
+6. **P3 云端 REST**（需 auth1）：notifications、wiki、session folders/tags/pin、plan/*。
+   **secrets 已有本地等价物**（`server/src/secrets.ts` + `secrets.json` 0600 + `@secrets:` composer picker + TerminalRunner env 注入 + Settings Secrets 面板 + `secret-response` 路由）——值只进 terminal env，永不进 transcript；云端 org secrets 仍是独立的远端存储。
 
 ### W2 — webapp bundle 收割（进行中）
 

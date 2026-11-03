@@ -152,6 +152,18 @@ devin-web 是承载它的工作台（workbench）。
 | FR-EXT-6 | config/read 只读面 + config/write `{path[],config}` 树导航写 | `/api/admin/devin-config` |
 | FR-EXT-7 | 前端暴露：Settings → 资源 各面板（rules/plans/plugins/agent resources）、ModelPicker 最近模型种子（localStorage 空时拉 agent recents）、composer ↑ 历史 | ResourcesSection / ModelPicker / ComposerFooter |
 
+### 3.6b Secrets（FR-SEC，云端 org secrets 的本地等价物）
+
+| 编号 | 需求 | 实现 |
+|---|---|---|
+| FR-SEC-1 | 密钥存储 `<dataDir>/secrets.json`（0600）：name→{value,description,ts} + 会话绑定表 | `secrets.ts` |
+| FR-SEC-2 | 值永不出后端：列表/composer-meta 只含 name+description | 路由 + `listSecrets` |
+| FR-SEC-3 | composer `@` → Secrets 选择器 → 锁定图标 pill → 序列化 `@secrets:NAME` | AT_CATEGORIES + `sec-` pill |
+| FR-SEC-4 | 派发时提取 `@secrets:NAME` → 绑定到会话（并集、持久化）+ prompt 追加 env-var 提示（含描述，无值） | `dispatchPrompt` |
+| FR-SEC-5 | agent terminal/create 的 env 合并会话绑定密钥（值覆盖 params.env）；SSH 远端不注入（避免命令行泄漏） | `TerminalRunner.secretEnv` |
+| FR-SEC-6 | CRUD：`GET/POST /api/admin/secrets`、`POST /api/admin/secrets/delete`；`POST …/secret-response` 应答 request_secret 卡（存值+绑定+`send_secrets` 标记） | registry + sessioncontrol |
+| FR-SEC-7 | Settings → 资源 Secrets 面板：列表（name/desc）+ 新增（name/value write-only/desc）+ 删除 | SecretsPanel |
+
 ### 3.7 云端 REST 面（FR-CLD）
 
 | 编号 | 需求 | 实现 |
