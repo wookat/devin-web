@@ -259,6 +259,7 @@ TimelineGroup (React.memo) → 结构化比较（item refs 元素级 + scalar �
 | `sessionlog.db` | SessionDb | timeline/prompt-history/insights | 长期；auto_vacuum=INCREMENTAL |
 | `dw.json` | backend | prefs/快照/设置 | 长期 |
 | `open-turns.json` | dispatchPrompt | 恢复管线 | turn 结算即删条目 |
+| `send-errors.json` | sendhealth | 派发失败排查 | 有界环形 |
 | `acp-offsets.json` | markGracefulExit | adoptBrokerAcps | 每次 graceful 覆盖 |
 | `broker-state.json` | broker | supervisor 清扫 | broker 进程期间 |
 | `broker.token`（0600） | broker | attach 鉴权 | broker 进程期间 |

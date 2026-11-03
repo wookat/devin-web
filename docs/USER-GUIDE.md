@@ -240,6 +240,7 @@ devin ≤3000.11.92 有 PTY commit 泄漏；broker 每 30s 扫一遍，单个 ac
 | `sessionlog.db` | 全部会话时间线（SQLite，可几 GB） |
 | `dw.json` | 偏好/快照/设置 |
 | `open-turns.json` | 未结算回合（正常应为空数组） |
+| `send-errors.json` | 消息派发失败记录 |
 | `notifications.json` | 通知中心 |
 | `devin-web.token` / `.org` | 云端凭证（手动放置） |
 | `supervisor.log` / `server.log` / `broker.log` | 三层日志 |
