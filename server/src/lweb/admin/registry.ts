@@ -126,6 +126,20 @@ export async function handleRegistry(ctx: ApiContext, req: IncomingMessage, res:
     return true;
   }
 
+  // GET /api/admin/search?q= — global FTS over every session's messages.
+  // Hits are filtered to sessions still registered locally (deleted rows
+  // leave orphan fts entries until the next boot sweep).
+  if (p === "/api/admin/search" && m === "GET") {
+    const q = String(url.searchParams.get("q") ?? "");
+    const limit = Math.min(60, Math.max(1, Number(url.searchParams.get("limit")) || 40));
+    const reg2 = loadReg(ctx);
+    const hits = ctx.sessionLog.searchMessages(q, limit)
+      .filter((h) => ctx.sessionCwd.has(h.sessionId) || !!ctx.store.agentSession(h.sessionId) || reg2.sessions[h.sessionId] != null)
+      .map((h) => ({ ...h, title: meta(ctx, h.sessionId).title ?? h.sessionId }));
+    json(res, 200, { hits });
+    return true;
+  }
+
   // /api/admin/playbooks — reusable task templates for automations.
   // GET list; POST create {name,prompt}; POST /:id patch; DELETE /:id.
   if (parts[2] === "playbooks") {

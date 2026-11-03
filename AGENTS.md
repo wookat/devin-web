@@ -211,8 +211,13 @@ to the data dir on fire; `POST /api/admin/heapdump` dumps on demand.
 prompts.dispatched, acp.memRecycles → `resources/system.metrics`.
 `sessionlog.db`: auto_vacuum=INCREMENTAL + `incremental_vacuum(256)`
 per checkpoint tick (new dbs; existing needs one VACUUM — repair fix
-`vacuum-logs`). `LanKeyBanner` warns once on non-loopback access with
-no ADMIN_KEY.
+`vacuum-logs`). Global message search: `msg_fts` FTS5 table indexes
+`user_message_chunk`/`agent_message_chunk`/`thought_chunk` text via a
+`fts_meta` rowid watermark — `searchMessages` tops the index up then
+serves bm25 hits (`GET /api/admin/search?q=` powers the SessionsPage
+"消息内容" hits section; boot fires one background bulk index at +6s).
+Replay re-logs dedupe by (session,text). `LanKeyBanner` warns once on
+non-loopback access with no ADMIN_KEY.
 
 Timeline render path — a strict ref-stability chain, every link required:
 `mergeItems()` (mirror/timelineUtil.tsx) preserves the previous item

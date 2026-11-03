@@ -153,6 +153,19 @@ export default function SessionsPage() {
   const [sideOpen, setSideOpen] = useState(window.innerWidth >= 1024)
   const loaded = useRef(false)
   const searchRef = useRef<HTMLInputElement>(null)
+  // Global message hits — the local filter only sees titles/ids/snippets;
+  // the FTS endpoint sees every message body in sessionlog.db.
+  const [msgHits, setMsgHits] = useState<{ sessionId: string; seq: number; snip: string; ts: number; title: string; kind: string }[]>([])
+  useEffect(() => {
+    const needle = q.trim()
+    if (needle.length < 2) { setMsgHits([]); return }
+    const t = setTimeout(() => {
+      adminFetch<{ hits: { sessionId: string; seq: number; snip: string; ts: number; title: string; kind: string }[] }>(`/api/admin/search?q=${encodeURIComponent(needle)}`)
+        .then((r) => setMsgHits(r.hits ?? []))
+        .catch(() => setMsgHits([]))
+    }, 250)
+    return () => clearTimeout(t)
+  }, [q])
 
   const load = () => adminFetch<SessionsResp>('/api/admin/mirror/sessions')
     .then((r) => {
@@ -406,6 +419,24 @@ export default function SessionsPage() {
 
         {/* list */}
         <div className="relative min-h-0 flex-1 overflow-y-auto pb-2">
+          {msgHits.length > 0 && (
+            <div className="mx-2 mb-2 rounded-[8px] border border-border-secondary bg-card p-1">
+              <p className="px-2 pb-0.5 pt-1.5 text-[11px] font-medium uppercase leading-[14px] text-muted-foreground">{t('sp.msgHits')}</p>
+              {msgHits.slice(0, 8).map((h) => (
+                <button
+                  key={`${h.sessionId}#${h.seq}`}
+                  onClick={() => nav(`/admin/${h.sessionId}`)}
+                  className="flex w-full cursor-pointer items-baseline gap-2 rounded-[6px] px-2 py-1.5 text-left hover:bg-tint-secondary"
+                >
+                  <span className="shrink-0 text-[13px] font-medium leading-[18px] text-foreground">{h.title}</span>
+                  <span className="min-w-0 flex-1 truncate text-[12px] leading-[16px] text-muted-foreground">
+                    {h.snip.split(/«|»/).map((part, i) => i % 2 ? <mark key={i} className="rounded-[2px] bg-tint-yellow px-0.5 text-foreground">{part}</mark> : part)}
+                  </span>
+                  <span className="shrink-0 text-[11px] leading-[14px] text-muted-foreground">{fmtDay(new Date(h.ts).toISOString())}</span>
+                </button>
+              ))}
+            </div>
+          )}
           {grouped ? (
             <>
               {actives.length > 0 && <GroupHead name={t('sp.activeSessions')} ids={actives.map((s) => s.devin_id)} />}

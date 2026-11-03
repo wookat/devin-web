@@ -649,6 +649,16 @@ export class SessionLog {
     return this.db ? this.db.usageStats(days) : null;
   }
 
+  /** Global FTS across sessions — [] when the db is in degraded mode.
+   *  indexSearchable() runs the bulk pass once at boot; searchMessages
+   *  incrementally indexes before every query. */
+  indexSearchable(): number {
+    try { return this.db?.indexSearchable() ?? 0; } catch { return 0; }
+  }
+  searchMessages(q: string, limit = 40) {
+    return this.db?.searchMessages(q, limit) ?? [];
+  }
+
   /** Newest user/agent message text for list views — the db path is one
    *  bounded DESC query; the .jsonl path scans a 600-entry tail. */
   lastMessage(sessionId: string): { body: string; ts: number } | null {

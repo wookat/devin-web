@@ -663,6 +663,15 @@ httpServer.listen(PORT, HOST, async () => {
   }, 4000);
   startAutomations(ctx);
   resumeScans(ctx);
+  // Global message search — first FTS pass over the whole event store can
+  // scan for a while; run it in the boot background so /api/admin/search is
+  // already warm (queries self-index incrementally anyway).
+  setTimeout(() => {
+    try {
+      const n = ctx.sessionLog.indexSearchable();
+      if (n) console.error(`[search] indexed ${n} messages`);
+    } catch (e) { console.error("[search] initial index failed:", e); }
+  }, 6000);
   // RSS watchdog — native allocator retention (sqlite churn, buffers) can
   // hold RSS far above the JS heap on Windows and never returns it. Past
   // the cap, take the same graceful exit a restart uses: markGracefulExit

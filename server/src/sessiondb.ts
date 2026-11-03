@@ -754,6 +754,85 @@ export class SessionDb {
     return { beforeMb: Math.round(beforeMb), afterMb: Math.round(size()) };
   }
 
+  // ---- global full-text search (FTS5) ------------------------------------
+  // msg_fts mirrors text-bearing events (user/agent message chunks +
+  // dw_notice) with an events.rowid watermark for lazy incremental indexing.
+  // Stale-gen/session orphans are filtered at query time, never rebuilt.
+
+  private ftsState: "unknown" | "ok" | "no" = "unknown";
+
+  private ensureFts(): boolean {
+    if (this.ftsState !== "unknown") return this.ftsState === "ok";
+    try {
+      this.db.exec(`CREATE VIRTUAL TABLE IF NOT EXISTS msg_fts USING fts5(text, session_id UNINDEXED, seq UNINDEXED, ts UNINDEXED, kind UNINDEXED)`);
+      this.db.exec(`CREATE TABLE IF NOT EXISTS fts_meta(k TEXT PRIMARY KEY, v INTEGER)`);
+      // Orphans from deleted sessions — one sweep per process lifetime.
+      this.db.exec(`DELETE FROM msg_fts WHERE session_id NOT IN (SELECT DISTINCT session_id FROM events)`);
+      this.ftsState = "ok";
+    } catch {
+      this.ftsState = "no";
+    }
+    return this.ftsState === "ok";
+  }
+
+  /** Index newly-appended text rows into msg_fts. Watermark semantics:
+   *  `upper` snapshots MAX(rowid) BEFORE the batch, so rows landing mid-pass
+   *  are picked up next call. Called by searchMessages (up-to-date = cheap
+   *  no-op range scan) and once at boot for the bulk pass. */
+  indexSearchable(): number {
+    if (!this.ensureFts()) return 0;
+    this.flush();
+    const wm = Number((this.db.prepare("SELECT v FROM fts_meta WHERE k='wm'").get() as { v?: number } | undefined)?.v ?? 0);
+    const upper = Number((this.db.prepare("SELECT MAX(rowid) m FROM events").get() as { m: number | null }).m ?? 0);
+    if (upper <= wm) return 0;
+    this.db.exec("BEGIN");
+    let n = 0;
+    try {
+      const r = this.db.prepare(
+        `INSERT INTO msg_fts(session_id,seq,ts,kind,text)
+         SELECT session_id, seq, ts, kind,
+           COALESCE(json_extract(data,'$.content.text'), json_extract(data,'$.notice'))
+         FROM events
+         WHERE rowid > ? AND rowid <= ?
+           AND kind IN ('user_message_chunk','agent_message_chunk','dw_notice')
+           AND COALESCE(json_extract(data,'$.content.text'), json_extract(data,'$.notice')) IS NOT NULL`,
+      ).run(wm, upper);
+      n = Number(r.changes);
+      this.db.prepare("INSERT OR REPLACE INTO fts_meta VALUES('wm',?)").run(upper);
+      this.db.exec("COMMIT");
+    } catch (e) {
+      try { this.db.exec("ROLLBACK"); } catch {}
+      throw e;
+    }
+    return n;
+  }
+
+  /** bm25-ranked hits across every session's messages. `q` is split into
+   *  AND-joined quoted terms (FTS-safe — no syntax errors on stray quotes or
+   *  operators). Snippet markers are « » for the client to highlight. */
+  searchMessages(q: string, limit = 40): { sessionId: string; seq: number; ts: number; kind: string; snip: string }[] {
+    const terms = q.trim().split(/\s+/).filter(Boolean).slice(0, 8)
+      .map((t) => `"${t.replace(/"/g, "")}"`);
+    if (!terms.length || !this.ensureFts()) return [];
+    try { this.indexSearchable(); } catch { /* serve from the stale index */ }
+    const rows = this.db.prepare(
+      `SELECT session_id, seq, ts, kind, text, snippet(msg_fts,0,'«','»','…',14) AS snip
+       FROM msg_fts WHERE msg_fts MATCH ? ORDER BY rank LIMIT ?`,
+    ).all(terms.join(" "), limit * 3) as { session_id: string; seq: number; ts: number; kind: string; text: string; snip: string }[];
+    // Dedupe by (session,text): replays re-log the same message at a new seq,
+    // which would surface as identical hits — keep the best-ranked copy.
+    const seen = new Set<string>();
+    const out: { sessionId: string; seq: number; ts: number; kind: string; snip: string }[] = [];
+    for (const r of rows) {
+      const k = `${r.session_id}\x00${r.text}`;
+      if (seen.has(k)) continue;
+      seen.add(k);
+      out.push({ sessionId: r.session_id, seq: r.seq, ts: r.ts, kind: r.kind, snip: r.snip });
+      if (out.length >= limit) break;
+    }
+    return out;
+  }
+
   close() {
     this.flush();
     try { this.db.close(); } catch {}
