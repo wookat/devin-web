@@ -247,6 +247,7 @@ TimelineGroup (React.memo) → 结构化比较（item refs 元素级 + scalar �
 | diagnose/repair | `diagnose.ts` | 全量状态导出 + 修复动作白名单（kill-orphans/stop-turns/clear-open-turns/restart-now/vacuum-logs） |
 | 密钥 | `secrets.ts` + `terminal.ts` 脱敏器 | `secrets.json` 0600 存储 + 会话绑定并集；值仅经 TerminalRunner env 注入（TOTP 注入活码非种子），SSH 不注入（防命令行泄漏）；**回显脱敏**：`makeStreamRedactor` 在 onData 源头遮蔽绑定值（整缓冲先脱敏再切分、块尾保留 maxLen-1 防跨界泄漏），覆盖 term.output→sessionlog→timeline→WS→agent 读回全下游；fs/read_text_file 同法 `redactFor`；`secret-response` 把 request_secret 应答落成新密钥（按 secret_type 记 TOTP）并绑定会话；request_secret/send_secrets 映射为 timeline 卡片项 |
 | 多账户轮换 | `accounts.ts` | SWE rate-limit 轮换 |
+| 本地自动化 | `automations.ts` | dw.json `automations` 存 5-field cron（Vixie dom/dow OR 语义）；30s tick；每次触发按 sessions/new 配方建真会话（`⚙`+`.automations`）；多步 `steps[]` 经 journaled `running{sid,step,sentAt}` 断点续跑（会话忙等待）；`inputs[]` fan-out 每输入一会话 + `{{input}}` 替换；firing 锁 + running 非空防重叠；失败记 runs 空行 + 铃铛通知；playbooks `!macro` 模板 |
 | security/wiki | `security.ts`/`wiki.ts` | 独立页面后端 |
 
 ---

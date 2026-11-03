@@ -388,8 +388,16 @@ route code never changes.
   dw.json `automations` holds 5-field cron entries (Vixie dom/dow OR rule,
   impossible exprs rejected at save); a 30s tick fires due ones via the
   canonical sessions/new recipe — real session per run titled `⚙ <name>` in
-  `.automations` folder. REST: GET/POST `/api/admin/automations`, POST `/:id`
-  patch, DELETE `/:id`, POST `/:id/run`. `pr.ts` = gh-backed PR endpoints;
+  `.automations` folder. `steps[]` runs as a serial workflow INSIDE one
+  session: journaled `running {sid,step,sentAt,prompts}` survives restarts —
+  each tick advances a chain whose session went fully idle (inflight +
+  openTurns + queue all empty, 10s grace); deleted session aborts it.
+  `/:id/run {inputs[]}` fans out one session per input with `{{input}}`
+  substituted per step (appended when absent). Overlap: `firing` set +
+  non-empty `running` skips the cron edge. Failures journal a null `runs`
+  row AND push a notifcenter item — silent cron breakage is visible.
+  REST: GET/POST `/api/admin/automations`, POST `/:id` patch, DELETE `/:id`,
+  POST `/:id/run`. `pr.ts` = gh-backed PR endpoints;
   `pr-analyze` dispatches the diff to a persistent pr-review acp session.
 - Attachments are STRUCTURED: dispatchPrompt stores `attachments[]` on the
   `_local` log entry → `DwItem.attachments` → `TimelineItem.attachments`.

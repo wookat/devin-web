@@ -200,6 +200,20 @@ devin-web 是承载它的工作台（workbench）。
 | FR-OPS-6 | WS 背压：bufferedAmount > 8MB 丢/断；重流 `session_update`/`agent_log`/`terminal_output`/`timeline_delta` 按 `{type:"sub",sessions}` 订阅 | ws.ts |
 | FR-OPS-7 | Share 链接 `/s/:id` 只读时间线 | `lweb/share.ts` |
 
+### 3.10 本地自动化（FR-AUT）
+
+| 编号 | 需求 | 实现 |
+|---|---|---|
+| FR-AUT-1 | 5-field cron 调度（Vixie dom/dow OR 语义；不可能表达式在保存时拒绝）：30s tick 触发到期条目 | `automations.ts` `cronNext` |
+| FR-AUT-2 | 每次触发按 sessions/new 配方建真会话（`⚙ <name>` 标题 + `.automations` 文件夹），不投递到已有会话——与云端 automations 语义一致 | `fire()` |
+| FR-AUT-3 | 多步工作流：`steps[]` 在同一 session 内串行；`running {sessionId,step,sentAt,prompts}` 落盘，后端重启后 tick 从断点续跑（会话忙等待、删会话即中止） | `tick()` running 推进 |
+| FR-AUT-4 | 批量 fan-out：`/:id/run {inputs[]}` 每个输入起一个会话，`{{input}}` 占位替换进每步 prompt（无占位则追加） | `runAutomation`/`renderPrompts` |
+| FR-AUT-5 | 重叠防护：单自动化 firing 锁 + 任何 running 链存活时跳过 cron 触发 | `firing`/`running` |
+| FR-AUT-6 | REST：GET/POST `/api/admin/automations`，POST `/:id` patch，DELETE `/:id`，POST `/:id/run`；运行史 cap 10（`runs[]`），`nextRun`/`lastRun`/`lastSession` 持久化 | registry.ts |
+| FR-AUT-7 | 触发失败可见：运行史记 null 行 + 通知中心铃铛条目 | `tick()` catch → `notify` |
+| FR-AUT-8 | Playbooks：可复用 prompt 模板（`!macro` 快捷展开），独立 CRUD `/api/admin/playbooks` | registry.ts |
+| FR-AUT-9 | 专用页面 `/admin/automations` + 侧栏入口；`SecurityPage` 有 Automations 标签 | `AutomationsPage.tsx` |
+
 ---
 
 ## 4. 非功能需求
