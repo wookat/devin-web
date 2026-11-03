@@ -650,6 +650,9 @@ export class SessionLog {
   vacuum(): { beforeMb: number; afterMb: number } | null {
     return this.db ? this.db.vacuum() : null;
   }
+  incrementalVacuum(pages?: number): void {
+    try { this.db?.incrementalVacuum(pages); } catch {}
+  }
 
   /** Insights-lite aggregations (sessiondb) — null when the db is off. */
   usageStats(days = 30) {

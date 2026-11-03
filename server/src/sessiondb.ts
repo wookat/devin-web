@@ -741,6 +741,14 @@ export class SessionDb {
     return { days: dayRows, kinds: kindRows, topSessions: topRows };
   }
 
+  /** Bounded freelist drain — safe to call online (unlike full VACUUM,
+   *  which rewrites the whole file, blocks the loop past the supervisor's
+   *  probe window, and gets killed mid-run → the db never actually shrinks).
+   *  The daily sweep feeds this ~32MB/pass. */
+  incrementalVacuum(pages = 8192): void {
+    try { this.db.exec(`PRAGMA incremental_vacuum(${Math.max(1, Math.floor(pages))})`); } catch {}
+  }
+
   /** Full VACUUM — rewrites the file (a 3GB db takes a while and pauses
    *  writers), so it's a deliberate repair action, never scheduled. Also
    *  the only way to flip auto_vacuum=INCREMENTAL on a pre-existing file;

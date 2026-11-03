@@ -680,6 +680,10 @@ httpServer.listen(PORT, HOST, async () => {
         const r = ctx.sessionLog.retentionSweep(sessionlogKeep);
         if (r.deleted) console.error(`[sessionlog] retention: pruned ${r.deleted} events across ${r.sessions} session(s)`);
       }
+      // Bounded freelist drain — full VACUUM rewrites multi-GB files, blocks
+      // the loop past the supervisor's probe window, and dies mid-run (the db
+      // never shrinks). 8k pages/pass drains steadily instead.
+      ctx.sessionLog.incrementalVacuum(8192);
       // Chunked pump — 20k rowids per slice with a yield between slices so a
       // quarter-million-row bulk index doesn't freeze the event loop.
       let total = 0;
