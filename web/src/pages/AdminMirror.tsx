@@ -379,10 +379,21 @@ export default function AdminMirrorPage() {
         const lc = m.last_config ?? {}
         if (lc.mode ?? lc._mode) cfg.mode = lc.mode ?? lc._mode ?? cfg.mode
         if (Object.keys(lc).length) {
-          cfg.options = (cfg.options ?? []).map((o) => (o.id && lc[o.id] ? { ...o, currentValue: lc[o.id] } : o))
+          // last_config seeds preferences for the NEW draft — a value the
+          // current catalog no longer offers (e.g. a model from another
+          // account/plan) must not be applied: the pill would render the
+          // raw slug and session/new would reject the pick anyway.
+          cfg.options = (cfg.options ?? []).map((o) => {
+            const v = o.id ? lc[o.id] : undefined
+            if (v == null) return o
+            const leaves = (o.options ?? []).flatMap((x) => ((x as { options?: { value: string }[] }).options ?? [x]))
+            return leaves.some((l) => l.value === v) ? { ...o, currentValue: v } : o
+          })
           if (cfg.model && lc[cfg.model.id]) {
             const v = lc[cfg.model.id]
-            cfg.model = { ...cfg.model, current: v, currentName: cfg.model.options.find((o) => o.value === v)?.name ?? v }
+            if (cfg.model.options.some((o) => o.value === v)) {
+              cfg.model = { ...cfg.model, current: v, currentName: cfg.model.options.find((o) => o.value === v)?.name ?? v }
+            }
           }
         }
         lastSeenLocalCfg = cfg
