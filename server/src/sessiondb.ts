@@ -185,7 +185,7 @@ export class SessionDb {
   private pendSids = new Set<string>();
   private flushTimer: NodeJS.Timeout | null = null;
 
-  constructor(private file: string) {
+  constructor(readonly file: string) {
     this.db = new DatabaseSync(file);
     this.db.exec("PRAGMA journal_mode=WAL");
     this.db.exec("PRAGMA synchronous=NORMAL");

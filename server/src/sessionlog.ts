@@ -1,5 +1,6 @@
 import fs from "node:fs";
 import path from "node:path";
+import { Worker } from "node:worker_threads";
 import { SessionDb, dedupKey, lastMessageFrom } from "./sessiondb.js";
 import { Sidecars, eachFileLine } from "./sessionsidecars.js";
 import type { LogEntry } from "./sessiondb.js";
@@ -654,9 +655,29 @@ export class SessionLog {
     try { this.db?.incrementalVacuum(pages); } catch {}
   }
 
-  /** Insights-lite aggregations (sessiondb) — null when the db is off. */
-  usageStats(days = 30) {
-    return this.db ? this.db.usageStats(days) : null;
+  private usageCache: { at: number; days: number; data: ReturnType<SessionDb["usageStats"]> } | null = null;
+  private usageBusy = false;
+  private usageErrAt = 0;
+
+  /** Insights-lite aggregations — served from a 60s cache, refreshed by a
+   *  worker thread over a read-only WAL connection. The GROUP BY scans on
+   *  a multi-GB events table take 10s+ and node:sqlite is synchronous: on
+   *  the request path that froze the loop past the supervisor's probe
+   *  window → backend restart loop every time the settings page polled.
+   *  First call returns null (clients poll again within seconds). */
+  usageStats(days = 30): ReturnType<SessionDb["usageStats"]> | null {
+    const c = this.usageCache;
+    if (c && c.days === days && Date.now() - c.at < 60_000) return c.data;
+    if (this.db && !this.usageBusy && Date.now() - this.usageErrAt > 60_000) {
+      this.usageBusy = true;
+      try {
+        const w = new Worker(new URL("./usagestats-worker.js", import.meta.url), { workerData: { file: this.db.file, days } });
+        w.once("message", (data) => { this.usageCache = { at: Date.now(), days, data: data as ReturnType<SessionDb["usageStats"]> }; this.usageBusy = false; void w.terminate(); });
+        w.once("error", () => { this.usageBusy = false; this.usageErrAt = Date.now(); });
+        w.unref();
+      } catch { this.usageBusy = false; }
+    }
+    return c?.data ?? null;
   }
 
   /** Global FTS across sessions — [] when the db is in degraded mode.
