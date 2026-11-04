@@ -401,6 +401,18 @@ export async function handleApi(
     // GET /api/accounts — pool status (current, cooldowns, healthy) + quota info.
     if (m === "GET" && url.pathname === "/api/accounts") {
       const rows = ctx.accounts.status();
+      // Cold cache (post-restart / expired 60s TTL) → info() returns null and
+      // only kicks a background refresh, so the first page load renders the
+      // raw toml name ("main") forever — the client never re-fetches. Resolve
+      // missing rows inline now (bounded — a dead network must not hang the
+      // endpoint); warm rows stay free.
+      const missing = rows.filter((a) => !ctx.accounts.info(a.name));
+      if (missing.length) {
+        await Promise.race([
+          Promise.all(missing.map((a) => ctx.accounts.refresh(a.name))),
+          new Promise((r) => setTimeout(r, 4000)),
+        ]);
+      }
       return json(res, 200, {
         accounts: rows.map((a) => ({
           ...a,
