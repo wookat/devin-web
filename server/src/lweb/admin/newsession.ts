@@ -13,7 +13,7 @@ import { sessionConfig, agentLevelConfig, sessionStatus, listLocalSessions } fro
 import { dispatchPrompt } from "../../sessionprompt.js";
 import {markLoadedOn } from "../../sessionplace.js";
 import { isDraining } from "../../sessionlive.js";
-import { captureLoadResponse, agentCfg, type ConfigOption } from "../../sessioncfg.js";
+import { captureLoadResponse, agentCfg, accountCfg, type ConfigOption } from "../../sessioncfg.js";
 import { agentById, agentCheck, listAgents, probeAgent, saveUserAgents } from "../../agents.js";
 import { publicSshHost } from "../../ssh.js";
 import { json, readJson } from "../../httputil.js";
@@ -75,7 +75,7 @@ export async function handleNewSession(ctx: ApiContext, req: IncomingMessage, re
     }
     ctx.sessionCwd.set(s.sessionId, ssh ? cwd : remapLegacyCwd(cwd));
     if (ssh) ctx.sessionSsh.set(s.sessionId, ssh);
-    captureLoadResponse(s.sessionId, s, agent.id);
+    captureLoadResponse(s.sessionId, s, agent.id, acp.account ?? null);
         // Pin the owning process or the next prompt re-loads onto a pooled
     // acp and devin rejects it ("already open in another process").
     markLoadedOn(s.sessionId, acp);
@@ -151,7 +151,11 @@ export async function handleNewSession(ctx: ApiContext, req: IncomingMessage, re
     // /admin/new composer shows the real mode+model pills before any
     // session exists (same lastAgentCfg fallback sessionConfig uses).
     const wantAgent = url.searchParams.get("agent") ?? "";
-    const ac = wantAgent ? agentCfg(wantAgent) : undefined;
+    // devin catalogs are per-account — prefer the pick's own capture. When
+    // it's absent the agent-keyed cache still fills modes/commands, but the
+    // MODEL group must not leak the other account's catalog → nulled below.
+    const acc = wantAgent === "devin" ? accountCfg(ctx.accounts.pick()) : undefined;
+    const ac = wantAgent ? (acc ?? agentCfg(wantAgent)) : undefined;
     const EMPTY_CFG = { options: null, mode: null, commands: [], model: null } as unknown as ReturnType<typeof sessionConfig>;
     const wantA = wantAgent || "devin";
     const peerSid = sessions.find((s) => (meta(ctx, s.id).agent ?? "devin") === wantA)?.id
@@ -159,6 +163,9 @@ export async function handleNewSession(ctx: ApiContext, req: IncomingMessage, re
     const cfg = wantAgent
       ? (ac && (ac.configOptions?.length || ac.modes) ? agentLevelConfig(ac as { configOptions?: ConfigOption[]; modes?: { currentModeId: string; availableModes?: { id: string; name?: string }[] } | null }) : (peerSid ? sessionConfig(ctx, peerSid) : EMPTY_CFG))
       : sessionConfig(ctx, peerSid ?? sessions[0]?.id ?? "");
+    // Never-seen account → the model catalog fell back to an ambiguous
+    // (possibly previous-account) source — hide it rather than lie.
+    if (wantA === "devin" && !acc && cfg.model) cfg.model = null;
     // Enabled agents for the draft picker's dropdown (disabled entries
     // stay hidden — their existing sessions still run via meta.agent).
     const checks = await Promise.all(listAgents().map(async (a) => [a, a.disabled ? null : await agentCheck(a)] as const));

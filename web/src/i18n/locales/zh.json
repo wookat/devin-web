@@ -97,6 +97,7 @@
     "qSubmit": "提交",
     "qNextBtn": "下一个",
     "selectMode": "选择模式",
+    "modelPending": "模型目录尚未捕获——在该账号下开一个会话后自动刷新",
     "attachMention": "附加或引用",
     "uploadAtt": "上传附件",
     "sessionMode": "会话模式",

@@ -124,7 +124,7 @@ async function fire(ctx: ApiContext, a: DwAutomation, input?: string): Promise<s
     ctx.store.addAgentSession(s.sessionId, agent.id, cwd);
   }
   ctx.sessionCwd.set(s.sessionId, remapLegacyCwd(cwd));
-  captureLoadResponse(s.sessionId, s, acp.agent?.id ?? "devin");
+  captureLoadResponse(s.sessionId, s, acp.agent?.id ?? "devin", acp.account ?? null);
     markLoadedOn(s.sessionId, acp);
   const mm = meta(ctx, s.sessionId);
   mm.title = `⚙ ${a.name}${input != null ? ` · ${input.slice(0, 24)}` : ""}`;

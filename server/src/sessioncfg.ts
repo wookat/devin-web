@@ -66,6 +66,7 @@ export function initCfgState(dir: string) {
       commands?: SessionConfig["commands"];
       bySession?: Record<string, ResponseCfgEntry>;
       byAgent?: Record<string, { configOptions?: ConfigOption[]; modes?: unknown }>;
+      byAccount?: Record<string, { configOptions?: ConfigOption[]; modes?: unknown }>;
     };
     if (j.configOptions?.length || j.modes) {
       lastAgentCfg = {
@@ -79,6 +80,7 @@ export function initCfgState(dir: string) {
     if (j.commands?.length) lastAgentCommands = j.commands;
     for (const [sid, c] of Object.entries(j.bySession ?? {})) if (c && typeof c === "object") responseCfg.set(sid, c);
     for (const [aid, c] of Object.entries(j.byAgent ?? {})) if (c && typeof c === "object") cfgByAgent.set(aid, c);
+    for (const [acc, c] of Object.entries(j.byAccount ?? {})) if (c && typeof c === "object") cfgByAccount.set(acc, c);
   } catch { /* cold start — no cache yet */ }
 }
 
@@ -103,6 +105,7 @@ function persistAgentCfg() {
     commands: lastAgentCommands ?? undefined,
     bySession: bySession.length ? Object.fromEntries(bySession) : undefined,
     byAgent: cfgByAgent.size ? Object.fromEntries(cfgByAgent) : undefined,
+    byAccount: cfgByAccount.size ? Object.fromEntries(cfgByAccount) : undefined,
   });
 }
 
@@ -111,22 +114,27 @@ function persistAgentCfg() {
 const cfgByAgent = new Map<string, { configOptions?: ConfigOption[]; modes?: unknown }>();
 export function agentCfg(agentId: string) { return cfgByAgent.get(agentId); }
 
-/** Account rotation invalidates EVERY cached catalog — configOptions are
- *  broadcast per-account, and the draft page reads both the agent-level
- *  cache AND per-session responseCfg (peerSid fallback) — a Free account's
- *  catalog would otherwise keep showing until a session under the new
- *  account re-captures it. Live acps repopulate on their next
- *  session/load. Better "…" than the wrong account's models. */
+/** cfg captured per ACCOUNT — configOptions are broadcast per-account
+ *  (model catalog is plan-gated), so the draft page must serve the catalog
+ *  of the account the NEXT spawn will use, not the last-seen one. Missing
+ *  entry = never captured under that account → honest "…" state. */
+const cfgByAccount = new Map<string, { configOptions?: ConfigOption[]; modes?: unknown }>();
+export function accountCfg(account: string | null | undefined) {
+  return account ? cfgByAccount.get(account) : undefined;
+}
+
+/** Account rotation: the agent-keyed caches are account-ambiguous (every
+ *  devin session writes them regardless of which account its acp holds) —
+ *  clear them so nothing serves the previous account's catalog. Per-
+ *  session responseCfg stays: each entry still describes ITS host acp's
+ *  account, which keeps its original token until the process dies. */
 export function clearAgentCfg(agentId: string) {
   cfgByAgent.delete(agentId);
-  if (agentId === "devin") {
-    lastAgentCfg = null;
-    responseCfg.clear();
-  }
+  if (agentId === "devin") lastAgentCfg = null;
   persistAgentCfg();
 }
 
-export function captureLoadResponse(id: string, r: unknown, agentId = "devin") {
+export function captureLoadResponse(id: string, r: unknown, agentId = "devin", account?: string | null) {
   if (!r || typeof r !== "object") return;
   const res = r as { configOptions?: ConfigOption[]; modes?: { currentModeId: string; availableModes?: { id: string; name?: string }[] }; models?: { modelId?: string; availableModels?: { modelId?: string; id?: string; name?: string }[] }; availableCommands?: SessionConfig["commands"] };
   // Non-devin agents expose ACP-standard models/modes instead of
@@ -162,6 +170,13 @@ export function captureLoadResponse(id: string, r: unknown, agentId = "devin") {
     configOptions: mergedOpts ?? prevAgent?.configOptions ?? undefined,
     modes: mergedModes ?? (prevAgent?.modes as typeof mergedModes) ?? undefined,
   });
+  if (account) {
+    const prevAcc = cfgByAccount.get(account);
+    cfgByAccount.set(account, {
+      configOptions: mergedOpts ?? prevAcc?.configOptions ?? undefined,
+      modes: mergedModes ?? (prevAcc?.modes as typeof mergedModes) ?? undefined,
+    });
+  }
   if (res.availableCommands?.length) lastAgentCommands = res.availableCommands;
   if (mergedOpts?.length || mergedModes) {
     lastAgentCfg = {

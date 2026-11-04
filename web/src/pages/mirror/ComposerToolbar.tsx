@@ -148,7 +148,15 @@ function ComposerToolbar({ isVisitor, caps, uploading, upload, isDraft, openMent
   // painting stale cloud capability rows; while the fetch is in flight the
   // pill simply isn't rendered (no "…" placeholder).
   const modelPillEl = (alwaysText: boolean) => {
-    if (!cfgFetched || !localCfg?.model) return null
+    if (!cfgFetched || !localCfg?.model) {
+      // Catalog deliberately withheld: the picked account has no captured
+      // configOptions yet (fresh rotate / never used) — a muted "…" beats
+      // a vanishing control. Repopulates on the next session under it.
+      if (cfgFetched && localCfg) {
+        return <span title={t('composer.modelPending')} className="flex h-7 items-center rounded-full px-[6px] text-[13px] leading-[18px] text-muted-foreground/50">…</span>
+      }
+      return null
+    }
     const iconMode = !alwaysText && pillTier >= 1
     return (
       <div className="relative">

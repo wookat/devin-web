@@ -97,6 +97,7 @@
     "qSubmit": "Submit",
     "qNextBtn": "Next",
     "selectMode": "Select mode",
+    "modelPending": "Model catalog not captured yet — it populates on the next session under this account",
     "attachMention": "Attach or mention",
     "uploadAtt": "Upload attachment",
     "sessionMode": "Session mode",

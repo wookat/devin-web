@@ -199,7 +199,7 @@ export async function handleSessionLifecycle(ctx: ApiContext, req: IncomingMessa
     }
       markLoadedOn(newId, acp);
     ctx.sessionCwd.set(newId, cwd);
-    captureLoadResponse(newId, forkRes, acp.agent?.id ?? "devin");
+    captureLoadResponse(newId, forkRes, acp.agent?.id ?? "devin", acp.account ?? null);
     const mm = meta(ctx, newId);
     mm.title = `${srcTitle} (fork)`;
     (mm as Record<string, unknown>).forkedFrom = anchor !== null ? `${id}@${anchor}` : id;
