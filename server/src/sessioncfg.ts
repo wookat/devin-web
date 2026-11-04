@@ -111,6 +111,21 @@ function persistAgentCfg() {
 const cfgByAgent = new Map<string, { configOptions?: ConfigOption[]; modes?: unknown }>();
 export function agentCfg(agentId: string) { return cfgByAgent.get(agentId); }
 
+/** Account rotation invalidates EVERY cached catalog — configOptions are
+ *  broadcast per-account, and the draft page reads both the agent-level
+ *  cache AND per-session responseCfg (peerSid fallback) — a Free account's
+ *  catalog would otherwise keep showing until a session under the new
+ *  account re-captures it. Live acps repopulate on their next
+ *  session/load. Better "…" than the wrong account's models. */
+export function clearAgentCfg(agentId: string) {
+  cfgByAgent.delete(agentId);
+  if (agentId === "devin") {
+    lastAgentCfg = null;
+    responseCfg.clear();
+  }
+  persistAgentCfg();
+}
+
 export function captureLoadResponse(id: string, r: unknown, agentId = "devin") {
   if (!r || typeof r !== "object") return;
   const res = r as { configOptions?: ConfigOption[]; modes?: { currentModeId: string; availableModes?: { id: string; name?: string }[] }; models?: { modelId?: string; availableModels?: { modelId?: string; id?: string; name?: string }[] }; availableCommands?: SessionConfig["commands"] };

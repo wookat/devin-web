@@ -17,6 +17,7 @@ import { snapshotEntries, dropTail } from "./dwtailsnap.js";
 import { handleApi, type ApiContext } from "./routes.js";
 import { handleLocalWb } from "./lweb/index.js";
 import { recordTerminal } from "./sessionview.js";
+import { clearAgentCfg } from "./sessioncfg.js";
 import { recordHttp } from "./metrics.js";
 import { autoResumeInterrupted, setCfgCacheDir } from "./sessionload.js";
 import { adoptBrokerAcps, resolveTurnByReq } from "./sessionadopt.js";
@@ -545,6 +546,10 @@ function rotate(reason: string, target?: string): string | null {
   const from = accounts.currentName;
   const next = accounts.rotate(target);
   if (!next) return null;
+  // The cfg cache is per-account: the draft page would keep serving the
+  // previous account's model/mode catalog until a session under the new
+  // account re-captures it. Clear so it shows "…" instead of wrong models.
+  clearAgentCfg("devin");
   manager.killPooled("devin", next);
   hub.broadcast({ type: "account_rotated", from, to: next, reason, accounts: accounts.status() });
   console.log(`[accounts] rotated [${reason}]: ${from} -> ${next}`);
